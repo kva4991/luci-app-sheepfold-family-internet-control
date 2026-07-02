@@ -26,6 +26,20 @@
 - Optional logging.
 - App update and router reboot controls with confirmation.
 
+## Android Scope
+
+The Android companion app **Овчарня** should support Android 9.0 Pie / API 28 and newer.
+
+Older Android versions are intentionally out of scope.
+
+Recommended Android baseline:
+
+- minimum SDK: API 28;
+- target SDK: latest stable Android SDK;
+- implementation language: Kotlin;
+- UI: Jetpack Compose;
+- token storage: Android Keystore.
+
 ## Target OpenWRT Scope
 
 The project should target modern OpenWRT installations that use `firewall4` and `nftables`.

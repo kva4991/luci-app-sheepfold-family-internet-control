@@ -23,6 +23,12 @@ It is planned as a LuCI application, OpenWRT backend service, Android companion 
 - Work safely with `fw4` / `nftables`.
 - Coexist with AdGuard Home and Podkop.
 
+## Target Android Scope
+
+The Android companion app targets Android 9.0 Pie / API 28 and newer.
+
+Older Android versions are intentionally out of scope.
+
 ## Target OpenWRT Scope
 
 Sheepfold targets modern OpenWRT routers with `firewall4` / `nftables`.
