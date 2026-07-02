@@ -13,6 +13,13 @@ wget -O /tmp/sheepfold-install.sh https://raw.githubusercontent.com/kva4991/luci
 sh /tmp/sheepfold-install.sh
 ```
 
+Public uninstall command:
+
+```sh
+wget -O /tmp/sheepfold-uninstall.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/uninstall.sh
+sh /tmp/sheepfold-uninstall.sh
+```
+
 ## Release Plan
 
 1. Build `.ipk` packages in GitHub Actions.
@@ -37,3 +44,14 @@ The LuCI and Android "Update app" buttons should:
 5. Install it.
 6. Restart required services.
 7. Report success or failure.
+
+## Uninstall Plan
+
+The OpenWRT uninstall command should:
+
+1. Create a backup of Sheepfold settings and local data.
+2. Stop and disable the Sheepfold service if it exists.
+3. Remove the OpenWRT package through `opkg remove`.
+4. Keep or restore `/etc/config/sheepfold` so client lists are not lost.
+5. Print and save a report of remaining Sheepfold-related UCI settings, files, and nftables rules.
+6. Leave manual cleanup decisions to the router administrator.

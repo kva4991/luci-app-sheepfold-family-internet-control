@@ -27,6 +27,7 @@
 - Import/export of all settings and known clients.
 - Optional logging.
 - App update and router reboot controls with confirmation.
+- OpenWRT uninstall command that removes the package but preserves Sheepfold settings and client lists, then shows a report of remaining router settings.
 
 ## Localization
 

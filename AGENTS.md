@@ -28,9 +28,11 @@ Avoid:
 
 ## README Layout
 
-- Keep installation and update instructions near the top of both `README.md` and `README.ru.md`, before long product explanations.
+- Keep installation, update, and uninstall instructions near the top of both `README.md` and `README.ru.md`, before long product explanations.
 - Keep the English and Russian README files structurally similar where practical.
-- When changing installation or update commands, update both README files and `docs/github-install-setup.md` if relevant.
+- Keep `install.sh`, `update.sh`, and `uninstall.sh` suitable for running directly on an OpenWRT router.
+- The uninstall command must remove the package without clearing Sheepfold client lists or user settings, then print a report of remaining router settings that may require manual cleanup.
+- When changing installation, update, or uninstall commands, update both README files and `docs/github-install-setup.md` if relevant.
 
 ## Emergency-Useful Sites
 

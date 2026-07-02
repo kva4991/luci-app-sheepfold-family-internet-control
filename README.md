@@ -24,6 +24,15 @@ wget -O /tmp/sheepfold-update.sh https://raw.githubusercontent.com/kva4991/luci-
 sh /tmp/sheepfold-update.sh
 ```
 
+## Uninstall From OpenWRT
+
+The uninstaller removes the OpenWRT package, keeps Sheepfold settings and client lists, and prints a report of remaining router settings.
+
+```sh
+wget -O /tmp/sheepfold-uninstall.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/uninstall.sh
+sh /tmp/sheepfold-uninstall.sh
+```
+
 ## Project Names
 
 - GitHub repository: `luci-app-sheepfold-family-internet-control`
@@ -80,6 +89,7 @@ bot/                                                 VK/MAX bot adapters
 docs/                                                Product and technical docs
 install.sh                                           Router installer entrypoint
 update.sh                                            Router updater entrypoint
+uninstall.sh                                         Router uninstaller that preserves settings
 ```
 
 ## Status
