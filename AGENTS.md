@@ -143,6 +143,9 @@ Avoid:
 - Device groups should include children, parents, TVs/media devices, and guests/custom groups.
 - Offline known devices should be cleaned after a configurable number of inactive days; default is 90 days.
 - Blocked-page placeholder text must be configurable by the parent/admin.
+- Allowlist should support quick add mode: a parent opens a 30 second connection window, sees a Wi-Fi QR code and devices that connected after the window started, then explicitly presses `Add` / `Добавить` for each candidate.
+- Quick add must collect candidates, not silently add every new device to the allowlist.
+- The quick add button may turn grey when the 30 second window expires, but it must remain clickable to restart the timer.
 
 ## Wi-Fi Settings
 

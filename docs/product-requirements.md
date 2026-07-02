@@ -24,6 +24,7 @@
 - Search by MAC, current IP, hostname, and custom name.
 - Device groups: children, parents, TVs/media devices, guests/custom.
 - DHCP static lease synchronization.
+- Quick allowlist add by Wi-Fi QR and newly connected device candidates.
 - Schedules.
 - Temporary access tokens.
 - Access to emergency-useful sites for restricted mode.
@@ -194,6 +195,19 @@ Device groups should be supported for easier management:
 - parents;
 - TVs/media devices;
 - guests/custom groups.
+
+Allowlist quick add:
+
+- the Allowlist tab should include a `Quick add to allowlist` / `Быстрое добавление в белый список` button;
+- pressing it opens a modal with a Wi-Fi QR code on the left and a list of newly connected devices on the right;
+- the modal starts a 30 second connection window;
+- the `Connection allowed` / `Разрешено подключение` button should show a decreasing status bar for the 30 second window;
+- when the timer expires, the button turns grey but stays clickable;
+- clicking the grey button starts a new 30 second window;
+- only devices that connect after the current window starts should be listed as candidates;
+- every candidate row must include name/hostname if known, current IP, MAC, connection time, and an `Add` / `Добавить` button;
+- quick add must not silently allowlist all new devices; the parent must press `Add` for each candidate;
+- backend validation must still prevent adding a MAC that is in the blocklist.
 
 Schedule priority:
 

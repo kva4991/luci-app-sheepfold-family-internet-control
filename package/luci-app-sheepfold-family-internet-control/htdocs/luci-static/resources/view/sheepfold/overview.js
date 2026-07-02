@@ -74,6 +74,21 @@ var admins = [
         }
 ];
 
+var quickAllowlistCandidates = [
+        {
+                name: 'iPhone гостя',
+                ip: '192.168.1.104',
+                mac: '8C:85:90:44:11:2A',
+                joinedAgo: '7 sec ago'
+        },
+        {
+                name: 'Android ученика',
+                ip: '192.168.1.105',
+                mac: '34:2E:B7:91:8A:10',
+                joinedAgo: '18 sec ago'
+        }
+];
+
 var rootPasswordIsSet = true;
 
 var translations = {
@@ -129,6 +144,19 @@ var translations = {
         'These devices are never blocked by global blocking or schedules.': 'Эти устройства не блокируются глобальной блокировкой и расписаниями.',
         'Add device': 'Добавить устройство',
         'The UI must prevent adding the same MAC to allowlist and blocklist.': 'Интерфейс должен запрещать добавление одного MAC одновременно в белый и чёрный список.',
+        'Quick add to allowlist': 'Быстрое добавление в белый список',
+        'Quick allowlist add': 'Быстрое добавление в белый список',
+        'Scan Wi-Fi QR, then add newly connected devices manually.': 'Отсканируйте QR Wi-Fi, затем вручную добавьте только что подключившиеся устройства.',
+        'Wi-Fi access QR': 'QR подключения к Wi-Fi',
+        'Newly connected devices': 'Только что подключившиеся устройства',
+        'Connection allowed': 'Разрешено подключение',
+        'Connection window expired': 'Окно подключения истекло',
+        'Click to restart the 30 second window.': 'Нажмите, чтобы снова запустить окно на 30 секунд.',
+        'seconds left': 'секунд осталось',
+        'Connected after quick add started.': 'Подключились после запуска быстрого добавления.',
+        'Add': 'Добавить',
+        'Candidate would be added to allowlist after confirmation.': 'Кандидат будет добавлен в белый список после подтверждения.',
+        'Quick mode only collects candidates. A parent still presses Add for every device.': 'Быстрый режим только собирает кандидатов. Родитель всё равно нажимает "Добавить" для каждого устройства.',
         'Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API.': 'Устройства из чёрного списка не могут открывать интернет, LuCI, SSH и Sheepfold API.',
         'Blocklist changes require confirmation.': 'Изменения чёрного списка требуют подтверждения.',
         'Emergency-useful sites for blocklisted devices require a separate explicit setting and still do not open router access.': 'Доступ к аварийно-полезным сайтам для чёрного списка требует отдельной явной настройки и всё равно не открывает доступ к роутеру.',
@@ -561,6 +589,109 @@ function pairingButton(device) {
         }, [adminDeviceIcon(), E('span', {}, T('Pairing'))]);
 }
 
+function showQuickAllowlistModal() {
+        var wifiPayload = 'WIFI:T:WPA;S:Sheepfold Home 5G;P:sheepfold-demo-pass;;';
+        var progressFill = E('span', { 'class': 'sf-quick-progress-fill' });
+        var statusText = E('span', { 'class': 'sf-quick-status-text' });
+        var permitButton;
+        var timer = null;
+        var secondsTotal = 30;
+
+        function startWindow() {
+                var remaining = secondsTotal;
+
+                if (timer)
+                        window.clearInterval(timer);
+
+                permitButton.classList.remove('expired');
+
+                function tick() {
+                        var percent = Math.max(0, remaining / secondsTotal * 100);
+
+                        progressFill.style.width = percent + '%';
+                        statusText.textContent = remaining > 0 ?
+                                remaining + ' ' + T('seconds left') :
+                                T('Connection window expired');
+
+                        if (remaining <= 0) {
+                                window.clearInterval(timer);
+                                timer = null;
+                                permitButton.classList.add('expired');
+                        }
+
+                        remaining--;
+                }
+
+                tick();
+                timer = window.setInterval(tick, 1000);
+        }
+
+        permitButton = E('button', {
+                'class': 'sf-action sf-action-positive sf-quick-permit',
+                'click': function (ev) {
+                        ev.preventDefault();
+                        startWindow();
+                }
+        }, [
+                E('strong', {}, T('Connection allowed')),
+                E('small', {}, T('Click to restart the 30 second window.'))
+        ]);
+
+        ui.showModal(T('Quick allowlist add'), [
+                E('div', { 'class': 'sf-modal-quick' }, [
+                        E('div', { 'class': 'sf-qr-wrap' }, [
+                                E('h4', {}, T('Wi-Fi access QR')),
+                                qrCode(wifiPayload),
+                                E('p', {}, T('Scan Wi-Fi QR, then add newly connected devices manually.')),
+                                E('code', {}, wifiPayload)
+                        ]),
+                        E('div', { 'class': 'sf-quick-side' }, [
+                                permitButton,
+                                E('div', { 'class': 'sf-quick-progress' }, [
+                                        progressFill,
+                                        statusText
+                                ]),
+                                E('div', { 'class': 'sf-note' }, T('Quick mode only collects candidates. A parent still presses Add for every device.')),
+                                E('h4', {}, T('Newly connected devices')),
+                                E('div', { 'class': 'sf-quick-candidates' }, quickAllowlistCandidates.map(function (candidate) {
+                                        return E('div', { 'class': 'sf-quick-candidate' }, [
+                                                E('div', {}, [
+                                                        E('strong', {}, candidate.name),
+                                                        E('small', {}, T('Connected after quick add started.'))
+                                                ]),
+                                                E('div', { 'class': 'sf-mono' }, candidate.ip),
+                                                E('div', { 'class': 'sf-mono' }, candidate.mac),
+                                                E('small', {}, candidate.joinedAgo),
+                                                actionButton(T('Add'), 'positive', T('Candidate would be added to allowlist after confirmation.'))
+                                        ]);
+                                }))
+                        ])
+                ]),
+                E('div', { 'class': 'right' }, [
+                        E('button', {
+                                'class': 'btn cbi-button',
+                                'click': function () {
+                                        if (timer)
+                                                window.clearInterval(timer);
+                                        ui.hideModal();
+                                }
+                        }, T('Close'))
+                ])
+        ]);
+
+        startWindow();
+}
+
+function quickAllowlistButton() {
+        return E('button', {
+                'class': 'sf-action sf-action-positive',
+                'click': function (ev) {
+                        ev.preventDefault();
+                        showQuickAllowlistModal();
+                }
+        }, T('Quick add to allowlist'));
+}
+
 function deviceTable(rows, options) {
         options = options || {};
 
@@ -688,7 +819,10 @@ return view.extend({
                                         E('h3', {}, T('Allowlist')),
                                         E('p', {}, T('These devices are never blocked by global blocking or schedules.'))
                                 ]),
-                                actionButton(T('Add device'), 'positive', T('The UI must prevent adding the same MAC to allowlist and blocklist.'))
+                                E('div', { 'class': 'sf-toolbar' }, [
+                                        quickAllowlistButton(),
+                                        actionButton(T('Add device'), 'positive', T('The UI must prevent adding the same MAC to allowlist and blocklist.'))
+                                ])
                         ]),
                         deviceTable(devices.filter(function (device) { return device.status === 'allow'; }), { compact: true })
                 ]);
@@ -971,7 +1105,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-7';
+                var assetVersion = '0.1.0-8';
                 var cssHref = L.resource('sheepfold/sheepfold.css') + '?v=' + encodeURIComponent(assetVersion);
                 var header = E('div', { 'class': 'sf-header' }, [
                         E('div', {}, [
