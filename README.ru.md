@@ -83,6 +83,15 @@ sh /tmp/sheepfold-install.sh
 - [GitHub and installer plan](docs/github-install-setup.md)
 - [Security model](docs/security.md)
 
+## Поддержать проект
+
+Если Sheepfold / Овчарня окажется полезной и вы захотите поддержать разработку, ссылки для донатов будут добавлены здесь до первого публичного релиза.
+
+Возможные варианты:
+
+- GitHub Sponsors для международной аудитории;
+- Boosty или ЮMoney для русскоязычных пользователей.
+
 ## Лицензия
 
 MIT License.

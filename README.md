@@ -83,6 +83,15 @@ See:
 - [GitHub and installer plan](docs/github-install-setup.md)
 - [Security model](docs/security.md)
 
+## Support
+
+If you find Sheepfold useful and want to support development, donation links will be added here before the first public release.
+
+Suggested support channels:
+
+- GitHub Sponsors for international donations;
+- Boosty or YooMoney for Russian-speaking users.
+
 ## License
 
 MIT License.
