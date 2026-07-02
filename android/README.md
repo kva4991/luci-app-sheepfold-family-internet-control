@@ -25,6 +25,33 @@ Default connection model:
 
 Full Android management should be local-network only. Do not design full remote management through WireGuard, VPN tunnels, or any other tunnel to the router. Outside the home network, use the configured messenger bot for short confirmed commands and notifications.
 
+## Pairing
+
+First pairing should be started locally from LuCI.
+
+Flow:
+
+- parent opens Sheepfold in LuCI;
+- parent marks the phone as an administrator device and selects which administrator owns it;
+- LuCI shows `Pairing` / `Сопряжение` for that device;
+- the pairing dialog shows a QR code plus the same values for manual setup;
+- Android scans the QR code or lets the parent enter the router address/API URL, administrator login or ID, pairing code, and token lifetime manually.
+
+The QR payload must use a short-lived one-time token scoped to one administrator and one device. It must not contain router root passwords, LuCI session cookies, bot tokens, AI keys, or unrelated secrets.
+
+## Wi-Fi MAC Check
+
+During first pairing, after the phone is connected to home Wi-Fi, the app should check whether the phone is visible to the router under the MAC address Sheepfold will manage.
+
+If the home Wi-Fi network uses randomized/private MAC:
+
+- explain that Sheepfold needs a stable device identifier for reliable rules;
+- guide the parent to Android Wi-Fi network settings;
+- allow manual confirmation after the parent switches the network to the real device MAC, when the OS/manufacturer allows it;
+- allow the parent to intentionally manage the stable randomized MAC for that Wi-Fi network if they prefer.
+
+Do not promise automatic switching from randomized/private MAC to device MAC. Android permissions and manufacturer builds may prevent reliable automatic changes.
+
 ## First-Run Agreement
 
 Before the first setup continues, the Android app must show a link to the full user agreement and require this checkbox:

@@ -108,6 +108,25 @@ Avoid:
 - `owner` can manage administrators; `admin` can manage family internet rules but must not remove the owner.
 - Do not add child/client roles or child-facing control interfaces unless explicitly requested later.
 - Administrative logs should record who changed what, when, and with what result, without storing secrets.
+- LuCI must include a separate `Administrators` tab.
+- A default owner account must exist after installation/first setup.
+- Additional administrators must have unique display names, unique logins, roles, and passwords stored as salted hashes.
+- Do not allow deleting or demoting the last owner.
+- Any detected device can be marked as an administrator device only after selecting which administrator owns it.
+- Admin devices should show a special local icon inspired by FontAwesome `laptop-mobile`; do not hotlink FontAwesome or any external CDN asset from LuCI.
+- Admin device rows must expose a `Pairing` / `Сопряжение` action that opens QR/manual Android setup.
+- Pairing payloads must use short-lived one-time tokens scoped to one administrator and one device. Never include router root passwords, LuCI session cookies, bot tokens, AI keys, or unrelated secrets in QR codes.
+- Pairing tokens must be revocable and stored only as hashes or non-reusable secrets on the router.
+- Pairing actions must be logged with masking.
+
+## Android Pairing And Wi-Fi MAC
+
+- First Android setup should be initiated locally from LuCI by scanning an admin-device pairing QR code or entering manual settings.
+- Manual settings shown next to QR must include router address/API URL, administrator login or identifier, pairing code/token, token lifetime, and Wi-Fi MAC guidance.
+- Android must check whether the phone is visible to the router under the MAC address Sheepfold will manage.
+- If randomized/private MAC is enabled for the home Wi-Fi, guide the parent to Android Wi-Fi network settings and explain why Sheepfold needs a stable identifier.
+- Do not promise automatic disabling of randomized/private MAC on Android. Public APIs and manufacturer builds may prevent reliable automatic switching.
+- Allow the parent to confirm either using the real device MAC for the home Wi-Fi or intentionally managing the stable randomized MAC used for that Wi-Fi network.
 
 ## Device Defaults
 

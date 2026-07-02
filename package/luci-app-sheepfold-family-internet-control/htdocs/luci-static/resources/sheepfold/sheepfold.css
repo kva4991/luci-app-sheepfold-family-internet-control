@@ -79,6 +79,14 @@
         border-color: #cbd5e1;
 }
 
+.sf-action-pairing {
+        border-color: #a7d8bd;
+        color: #14532d;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+}
+
 .sf-header-actions .sf-action {
         background: #202124;
         border-color: #3b414a;
@@ -201,6 +209,26 @@
         gap: 3px;
 }
 
+.sf-device-name strong {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+}
+
+.sf-admin-device-icon {
+        display: inline-flex;
+        width: 18px;
+        height: 18px;
+        color: var(--sf-green);
+        vertical-align: middle;
+}
+
+.sf-admin-device-icon svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+}
+
 .sf-mono {
         font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
         font-size: 12px;
@@ -228,6 +256,41 @@
 }
 
 .sf-device-head {
+        background: #f8fafc;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+}
+
+.sf-admin-table {
+        border: 1px solid var(--sf-border);
+        border-radius: 8px;
+        overflow-x: auto;
+}
+
+.sf-admin-row {
+        display: grid;
+        grid-template-columns: minmax(170px, 1.2fr) minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(160px, 1fr) minmax(130px, 0.8fr);
+        gap: 12px;
+        align-items: center;
+        min-width: 780px;
+        padding: 11px 12px;
+        border-top: 1px solid var(--sf-border);
+        background: #ffffff;
+}
+
+.sf-admin-row:first-child {
+        border-top: 0;
+}
+
+.sf-admin-row small {
+        display: block;
+        color: var(--sf-muted);
+        margin-top: 3px;
+}
+
+.sf-admin-head {
         background: #f8fafc;
         color: #334155;
         font-size: 12px;
@@ -330,6 +393,67 @@
         min-width: 48px;
 }
 
+.sf-modal-pairing {
+        display: grid;
+        grid-template-columns: 220px minmax(260px, 1fr);
+        gap: 18px;
+        max-width: 760px;
+}
+
+.sf-qr-wrap {
+        display: grid;
+        gap: 8px;
+        align-content: start;
+}
+
+.sf-qr-wrap p {
+        margin: 0;
+}
+
+.sf-qr-wrap small {
+        color: var(--sf-muted);
+}
+
+.sf-qr {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 4px;
+        width: 180px;
+        height: 180px;
+        padding: 12px;
+        border: 1px solid var(--sf-border);
+        background: #ffffff;
+}
+
+.sf-qr span {
+        background: #ffffff;
+}
+
+.sf-qr span.on {
+        background: #111827;
+}
+
+.sf-manual-settings h4 {
+        margin-top: 0;
+}
+
+.sf-setting-line {
+        display: grid;
+        grid-template-columns: minmax(140px, 0.8fr) minmax(180px, 1fr);
+        gap: 10px;
+        align-items: center;
+        border-bottom: 1px solid var(--sf-border);
+        padding: 7px 0;
+}
+
+.sf-setting-line span {
+        color: var(--sf-muted);
+}
+
+.sf-setting-line code {
+        overflow-wrap: anywhere;
+}
+
 @media (max-width: 900px) {
         .sf-header,
         .sf-panel-head {
@@ -339,6 +463,10 @@
         .sf-metrics,
         .sf-grid.two,
         .sf-domain-list {
+                grid-template-columns: 1fr;
+        }
+
+        .sf-modal-pairing {
                 grid-template-columns: 1fr;
         }
 }

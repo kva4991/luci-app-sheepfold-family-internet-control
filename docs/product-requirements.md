@@ -35,6 +35,7 @@
 - User agreement and data-processing consent shown before Android first setup and OpenWRT installation.
 - Privacy policy describing local storage, Android data, messenger data, AI-provider data sharing, logs, masking, export, and deletion.
 - Common Wi-Fi settings for 2.4 GHz and 5 GHz networks: SSID, password, security mode, and channel.
+- Administrator devices and Android pairing by QR/manual setup.
 
 ## Localization
 
@@ -111,6 +112,15 @@ Android connectivity:
 - do not support or document full remote management through WireGuard, VPN tunnels, or any other tunnel to the router;
 - outside the local network, remote management is limited to short confirmed commands and notifications through the single configured messenger adapter;
 - without a developer-operated cloud service, the Android app must not promise full remote router management outside the local network.
+- first Android pairing should be initiated locally from LuCI by an owner/admin using a QR code or manual settings;
+- the pairing payload must contain a short-lived one-time token scoped to one administrator and one admin device, never a router root password.
+
+Android Wi-Fi MAC check:
+
+- during first pairing, after the phone is connected to the home Wi-Fi, the Android app should check whether the phone is visible to the router as the same MAC address that Sheepfold will manage;
+- if Android uses a randomized/private MAC for this Wi-Fi network, the app should explain the problem and guide the parent to the system Wi-Fi network settings;
+- the app may open Android Wi-Fi settings when public APIs allow it, but must not promise that it can automatically disable randomized MAC on every device/manufacturer build;
+- the parent must be able to confirm manually that the home Wi-Fi uses the real device MAC, or accept managing the randomized MAC as the stable identifier for that specific Wi-Fi network.
 
 ## Administrators
 
@@ -122,6 +132,34 @@ Minimum roles:
 - `admin`: device, schedule, temporary access, Wi-Fi shortcut, and emergency-useful sites management.
 
 Telegram/VK access must be bound to explicitly approved user IDs or chat IDs. MAX may be added as an experimental adapter, disabled by default. Children/client devices do not get a dedicated control interface by default.
+
+## Administrator Devices And Pairing
+
+Any detected device can be marked as an administrator device.
+
+Requirements:
+
+- when making a device administrator-owned, LuCI must ask which administrator owns it;
+- the administrator must be selected from the configured administrator list;
+- an administrator device is still a normal network device for allowlist/blocklist/schedule purposes, but it also becomes eligible for Android app pairing;
+- the device table should show a special admin-device icon and a `Pairing` / `Сопряжение` action;
+- the icon should follow the idea of FontAwesome `laptop-mobile`, but must be bundled locally or implemented as a local asset/SVG, not hotlinked from a CDN;
+- pressing `Pairing` opens a modal with a QR code for the Android app and the same settings in text form for manual setup;
+- QR/manual setup must include router address/API URL, administrator login or identifier, pairing token/code, token lifetime, and Wi-Fi MAC guidance;
+- pairing tokens must be one-time, short-lived, revocable, and stored only as hashes or otherwise non-reusable secrets on the router;
+- pairing must not expose router root credentials, LuCI session cookies, bot tokens, AI keys, or other unrelated secrets;
+- pairing events must be written to the administrative action log with masking.
+
+The LuCI interface must include an `Administrators` tab.
+
+Administrator requirements:
+
+- one default owner exists after installation/first setup;
+- additional administrators can be created by the owner;
+- every administrator has a unique display name, unique login, role, and password;
+- passwords are stored only as salted password hashes;
+- minimum roles remain `owner` and `admin`;
+- deleting or demoting the last owner must be forbidden.
 
 ## Target OpenWRT Scope
 

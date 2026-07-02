@@ -9,7 +9,10 @@ var devices = [
                 mac: 'A4:5E:60:12:34:56',
                 group: 'Родители',
                 status: 'allow',
-                note: 'Всегда доступен, устройство администратора'
+                note: 'Всегда доступен, устройство администратора',
+                adminDevice: true,
+                adminOwner: 'Владелец',
+                pairingCode: 'SF-PAIR-8264'
         },
         {
                 name: 'Планшет ребёнка',
@@ -55,6 +58,21 @@ var emergencySites = [
         ['2gis.ru', '2ГИС', 'Карты и организации']
 ];
 
+var admins = [
+        {
+                name: 'Владелец',
+                login: 'owner',
+                role: 'owner',
+                devices: 'Телефон родителя'
+        },
+        {
+                name: 'Мама',
+                login: 'mama',
+                role: 'admin',
+                devices: 'Не привязано'
+        }
+];
+
 var translations = {
         'All devices': 'Все устройства',
         'Allowlist': 'Белый список',
@@ -63,7 +81,8 @@ var translations = {
         'Emergency-useful sites': 'Аварийно-полезные сайты',
         'Wi-Fi': 'Wi-Fi',
         'Integrations': 'Интеграции',
-        'Bot and admins': 'Бот и администраторы',
+        'Messenger': 'Мессенджер',
+        'Administrators': 'Администраторы',
         'Logs': 'Журнал',
         'Settings': 'Настройки',
         'Scheduled': 'По расписанию',
@@ -72,6 +91,25 @@ var translations = {
         'This action is a visual prototype only.': 'Это действие работает только как визуальная заглушка.',
         'Configure': 'Настроить',
         'Device editor is not implemented in this visual test build.': 'Редактор устройства не реализован в этой визуальной тестовой сборке.',
+        'Make admin device': 'Сделать админским',
+        'Choose which administrator owns this device before enabling admin pairing.': 'Перед включением админского устройства нужно выбрать, какому администратору оно принадлежит.',
+        'Admin device': 'Админское устройство',
+        'Owner': 'Владелец',
+        'Pairing': 'Сопряжение',
+        'Pairing settings': 'Настройки сопряжения',
+        'Scan this QR code with the Android app to connect it to this router.': 'Отсканируйте QR-код Android-приложением, чтобы подключить его к этому роутеру.',
+        'The QR code must contain a short-lived one-time token, not the router root password.': 'QR-код должен содержать короткоживущий одноразовый токен, а не root-пароль роутера.',
+        'Manual setup': 'Ручная настройка',
+        'Router address': 'Адрес роутера',
+        'Sheepfold API URL': 'URL API Sheepfold',
+        'Administrator login': 'Логин администратора',
+        'Pairing code': 'Код сопряжения',
+        'Token lifetime': 'Срок действия токена',
+        '10 minutes': '10 минут',
+        'Wi-Fi MAC check': 'Проверка MAC Wi-Fi',
+        'Use the real device MAC for this home Wi-Fi network.': 'Для этой домашней Wi-Fi сети используйте настоящий MAC устройства.',
+        'Android should detect randomized MAC and guide the parent to Wi-Fi settings; automatic switching must not be promised.': 'Android должен обнаруживать случайный MAC и вести родителя в настройки Wi-Fi; автоматическое переключение обещать нельзя.',
+        'Close': 'Закрыть',
         '+30 min': '+30 мин',
         'Temporary access would require confirmation.': 'Временный доступ потребует подтверждения.',
         'Device': 'Устройство',
@@ -119,12 +157,23 @@ var translations = {
         'None': 'Нет',
         'Traffic order: Sheepfold -> AdGuard Home -> Podkop.': 'Порядок трафика: Sheepfold -> AdGuard Home -> Podkop.',
         'Automatic router changes must show integration-specific notes and create/export a backup before applying.': 'Автоматические изменения роутера должны показывать нюансы интеграции и создавать/экспортировать резервную копию перед применением.',
-        'Messenger': 'Мессенджер',
         'Active messenger': 'Активный мессенджер',
         'Disabled': 'Выключено',
+        'MAX experimental': 'MAX экспериментально',
         'VK is shown first during setup, but activation requires credentials and an approved admin.': 'VK предлагается первым при настройке, но включение требует данных доступа и разрешённого администратора.',
         'Approved admin ID': 'ID разрешённого администратора',
         'Stored on the router.': 'Хранится на роутере.',
+        'Administrator accounts': 'Учётные записи администраторов',
+        'Each administrator has a unique display name, login, and password stored on the router.': 'У каждого администратора есть уникальное имя, логин и пароль, хранящиеся на роутере.',
+        'Add administrator': 'Добавить администратора',
+        'Adding a new administrator requires confirmation.': 'Добавление администратора требует подтверждения.',
+        'Unique name': 'Уникальное имя',
+        'Login': 'Логин',
+        'Role': 'Роль',
+        'Admin devices': 'Админские устройства',
+        'Admin': 'Администратор',
+        'Default owner account': 'Учётная запись владельца по умолчанию',
+        'Password is stored as a hash, never as plain text.': 'Пароль хранится в виде хеша, никогда открытым текстом.',
         'Commands': 'Команды',
         'show all devices': 'показать все устройства',
         'block internet': 'выключить интернет',
@@ -185,7 +234,8 @@ var tabs = [
         ['emergency', T('Emergency-useful sites')],
         ['wifi', T('Wi-Fi')],
         ['integrations', T('Integrations')],
-        ['bot', T('Bot and admins')],
+        ['admins', T('Administrators')],
+        ['bot', T('Messenger')],
         ['logs', T('Logs')],
         ['settings', T('Settings')]
 ];
@@ -223,13 +273,90 @@ function actionButton(label, tone, message) {
         }, label);
 }
 
+function adminDeviceIcon() {
+        return E('span', { 'class': 'sf-admin-device-icon', 'title': T('Admin device') }, [
+                E('svg', { 'viewBox': '0 0 24 24', 'aria-hidden': 'true' }, [
+                        E('path', { 'd': 'M4 5h11a2 2 0 0 1 2 2v8H2V7a2 2 0 0 1 2-2z' }),
+                        E('path', { 'd': 'M1 17h17v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z' }),
+                        E('path', { 'd': 'M19 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z' })
+                ])
+        ]);
+}
+
+function qrPlaceholder() {
+        var active = {
+                0: true, 1: true, 2: true, 4: true, 6: true, 7: true, 8: true,
+                9: true, 12: true, 13: true, 15: true, 17: true, 20: true,
+                22: true, 23: true, 25: true, 27: true, 30: true, 31: true,
+                33: true, 36: true, 38: true, 40: true, 41: true, 42: true,
+                44: true, 45: true, 47: true, 48: true, 50: true, 53: true,
+                55: true, 56: true, 57: true, 58: true, 60: true, 62: true
+        };
+
+        return E('div', { 'class': 'sf-qr', 'aria-label': T('Pairing') },
+                Array.from({ length: 64 }, function (_, index) {
+                        return E('span', { 'class': active[index] ? 'on' : '' });
+                }));
+}
+
+function settingLine(label, value) {
+        return E('div', { 'class': 'sf-setting-line' }, [
+                E('span', {}, label),
+                E('code', {}, value)
+        ]);
+}
+
+function showPairingModal(device) {
+        var routerAddress = '192.168.1.1';
+        var apiUrl = 'http://' + routerAddress + '/sheepfold/api';
+
+        ui.showModal(T('Pairing settings'), [
+                E('div', { 'class': 'sf-modal-pairing' }, [
+                        E('div', { 'class': 'sf-qr-wrap' }, [
+                                qrPlaceholder(),
+                                E('p', {}, T('Scan this QR code with the Android app to connect it to this router.')),
+                                E('small', {}, T('The QR code must contain a short-lived one-time token, not the router root password.'))
+                        ]),
+                        E('div', { 'class': 'sf-manual-settings' }, [
+                                E('h4', {}, T('Manual setup')),
+                                settingLine(T('Router address'), routerAddress),
+                                settingLine(T('Sheepfold API URL'), apiUrl),
+                                settingLine(T('Administrator login'), device.adminOwner || 'owner'),
+                                settingLine(T('Pairing code'), device.pairingCode || 'SF-PAIR-0000'),
+                                settingLine(T('Token lifetime'), T('10 minutes')),
+                                settingLine(T('Wi-Fi MAC check'), T('Use the real device MAC for this home Wi-Fi network.')),
+                                E('div', { 'class': 'sf-note' }, T('Android should detect randomized MAC and guide the parent to Wi-Fi settings; automatic switching must not be promised.'))
+                        ])
+                ]),
+                E('div', { 'class': 'right' }, [
+                        E('button', {
+                                'class': 'btn cbi-button',
+                                'click': ui.hideModal
+                        }, T('Close'))
+                ])
+        ]);
+}
+
+function pairingButton(device) {
+        return E('button', {
+                'class': 'sf-action sf-action-pairing',
+                'click': function (ev) {
+                        ev.preventDefault();
+                        showPairingModal(device);
+                }
+        }, [adminDeviceIcon(), E('span', {}, T('Pairing'))]);
+}
+
 function deviceTable(rows, options) {
         options = options || {};
 
         var tableRows = rows.map(function (device) {
                 return E('div', { 'class': 'sf-device-row' }, [
                         E('div', { 'class': 'sf-device-name' }, [
-                                        E('strong', {}, device.name),
+                                        E('strong', {}, [
+                                                device.adminDevice ? adminDeviceIcon() : '',
+                                                E('span', {}, device.name)
+                                        ]),
                                         E('small', {}, device.note)
                         ]),
                         E('div', {}, device.ip),
@@ -238,6 +365,7 @@ function deviceTable(rows, options) {
                         E('div', {}, badge(device.status)),
                         E('div', { 'class': 'sf-row-actions' }, [
                                 actionButton(T('Configure'), 'neutral', T('Device editor is not implemented in this visual test build.')),
+                                device.adminDevice ? pairingButton(device) : actionButton(T('Make admin device'), 'neutral', T('Choose which administrator owns this device before enabling admin pairing.')),
                                 options.compact ? '' : actionButton(T('+30 min'), 'positive', T('Temporary access would require confirmation.'))
                         ])
                 ]);
@@ -470,7 +598,7 @@ return view.extend({
 
         renderBot: function () {
                 return E('div', { 'class': 'sf-panel' }, [
-                        E('h3', {}, T('Bot and administrators')),
+                        E('h3', {}, T('Messenger')),
                         E('div', { 'class': 'sf-grid two' }, [
                                 E('div', { 'class': 'sf-box' }, [
                                         E('h4', {}, T('Messenger')),
@@ -478,7 +606,7 @@ return view.extend({
                                                 ['none', T('Disabled')],
                                                 ['vk', 'VK'],
                                                 ['telegram', 'Telegram'],
-                                                ['max', 'MAX экспериментально']
+                                                ['max', T('MAX experimental')]
                                         ], T('VK is shown first during setup, but activation requires credentials and an approved admin.')),
                                         field(T('Approved admin ID'), 'vk:123***789', T('Stored on the router.'))
                                 ]),
@@ -495,6 +623,41 @@ return view.extend({
                                         }))
                                 ])
                         ])
+                ]);
+        },
+
+        renderAdmins: function () {
+                return E('div', { 'class': 'sf-panel' }, [
+                        E('div', { 'class': 'sf-panel-head' }, [
+                                E('div', {}, [
+                                        E('h3', {}, T('Administrator accounts')),
+                                        E('p', {}, T('Each administrator has a unique display name, login, and password stored on the router.'))
+                                ]),
+                                actionButton(T('Add administrator'), 'danger', T('Adding a new administrator requires confirmation.'))
+                        ]),
+                        E('div', { 'class': 'sf-note' }, T('Password is stored as a hash, never as plain text.')),
+                        E('div', { 'class': 'sf-admin-table' }, [
+                                E('div', { 'class': 'sf-admin-row sf-admin-head' }, [
+                                        E('div', {}, T('Unique name')),
+                                        E('div', {}, T('Login')),
+                                        E('div', {}, T('Role')),
+                                        E('div', {}, T('Admin devices')),
+                                        E('div', {}, T('Actions'))
+                                ])
+                        ].concat(admins.map(function (admin) {
+                                return E('div', { 'class': 'sf-admin-row' }, [
+                                        E('div', {}, [
+                                                E('strong', {}, admin.name),
+                                                admin.role === 'owner' ? E('small', {}, T('Default owner account')) : ''
+                                        ]),
+                                        E('div', { 'class': 'sf-mono' }, admin.login),
+                                        E('div', {}, admin.role === 'owner' ? T('Owner') : T('Admin')),
+                                        E('div', {}, admin.devices),
+                                        E('div', { 'class': 'sf-row-actions' }, [
+                                                actionButton(T('Configure'), 'neutral', T('This action is a visual prototype only.'))
+                                        ])
+                                ]);
+                        })))
                 ]);
         },
 
@@ -571,6 +734,7 @@ return view.extend({
                         this.renderPanel('emergency', this.renderEmergency()),
                         this.renderPanel('wifi', this.renderWifi()),
                         this.renderPanel('integrations', this.renderIntegrations()),
+                        this.renderPanel('admins', this.renderAdmins()),
                         this.renderPanel('bot', this.renderBot()),
                         this.renderPanel('logs', this.renderLogs()),
                         this.renderPanel('settings', this.renderSettings())
@@ -578,7 +742,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-5';
+                var assetVersion = '0.1.0-6';
                 var cssHref = L.resource('sheepfold/sheepfold.css') + '?v=' + encodeURIComponent(assetVersion);
 
                 return E('div', { 'class': 'sf-page' }, [
