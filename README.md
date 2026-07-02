@@ -100,6 +100,7 @@ See:
 
 - [Product requirements](docs/product-requirements.md)
 - [Parent AI assistant](docs/ai-assistant.md)
+- [AI context sharing](docs/ai-context-sharing.md)
 - [Parent AI assistant prompt draft, Russian](docs/ai-assistant-prompt.ru.md)
 - [Age-based control scenarios](docs/age-scenarios.md)
 - [Country profiles](docs/country-profiles.md)

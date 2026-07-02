@@ -8,7 +8,7 @@ PKG_MAINTAINER:=kva4991
 
 LUCI_TITLE:=Sheepfold Family Internet Control
 LUCI_DESCRIPTION:=Family internet access control for OpenWRT with LuCI, Android, and bot support.
-LUCI_DEPENDS:=+firewall4 +rpcd +uci +uclient-fetch
+LUCI_DEPENDS:=+firewall4 +rpcd +uci +uclient-fetch +ca-bundle +jsonfilter
 
 include $(TOPDIR)/feeds/luci/luci.mk
 

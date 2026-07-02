@@ -73,6 +73,15 @@ transport.mos.ru
 mosmetro.ru
 ```
 
+Taxi may be shown only as a separate manual transport list, not as a starter suggestion:
+
+```text
+taximaxim.ru
+city-mobil.ru
+vezet.ru
+taxovichkof.ru
+```
+
 Do not add Yandex Go or Yandex Taxi to starter suggestions by default. This is too broad a super-app surface: taxi access may also expose marketplaces, food delivery, parcel delivery, carsharing, scooters, and other non-emergency workflows.
 
 ## Future Country Profiles

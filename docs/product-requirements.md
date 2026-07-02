@@ -31,7 +31,7 @@
 - OpenWRT uninstall command that removes the package but preserves Sheepfold settings and client lists, then shows a report of remaining router settings.
 - User agreement and data-processing consent shown before Android first setup and OpenWRT installation.
 - Privacy policy describing local storage, Android data, messenger data, AI-provider data sharing, logs, masking, export, and deletion.
-- Optional guest network rules, disabled by default.
+- Common Wi-Fi settings for 2.4 GHz and 5 GHz networks: SSID, password, security mode, and channel.
 
 ## Localization
 
@@ -158,6 +158,25 @@ Default retention: `3d`.
 Default maximum log size: `1024 KB`.
 
 Logs must support a clear-log action and masked export. Masked export is enabled by default.
+
+## Wi-Fi Settings
+
+Sheepfold may expose common OpenWRT Wi-Fi settings to make family router management easier.
+
+Required LuCI/Android controls:
+
+- 2.4 GHz SSID;
+- 2.4 GHz password;
+- 5 GHz SSID;
+- 5 GHz password.
+
+Advanced collapsible controls:
+
+- security mode;
+- channel;
+- optional channel width when OpenWRT exposes it safely.
+
+Changing Wi-Fi settings must require confirmation because it can disconnect current users. Sheepfold must not hide or remove standard OpenWRT wireless settings; it only provides a simpler family-facing shortcut.
 
 ## Router Interface Access
 

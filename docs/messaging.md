@@ -76,6 +76,39 @@ Architecture:
 - each administrator should have a role and a linked Telegram/MAX user ID or chat ID;
 - log administrative actions: who performed the command, what changed, when, and with what result.
 
+## OpenWRT Implementation
+
+The bot should run as a local `procd` service on the router.
+
+Preferred Telegram approach:
+
+- do not open an inbound port on the router;
+- do not require a public IP address;
+- use the Telegram Bot API through outbound HTTPS requests;
+- receive messages through long polling with `getUpdates`;
+- send replies through the HTTPS API;
+- store the last processed update offset locally;
+- ignore commands from unknown user IDs / chat IDs.
+
+This fits home routers better than webhooks because webhooks require a public HTTPS endpoint.
+
+Use the same adapter interface for MAX, but keep the MAX adapter `experimental` until stable public Bot API documentation and an inbound-message method that does not expose the router to the internet are confirmed.
+
+Minimum OpenWRT dependencies:
+
+```text
+uclient-fetch
+ca-bundle
+jsonfilter
+```
+
+If the shell implementation becomes too fragile, move the bot to a `ucode`/`rpcd` backend without changing the external Sheepfold API.
+
+Useful references:
+
+- Telegram Bot API: https://core.telegram.org/bots/api
+- Telegram `getUpdates`: https://core.telegram.org/bots/api#getupdates
+
 ## Shared Requirements
 
 - Messenger integration must be optional.

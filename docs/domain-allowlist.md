@@ -183,14 +183,27 @@ Taxi access can be useful in household or emergency situations, but taxi domains
 
 Reason: many taxi services are now super-apps. They may expose ride hailing together with marketplaces, food delivery, grocery delivery, carsharing, scooters, advertising, and other non-emergency workflows.
 
-For Russia, Yandex Go and related domains may be suggested only as a manually enabled transport extension with a warning:
+For Russia, keep taxi as a separate manual list. It is not part of the starter list and should be enabled only by a parent who understands the tradeoff.
+
+Do not suggest Yandex Go by default: it is too broad a super-app surface.
+
+Domains to review manually:
+
+```text
+taximaxim.ru
+city-mobil.ru
+vezet.ru
+taxovichkof.ru
+```
+
+Yandex Go / Yandex Taxi may be added only manually if the parent explicitly accepts the risk:
 
 ```text
 go.yandex
 taxi.yandex.ru
 ```
 
-Do not add these by default:
+Do not add or suggest these by default:
 
 ```text
 market.yandex.ru

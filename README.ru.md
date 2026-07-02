@@ -100,6 +100,7 @@ uninstall.sh                                         удаление с роу�
 
 - [Product requirements](docs/product-requirements.md)
 - [ИИ-помощник для родителей](docs/ai-assistant.ru.md)
+- [Передача контекста ИИ-помощнику](docs/ai-context-sharing.ru.md)
 - [Черновик промпта ИИ-помощника](docs/ai-assistant-prompt.ru.md)
 - [Возрастные сценарии контроля](docs/age-scenarios.ru.md)
 - [Профили стран](docs/country-profiles.ru.md)

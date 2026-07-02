@@ -80,7 +80,16 @@ Avoid:
 - A router can enable only one messenger adapter at a time: Telegram or MAX.
 - Do not design flows that require Telegram and MAX to be active simultaneously on the same router.
 - Messenger integrations must use the same Sheepfold API as LuCI and Android.
+- On OpenWRT, prefer outbound HTTPS long polling for Telegram instead of webhooks, so the router does not need an inbound public HTTPS endpoint.
+- Keep the MAX adapter experimental until current public MAX Bot API behavior is confirmed for router-side use.
 - Administrative bot actions such as reboot, update, import, global block, and list changes must require explicit confirmation.
+
+## Wi-Fi Settings
+
+- Sheepfold may expose common 2.4 GHz and 5 GHz Wi-Fi settings: SSID, password, security mode, and channel.
+- Wi-Fi changes must require confirmation because the current admin may be disconnected.
+- Do not hide or replace standard OpenWRT wireless pages; Sheepfold only provides a simpler family-facing shortcut.
+- Do not add guest-network features unless explicitly requested again.
 
 ## AdGuard Home And Podkop Integrations
 
@@ -108,6 +117,7 @@ Avoid:
 - Provider availability is country-profile configuration, not a permanent legal claim in code.
 - The selected router country controls visible AI providers and suggested emergency-useful sites.
 - Manual user entries must survive country changes.
+- AI context sharing must use an explicit preview/confirmation step. Do not send MAC/IP/device names/child names/family details/logs/device lists/router settings automatically.
 - The assistant may suggest settings but must not apply router actions without explicit parent confirmation.
 - Keep long assistant prompts in separate prompt documents, not buried inside architecture docs.
 - Assistant prompts are drafts until reviewed by the project owner and, for family/psychology guidance, a qualified family psychologist.

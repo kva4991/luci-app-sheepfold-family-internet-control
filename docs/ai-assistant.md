@@ -37,6 +37,10 @@ Do not automatically send the following to an AI provider:
 
 If the app needs to attach Sheepfold context, it must show a separate confirmation and list the exact fields that will be sent. Sensitive fields should be off by default.
 
+Detailed plan:
+
+- [AI Context Sharing](ai-context-sharing.md)
+
 ## DeepSeek Notes
 
 DeepSeek is a good default candidate for the parent assistant because it tends to produce reflective, explanatory answers.
