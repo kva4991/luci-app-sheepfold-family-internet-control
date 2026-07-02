@@ -4,68 +4,190 @@
 
 var devices = [
         {
-                name: 'Parent phone',
+                name: 'Телефон родителя',
                 ip: '192.168.1.21',
                 mac: 'A4:5E:60:12:34:56',
-                group: 'Parents',
+                group: 'Родители',
                 status: 'allow',
-                note: 'Always available, admin device'
+                note: 'Всегда доступен, устройство администратора'
         },
         {
-                name: 'Child tablet',
+                name: 'Планшет ребёнка',
                 ip: '192.168.1.43',
                 mac: '58:2F:40:AA:18:10',
-                group: 'Children',
+                group: 'Дети',
                 status: 'scheduled',
-                note: 'School-day schedule, bedtime 21:00'
+                note: 'Расписание учебного дня, отбой 21:00'
         },
         {
-                name: 'Living room TV',
+                name: 'Телевизор в гостиной',
                 ip: '192.168.1.77',
                 mac: 'F0:99:BF:70:22:09',
-                group: 'TVs / media',
+                group: 'ТВ / медиа',
                 status: 'restricted',
-                note: 'Allowed after homework window'
+                note: 'Разрешён после времени для уроков'
         },
         {
-                name: 'Unknown device',
+                name: 'Неизвестное устройство',
                 ip: '192.168.1.98',
                 mac: 'DC:A6:32:8C:00:19',
-                group: 'Unconfigured',
+                group: 'Не настроено',
                 status: 'new',
-                note: 'Detected from router leases'
+                note: 'Обнаружено по данным роутера'
         },
         {
-                name: 'Old game console',
+                name: 'Старая игровая приставка',
                 ip: '192.168.1.64',
                 mac: '00:1F:16:CC:90:02',
-                group: 'Children',
+                group: 'Дети',
                 status: 'blocked',
-                note: 'Blocklist'
+                note: 'Чёрный список'
         }
 ];
 
 var emergencySites = [
-        ['gosuslugi.ru', 'Gosuslugi', 'Government services'],
-        ['esia.gosuslugi.ru', 'ESIA', 'Government account login'],
-        ['mos.ru', 'Moscow services', 'City services'],
-        ['school.mos.ru', 'Moscow school', 'School access'],
-        ['dnevnik.ru', 'Dnevnik.ru', 'School diary'],
-        ['ya.ru', 'Yandex search', 'Narrow search entrypoint'],
-        ['2gis.ru', '2GIS', 'Maps and local organizations']
+        ['gosuslugi.ru', 'Госуслуги', 'Государственные услуги'],
+        ['esia.gosuslugi.ru', 'ЕСИА', 'Вход в государственную учётную запись'],
+        ['mos.ru', 'Услуги Москвы', 'Городские сервисы'],
+        ['school.mos.ru', 'Московская школа', 'Доступ к школе'],
+        ['dnevnik.ru', 'Дневник.ру', 'Школьный дневник'],
+        ['ya.ru', 'Поиск Яндекса', 'Узкая точка входа в поиск'],
+        ['2gis.ru', '2ГИС', 'Карты и организации']
 ];
 
+var translations = {
+        'All devices': 'Все устройства',
+        'Allowlist': 'Белый список',
+        'Blocklist': 'Чёрный список',
+        'Schedules': 'Расписания',
+        'Emergency-useful sites': 'Аварийно-полезные сайты',
+        'Wi-Fi': 'Wi-Fi',
+        'Integrations': 'Интеграции',
+        'Bot and admins': 'Бот и администраторы',
+        'Logs': 'Журнал',
+        'Settings': 'Настройки',
+        'Scheduled': 'По расписанию',
+        'Restricted': 'Ограничено',
+        'New': 'Новое',
+        'This action is a visual prototype only.': 'Это действие работает только как визуальная заглушка.',
+        'Configure': 'Настроить',
+        'Device editor is not implemented in this visual test build.': 'Редактор устройства не реализован в этой визуальной тестовой сборке.',
+        '+30 min': '+30 мин',
+        'Temporary access would require confirmation.': 'Временный доступ потребует подтверждения.',
+        'Device': 'Устройство',
+        'IP address': 'IP-адрес',
+        'MAC address': 'MAC-адрес',
+        'Group': 'Группа',
+        'Status': 'Статус',
+        'Actions': 'Действия',
+        'Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.': 'Обнаруживаются автоматически из аренд DHCP, ARP/neighbor-данных и постоянных аренд DHCP.',
+        'Search by name, IP, or MAC': 'Поиск по имени, IP или MAC',
+        'Add manually': 'Добавить вручную',
+        'Manual MAC-based add form is not implemented in this visual test build.': 'Ручное добавление по MAC пока не реализовано в этой визуальной сборке.',
+        'These devices are never blocked by global blocking or schedules.': 'Эти устройства не блокируются глобальной блокировкой и расписаниями.',
+        'Add device': 'Добавить устройство',
+        'The UI must prevent adding the same MAC to allowlist and blocklist.': 'Интерфейс должен запрещать добавление одного MAC одновременно в белый и чёрный список.',
+        'Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API.': 'Устройства из чёрного списка не могут открывать интернет, LuCI, SSH и Sheepfold API.',
+        'Blocklist changes require confirmation.': 'Изменения чёрного списка требуют подтверждения.',
+        'Emergency-useful sites for blocklisted devices require a separate explicit setting and still do not open router access.': 'Доступ к аварийно-полезным сайтам для чёрного списка требует отдельной явной настройки и всё равно не открывает доступ к роутеру.',
+        'Allow and block rules for devices and groups.': 'Правила разрешения и блокировки для устройств и групп.',
+        'Add rule': 'Добавить правило',
+        'Schedule editor is not implemented in this visual test build.': 'Редактор расписаний пока не реализован в этой визуальной сборке.',
+        'School days': 'Учебные дни',
+        'Children group': 'Группа детей',
+        'Allow 07:00-20:30, block after bedtime': 'Разрешить 07:00-20:30, блокировать после отбоя',
+        'Temporary access': 'Временный доступ',
+        'End of day': 'До конца дня',
+        'Bedtime': 'До отбоя',
+        'Temporary access requires confirmation.': 'Временный доступ требует подтверждения.',
+        'Default bedtime': 'Время отбоя по умолчанию',
+        'Used by the "until bedtime" quick action.': 'Используется кнопкой быстрого доступа "до отбоя".',
+        'Access to emergency-useful sites': 'Доступ к аварийно-полезным сайтам',
+        'Editable list for necessary services during restricted access.': 'Редактируемый список необходимых сервисов при ограниченном доступе.',
+        'Add domain': 'Добавить домен',
+        'Domain editor is not implemented in this visual test build.': 'Редактор доменов пока не реализован в этой визуальной сборке.',
+        'Do not add broad yandex.ru by default: it can open video, music, games, feeds, and other non-emergency services.': 'Не добавляйте широкий yandex.ru по умолчанию: он может открыть видео, музыку, игры, ленты и другие неаварийные сервисы.',
+        'Family-facing shortcut for common OpenWRT wireless settings.': 'Упрощённый семейный доступ к основным настройкам Wi-Fi OpenWRT.',
+        'Apply Wi-Fi changes': 'Применить Wi-Fi',
+        'Wi-Fi changes can disconnect current users and require confirmation.': 'Изменения Wi-Fi могут отключить текущих пользователей и требуют подтверждения.',
+        'SSID': 'SSID',
+        'Password': 'Пароль',
+        'Security': 'Защита',
+        'Channel': 'Канал',
+        'Auto': 'Авто',
+        'Use together with': 'Использование совместно с',
+        'None': 'Нет',
+        'Traffic order: Sheepfold -> AdGuard Home -> Podkop.': 'Порядок трафика: Sheepfold -> AdGuard Home -> Podkop.',
+        'Automatic router changes must show integration-specific notes and create/export a backup before applying.': 'Автоматические изменения роутера должны показывать нюансы интеграции и создавать/экспортировать резервную копию перед применением.',
+        'Messenger': 'Мессенджер',
+        'Active messenger': 'Активный мессенджер',
+        'Disabled': 'Выключено',
+        'VK is shown first during setup, but activation requires credentials and an approved admin.': 'VK предлагается первым при настройке, но включение требует данных доступа и разрешённого администратора.',
+        'Approved admin ID': 'ID разрешённого администратора',
+        'Stored on the router.': 'Хранится на роутере.',
+        'Commands': 'Команды',
+        'show all devices': 'показать все устройства',
+        'block internet': 'выключить интернет',
+        'unblock internet': 'включить интернет',
+        'grant +30 minutes': 'дать +30 минут',
+        'status': 'статус',
+        'Administrative action log with masking.': 'Журнал действий администраторов с маскированием.',
+        'Clear log': 'Очистить журнал',
+        'Clearing logs requires confirmation.': 'Очистка журнала требует подтверждения.',
+        'Export masked': 'Экспорт с маскированием',
+        'Masked log export is not implemented in this visual test build.': 'Экспорт журнала с маскированием пока не реализован в этой визуальной сборке.',
+        'admin granted +30 minutes to Child tablet': 'администратор дал +30 минут устройству "Планшет ребёнка"',
+        'new device detected: DC:A6:32:xx:xx:19': 'обнаружено новое устройство: DC:A6:32:xx:xx:19',
+        'global block disabled by owner': 'глобальная блокировка выключена владельцем',
+        'General': 'Общие',
+        'Language': 'Язык',
+        'Russian': 'Русский',
+        'English': 'Английский',
+        'New device behavior': 'Поведение новых устройств',
+        'Allow internet by default': 'Разрешать интернет по умолчанию',
+        'Restrict until configured': 'Ограничивать до настройки',
+        'Known offline devices cleanup': 'Очистка известных офлайн-устройств',
+        '30 days': '30 дней',
+        '90 days': '90 дней',
+        '180 days': '180 дней',
+        'Export and update': 'Экспорт и обновление',
+        'Export mode': 'Режим экспорта',
+        'Readable JSON without secrets': 'Читаемый JSON без секретов',
+        'Encrypted full backup': 'Зашифрованный полный бэкап',
+        'Blocked page text': 'Текст страницы блокировки',
+        'Internet is temporarily unavailable by family rules.': 'Интернет временно недоступен по семейным правилам.',
+        'Update app': 'Обновить приложение',
+        'Application update requires confirmation.': 'Обновление приложения требует подтверждения.',
+        'Reboot router': 'Перезагрузить роутер',
+        'Router reboot requires confirmation.': 'Перезагрузка роутера требует подтверждения.',
+        'Sheepfold Family Internet Control': 'Овчарня : контроль доступа в интернет для семьи',
+        'Visual test build. Router rules and persistence are not active yet.': 'Визуальная тестовая сборка. Правила роутера и сохранение настроек пока не активны.',
+        'Block internet': 'Выключить интернет',
+        'Global block would block every device except allowlist.': 'Глобальная блокировка заблокирует все устройства, кроме белого списка.',
+        'Unblock': 'Включить',
+        'Global block would be disabled after confirmation.': 'Глобальная блокировка будет выключена после подтверждения.',
+        'Export': 'Экспорт',
+        'Default export is readable JSON without secrets.': 'Экспорт по умолчанию — читаемый JSON без секретов.',
+        'Import': 'Импорт',
+        'Import requires confirmation.': 'Импорт требует подтверждения.',
+        'Devices': 'Устройства'
+};
+
+function T(text) {
+        return translations[text] || text;
+}
+
 var tabs = [
-        ['devices', _('All devices')],
-        ['allowlist', _('Allowlist')],
-        ['blocklist', _('Blocklist')],
-        ['schedules', _('Schedules')],
-        ['emergency', _('Emergency-useful sites')],
-        ['wifi', _('Wi-Fi')],
-        ['integrations', _('Integrations')],
-        ['bot', _('Bot and admins')],
-        ['logs', _('Logs')],
-        ['settings', _('Settings')]
+        ['devices', T('All devices')],
+        ['allowlist', T('Allowlist')],
+        ['blocklist', T('Blocklist')],
+        ['schedules', T('Schedules')],
+        ['emergency', T('Emergency-useful sites')],
+        ['wifi', T('Wi-Fi')],
+        ['integrations', T('Integrations')],
+        ['bot', T('Bot and admins')],
+        ['logs', T('Logs')],
+        ['settings', T('Settings')]
 ];
 
 function notify(message, level) {
@@ -74,11 +196,11 @@ function notify(message, level) {
 
 function badge(status) {
         var labels = {
-                allow: _('Allowlist'),
-                blocked: _('Blocklist'),
-                scheduled: _('Scheduled'),
-                restricted: _('Restricted'),
-                new: _('New')
+                allow: T('Allowlist'),
+                blocked: T('Blocklist'),
+                scheduled: T('Scheduled'),
+                restricted: T('Restricted'),
+                new: T('New')
         };
 
         return E('span', { 'class': 'sf-badge sf-badge-' + status }, labels[status] || status);
@@ -96,7 +218,7 @@ function actionButton(label, tone, message) {
                 'class': 'sf-action sf-action-' + tone,
                 'click': function (ev) {
                         ev.preventDefault();
-                        notify(message || _('This action is a visual prototype only.'), tone === 'danger' ? 'warning' : 'info');
+                        notify(message || T('This action is a visual prototype only.'), tone === 'danger' ? 'warning' : 'info');
                 }
         }, label);
 }
@@ -115,20 +237,20 @@ function deviceTable(rows, options) {
                         E('div', {}, device.group),
                         E('div', {}, badge(device.status)),
                         E('div', { 'class': 'sf-row-actions' }, [
-                                actionButton(_('Configure'), 'neutral', _('Device editor is not implemented in this visual test build.')),
-                                options.compact ? '' : actionButton(_('+30 min'), 'positive', _('Temporary access would require confirmation.'))
+                                actionButton(T('Configure'), 'neutral', T('Device editor is not implemented in this visual test build.')),
+                                options.compact ? '' : actionButton(T('+30 min'), 'positive', T('Temporary access would require confirmation.'))
                         ])
                 ]);
         });
 
         return E('div', { 'class': 'sf-device-table' }, [
                 E('div', { 'class': 'sf-device-row sf-device-head' }, [
-                        E('div', {}, _('Device')),
-                        E('div', {}, _('IP address')),
-                        E('div', {}, _('MAC address')),
-                        E('div', {}, _('Group')),
-                        E('div', {}, _('Status')),
-                        E('div', {}, _('Actions'))
+                        E('div', {}, T('Device')),
+                        E('div', {}, T('IP address')),
+                        E('div', {}, T('MAC address')),
+                        E('div', {}, T('Group')),
+                        E('div', {}, T('Status')),
+                        E('div', {}, T('Actions'))
                 ])
         ].concat(tableRows));
 }
@@ -187,15 +309,15 @@ return view.extend({
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('h3', {}, _('All devices')),
-                                        E('p', {}, _('Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.'))
+                                        E('h3', {}, T('All devices')),
+                                        E('p', {}, T('Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.'))
                                 ]),
                                 E('div', { 'class': 'sf-toolbar' }, [
                                         E('input', {
                                                 'class': 'cbi-input-text sf-search',
-                                                'placeholder': _('Search by name, IP, or MAC')
+                                                'placeholder': T('Search by name, IP, or MAC')
                                         }),
-                                        actionButton(_('Add manually'), 'positive', _('Manual MAC-based add form is not implemented in this visual test build.'))
+                                        actionButton(T('Add manually'), 'positive', T('Manual MAC-based add form is not implemented in this visual test build.'))
                                 ])
                         ]),
                         deviceTable(devices)
@@ -206,10 +328,10 @@ return view.extend({
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('h3', {}, _('Allowlist')),
-                                        E('p', {}, _('These devices are never blocked by global blocking or schedules.'))
+                                        E('h3', {}, T('Allowlist')),
+                                        E('p', {}, T('These devices are never blocked by global blocking or schedules.'))
                                 ]),
-                                actionButton(_('Add device'), 'positive', _('The UI must prevent adding the same MAC to allowlist and blocklist.'))
+                                actionButton(T('Add device'), 'positive', T('The UI must prevent adding the same MAC to allowlist and blocklist.'))
                         ]),
                         deviceTable(devices.filter(function (device) { return device.status === 'allow'; }), { compact: true })
                 ]);
@@ -219,12 +341,12 @@ return view.extend({
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('h3', {}, _('Blocklist')),
-                                        E('p', {}, _('Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API.'))
+                                        E('h3', {}, T('Blocklist')),
+                                        E('p', {}, T('Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API.'))
                                 ]),
-                                actionButton(_('Add device'), 'danger', _('Blocklist changes require confirmation.'))
+                                actionButton(T('Add device'), 'danger', T('Blocklist changes require confirmation.'))
                         ]),
-                        E('div', { 'class': 'sf-note sf-note-warning' }, _('Emergency-useful sites for blocklisted devices require a separate explicit setting and still do not open router access.')),
+                        E('div', { 'class': 'sf-note sf-note-warning' }, T('Emergency-useful sites for blocklisted devices require a separate explicit setting and still do not open router access.')),
                         deviceTable(devices.filter(function (device) { return device.status === 'blocked'; }), { compact: true })
                 ]);
         },
@@ -233,34 +355,34 @@ return view.extend({
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('h3', {}, _('Schedules')),
-                                        E('p', {}, _('Allow and block rules for devices and groups.'))
+                                        E('h3', {}, T('Schedules')),
+                                        E('p', {}, T('Allow and block rules for devices and groups.'))
                                 ]),
-                                actionButton(_('Add rule'), 'positive', _('Schedule editor is not implemented in this visual test build.'))
+                                actionButton(T('Add rule'), 'positive', T('Schedule editor is not implemented in this visual test build.'))
                         ]),
                         E('div', { 'class': 'sf-grid two' }, [
                                 E('div', { 'class': 'sf-box' }, [
-                                        E('h4', {}, _('School days')),
-                                        E('p', {}, _('Children group')),
-                                        E('strong', {}, _('Allow 07:00-20:30, block after bedtime'))
+                                        E('h4', {}, T('School days')),
+                                        E('p', {}, T('Children group')),
+                                        E('strong', {}, T('Allow 07:00-20:30, block after bedtime'))
                                 ]),
                                 E('div', { 'class': 'sf-box' }, [
-                                        E('h4', {}, _('Temporary access')),
+                                        E('h4', {}, T('Temporary access')),
                                         E('div', { 'class': 'sf-chip-row' }, [
-                                                '+15', '+30', '+1h', '+2h', '+3h', '+5h', _('End of day'), _('Bedtime')
+                                                '+15', '+30', '+1h', '+2h', '+3h', '+5h', T('End of day'), T('Bedtime')
                                         ].map(function (label) {
                                                 return E('button', {
                                                 'class': 'sf-chip',
                                                         'click': function (ev) {
                                                                 ev.preventDefault();
-                                                                notify(_('Temporary access requires confirmation.'), 'info');
+                                                                notify(T('Temporary access requires confirmation.'), 'info');
                                                         }
                                                 }, label);
                                         }))
                                 ])
                         ]),
                         E('div', { 'class': 'sf-form-row' }, [
-                                field(_('Default bedtime'), '21:00', _('Used by the "until bedtime" quick action.'))
+                                field(T('Default bedtime'), '21:00', T('Used by the "until bedtime" quick action.'))
                         ])
                 ]);
         },
@@ -269,12 +391,12 @@ return view.extend({
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('h3', {}, _('Access to emergency-useful sites')),
-                                        E('p', {}, _('Editable list for necessary services during restricted access.'))
+                                        E('h3', {}, T('Access to emergency-useful sites')),
+                                        E('p', {}, T('Editable list for necessary services during restricted access.'))
                                 ]),
-                                actionButton(_('Add domain'), 'positive', _('Domain editor is not implemented in this visual test build.'))
+                                actionButton(T('Add domain'), 'positive', T('Domain editor is not implemented in this visual test build.'))
                         ]),
-                        E('div', { 'class': 'sf-note' }, _('Do not add broad yandex.ru by default: it can open video, music, games, feeds, and other non-emergency services.')),
+                        E('div', { 'class': 'sf-note' }, T('Do not add broad yandex.ru by default: it can open video, music, games, feeds, and other non-emergency services.')),
                         E('div', { 'class': 'sf-domain-list' }, emergencySites.map(function (site) {
                                 return E('div', { 'class': 'sf-domain' }, [
                                         E('strong', {}, site[0]),
@@ -289,39 +411,39 @@ return view.extend({
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('h3', {}, _('Wi-Fi')),
-                                        E('p', {}, _('Family-facing shortcut for common OpenWRT wireless settings.'))
+                                        E('h3', {}, T('Wi-Fi')),
+                                        E('p', {}, T('Family-facing shortcut for common OpenWRT wireless settings.'))
                                 ]),
-                                actionButton(_('Apply Wi-Fi changes'), 'danger', _('Wi-Fi changes can disconnect current users and require confirmation.'))
+                                actionButton(T('Apply Wi-Fi changes'), 'danger', T('Wi-Fi changes can disconnect current users and require confirmation.'))
                         ]),
                         E('div', { 'class': 'sf-grid two' }, [
                                 E('div', { 'class': 'sf-box' }, [
-                                        E('h4', {}, _('2.4 GHz')),
-                                        field(_('SSID'), 'Sheepfold Home 2G'),
-                                        field(_('Password'), '********'),
-                                        selectField(_('Security'), 'sae-mixed', [
+                                        E('h4', {}, T('2.4 GHz')),
+                                        field(T('SSID'), 'Sheepfold Home 2G'),
+                                        field(T('Password'), '********'),
+                                        selectField(T('Security'), 'sae-mixed', [
                                                 ['sae-mixed', 'WPA2/WPA3 mixed'],
                                                 ['psk2', 'WPA2-PSK'],
                                                 ['sae', 'WPA3-SAE']
                                         ]),
-                                        selectField(_('Channel'), 'auto', [
-                                                ['auto', _('Auto')],
+                                        selectField(T('Channel'), 'auto', [
+                                                ['auto', T('Auto')],
                                                 ['1', '1'],
                                                 ['6', '6'],
                                                 ['11', '11']
                                         ])
                                 ]),
                                 E('div', { 'class': 'sf-box' }, [
-                                        E('h4', {}, _('5 GHz')),
-                                        field(_('SSID'), 'Sheepfold Home 5G'),
-                                        field(_('Password'), '********'),
-                                        selectField(_('Security'), 'sae-mixed', [
+                                        E('h4', {}, T('5 GHz')),
+                                        field(T('SSID'), 'Sheepfold Home 5G'),
+                                        field(T('Password'), '********'),
+                                        selectField(T('Security'), 'sae-mixed', [
                                                 ['sae-mixed', 'WPA2/WPA3 mixed'],
                                                 ['psk2', 'WPA2-PSK'],
                                                 ['sae', 'WPA3-SAE']
                                         ]),
-                                        selectField(_('Channel'), 'auto', [
-                                                ['auto', _('Auto')],
+                                        selectField(T('Channel'), 'auto', [
+                                                ['auto', T('Auto')],
                                                 ['36', '36'],
                                                 ['44', '44'],
                                                 ['149', '149']
@@ -333,41 +455,41 @@ return view.extend({
 
         renderIntegrations: function () {
                 return E('div', { 'class': 'sf-panel' }, [
-                        E('h3', {}, _('Integrations')),
+                        E('h3', {}, T('Integrations')),
                         E('div', { 'class': 'sf-form-row' }, [
-                                selectField(_('Use together with'), 'adguard_podkop', [
-                                        ['none', _('None')],
+                                selectField(T('Use together with'), 'adguard_podkop', [
+                                        ['none', T('None')],
                                         ['adguard', 'AdGuard Home'],
                                         ['podkop', 'Podkop'],
                                         ['adguard_podkop', 'AdGuard Home + Podkop']
-                                ], _('Traffic order: Sheepfold -> AdGuard Home -> Podkop.'))
+                                ], T('Traffic order: Sheepfold -> AdGuard Home -> Podkop.'))
                         ]),
-                        E('div', { 'class': 'sf-note' }, _('Automatic router changes must show integration-specific notes and create/export a backup before applying.'))
+                        E('div', { 'class': 'sf-note' }, T('Automatic router changes must show integration-specific notes and create/export a backup before applying.'))
                 ]);
         },
 
         renderBot: function () {
                 return E('div', { 'class': 'sf-panel' }, [
-                        E('h3', {}, _('Bot and administrators')),
+                        E('h3', {}, T('Bot and administrators')),
                         E('div', { 'class': 'sf-grid two' }, [
                                 E('div', { 'class': 'sf-box' }, [
-                                        E('h4', {}, _('Messenger')),
-                                        selectField(_('Active messenger'), 'none', [
-                                                ['none', _('Disabled')],
+                                        E('h4', {}, T('Messenger')),
+                                        selectField(T('Active messenger'), 'none', [
+                                                ['none', T('Disabled')],
                                                 ['vk', 'VK'],
                                                 ['telegram', 'Telegram'],
-                                                ['max', 'MAX experimental']
-                                        ], _('VK is shown first during setup, but activation requires credentials and an approved admin.')),
-                                        field(_('Approved admin ID'), 'vk:123***789', _('Stored on the router.'))
+                                                ['max', 'MAX экспериментально']
+                                        ], T('VK is shown first during setup, but activation requires credentials and an approved admin.')),
+                                        field(T('Approved admin ID'), 'vk:123***789', T('Stored on the router.'))
                                 ]),
                                 E('div', { 'class': 'sf-box' }, [
-                                        E('h4', {}, _('Commands')),
+                                        E('h4', {}, T('Commands')),
                                         E('div', { 'class': 'sf-command-list' }, [
-                                                _('show all devices'),
-                                                _('block internet'),
-                                                _('unblock internet'),
-                                                _('grant +30 minutes'),
-                                                _('status')
+                                                T('show all devices'),
+                                                T('block internet'),
+                                                T('unblock internet'),
+                                                T('grant +30 minutes'),
+                                                T('status')
                                         ].map(function (command) {
                                                 return E('code', {}, command);
                                         }))
@@ -380,52 +502,52 @@ return view.extend({
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('h3', {}, _('Logs')),
-                                        E('p', {}, _('Administrative action log with masking.'))
+                                        E('h3', {}, T('Logs')),
+                                        E('p', {}, T('Administrative action log with masking.'))
                                 ]),
                                 E('div', { 'class': 'sf-toolbar' }, [
-                                        actionButton(_('Clear log'), 'danger', _('Clearing logs requires confirmation.')),
-                                        actionButton(_('Export masked'), 'neutral', _('Masked log export is not implemented in this visual test build.'))
+                                        actionButton(T('Clear log'), 'danger', T('Clearing logs requires confirmation.')),
+                                        actionButton(T('Export masked'), 'neutral', T('Masked log export is not implemented in this visual test build.'))
                                 ])
                         ]),
                         E('div', { 'class': 'sf-log' }, [
-                                E('div', {}, [E('time', {}, '20:31'), E('span', {}, _('admin granted +30 minutes to Child tablet'))]),
-                                E('div', {}, [E('time', {}, '19:55'), E('span', {}, _('new device detected: DC:A6:32:xx:xx:19'))]),
-                                E('div', {}, [E('time', {}, '18:10'), E('span', {}, _('global block disabled by owner'))])
+                                E('div', {}, [E('time', {}, '20:31'), E('span', {}, T('admin granted +30 minutes to Child tablet'))]),
+                                E('div', {}, [E('time', {}, '19:55'), E('span', {}, T('new device detected: DC:A6:32:xx:xx:19'))]),
+                                E('div', {}, [E('time', {}, '18:10'), E('span', {}, T('global block disabled by owner'))])
                         ])
                 ]);
         },
 
         renderSettings: function () {
                 return E('div', { 'class': 'sf-panel' }, [
-                        E('h3', {}, _('Settings')),
+                        E('h3', {}, T('Settings')),
                         E('div', { 'class': 'sf-grid two' }, [
                                 E('div', { 'class': 'sf-box' }, [
-                                        E('h4', {}, _('General')),
-                                        selectField(_('Language'), 'ru', [
-                                                ['ru', _('Russian')],
-                                                ['en', _('English')]
+                                        E('h4', {}, T('General')),
+                                        selectField(T('Language'), 'ru', [
+                                                ['ru', T('Russian')],
+                                                ['en', T('English')]
                                         ]),
-                                        selectField(_('New device behavior'), 'allow', [
-                                                ['allow', _('Allow internet by default')],
-                                                ['restrict_until_configured', _('Restrict until configured')]
+                                        selectField(T('New device behavior'), 'allow', [
+                                                ['allow', T('Allow internet by default')],
+                                                ['restrict_until_configured', T('Restrict until configured')]
                                         ]),
-                                        selectField(_('Known offline devices cleanup'), '90', [
-                                                ['30', _('30 days')],
-                                                ['90', _('90 days')],
-                                                ['180', _('180 days')]
+                                        selectField(T('Known offline devices cleanup'), '90', [
+                                                ['30', T('30 days')],
+                                                ['90', T('90 days')],
+                                                ['180', T('180 days')]
                                         ])
                                 ]),
                                 E('div', { 'class': 'sf-box' }, [
-                                        E('h4', {}, _('Export and update')),
-                                        selectField(_('Export mode'), 'safe', [
-                                                ['safe', _('Readable JSON without secrets')],
-                                                ['encrypted', _('Encrypted full backup')]
+                                        E('h4', {}, T('Export and update')),
+                                        selectField(T('Export mode'), 'safe', [
+                                                ['safe', T('Readable JSON without secrets')],
+                                                ['encrypted', T('Encrypted full backup')]
                                         ]),
-                                        field(_('Blocked page text'), _('Internet is temporarily unavailable by family rules.')),
+                                        field(T('Blocked page text'), T('Internet is temporarily unavailable by family rules.')),
                                         E('div', { 'class': 'sf-toolbar' }, [
-                                                actionButton(_('Update app'), 'danger', _('Application update requires confirmation.')),
-                                                actionButton(_('Reboot router'), 'danger', _('Router reboot requires confirmation.'))
+                                                actionButton(T('Update app'), 'danger', T('Application update requires confirmation.')),
+                                                actionButton(T('Reboot router'), 'danger', T('Router reboot requires confirmation.'))
                                         ])
                                 ])
                         ])
@@ -456,28 +578,28 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-4';
+                var assetVersion = '0.1.0-5';
                 var cssHref = L.resource('sheepfold/sheepfold.css') + '?v=' + encodeURIComponent(assetVersion);
 
                 return E('div', { 'class': 'sf-page' }, [
                         E('link', { 'rel': 'stylesheet', 'href': cssHref }),
                         E('div', { 'class': 'sf-header' }, [
                                 E('div', {}, [
-                                        E('h2', {}, _('Sheepfold Family Internet Control')),
-                                        E('p', {}, _('Visual test build. Router rules and persistence are not active yet.'))
+                                        E('h2', {}, T('Sheepfold Family Internet Control')),
+                                        E('p', {}, T('Visual test build. Router rules and persistence are not active yet.'))
                                 ]),
                                 E('div', { 'class': 'sf-header-actions' }, [
-                                        actionButton(_('Block internet'), 'danger', _('Global block would block every device except allowlist.')),
-                                        actionButton(_('Unblock'), 'positive', _('Global block would be disabled after confirmation.')),
-                                        actionButton(_('Export'), 'neutral', _('Default export is readable JSON without secrets.')),
-                                        actionButton(_('Import'), 'neutral', _('Import requires confirmation.'))
+                                        actionButton(T('Block internet'), 'danger', T('Global block would block every device except allowlist.')),
+                                        actionButton(T('Unblock'), 'positive', T('Global block would be disabled after confirmation.')),
+                                        actionButton(T('Export'), 'neutral', T('Default export is readable JSON without secrets.')),
+                                        actionButton(T('Import'), 'neutral', T('Import requires confirmation.'))
                                 ])
                         ]),
                         E('div', { 'class': 'sf-metrics' }, [
-                                metric(_('Devices'), '5', 'neutral'),
-                                metric(_('Allowlist'), '1', 'positive'),
-                                metric(_('Restricted'), '2', 'warning'),
-                                metric(_('Blocklist'), '1', 'danger')
+                                metric(T('Devices'), '5', 'neutral'),
+                                metric(T('Allowlist'), '1', 'positive'),
+                                metric(T('Restricted'), '2', 'warning'),
+                                metric(T('Blocklist'), '1', 'danger')
                         ]),
                         this.renderTabs(),
                         E('div', { 'class': 'sf-panels' }, this.renderPanels())
