@@ -11,7 +11,7 @@
 
 ## Core Features
 
-- LuCI interface for family internet access control.
+- Manage family internet access through an OpenWRT router and its LuCI web interface.
 - Android companion app.
 - VK/MAX messenger bot.
 - Device allowlist.
@@ -56,7 +56,7 @@ Temporary access must never bypass the blocklist.
 
 The application should include security settings for local router access:
 
-- blocklisted devices cannot access LuCI, SSH, or the Sheepfold local API;
+- blocklisted devices cannot access the OpenWRT router LuCI interface, SSH, or the Sheepfold local API;
 - globally blocked devices may access the router only if `allow_router_for_blocked` is enabled;
 - domain allowlist mode can optionally allow selected public domains for blocked devices.
 
