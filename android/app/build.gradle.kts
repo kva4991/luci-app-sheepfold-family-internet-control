@@ -1,3 +1,8 @@
+import org.gradle.api.tasks.Copy
+
+val sheepfoldVersionCode = 1
+val sheepfoldVersionName = "0.1.0"
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,8 +17,8 @@ android {
         applicationId = "app.sheepfold.android"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = sheepfoldVersionCode
+        versionName = sheepfoldVersionName
     }
 
     buildTypes {
@@ -46,4 +51,43 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.10.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
+}
+
+fun debugApkExportDir(): File {
+    val customDir = providers.environmentVariable("SHEEPFOLD_APK_OUTPUT_DIR").orNull
+    if (!customDir.isNullOrBlank()) {
+        return file(customDir)
+    }
+
+    val userProfile = providers.environmentVariable("USERPROFILE").orNull
+    if (!userProfile.isNullOrBlank()) {
+        return file("$userProfile/Downloads")
+    }
+
+    val home = providers.environmentVariable("HOME").orNull
+    if (!home.isNullOrBlank()) {
+        return file("$home/Downloads")
+    }
+
+    return layout.projectDirectory.dir("build/outputs/shared").asFile
+}
+
+val copyDebugApkToDownloads by tasks.registering(Copy::class) {
+    group = "sheepfold"
+    description = "Copies the debug APK to Downloads, or to SHEEPFOLD_APK_OUTPUT_DIR when set."
+
+    val exportDir = debugApkExportDir()
+    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+    into(exportDir)
+    rename { "sheepfold-v$sheepfoldVersionName.apk" }
+
+    doFirst {
+        exportDir.mkdirs()
+    }
+}
+
+afterEvaluate {
+    tasks.named("assembleDebug") {
+        finalizedBy(copyDebugApkToDownloads)
+    }
 }
