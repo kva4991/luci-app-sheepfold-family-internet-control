@@ -37,7 +37,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -67,9 +66,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -310,14 +313,6 @@ private fun AgreementScreen(onAccept: () -> Unit) {
                 text = "Перед настройкой примите пользовательское соглашение и условия обработки технических данных, необходимых для работы приложения.",
                 style = MaterialTheme.typography.bodyLarge
             )
-            SetupCard(
-                title = "Разрешения Android",
-                body = if (allPermissionsGranted) {
-                    "Разрешения выданы. Они нужны для QR-кода, чтения имени Wi-Fi сети, проверки MAC-адреса и важных уведомлений."
-                } else {
-                    "Выдайте разрешения на первом шаге. Камера нужна для QR-кода, Wi-Fi/геоданные - для имени сети и MAC-адреса, уведомления - для важных событий."
-                }
-            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -332,17 +327,23 @@ private fun AgreementScreen(onAccept: () -> Unit) {
                         uncheckedColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
-                FramedButton(
+                AgreementLinkText(
                     onClick = {
                         uriHandler.openUri(
                             "https://github.com/kva4991/luci-app-sheepfold-family-internet-control/blob/main/docs/user-agreement.ru.md"
                         )
                     },
                     modifier = Modifier.weight(1f)
-                ) {
-                    Text(text = "Открыть соглашение")
-                }
+                )
             }
+            SetupCard(
+                title = "Разрешения Android",
+                body = if (allPermissionsGranted) {
+                    "Разрешения выданы. Они нужны для QR-кода, чтения имени Wi-Fi сети, проверки MAC-адреса и важных уведомлений."
+                } else {
+                    "Выдайте разрешения на первом шаге. Камера нужна для QR-кода, Wi-Fi/геоданные - для имени сети и MAC-адреса, уведомления - для важных событий."
+                }
+            )
             FramedButton(
                 enabled = !allPermissionsGranted,
                 onClick = { permissionsLauncher.launch(runtimePermissions.toTypedArray()) },
@@ -402,7 +403,7 @@ private fun WifiConnectScreen(
                 discoveryStatus = DiscoveryStatus.Attention
             }
         } else {
-            detectionMessage = "Для первичной настройки нужна домашняя Wi-Fi сеть или проводное подключение к роутеру. Через мобильную сеть продолжать нельзя."
+            detectionMessage = "Для первичной настройки нужна домашняя Wi-Fi сеть или проводное подключение к роутеру. Через мобильную сеть продолжить не получится."
             discoveryStatus = DiscoveryStatus.Attention
         }
         isDetecting = false
@@ -422,10 +423,12 @@ private fun WifiConnectScreen(
                 text = "Подключите телефон к домашней Wi-Fi сети или проводной сети роутера, на котором установлен Sheepfold.",
                 style = MaterialTheme.typography.bodyLarge
             )
-            SetupCard(
-                title = "Важно",
-                body = "Полная настройка работает локально. Через мобильную сеть продолжать нельзя."
-            )
+            if (!localNetworkAllowed) {
+                SetupCard(
+                    title = "Важно",
+                    body = "Полная настройка работает локально. Через мобильную сеть продолжить не получится."
+                )
+            }
             SetupCard(
                 title = "Текущее подключение",
                 body = if (localNetworkAllowed) {
@@ -436,7 +439,7 @@ private fun WifiConnectScreen(
                 bodyColor = if (localNetworkAllowed) Color(0xFF2E7D32) else null
             )
             StatusActionCard(
-                title = "Автопоиск",
+                title = "Автопоиск сервера Sheepfold",
                 body = detectionMessage,
                 status = discoveryStatus,
                 onClick = {
@@ -478,14 +481,71 @@ private fun RoundNextButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
-            disabledContainerColor = Color(0xFFB8BEBB),
-            disabledContentColor = Color(0xFF707774)
+            disabledContainerColor = Color(0xFFDDEBE4),
+            disabledContentColor = Color(0xFF5F746C)
         )
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = ">")
+            Text(text = "▸", style = MaterialTheme.typography.headlineSmall)
             Text(text = "далее")
         }
+    }
+}
+
+@Composable
+private fun AgreementLinkText(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val text = buildAnnotatedString {
+        append("Я согласен с ")
+        withStyle(
+            SpanStyle(
+                color = MaterialTheme.colorScheme.primary,
+                textDecoration = TextDecoration.Underline,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+        ) {
+            append("пользовательским соглашением")
+        }
+        append(" и обработкой персональных данных")
+    }
+
+    Box(modifier = modifier) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(onClick = onClick)
+        )
+    }
+}
+
+@Composable
+private fun PairingChoiceButton(
+    text: String,
+    containerColor: Color,
+    contentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        )
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(vertical = 14.dp),
+            style = MaterialTheme.typography.titleLarge
+        )
     }
 }
 
@@ -654,22 +714,26 @@ private fun PairingChoiceScreen(
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            FramedButton(
+            PairingChoiceButton(
+                text = "QR код",
+                containerColor = Color(0xFF2E7D32),
+                contentColor = Color.White,
                 onClick = onQrClick,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .widthIn(min = 148.dp)
-            ) {
-                Text(text = "QR")
-            }
-            FramedButton(
+                    .padding(top = 36.dp)
+                    .fillMaxWidth(0.84f)
+            )
+            PairingChoiceButton(
+                text = "Ручная настройка",
+                containerColor = Color(0xFFF2C94C),
+                contentColor = Color(0xFF3A2A00),
                 onClick = onManualClick,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .widthIn(min = 148.dp)
-            ) {
-                Text(text = "Ручная настройка")
-            }
+                    .padding(bottom = 36.dp)
+                    .fillMaxWidth(0.84f)
+            )
         }
         SetupCard(
             title = "Следующий шаг",
