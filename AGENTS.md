@@ -38,8 +38,16 @@ Avoid:
 ## Implementation Entry Point
 
 - Future AI developers should start with `docs/developer-task.ru.md`, then read `docs/product-requirements.md` and the relevant focused docs.
+- For broad feature work, future AI developers must also read `docs/agent-playbook.ru.md`; it is the detailed implementation playbook that captures product decisions from the planning discussion.
 - Keep `docs/developer-task.ru.md` updated when project-level decisions change.
 - Do not replace the focused docs with the developer task; it is an entrypoint and summary, not the source of every detail.
+
+## Agent Playbook
+
+- `docs/agent-playbook.ru.md` is the detailed repository-wide task brief for AI agents.
+- Keep it synchronized with `AGENTS.md`, `docs/product-requirements.md`, and `docs/developer-task.ru.md` whenever core product decisions change.
+- If an agent is unsure whether to add a feature, prefer the stricter/smaller interpretation until the project owner explicitly expands scope.
+- Never implement a convenience feature that weakens privacy, opens entertainment/marketplace access by default, bypasses the blocklist, adds hidden child-device behavior, or introduces full remote router management.
 
 ## Emergency-Useful Sites
 
@@ -172,6 +180,7 @@ Avoid:
 ## LuCI Architecture
 
 - Use a Podkop-like structure for the real LuCI implementation: a small entrypoint with `form.Map("sheepfold")`, `tabbed = true`, and separate modules for devices, allowlist, blocklist, schedules, emergency-useful sites, Wi-Fi, integrations, messaging, logs, diagnostics, and settings.
+- Podkop is the implementation style reference for LuCI structure, backend JSON methods, diagnostics, ACL discipline, install/update flow, and cache handling. Do not copy Podkop routing/sing-box responsibilities into Sheepfold.
 - Keep the visual prototype separate from the future production architecture; do not keep growing one huge `overview.js`.
 - LuCI must call a narrow backend command/API layer such as `/usr/bin/sheepfold <method>` instead of building arbitrary shell commands.
 - rpcd ACL must explicitly allow only the Sheepfold files, UCI configs, ubus objects, and executable commands required by the UI.

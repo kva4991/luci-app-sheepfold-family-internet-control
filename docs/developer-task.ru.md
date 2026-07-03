@@ -7,6 +7,7 @@
 Перед началом работы прочитай:
 
 - `AGENTS.md`;
+- `docs/agent-playbook.ru.md`;
 - `docs/product-requirements.md`;
 - `docs/security.md`;
 - `docs/privacy.ru.md`;
