@@ -1,9 +1,14 @@
 package app.sheepfold.android.router
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.LinkProperties
+import android.net.RouteInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.Inet4Address
 import java.net.URL
 
 data class RouterConnectionRequest(
@@ -11,6 +16,12 @@ data class RouterConnectionRequest(
     val routerName: String,
     val temporaryPassword: String? = null,
     val administratorLogin: String? = null
+)
+
+data class LocalSheepfoldDiscovery(
+    val gatewayHost: String,
+    val apiUrl: String,
+    val routerName: String
 )
 
 class RouterConnectionManager {
@@ -95,6 +106,19 @@ class RouterConnectionManager {
         }
     }
 
+    suspend fun discoverLocalSheepfold(context: Context): LocalSheepfoldDiscovery? = withContext(Dispatchers.IO) {
+        val gatewayHost = currentGatewayHost(context) ?: getAutoRouterAddress() ?: return@withContext null
+        val probeUrls = listOf(
+            "http://$gatewayHost/cgi-bin/luci/admin/services/sheepfold/api/ping",
+            "http://$gatewayHost/cgi-bin/luci/admin/sheepfold/api/ping",
+            "http://$gatewayHost/.well-known/sheepfold.json"
+        )
+
+        probeUrls.firstNotNullOfOrNull { url ->
+            probeSheepfold(url, gatewayHost)
+        }
+    }
+
     private fun normalizeRouterUrl(value: String): String {
         require(value.isNotBlank()) { "QR код не содержит адрес роутера" }
         val withScheme = if (value.startsWith("http://") || value.startsWith("https://")) {
@@ -109,5 +133,55 @@ class RouterConnectionManager {
         return runCatching { URL(apiUrl).host }
             .getOrDefault(apiUrl)
             .ifBlank { "router" }
+    }
+
+    private fun probeSheepfold(url: String, gatewayHost: String): LocalSheepfoldDiscovery? {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        return try {
+            connection.connectTimeout = 1200
+            connection.readTimeout = 1200
+            connection.requestMethod = "GET"
+            connection.instanceFollowRedirects = false
+            connection.connect()
+            if (connection.responseCode !in 200..299) {
+                return null
+            }
+
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            if (!body.contains("sheepfold", ignoreCase = true)) {
+                return null
+            }
+
+            val routerName = runCatching {
+                JSONObject(body).optString("routerName")
+                    .ifBlank { JSONObject(body).optString("name") }
+            }.getOrNull().orEmpty().ifBlank { gatewayHost }
+
+            LocalSheepfoldDiscovery(
+                gatewayHost = gatewayHost,
+                apiUrl = url.removeSuffix("/ping"),
+                routerName = routerName
+            )
+        } catch (_: Exception) {
+            null
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun currentGatewayHost(context: Context): String? {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val linkProperties = connectivityManager.getLinkProperties(connectivityManager.activeNetwork)
+            ?: return null
+
+        return defaultIpv4Route(linkProperties)
+            ?.gateway
+            ?.hostAddress
+    }
+
+    private fun defaultIpv4Route(linkProperties: LinkProperties): RouteInfo? {
+        return linkProperties.routes.firstOrNull { route ->
+            route.isDefaultRoute && route.gateway is Inet4Address
+        }
     }
 }

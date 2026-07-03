@@ -67,6 +67,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.sheepfold.android.R
+import app.sheepfold.android.router.LocalSheepfoldDiscovery
 import app.sheepfold.android.router.RouterConnectionManager
 import app.sheepfold.android.router.RouterConnectionRequest
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
@@ -148,6 +149,8 @@ fun RouterSetupScreen(onSetupComplete: () -> Unit) {
                 )
 
                 SetupStep.WifiConnect -> WifiConnectScreen(
+                    routerConnectionManager = routerConnectionManager,
+                    onDetected = { setupStep = SetupStep.MacCheck },
                     onContinue = { setupStep = SetupStep.MacCheck }
                 )
 
@@ -312,8 +315,25 @@ private fun AgreementScreen(onAccept: () -> Unit) {
 }
 
 @Composable
-private fun WifiConnectScreen(onContinue: () -> Unit) {
+private fun WifiConnectScreen(
+    routerConnectionManager: RouterConnectionManager,
+    onDetected: (LocalSheepfoldDiscovery) -> Unit,
+    onContinue: () -> Unit
+) {
     val context = LocalContext.current
+    var isDetecting by remember { mutableStateOf(true) }
+    var detectionMessage by remember { mutableStateOf("Ищу Sheepfold в текущей Wi-Fi сети...") }
+
+    LaunchedEffect(Unit) {
+        val discovery = routerConnectionManager.discoverLocalSheepfold(context)
+        if (discovery != null) {
+            detectionMessage = "Sheepfold найден на роутере ${discovery.routerName}"
+            onDetected(discovery)
+        } else {
+            detectionMessage = "Sheepfold автоматически не найден. Проверьте, что телефон подключён к домашней Wi-Fi сети."
+        }
+        isDetecting = false
+    }
 
     Column(
         modifier = Modifier
@@ -331,6 +351,10 @@ private fun WifiConnectScreen(onContinue: () -> Unit) {
             title = "Важно",
             body = "Полная настройка работает локально. Телефон должен быть подключён к той же домашней сети, где открыт LuCI."
         )
+        SetupCard(
+            title = "Автопоиск",
+            body = detectionMessage
+        )
         FramedButton(
             onClick = {
                 context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
@@ -340,10 +364,11 @@ private fun WifiConnectScreen(onContinue: () -> Unit) {
             Text(text = "Открыть настройки Wi-Fi")
         }
         FramedButton(
+            enabled = !isDetecting,
             onClick = onContinue,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(text = "Я подключён к домашнему Wi-Fi")
+            Text(text = if (isDetecting) "Проверяю сеть..." else "Я подключён к домашнему Wi-Fi")
         }
     }
 }
@@ -352,6 +377,9 @@ private fun WifiConnectScreen(onContinue: () -> Unit) {
 private fun MacCheckScreen(onContinue: () -> Unit) {
     val context = LocalContext.current
     var currentWifi by remember { mutableStateOf(readCurrentWifiDetails(context)) }
+    val macLooksRandomized = currentWifi.macAddress?.let(::isLocallyAdministeredMac) == true
+    val wifiName = currentWifi.ssid ?: "не удалось определить"
+    val macAddress = currentWifi.macAddress ?: "не удалось определить"
 
     Column(
         modifier = Modifier
@@ -366,19 +394,25 @@ private fun MacCheckScreen(onContinue: () -> Unit) {
             style = MaterialTheme.typography.bodyLarge
         )
         SetupCard(
-            title = "Если включён случайный MAC",
-            body = "Откройте настройки текущей Wi-Fi сети и переключите MAC-адрес на настоящий. Иначе роутер может видеть телефон как новое устройство после переподключения."
+            title = "Текущее подключение",
+            body = "Wi-Fi: $wifiName\nMAC: $macAddress"
         )
-        SetupCard(
-            title = "Текущая Wi-Fi сеть",
-            body = currentWifi.ssid
-                ?: "Android не отдал имя Wi-Fi сети приложению. Проверьте имя сети в настройках Wi-Fi."
-        )
-        SetupCard(
-            title = "Текущий MAC в этой Wi-Fi сети",
-            body = currentWifi.macAddress
-                ?: "Android не отдал MAC-адрес приложению. Откройте настройки текущей Wi-Fi сети и проверьте, что выбран настоящий MAC-адрес устройства."
-        )
+        if (currentWifi.macAddress == null) {
+            SetupCard(
+                title = "Нужна ручная проверка",
+                body = "Android не отдал MAC-адрес приложению. Откройте настройки текущей Wi-Fi сети и проверьте, что выбран настоящий MAC-адрес устройства."
+            )
+        } else if (macLooksRandomized) {
+            SetupCard(
+                title = "Похоже на случайный MAC",
+                body = "Этот MAC выглядит как локально назначенный адрес, что часто означает randomized/private MAC. Переключите эту Wi-Fi сеть на настоящий MAC устройства."
+            )
+        } else {
+            SetupCard(
+                title = "Похоже, всё в порядке",
+                body = "MAC выглядит как постоянный адрес для текущей Wi-Fi сети. Подробные инструкции не нужны."
+            )
+        }
         FramedButton(
             onClick = { currentWifi = readCurrentWifiDetails(context) },
             modifier = Modifier.fillMaxWidth()
@@ -978,6 +1012,11 @@ private fun cleanWifiSsid(value: String?): String? {
         ?.trim()
         ?.removeSurrounding("\"")
         ?.takeUnless { ssid -> ssid.isBlank() || ssid == "<unknown ssid>" }
+}
+
+private fun isLocallyAdministeredMac(macAddress: String): Boolean {
+    val firstOctet = macAddress.substringBefore(':').toIntOrNull(radix = 16) ?: return false
+    return firstOctet and 0x02 != 0
 }
 
 private fun currentWifiInfo(context: Context): WifiInfo? {

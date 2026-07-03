@@ -1,7 +1,7 @@
 import org.gradle.api.tasks.Copy
 
-val sheepfoldVersionCode = 7
-val sheepfoldVersionName = "0.1.6"
+val sheepfoldVersionCode = 8
+val sheepfoldVersionName = "0.1.7"
 
 plugins {
     id("com.android.application")

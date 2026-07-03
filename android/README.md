@@ -25,6 +25,14 @@ Default connection model:
 
 Full Android management should be local-network only. Do not design full remote management through WireGuard, VPN tunnels, or any other tunnel to the router. Outside the home network, use the configured messenger bot for short confirmed commands and notifications.
 
+During first setup, Android should try to detect Sheepfold automatically on the currently connected Wi-Fi network before asking the parent to confirm that this is the home network. Detection must verify a Sheepfold-specific endpoint on the router, not just any HTTP/LuCI response. Suggested endpoints:
+
+- `/cgi-bin/luci/admin/services/sheepfold/api/ping`
+- `/cgi-bin/luci/admin/sheepfold/api/ping`
+- `/.well-known/sheepfold.json`
+
+The response should contain a Sheepfold marker, package version, router name, and API base URL. If detection succeeds, continue to the MAC-check step without asking “are you connected to home Wi-Fi?”. If detection fails, show the manual Wi-Fi confirmation flow.
+
 ## Pairing
 
 First pairing should be started locally from LuCI.
@@ -143,7 +151,7 @@ android/app/build/outputs/apk/debug/app-debug.apk
 After `gradle :app:assembleDebug`, the project also copies the APK to:
 
 ```text
-%USERPROFILE%\Downloads\sheepfold-v0.1.6.apk
+%USERPROFILE%\Downloads\sheepfold-v0.1.7.apk
 ```
 
 To copy it somewhere else, set `SHEEPFOLD_APK_OUTPUT_DIR` before building.
