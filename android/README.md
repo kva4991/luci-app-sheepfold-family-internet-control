@@ -82,7 +82,9 @@ Android versions older than 9.0 are intentionally out of scope.
 
 ## Current Scaffold
 
-The repository currently includes a minimal Android project under `android/app`.
+The repository has one Android build root: `android/`.
+
+Inside it, `android/app/` is the application module, not a second separate project. Run Gradle from `android/` so the build always uses `android/settings.gradle.kts`.
 
 This first scaffold uses Kotlin and Jetpack Compose. It currently shows a minimal router setup screen and keeps the package/application identity ready for future pairing, QR scanning, Android Keystore, and real router API integration.
 
