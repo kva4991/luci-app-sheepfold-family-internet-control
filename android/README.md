@@ -89,6 +89,8 @@ Biometric unlock by fingerprint or face can be offered, but should not be recomm
 Password or PIN is recommended. Fingerprint or face unlock can be less safe for parental-control apps: a child may try to unlock the app while the parent is asleep.
 ```
 
+Do not request biometric permissions during the first-run permission step. Ask for biometric access only later, after the parent explicitly enables fingerprint or face unlock in app-lock settings.
+
 Android versions older than 9.0 are intentionally out of scope.
 
 ## Current Scaffold
@@ -139,7 +141,7 @@ android/app/build/outputs/apk/debug/app-debug.apk
 After `gradle :app:assembleDebug`, the project also copies the APK to:
 
 ```text
-%USERPROFILE%\Downloads\sheepfold-v0.1.2.apk
+%USERPROFILE%\Downloads\sheepfold-v0.1.5.apk
 ```
 
 To copy it somewhere else, set `SHEEPFOLD_APK_OUTPUT_DIR` before building.

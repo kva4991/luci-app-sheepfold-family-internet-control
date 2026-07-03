@@ -2,9 +2,14 @@ package app.sheepfold.android.ui.setup
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -33,6 +38,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,6 +58,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.text.KeyboardOptions
@@ -65,6 +72,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -204,7 +212,24 @@ fun RouterSetupScreen() {
 
 @Composable
 private fun AgreementScreen(onAccept: () -> Unit) {
+    val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
+    val runtimePermissions = remember { requiredRuntimePermissions() }
+    var permissionStates by remember {
+        mutableStateOf(runtimePermissions.associateWith { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        })
+    }
+    val allPermissionsGranted = permissionStates.values.all { it }
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        permissionStates = runtimePermissions.associateWith { permission ->
+            result[permission] ?: (
+                ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+            )
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -223,6 +248,20 @@ private fun AgreementScreen(onAccept: () -> Unit) {
             text = "Перед настройкой примите пользовательское соглашение и условия обработки технических данных, необходимых для работы приложения.",
             style = MaterialTheme.typography.bodyLarge
         )
+        SetupCard(
+            title = "Разрешения Android",
+            body = if (allPermissionsGranted) {
+                "Разрешения выданы. Они нужны для QR-кода, чтения имени Wi-Fi сети, проверки MAC-адреса и важных уведомлений."
+            } else {
+                "Выдайте разрешения на первом шаге. Камера нужна для QR-кода, Wi-Fi/геоданные - для имени сети и MAC-адреса, уведомления - для важных событий."
+            }
+        )
+        FramedButton(
+            onClick = { permissionsLauncher.launch(runtimePermissions.toTypedArray()) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = if (allPermissionsGranted) "Разрешения выданы" else "Выдать разрешения Android")
+        }
         FramedButton(
             onClick = {
                 uriHandler.openUri(
@@ -282,6 +321,7 @@ private fun WifiConnectScreen(onContinue: () -> Unit) {
 @Composable
 private fun MacCheckScreen(onContinue: () -> Unit) {
     val context = LocalContext.current
+    var currentWifi by remember { mutableStateOf(readCurrentWifiDetails(context)) }
 
     Column(
         modifier = Modifier
@@ -299,6 +339,22 @@ private fun MacCheckScreen(onContinue: () -> Unit) {
             title = "Если включён случайный MAC",
             body = "Откройте настройки текущей Wi-Fi сети и переключите MAC-адрес на настоящий. Иначе роутер может видеть телефон как новое устройство после переподключения."
         )
+        SetupCard(
+            title = "Текущая Wi-Fi сеть",
+            body = currentWifi.ssid
+                ?: "Android не отдал имя Wi-Fi сети приложению. Проверьте имя сети в настройках Wi-Fi."
+        )
+        SetupCard(
+            title = "Текущий MAC в этой Wi-Fi сети",
+            body = currentWifi.macAddress
+                ?: "Android не отдал MAC-адрес приложению. Откройте настройки текущей Wi-Fi сети и проверьте, что выбран настоящий MAC-адрес устройства."
+        )
+        FramedButton(
+            onClick = { currentWifi = readCurrentWifiDetails(context) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = "Обновить Wi-Fi данные")
+        }
         FramedButton(
             onClick = {
                 context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
@@ -369,7 +425,7 @@ private fun ManualSetupScreen(
     onConnect: (RouterConnectionRequest) -> Unit
 ) {
     var temporaryPassword by remember { mutableStateOf("") }
-    var routerName by remember { mutableStateOf("") }
+    var administratorLogin by remember { mutableStateOf("") }
     var serverAddress by remember { mutableStateOf("") }
     var port by remember { mutableStateOf("80") }
 
@@ -384,34 +440,38 @@ private fun ManualSetupScreen(
             text = "Введите данные сопряжения, показанные в LuCI рядом с QR-кодом.",
             style = MaterialTheme.typography.bodyLarge
         )
-        OutlinedTextField(
+        SheepfoldTextField(
             value = temporaryPassword,
             onValueChange = { temporaryPassword = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Временный пароль") },
             singleLine = true
         )
-        OutlinedTextField(
-            value = routerName,
-            onValueChange = { routerName = it },
+        SheepfoldTextField(
+            value = administratorLogin,
+            onValueChange = { administratorLogin = filterLatinLogin(it) },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Имя") },
-            singleLine = true
-        )
-        OutlinedTextField(
-            value = serverAddress,
-            onValueChange = { serverAddress = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Адрес сервера") },
+            label = { Text("Логин") },
             singleLine = true,
-            placeholder = { Text("192.168.1.1") }
+            supportingText = { Text("Только латиница, цифры и символы . _ - @") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii)
         )
-        OutlinedTextField(
+        SheepfoldTextField(
+            value = serverAddress,
+            onValueChange = { serverAddress = formatIpv4Input(it) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("IP адрес роутера") },
+            singleLine = true,
+            placeholder = { Text("192.168.1.1") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+        )
+        SheepfoldTextField(
             value = port,
-            onValueChange = { port = it.filter(Char::isDigit) },
+            onValueChange = { port = formatPortInput(it) },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Порт") },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             supportingText = { Text("По умолчанию 80 для LuCI/API.") }
         )
         FramedButton(
@@ -425,8 +485,9 @@ private fun ManualSetupScreen(
                 onConnect(
                     RouterConnectionRequest(
                         apiUrl = url,
-                        routerName = routerName.ifBlank { host },
-                        temporaryPassword = temporaryPassword.ifBlank { null }
+                        routerName = host,
+                        temporaryPassword = temporaryPassword.ifBlank { null },
+                        administratorLogin = administratorLogin.ifBlank { null }
                     )
                 )
             },
@@ -670,7 +731,7 @@ private fun AppPasswordScreen(onPasswordReady: () -> Unit) {
             title = "Рекомендация",
             body = "Пароль или PIN безопаснее как основной способ защиты. Отпечаток пальца и разблокировка лицом могут быть менее надёжны, если ребёнок попробует разблокировать приложение, пока родитель спит."
         )
-        OutlinedTextField(
+        SheepfoldTextField(
             value = password,
             onValueChange = { password = it },
             modifier = Modifier.fillMaxWidth(),
@@ -679,7 +740,7 @@ private fun AppPasswordScreen(onPasswordReady: () -> Unit) {
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
         )
-        OutlinedTextField(
+        SheepfoldTextField(
             value = repeatPassword,
             onValueChange = { repeatPassword = it },
             modifier = Modifier.fillMaxWidth(),
@@ -695,6 +756,143 @@ private fun AppPasswordScreen(onPasswordReady: () -> Unit) {
         ) {
             Text(text = "Сохранить пароль")
         }
+    }
+}
+
+@Composable
+private fun SheepfoldTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: @Composable (() -> Unit)? = null,
+    placeholder: @Composable (() -> Unit)? = null,
+    supportingText: @Composable (() -> Unit)? = null,
+    singleLine: Boolean = false,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        label = label,
+        placeholder = placeholder,
+        supportingText = supportingText,
+        singleLine = singleLine,
+        visualTransformation = visualTransformation,
+        keyboardOptions = keyboardOptions,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            disabledBorderColor = MaterialTheme.colorScheme.outline,
+            errorBorderColor = MaterialTheme.colorScheme.error,
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            cursorColor = MaterialTheme.colorScheme.primary
+        )
+    )
+}
+
+private fun filterLatinLogin(value: String): String {
+    return value.filter { character ->
+        character in 'a'..'z' ||
+            character in 'A'..'Z' ||
+            character in '0'..'9' ||
+            character == '.' ||
+            character == '_' ||
+            character == '-' ||
+            character == '@'
+    }.take(64)
+}
+
+private fun formatIpv4Input(value: String): String {
+    val groups = value
+        .filter { it.isDigit() || it == '.' }
+        .split('.')
+        .take(4)
+        .map { group ->
+            group
+                .filter(Char::isDigit)
+                .take(3)
+                .toIntOrNull()
+                ?.coerceIn(0, 255)
+                ?.toString()
+                ?: group.filter(Char::isDigit).take(3)
+        }
+
+    return groups.joinToString(".").take(15)
+}
+
+private fun formatPortInput(value: String): String {
+    return value.filter(Char::isDigit)
+        .take(5)
+        .toIntOrNull()
+        ?.coerceIn(1, 65535)
+        ?.toString()
+        ?: ""
+}
+
+private fun requiredRuntimePermissions(): List<String> {
+    val permissions = mutableListOf(
+        Manifest.permission.CAMERA,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    )
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        permissions += Manifest.permission.NEARBY_WIFI_DEVICES
+        permissions += Manifest.permission.POST_NOTIFICATIONS
+    }
+
+    return permissions
+}
+
+private data class CurrentWifiDetails(
+    val ssid: String?,
+    val macAddress: String?
+)
+
+private fun readCurrentWifiDetails(context: Context): CurrentWifiDetails {
+    val wifiInfo = currentWifiInfo(context) ?: return CurrentWifiDetails(
+        ssid = null,
+        macAddress = null
+    )
+
+    return CurrentWifiDetails(
+        ssid = cleanWifiSsid(wifiInfo.ssid),
+        macAddress = cleanWifiMacAddress(wifiInfo.macAddress)
+    )
+}
+
+private fun cleanWifiMacAddress(value: String?): String? {
+    val macAddress = value
+        ?.trim()
+        ?.uppercase(Locale.US)
+        ?: return null
+
+    return macAddress.takeIf { mac ->
+        mac.isNotBlank() &&
+            mac != "02:00:00:00:00:00" &&
+            Regex("^[0-9A-F]{2}(:[0-9A-F]{2}){5}$").matches(mac)
+    }
+}
+
+private fun cleanWifiSsid(value: String?): String? {
+    return value
+        ?.trim()
+        ?.removeSurrounding("\"")
+        ?.takeUnless { ssid -> ssid.isBlank() || ssid == "<unknown ssid>" }
+}
+
+private fun currentWifiInfo(context: Context): WifiInfo? {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        connectivityManager
+            .getNetworkCapabilities(connectivityManager.activeNetwork)
+            ?.transportInfo as? WifiInfo
+    } else {
+        @Suppress("DEPRECATION")
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        @Suppress("DEPRECATION")
+        wifiManager.connectionInfo
     }
 }
 
