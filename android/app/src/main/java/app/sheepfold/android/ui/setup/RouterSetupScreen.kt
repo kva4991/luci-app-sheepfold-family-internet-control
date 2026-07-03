@@ -2,8 +2,10 @@ package app.sheepfold.android.ui.setup
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -44,8 +46,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.sheepfold.android.R
@@ -61,9 +66,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 private enum class SetupStep {
     Agreement,
+    WifiConnect,
+    MacCheck,
     PairingChoice,
     QrScanner,
-    ManualSetup
+    ManualSetup,
+    AppPassword
 }
 
 @Composable
@@ -80,7 +88,15 @@ fun RouterSetupScreen() {
         Box(modifier = Modifier.padding(padding)) {
             when (setupStep) {
                 SetupStep.Agreement -> AgreementScreen(
-                    onAccept = { setupStep = SetupStep.PairingChoice }
+                    onAccept = { setupStep = SetupStep.WifiConnect }
+                )
+
+                SetupStep.WifiConnect -> WifiConnectScreen(
+                    onContinue = { setupStep = SetupStep.MacCheck }
+                )
+
+                SetupStep.MacCheck -> MacCheckScreen(
+                    onContinue = { setupStep = SetupStep.PairingChoice }
                 )
 
                 SetupStep.PairingChoice -> PairingChoiceScreen(
@@ -109,6 +125,7 @@ fun RouterSetupScreen() {
                                     snackbarHostState.showSnackbar(
                                         "Подключено к серверу (${request.routerName})"
                                     )
+                                    setupStep = SetupStep.AppPassword
                                 } else {
                                     snackbarHostState.showSnackbar("Не удалось подключиться к серверу")
                                 }
@@ -138,6 +155,7 @@ fun RouterSetupScreen() {
                                     snackbarHostState.showSnackbar(
                                         "Подключено к серверу (${request.routerName})"
                                     )
+                                    setupStep = SetupStep.AppPassword
                                 } else {
                                     snackbarHostState.showSnackbar("Не удалось подключиться к серверу")
                                 }
@@ -148,6 +166,14 @@ fun RouterSetupScreen() {
                             } finally {
                                 isTestingConnection = false
                             }
+                        }
+                    }
+                )
+
+                SetupStep.AppPassword -> AppPasswordScreen(
+                    onPasswordReady = {
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Пароль приложения установлен")
                         }
                     }
                 )
@@ -194,6 +220,86 @@ private fun AgreementScreen(onAccept: () -> Unit) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = "Принимаю")
+        }
+    }
+}
+
+@Composable
+private fun WifiConnectScreen(onContinue: () -> Unit) {
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Подключение к Wi-Fi",
+            style = MaterialTheme.typography.headlineMedium
+        )
+        Text(
+            text = "Подключите телефон к домашней Wi-Fi сети роутера, на котором установлен Sheepfold.",
+            style = MaterialTheme.typography.bodyLarge
+        )
+        SetupCard(
+            title = "Важно",
+            body = "Полная настройка работает локально. Телефон должен быть подключён к той же домашней сети, где открыт LuCI."
+        )
+        Button(
+            onClick = {
+                context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = "Открыть настройки Wi-Fi")
+        }
+        Button(
+            onClick = onContinue,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = "Я подключён к домашнему Wi-Fi")
+        }
+    }
+}
+
+@Composable
+private fun MacCheckScreen(onContinue: () -> Unit) {
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Проверка MAC-адреса",
+            style = MaterialTheme.typography.headlineMedium
+        )
+        Text(
+            text = "Для этой домашней Wi-Fi сети должен быть включён настоящий MAC-адрес телефона, а не случайный/private MAC.",
+            style = MaterialTheme.typography.bodyLarge
+        )
+        SetupCard(
+            title = "Если включён случайный MAC",
+            body = "Откройте настройки текущей Wi-Fi сети и переключите MAC-адрес на настоящий. Иначе роутер может видеть телефон как новое устройство после переподключения."
+        )
+        Button(
+            onClick = {
+                context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = "Открыть настройки Wi-Fi")
+        }
+        Button(
+            onClick = onContinue,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = "Настоящий MAC включён")
         }
     }
 }
@@ -529,6 +635,59 @@ private class QrImageScanner {
             .addOnFailureListener {
                 onError()
             }
+    }
+}
+
+@Composable
+private fun AppPasswordScreen(onPasswordReady: () -> Unit) {
+    var password by remember { mutableStateOf("") }
+    var repeatPassword by remember { mutableStateOf("") }
+    val passwordIsValid = password.length >= 4 && password == repeatPassword
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Пароль приложения",
+            style = MaterialTheme.typography.headlineMedium
+        )
+        Text(
+            text = "Задайте пароль или PIN для входа в приложение Sheepfold на этом телефоне.",
+            style = MaterialTheme.typography.bodyLarge
+        )
+        SetupCard(
+            title = "Рекомендация",
+            body = "Пароль или PIN безопаснее как основной способ защиты. Отпечаток пальца и разблокировка лицом могут быть менее надёжны, если ребёнок попробует разблокировать приложение, пока родитель спит."
+        )
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Пароль или PIN") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+        )
+        OutlinedTextField(
+            value = repeatPassword,
+            onValueChange = { repeatPassword = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Повторите пароль или PIN") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+        )
+        Button(
+            enabled = passwordIsValid,
+            onClick = onPasswordReady,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = "Сохранить пароль")
+        }
     }
 }
 

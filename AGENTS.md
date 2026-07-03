@@ -137,6 +137,7 @@ Avoid:
 - Do not add root-level Gradle files for Android unless the project owner explicitly changes the repository layout.
 - Run Android builds from `android/`, for example `gradle :app:assembleDebug`.
 - First Android setup should be initiated locally from LuCI by scanning an admin-device pairing QR code or entering manual settings.
+- Android first setup screen order is: agreement, home Wi-Fi connection, real Wi-Fi MAC check/guidance, router setup by QR/manual entry, then local app password/PIN.
 - Manual settings shown next to QR must include router address/API URL, administrator login or identifier, pairing code/token, token lifetime, and Wi-Fi MAC guidance.
 - Android must check whether the phone is visible to the router under the MAC address Sheepfold will manage.
 - If randomized/private MAC is enabled for the home Wi-Fi, guide the parent to Android Wi-Fi network settings and explain why Sheepfold needs the real device MAC.

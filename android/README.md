@@ -29,6 +29,14 @@ Full Android management should be local-network only. Do not design full remote 
 
 First pairing should be started locally from LuCI.
 
+Android first setup screen order:
+
+1. User agreement and data-processing consent.
+2. Connect the phone to the home Wi-Fi network.
+3. Check/guide the parent to use the real device MAC for this Wi-Fi network.
+4. Choose router connection setup: QR scan/image import or manual setup.
+5. Set the local app password/PIN.
+
 Flow:
 
 - parent opens Sheepfold in LuCI;

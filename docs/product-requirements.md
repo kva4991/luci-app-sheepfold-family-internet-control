@@ -101,8 +101,9 @@ Recommended Android baseline:
 
 Android app local authentication:
 
-- before app-lock setup, require agreement checkbox: `Я принимаю пользовательское соглашение и даю согласие на обработку персональных и технических данных, необходимых для работы Sheepfold.`;
-- ask for app-lock method during first setup;
+- first setup screen order must be: agreement, home Wi-Fi connection, real Wi-Fi MAC check/guidance, router connection setup by QR/manual entry, then local app password/PIN;
+- before continuing setup, require agreement checkbox: `Я принимаю пользовательское соглашение и даю согласие на обработку персональных и технических данных, необходимых для работы Sheepfold.`;
+- ask for app-lock method after successful router pairing;
 - recommend password or PIN by default;
 - allow fingerprint/face unlock if supported, but do not recommend it as the safest parental-control default;
 - show a short warning that biometric unlock may be less safe because a child may try to unlock the app while the parent is asleep.
