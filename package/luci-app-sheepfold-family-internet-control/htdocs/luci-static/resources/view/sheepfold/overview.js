@@ -5,6 +5,7 @@
 
 var devices = [
         {
+                id: 'D-0001',
                 name: 'Телефон родителя',
                 ip: '192.168.1.21',
                 mac: 'A4:5E:60:12:34:56',
@@ -16,6 +17,7 @@ var devices = [
                 adminLogin: 'owner'
         },
         {
+                id: 'D-0002',
                 name: 'Планшет ребёнка',
                 ip: '192.168.1.43',
                 mac: '58:2F:40:AA:18:10',
@@ -24,6 +26,7 @@ var devices = [
                 note: 'Расписание учебного дня, отбой 21:00'
         },
         {
+                id: 'D-0003',
                 name: 'Телевизор в гостиной',
                 ip: '192.168.1.77',
                 mac: 'F0:99:BF:70:22:09',
@@ -32,6 +35,7 @@ var devices = [
                 note: 'Разрешён после времени для уроков'
         },
         {
+                id: 'D-0004',
                 name: 'Неизвестное устройство',
                 ip: '192.168.1.98',
                 mac: 'DC:A6:32:8C:00:19',
@@ -40,6 +44,7 @@ var devices = [
                 note: 'Обнаружено по данным роутера'
         },
         {
+                id: 'D-0005',
                 name: 'Старая игровая приставка',
                 ip: '192.168.1.64',
                 mac: '00:1F:16:CC:90:02',
@@ -111,6 +116,7 @@ var translations = {
         'This action is a visual prototype only.': 'Это действие работает только как визуальная заглушка.',
         'Configure': 'Настроить',
         'Device editor is not implemented in this visual test build.': 'Редактор устройства не реализован в этой визуальной тестовой сборке.',
+        'Device ID': 'ID устройства',
         'Bind devices': 'Привязать устройства',
         'Administrator device binding is not implemented in this visual test build.': 'Привязка устройств администратора пока не реализована в этой визуальной сборке.',
         'Admin device': 'Админское устройство',
@@ -330,8 +336,15 @@ function badge(status) {
         return E('span', { 'class': 'sf-badge sf-badge-' + status }, labels[status] || status);
 }
 
-function metric(label, value, tone) {
-        return E('div', { 'class': 'sf-metric sf-metric-' + tone }, [
+function metric(label, value, tone, handler) {
+        return E('button', {
+                'class': 'sf-metric sf-metric-' + tone,
+                'click': function (ev) {
+                        ev.preventDefault();
+                        if (handler)
+                                handler(ev.currentTarget);
+                }
+        }, [
                 E('span', {}, label),
                 E('strong', {}, value)
         ]);
@@ -838,7 +851,8 @@ function deviceTable(rows, options) {
                         E('div', { 'class': 'sf-device-name' }, [
                                         E('strong', {}, [
                                                 device.adminDevice ? adminDeviceIcon() : '',
-                                                E('span', {}, device.name)
+                                                E('span', {}, device.name),
+                                                E('span', { 'class': 'sf-device-id', 'title': T('Device ID') }, device.id)
                                         ]),
                                         E('small', {}, device.note)
                         ]),
@@ -1092,6 +1106,19 @@ return view.extend({
                         if (generalButton)
                                 this.switchSettingsTab(generalButton, 'general');
                 }
+        },
+
+        openUserListMetric: function (button, userListTab) {
+                var page = button.closest('.sf-page');
+                var usersTabButton = page.querySelector('[data-tab="users"]');
+                var userListButton;
+
+                if (usersTabButton)
+                        this.switchTab(usersTabButton, 'users');
+
+                userListButton = page.querySelector('[data-user-list-tab="' + userListTab + '"]');
+                if (userListButton)
+                        this.switchUserListTab(userListButton, userListTab);
         },
 
         renderTabs: function () {
@@ -1534,7 +1561,8 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-17';
+                var assetVersion = '0.1.0-18';
+                var self = this;
                 var cssHref = L.resource('sheepfold/sheepfold.css') + '?v=' + encodeURIComponent(assetVersion);
                 var header = E('div', { 'class': 'sf-header' }, [
                         E('div', {}, [
@@ -1559,10 +1587,18 @@ return view.extend({
                         E('link', { 'rel': 'stylesheet', 'href': cssHref }),
                         header,
                         E('div', { 'class': 'sf-metrics' }, [
-                                metric(T('Devices'), '5', 'neutral'),
-                                metric(T('Allowlist'), '1', 'positive'),
-                                metric(T('Restricted'), '2', 'warning'),
-                                metric(T('Blocklist'), '1', 'danger')
+                                metric(T('Devices'), '5', 'neutral', function (button) {
+                                        self.openUserListMetric(button, 'devices');
+                                }),
+                                metric(T('Allowlist'), '1', 'positive', function (button) {
+                                        self.openUserListMetric(button, 'allowlist');
+                                }),
+                                metric(T('Restricted'), '2', 'warning', function (button) {
+                                        self.openUserListMetric(button, 'devices');
+                                }),
+                                metric(T('Blocklist'), '1', 'danger', function (button) {
+                                        self.openUserListMetric(button, 'blocklist');
+                                })
                         ]),
                         this.renderTabs(),
                         E('div', { 'class': 'sf-panels' }, this.renderPanels())
