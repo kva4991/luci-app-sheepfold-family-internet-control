@@ -1,7 +1,7 @@
 import org.gradle.api.tasks.Copy
 
-val sheepfoldVersionCode = 16
-val sheepfoldVersionName = "0.1.15"
+val sheepfoldVersionCode = 18
+val sheepfoldVersionName = "0.1.17"
 
 plugins {
     id("com.android.application")
@@ -55,7 +55,7 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.10.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
-    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("com.google.zxing:core:3.5.3")
 }
 
 fun debugApkExportDir(): File {

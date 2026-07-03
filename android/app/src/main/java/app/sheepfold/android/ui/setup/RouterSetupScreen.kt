@@ -5,6 +5,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
@@ -17,15 +19,18 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
@@ -63,6 +68,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -83,10 +89,15 @@ import app.sheepfold.android.R
 import app.sheepfold.android.router.LocalSheepfoldDiscovery
 import app.sheepfold.android.router.RouterConnectionManager
 import app.sheepfold.android.router.RouterConnectionRequest
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
+import com.google.zxing.LuminanceSource
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.NotFoundException
+import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.HybridBinarizer
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -840,7 +851,7 @@ private fun QrScannerScreen(
     onQrDetected: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val imageScanner = remember { QrImageScanner() }
+    val qrDecoder = remember { QrCodeDecoder() }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -858,7 +869,7 @@ private fun QrScannerScreen(
         if (uri == null) {
             return@rememberLauncherForActivityResult
         }
-        imageScanner.scan(
+        qrDecoder.scanUri(
             context = context,
             uri = uri,
             onResult = onQrDetected,
@@ -894,7 +905,13 @@ private fun QrScannerScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1f),
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(14.dp))
+                .border(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = RoundedCornerShape(14.dp)
+                ),
             contentAlignment = Alignment.Center
         ) {
             if (hasCameraPermission) {
@@ -939,6 +956,7 @@ private fun CameraQrScanner(
     val lifecycleOwner = LocalLifecycleOwner.current
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
     val isProcessing = remember { AtomicBoolean(false) }
+    val qrDecoder = remember { QrCodeDecoder() }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -950,6 +968,8 @@ private fun CameraQrScanner(
         modifier = Modifier.fillMaxSize(),
         factory = { viewContext ->
             PreviewView(viewContext).also { previewView ->
+                previewView.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(viewContext)
                 cameraProviderFuture.addListener(
                     {
@@ -957,10 +977,6 @@ private fun CameraQrScanner(
                         val preview = Preview.Builder().build().also { cameraPreview ->
                             cameraPreview.setSurfaceProvider(previewView.surfaceProvider)
                         }
-                        val options = BarcodeScannerOptions.Builder()
-                            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                            .build()
-                        val scanner = BarcodeScanning.getClient(options)
                         val imageAnalysis = ImageAnalysis.Builder()
                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                             .build()
@@ -972,21 +988,15 @@ private fun CameraQrScanner(
                                         return@setAnalyzer
                                     }
 
-                                    val image = InputImage.fromMediaImage(
-                                        mediaImage,
-                                        imageProxy.imageInfo.rotationDegrees
-                                    )
-                                    scanner.process(image)
-                                        .addOnSuccessListener { barcodes ->
-                                            val rawValue = barcodes.firstOrNull()?.rawValue
-                                            if (!rawValue.isNullOrBlank()) {
-                                                onQrDetected(rawValue)
-                                            }
+                                    try {
+                                        val rawValue = qrDecoder.decodeImageProxy(imageProxy)
+                                        if (!rawValue.isNullOrBlank()) {
+                                            onQrDetected(rawValue)
                                         }
-                                        .addOnCompleteListener {
-                                            isProcessing.set(false)
-                                            imageProxy.close()
-                                        }
+                                    } finally {
+                                        isProcessing.set(false)
+                                        imageProxy.close()
+                                    }
                                 }
                             }
 
@@ -1005,31 +1015,81 @@ private fun CameraQrScanner(
     )
 }
 
-private class QrImageScanner {
-    private val options = BarcodeScannerOptions.Builder()
-        .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-        .build()
+private class QrCodeDecoder {
+    private val hints = mapOf(
+        DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+        DecodeHintType.TRY_HARDER to true
+    )
 
-    fun scan(
-        context: android.content.Context,
+    fun scanUri(
+        context: Context,
         uri: Uri,
         onResult: (String) -> Unit,
         onError: () -> Unit
     ) {
-        val image = InputImage.fromFilePath(context, uri)
-        BarcodeScanning.getClient(options)
-            .process(image)
-            .addOnSuccessListener { barcodes ->
-                val rawValue = barcodes.firstOrNull()?.rawValue
-                if (rawValue.isNullOrBlank()) {
-                    onError()
-                } else {
-                    onResult(rawValue)
-                }
+        val bitmap = runCatching {
+            context.contentResolver.openInputStream(uri)?.use(BitmapFactory::decodeStream)
+        }.getOrNull()
+        val rawValue = bitmap?.let(::decodeBitmap)
+
+        if (rawValue.isNullOrBlank()) {
+            onError()
+        } else {
+            onResult(rawValue)
+        }
+    }
+
+    fun decodeImageProxy(imageProxy: ImageProxy): String? {
+        val yPlane = imageProxy.planes.firstOrNull() ?: return null
+        val buffer = yPlane.buffer
+        val data = ByteArray(buffer.remaining())
+        buffer.get(data)
+
+        val source = PlanarYUVLuminanceSource(
+            data,
+            yPlane.rowStride,
+            imageProxy.height,
+            0,
+            0,
+            imageProxy.width,
+            imageProxy.height,
+            false
+        )
+
+        return decodeWithRotations(source)
+    }
+
+    private fun decodeBitmap(bitmap: Bitmap): String? {
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        return decodeOnce(RGBLuminanceSource(bitmap.width, bitmap.height, pixels))
+    }
+
+    private fun decodeWithRotations(source: LuminanceSource): String? {
+        var candidate = source
+        repeat(4) { index ->
+            decodeOnce(candidate)?.let { return it }
+            if (!candidate.isRotateSupported || index == 3) {
+                return null
             }
-            .addOnFailureListener {
-                onError()
-            }
+            candidate = candidate.rotateCounterClockwise()
+        }
+
+        return null
+    }
+
+    private fun decodeOnce(source: LuminanceSource): String? {
+        val reader = MultiFormatReader().apply {
+            setHints(hints)
+        }
+
+        return try {
+            reader.decodeWithState(BinaryBitmap(HybridBinarizer(source))).text
+        } catch (_: NotFoundException) {
+            null
+        } finally {
+            reader.reset()
+        }
     }
 }
 
