@@ -2,7 +2,11 @@
   "luci-app-sheepfold-family-internet-control": {
     "description": "Grant access to Sheepfold Family Internet Control",
     "read": {
-      "uci": [ "sheepfold", "dhcp", "wireless" ]
+      "uci": [ "sheepfold", "dhcp", "wireless" ],
+      "file": {
+        "/tmp/dhcp.leases": [ "read" ],
+        "/proc/net/arp": [ "read" ]
+      }
     },
     "write": {
       "uci": [ "sheepfold", "dhcp", "wireless" ]

@@ -2,57 +2,9 @@
 'require view';
 'require ui';
 'require uci';
+'require fs';
 
-var devices = [
-        {
-                id: 'D-0001',
-                name: 'Телефон родителя',
-                ip: '192.168.1.21',
-                mac: 'A4:5E:60:12:34:56',
-                group: 'Родители',
-                status: 'allow',
-                note: 'Всегда доступен, устройство администратора',
-                adminDevice: true,
-                adminOwner: 'Владелец',
-                adminLogin: 'owner'
-        },
-        {
-                id: 'D-0002',
-                name: 'Планшет ребёнка',
-                ip: '192.168.1.43',
-                mac: '58:2F:40:AA:18:10',
-                group: 'Дети',
-                status: 'scheduled',
-                note: 'Расписание учебного дня, отбой 21:00'
-        },
-        {
-                id: 'D-0003',
-                name: 'Телевизор в гостиной',
-                ip: '192.168.1.77',
-                mac: 'F0:99:BF:70:22:09',
-                group: 'ТВ / медиа',
-                status: 'restricted',
-                note: 'Разрешён после времени для уроков'
-        },
-        {
-                id: 'D-0004',
-                name: 'Неизвестное устройство',
-                ip: '192.168.1.98',
-                mac: 'DC:A6:32:8C:00:19',
-                group: 'Не настроено',
-                status: 'new',
-                note: 'Обнаружено по данным роутера'
-        },
-        {
-                id: 'D-0005',
-                name: 'Старая игровая приставка',
-                ip: '192.168.1.64',
-                mac: '00:1F:16:CC:90:02',
-                group: 'Дети',
-                status: 'blocked',
-                note: 'Чёрный список'
-        }
-];
+var devices = [];
 
 var emergencySites = [
         ['gosuslugi.ru', 'Госуслуги', 'Государственные услуги'],
@@ -165,6 +117,14 @@ var translations = {
         'Status': 'Статус',
         'Actions': 'Действия',
         'Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.': 'Обнаруживаются автоматически из аренд DHCP, ARP/neighbor-данных и постоянных аренд DHCP.',
+        'No devices found in DHCP leases, ARP, or static DHCP leases yet.': 'В арендах DHCP, ARP и постоянных арендах DHCP пока нет устройств.',
+        'Unknown device': 'Неизвестное устройство',
+        'Not configured': 'Не настроено',
+        'Active DHCP lease': 'Активная аренда DHCP',
+        'ARP/neighbor entry': 'Обнаружено в ARP/neighbor',
+        'Static DHCP lease': 'Постоянная аренда DHCP',
+        'Static DHCP lease, currently online': 'Постоянная аренда DHCP, сейчас в сети',
+        'Configured in Sheepfold': 'Настроено в Sheepfold',
         'Search by name, IP, or MAC': 'Поиск по имени, IP или MAC',
         'Search by name, IP, MAC, or ID': 'Поиск по имени, IP, MAC или ID',
         'Manual MAC-based add form is not implemented in this visual test build.': 'Ручное добавление по MAC пока не реализовано в этой визуальной сборке.',
@@ -773,11 +733,16 @@ function generatePairingCode() {
         return shuffleCharacters(chars).join('');
 }
 
+function currentRouterAddress() {
+        return window.location.hostname || String(window.location.host || '').split(':')[0] || '192.168.1.1';
+}
+
 function showPairingModal(device) {
-        var routerAddress = '192.168.1.1';
-        var apiUrl = 'http://' + routerAddress + '/sheepfold/api';
+        var routerAddress = currentRouterAddress();
+        var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
+        var apiUrl = 'http://' + routerAddress + ':' + port + '/api/v1';
         var pairingCode = device.pairingCode || generatePairingCode();
-        var pairingPayload = 'SF1|h=' + routerAddress + '|api=/sf|u=' +
+        var pairingPayload = 'SF1|h=' + routerAddress + '|p=' + port + '|u=' +
                 (device.adminLogin || 'owner') + '|c=' + pairingCode + '|ttl=600';
 
         ui.showModal(T('Pairing settings'), [
@@ -808,7 +773,7 @@ function showPairingModal(device) {
 }
 
 function showAdminSettingsModal(admin) {
-        var routerAddress = '192.168.1.1';
+        var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
         var temporaryPassword = generatePairingCode();
         var setupLink = adminSetupLink(admin);
@@ -1415,6 +1380,207 @@ function safeUciSections(config, type) {
         }
 }
 
+function normalizeMac(mac) {
+        var value = String(mac || '').trim().toUpperCase();
+
+        if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(value))
+                return '';
+
+        if (value === '00:00:00:00:00:00')
+                return '';
+
+        return value;
+}
+
+function listOptionValues(value) {
+        if (Array.isArray(value))
+                return value;
+
+        if (value == null)
+                return [];
+
+        return String(value).split(/\s+/).filter(Boolean);
+}
+
+function addRouterDevice(map, mac, data) {
+        var normalizedMac = normalizeMac(mac);
+        var current;
+
+        if (!normalizedMac)
+                return;
+
+        current = map[normalizedMac] || {
+                mac: normalizedMac,
+                sources: {}
+        };
+
+        if (data.ip && !current.ip)
+                current.ip = data.ip;
+        if (data.staticIp)
+                current.staticIp = data.staticIp;
+        if (data.hostname && data.hostname !== '*')
+                current.hostname = data.hostname;
+        if (data.staticName)
+                current.staticName = data.staticName;
+        if (data.source)
+                current.sources[data.source] = true;
+
+        map[normalizedMac] = current;
+}
+
+function parseDhcpLeases(content, map) {
+        String(content || '').split(/\n/).forEach(function (line) {
+                var fields = line.trim().split(/\s+/);
+
+                if (fields.length < 4)
+                        return;
+
+                addRouterDevice(map, fields[1], {
+                        ip: fields[2],
+                        hostname: fields[3],
+                        source: 'dhcp'
+                });
+        });
+}
+
+function parseArpTable(content, map) {
+        String(content || '').split(/\n/).slice(1).forEach(function (line) {
+                var fields = line.trim().split(/\s+/);
+
+                if (fields.length < 4)
+                        return;
+
+                addRouterDevice(map, fields[3], {
+                        ip: fields[0],
+                        source: 'arp'
+                });
+        });
+}
+
+function addStaticDhcpLeases(map) {
+        safeUciSections('dhcp', 'host').forEach(function (section) {
+                var name = section.name || section.hostname || section.dns || '';
+                var ip = section.ip || '';
+
+                listOptionValues(section.mac).forEach(function (mac) {
+                        addRouterDevice(map, mac, {
+                                staticName: name,
+                                staticIp: ip,
+                                ip: ip,
+                                source: 'static'
+                        });
+                });
+        });
+}
+
+function sheepfoldDeviceConfigByMac() {
+        var byMac = {};
+
+        safeUciSections('sheepfold', 'device').forEach(function (section) {
+                var mac = normalizeMac(section.mac);
+
+                if (!mac)
+                        return;
+
+                byMac[mac] = section;
+        });
+
+        return byMac;
+}
+
+function sheepfoldListMacs(listName) {
+        var result = {};
+
+        safeUciSections('sheepfold', 'list').forEach(function (section) {
+                if (section['.name'] !== listName)
+                        return;
+
+                listOptionValues(section.mac).concat(listOptionValues(section.macs)).forEach(function (mac) {
+                        mac = normalizeMac(mac);
+                        if (mac)
+                                result[mac] = true;
+                });
+        });
+
+        return result;
+}
+
+function routerDeviceNote(item, configured) {
+        if (configured && configured.note)
+                return configured.note;
+
+        if (configured)
+                return T('Configured in Sheepfold');
+
+        if (item.sources.static && (item.sources.dhcp || item.sources.arp))
+                return T('Static DHCP lease, currently online');
+
+        if (item.sources.dhcp)
+                return T('Active DHCP lease');
+
+        if (item.sources.arp)
+                return T('ARP/neighbor entry');
+
+        if (item.sources.static)
+                return T('Static DHCP lease');
+
+        return T('Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.');
+}
+
+function buildRouterDevices(dhcpLeases, arpTable) {
+        var map = {};
+        var configuredByMac;
+        var allowlist;
+        var blocklist;
+
+        parseDhcpLeases(dhcpLeases, map);
+        parseArpTable(arpTable, map);
+        addStaticDhcpLeases(map);
+
+        configuredByMac = sheepfoldDeviceConfigByMac();
+        allowlist = sheepfoldListMacs('allowlist');
+        blocklist = sheepfoldListMacs('blocklist');
+
+        return Object.keys(map).sort(function (left, right) {
+                var leftDevice = map[left];
+                var rightDevice = map[right];
+                var leftOnline = leftDevice.sources.dhcp || leftDevice.sources.arp ? 1 : 0;
+                var rightOnline = rightDevice.sources.dhcp || rightDevice.sources.arp ? 1 : 0;
+                var leftName = leftDevice.staticName || leftDevice.hostname || left;
+                var rightName = rightDevice.staticName || rightDevice.hostname || right;
+
+                if (leftOnline !== rightOnline)
+                        return rightOnline - leftOnline;
+
+                return leftName.localeCompare(rightName);
+        }).map(function (mac, index) {
+                var item = map[mac];
+                var configured = configuredByMac[mac];
+                var status = configured && configured.status ? configured.status : 'new';
+                var adminDevice = configured && configured.admin_device === '1';
+
+                if (allowlist[mac])
+                        status = 'allow';
+                if (blocklist[mac])
+                        status = 'blocked';
+
+                return {
+                        id: 'D-' + String(index + 1).padStart(4, '0'),
+                        name: configured && configured.name ?
+                                configured.name :
+                                (item.staticName || item.hostname || T('Unknown device')),
+                        ip: configured && configured.ip ? configured.ip : (item.ip || item.staticIp || ''),
+                        mac: mac,
+                        group: configured && configured.group ? configured.group : T('Not configured'),
+                        status: status,
+                        note: routerDeviceNote(item, configured),
+                        adminDevice: adminDevice,
+                        adminOwner: configured && configured.admin_owner,
+                        adminLogin: configured && configured.admin_login
+                };
+        });
+}
+
 function readWifiNetworksFromUci() {
         return safeUciSections('wireless', 'wifi-iface').filter(function (section) {
                 return section.disabled !== '1' && (!section.mode || section.mode === 'ap');
@@ -1539,8 +1705,17 @@ return view.extend({
                                 self.uciLoadState.sheepfold = true;
                         }, function () {
                                 self.uciLoadState.sheepfold = false;
+                        }),
+                        uci.load('dhcp'),
+                        fs.read('/tmp/dhcp.leases').catch(function () {
+                                return '';
+                        }),
+                        fs.read('/proc/net/arp').catch(function () {
+                                return '';
                         })
-                ]);
+                ]).then(function (results) {
+                        devices = buildRouterDevices(results[3], results[4]);
+                });
         },
 
         isGlobalInternetBlocked: function () {
@@ -1761,6 +1936,7 @@ return view.extend({
                                         actionButton(T('Add device'), 'positive', T('Manual MAC-based add form is not implemented in this visual test build.'))
                                 ])
                         ]),
+                        devices.length ? '' : E('div', { 'class': 'sf-note sf-note-warning' }, T('No devices found in DHCP leases, ARP, or static DHCP leases yet.')),
                         deviceTable(devices)
                 ]);
         },
@@ -2087,9 +2263,14 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-32';
+                var assetVersion = '0.1.0-33';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
+                var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
+                var blocklistCount = devices.filter(function (device) { return device.status === 'blocked'; }).length;
+                var restrictedCount = devices.filter(function (device) {
+                        return device.status === 'restricted' || device.status === 'scheduled';
+                }).length;
                 var cssHref = L.resource('sheepfold/sheepfold.css') + '?v=' + encodeURIComponent(assetVersion);
                 var page;
                 var header = E('div', { 'class': 'sf-header' }, [
@@ -2117,16 +2298,16 @@ return view.extend({
                         E('link', { 'rel': 'stylesheet', 'href': cssHref }),
                         header,
                         E('div', { 'class': 'sf-metrics' }, [
-                                metric(T('Devices'), '5', 'neutral', function (button) {
+                                metric(T('Devices'), String(devices.length), 'neutral', function (button) {
                                         self.openUserListMetric(button, 'devices');
                                 }),
-                                metric(T('Allowlist'), '1', 'positive', function (button) {
+                                metric(T('Allowlist'), String(allowlistCount), 'positive', function (button) {
                                         self.openUserListMetric(button, 'allowlist');
                                 }),
-                                metric(T('Restricted'), '2', 'warning', function (button) {
+                                metric(T('Restricted'), String(restrictedCount), 'warning', function (button) {
                                         self.openUserListMetric(button, 'devices');
                                 }),
-                                metric(T('Blocklist'), '1', 'danger', function (button) {
+                                metric(T('Blocklist'), String(blocklistCount), 'danger', function (button) {
                                         self.openUserListMetric(button, 'blocklist');
                                 })
                         ]),

@@ -79,7 +79,7 @@ class RouterConnectionManager {
                 }
                 .toMap()
 
-            val baseUrl = normalizeRouterUrl(fields["h"].orEmpty())
+            val baseUrl = normalizeRouterUrl(withOptionalPort(fields["h"].orEmpty(), fields["p"].orEmpty()))
             val apiPath = fields["api"].orEmpty().trim()
             val apiUrl = when {
                 apiPath.isBlank() -> baseUrl
@@ -151,6 +151,25 @@ class RouterConnectionManager {
             "http://$value"
         }
         return withScheme.trimEnd('/')
+    }
+
+    private fun withOptionalPort(host: String, port: String): String {
+        val trimmedPort = port.trim()
+        if (trimmedPort.isBlank()) {
+            return host
+        }
+
+        val withScheme = if (host.startsWith("http://") || host.startsWith("https://")) {
+            host
+        } else {
+            "http://$host"
+        }
+        val url = URL(withScheme)
+        if (url.port != -1) {
+            return host
+        }
+
+        return "${url.protocol}://${url.host}:$trimmedPort"
     }
 
     private fun hostName(apiUrl: String): String {
