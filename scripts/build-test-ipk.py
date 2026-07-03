@@ -69,7 +69,7 @@ def write_control_tar(path: Path, version: str, release: str) -> None:
 Version: {version}-{release}
 Architecture: all
 Maintainer: kva4991
-Depends: firewall4, rpcd, uci, uclient-fetch, ca-bundle, jsonfilter
+Depends: firewall4, rpcd, uci, uclient-fetch, ca-bundle
 Section: luci
 Priority: optional
 Installed-Size: 10240

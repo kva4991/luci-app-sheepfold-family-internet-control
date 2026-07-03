@@ -49,7 +49,7 @@ Package: $PKG_NAME
 Version: $PKG_VERSION-$PKG_RELEASE
 Architecture: $ARCH
 Maintainer: kva4991
-Depends: firewall4, rpcd, uci, uclient-fetch, ca-bundle, jsonfilter
+Depends: firewall4, rpcd, uci, uclient-fetch, ca-bundle
 Section: luci
 Priority: optional
 Installed-Size: 10240
