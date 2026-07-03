@@ -11,6 +11,30 @@ PKG_RELEASE="$(sed -n 's/^PKG_RELEASE:=//p' "$PKG_DIR/Makefile" | head -n 1)"
 ARCH="all"
 IPK="$OUT_DIR/${PKG_NAME}_${PKG_VERSION}-${PKG_RELEASE}_${ARCH}.ipk"
 
+resolve_downloads_dir() {
+        if [ -n "${SHEEPFOLD_DOWNLOADS_DIR:-}" ]; then
+                printf '%s\n' "$SHEEPFOLD_DOWNLOADS_DIR"
+                return 0
+        fi
+
+        if command -v cygpath >/dev/null 2>&1 && [ -n "${USERPROFILE:-}" ]; then
+                cygpath -u "$USERPROFILE/Downloads"
+                return 0
+        fi
+
+        if [ -n "${USERPROFILE:-}" ] && [ -d "$USERPROFILE/Downloads" ]; then
+                printf '%s\n' "$USERPROFILE/Downloads"
+                return 0
+        fi
+
+        if [ -n "${HOME:-}" ] && [ -d "$HOME/Downloads" ]; then
+                printf '%s\n' "$HOME/Downloads"
+                return 0
+        fi
+
+        return 1
+}
+
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/control" "$BUILD_DIR/data/www" "$OUT_DIR"
 trap 'rm -rf "$BUILD_DIR"; rmdir "$ROOT_DIR/.build" 2>/dev/null || true' EXIT
@@ -57,12 +81,13 @@ printf '2.0\n' > "$BUILD_DIR/debian-binary"
 
 (
         cd "$BUILD_DIR"
-        command -v ar >/dev/null 2>&1 || {
-                echo "error: ar is required to build an opkg-compatible .ipk archive" >&2
-                exit 1
-        }
         rm -f "$IPK"
-        ar r "$IPK" ./debian-binary ./control.tar.gz ./data.tar.gz >/dev/null
+        tar --format=gnu --numeric-owner --sort=name -cf - ./debian-binary ./data.tar.gz ./control.tar.gz | gzip -n - > "$IPK"
 )
 
 echo "$IPK"
+
+if DOWNLOADS_DIR="$(resolve_downloads_dir)" && [ -d "$DOWNLOADS_DIR" ]; then
+        cp "$IPK" "$DOWNLOADS_DIR/$(basename "$IPK")"
+        echo "$DOWNLOADS_DIR/$(basename "$IPK")"
+fi

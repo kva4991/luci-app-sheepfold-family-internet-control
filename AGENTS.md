@@ -35,7 +35,8 @@ Avoid:
 - Keep installation, update, and uninstall instructions near the top of both `README.md` and `README.ru.md`, before long product explanations.
 - Keep the English and Russian README files structurally similar where practical.
 - Keep `install.sh`, `update.sh`, and `uninstall.sh` suitable for running directly on an OpenWRT router.
-- Test `.ipk` packages must be opkg-compatible `ar` archives containing `debian-binary`, `control.tar.gz`, and `data.tar.gz`; do not publish a gzip/tar archive under an `.ipk` filename.
+- Test `.ipk` packages must follow OpenWrt `ipkg-build` style: a gzip-compressed tar archive containing `debian-binary`, `data.tar.gz`, and `control.tar.gz`; do not publish ad-hoc `ar` archives for OpenWrt test packages.
+- After building local test packages such as `.ipk` or `.apk`, copy the finished artifact to the user's Downloads folder for easy manual installation, but do not commit generated package artifacts.
 - The uninstall command must remove the package without clearing Sheepfold client lists or user settings, then print a report of remaining router settings that may require manual cleanup.
 - When changing installation, update, or uninstall commands, update both README files and `docs/github-install-setup.md` if relevant.
 

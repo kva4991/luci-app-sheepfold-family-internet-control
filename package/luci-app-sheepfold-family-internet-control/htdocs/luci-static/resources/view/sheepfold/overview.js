@@ -1436,7 +1436,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-10';
+                var assetVersion = '0.1.0-14';
                 var cssHref = L.resource('sheepfold/sheepfold.css') + '?v=' + encodeURIComponent(assetVersion);
                 var header = E('div', { 'class': 'sf-header' }, [
                         E('div', {}, [
