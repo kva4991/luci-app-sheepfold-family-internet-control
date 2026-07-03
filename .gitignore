@@ -21,6 +21,7 @@ dist/
 .gradle/
 android/build/
 android/app/build/
+android/local.properties
 
 # Secrets and local configs
 *.env
