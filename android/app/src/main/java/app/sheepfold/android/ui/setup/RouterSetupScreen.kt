@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.net.Uri
@@ -38,6 +39,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -113,6 +115,16 @@ private enum class AppProtectionMode(
         title = "Нет",
         description = "Приложение будет открываться без дополнительной защиты."
     )
+}
+
+private enum class NetworkTransport(
+    val displayName: String
+) {
+    Wifi("Wi-Fi"),
+    Ethernet("проводное подключение"),
+    Cellular("мобильная сеть"),
+    Other("другая сеть"),
+    None("нет подключения")
 }
 
 @Composable
@@ -277,12 +289,6 @@ private fun AgreementScreen(onAccept: () -> Unit) {
             modifier = Modifier.size(84.dp)
         )
         ScreenHeader(text = "Sheepfold", large = true)
-        FramedButton(
-            onClick = { permissionsLauncher.launch(runtimePermissions.toTypedArray()) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(text = if (allPermissionsGranted) "Разрешения выданы" else "Выдать разрешения Android")
-        }
         Text(
             text = "Перед настройкой примите пользовательское соглашение и условия обработки технических данных, необходимых для работы приложения.",
             style = MaterialTheme.typography.bodyLarge
@@ -306,6 +312,12 @@ private fun AgreementScreen(onAccept: () -> Unit) {
             Text(text = "Открыть пользовательское соглашение")
         }
         FramedButton(
+            onClick = { permissionsLauncher.launch(runtimePermissions.toTypedArray()) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = if (allPermissionsGranted) "Разрешения выданы" else "Выдать разрешения Android")
+        }
+        FramedButton(
             onClick = onAccept,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -321,16 +333,24 @@ private fun WifiConnectScreen(
     onContinue: () -> Unit
 ) {
     val context = LocalContext.current
+    var networkTransport by remember { mutableStateOf(readNetworkTransport(context)) }
     var isDetecting by remember { mutableStateOf(true) }
-    var detectionMessage by remember { mutableStateOf("Ищу Sheepfold в текущей Wi-Fi сети...") }
+    var detectionMessage by remember { mutableStateOf("Ищу Sheepfold в текущей локальной сети...") }
+    val localNetworkAllowed = networkTransport == NetworkTransport.Wifi ||
+        networkTransport == NetworkTransport.Ethernet
 
-    LaunchedEffect(Unit) {
-        val discovery = routerConnectionManager.discoverLocalSheepfold(context)
-        if (discovery != null) {
-            detectionMessage = "Sheepfold найден на роутере ${discovery.routerName}"
-            onDetected(discovery)
+    LaunchedEffect(networkTransport) {
+        isDetecting = true
+        if (localNetworkAllowed) {
+            val discovery = routerConnectionManager.discoverLocalSheepfold(context)
+            if (discovery != null) {
+                detectionMessage = "Sheepfold найден на роутере ${discovery.routerName}"
+                onDetected(discovery)
+            } else {
+                detectionMessage = "Sheepfold автоматически не найден. Проверьте, что телефон подключён к домашней локальной сети."
+            }
         } else {
-            detectionMessage = "Sheepfold автоматически не найден. Проверьте, что телефон подключён к домашней Wi-Fi сети."
+            detectionMessage = "Для первичной настройки нужна домашняя Wi-Fi сеть или проводное подключение к роутеру. Через мобильную сеть продолжать нельзя."
         }
         isDetecting = false
     }
@@ -342,14 +362,18 @@ private fun WifiConnectScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        ScreenHeader(text = "Подключение к Wi-Fi")
+        ScreenHeader(text = "Подключение к локальной сети")
         Text(
-            text = "Подключите телефон к домашней Wi-Fi сети роутера, на котором установлен Sheepfold.",
+            text = "Подключите телефон к домашней Wi-Fi сети или проводной сети роутера, на котором установлен Sheepfold.",
             style = MaterialTheme.typography.bodyLarge
         )
         SetupCard(
             title = "Важно",
-            body = "Полная настройка работает локально. Телефон должен быть подключён к той же домашней сети, где открыт LuCI."
+            body = "Полная настройка работает локально. Через мобильную сеть продолжать нельзя."
+        )
+        SetupCard(
+            title = "Текущее подключение",
+            body = networkTransport.displayName
         )
         SetupCard(
             title = "Автопоиск",
@@ -364,11 +388,23 @@ private fun WifiConnectScreen(
             Text(text = "Открыть настройки Wi-Fi")
         }
         FramedButton(
-            enabled = !isDetecting,
+            onClick = { networkTransport = readNetworkTransport(context) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = "Обновить тип подключения")
+        }
+        FramedButton(
+            enabled = !isDetecting && localNetworkAllowed,
             onClick = onContinue,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(text = if (isDetecting) "Проверяю сеть..." else "Я подключён к домашнему Wi-Fi")
+            Text(
+                text = when {
+                    isDetecting -> "Проверяю сеть..."
+                    localNetworkAllowed -> "Продолжить"
+                    else -> "Нужна Wi-Fi или проводная сеть"
+                }
+            )
         }
     }
 }
@@ -376,10 +412,13 @@ private fun WifiConnectScreen(
 @Composable
 private fun MacCheckScreen(onContinue: () -> Unit) {
     val context = LocalContext.current
+    var networkTransport by remember { mutableStateOf(readNetworkTransport(context)) }
     var currentWifi by remember { mutableStateOf(readCurrentWifiDetails(context)) }
     val macLooksRandomized = currentWifi.macAddress?.let(::isLocallyAdministeredMac) == true
     val wifiName = currentWifi.ssid ?: "не удалось определить"
     val macAddress = currentWifi.macAddress ?: "не удалось определить"
+    val isWifi = networkTransport == NetworkTransport.Wifi
+    val isEthernet = networkTransport == NetworkTransport.Ethernet
 
     Column(
         modifier = Modifier
@@ -390,48 +429,75 @@ private fun MacCheckScreen(onContinue: () -> Unit) {
     ) {
         ScreenHeader(text = "Проверка MAC-адреса")
         Text(
-            text = "Для этой домашней Wi-Fi сети должен быть включён настоящий MAC-адрес телефона, а не случайный/private MAC.",
+            text = if (isWifi) {
+                "Для этой домашней Wi-Fi сети должен быть включён настоящий MAC-адрес телефона, а не случайный/private MAC."
+            } else {
+                "Для проводного подключения роутер видит MAC сетевого адаптера. Подтвердите, что именно это подключение нужно привязать как админское."
+            },
             style = MaterialTheme.typography.bodyLarge
         )
         SetupCard(
             title = "Текущее подключение",
-            body = "Wi-Fi: $wifiName\nMAC: $macAddress"
+            body = if (isWifi) {
+                "Тип: ${networkTransport.displayName}\nWi-Fi: $wifiName\nMAC: $macAddress"
+            } else {
+                "Тип: ${networkTransport.displayName}\nMAC: $macAddress"
+            }
         )
-        if (currentWifi.macAddress == null) {
+        if (!isWifi && !isEthernet) {
+            SetupCard(
+                title = "Нужна локальная сеть",
+                body = "Вернитесь назад и подключите телефон к Wi-Fi или проводной сети роутера."
+            )
+        } else if (currentWifi.macAddress == null) {
             SetupCard(
                 title = "Нужна ручная проверка",
-                body = "Android не отдал MAC-адрес приложению. Откройте настройки текущей Wi-Fi сети и проверьте, что выбран настоящий MAC-адрес устройства."
+                body = if (isWifi) {
+                    "Android не отдал MAC-адрес приложению. Откройте настройки текущей Wi-Fi сети и проверьте, что выбран настоящий MAC-адрес устройства."
+                } else {
+                    "Android не отдал MAC-адрес адаптера приложению. Проверьте устройство в списке клиентов роутера."
+                }
             )
         } else if (macLooksRandomized) {
             SetupCard(
-                title = "Похоже на случайный MAC",
-                body = "Этот MAC выглядит как локально назначенный адрес, что часто означает randomized/private MAC. Переключите эту Wi-Fi сеть на настоящий MAC устройства."
+                title = "MAC выглядит как локально назначенный",
+                body = if (isWifi) {
+                    "Это часто означает randomized/private MAC. Переключите эту Wi-Fi сеть на настоящий MAC устройства."
+                } else {
+                    "У проводного адаптера такой MAC тоже возможен. Проверьте, что именно этот адаптер нужно привязать как админское устройство."
+                }
             )
         } else {
             SetupCard(
                 title = "Похоже, всё в порядке",
-                body = "MAC выглядит как постоянный адрес для текущей Wi-Fi сети. Подробные инструкции не нужны."
+                body = "MAC выглядит как постоянный адрес для текущего подключения. Подробные инструкции не нужны."
             )
         }
         FramedButton(
-            onClick = { currentWifi = readCurrentWifiDetails(context) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(text = "Обновить Wi-Fi данные")
-        }
-        FramedButton(
             onClick = {
-                context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+                networkTransport = readNetworkTransport(context)
+                currentWifi = readCurrentWifiDetails(context)
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(text = "Открыть настройки Wi-Fi")
+            Text(text = "Обновить данные подключения")
+        }
+        if (isWifi) {
+            FramedButton(
+                onClick = {
+                    context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = "Открыть настройки Wi-Fi")
+            }
         }
         FramedButton(
+            enabled = isWifi || isEthernet,
             onClick = onContinue,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(text = "Настоящий MAC включён")
+            Text(text = if (isWifi) "Настоящий MAC включён" else "Подтверждаю подключение")
         }
     }
 }
@@ -963,6 +1029,19 @@ private fun formatPortInput(value: String): String {
         ?: ""
 }
 
+private fun readNetworkTransport(context: Context): NetworkTransport {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val capabilities = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+        ?: return NetworkTransport.None
+
+    return when {
+        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> NetworkTransport.Wifi
+        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> NetworkTransport.Ethernet
+        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkTransport.Cellular
+        else -> NetworkTransport.Other
+    }
+}
+
 private fun requiredRuntimePermissions(): List<String> {
     val permissions = mutableListOf(
         Manifest.permission.CAMERA,
@@ -1068,7 +1147,13 @@ private fun FramedButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            disabledContainerColor = MaterialTheme.colorScheme.surface,
+            disabledContentColor = MaterialTheme.colorScheme.outline
+        ),
         content = content
     )
 }

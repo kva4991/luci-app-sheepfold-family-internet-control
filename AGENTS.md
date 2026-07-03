@@ -137,7 +137,9 @@ Avoid:
 - Do not add root-level Gradle files for Android unless the project owner explicitly changes the repository layout.
 - Run Android builds from `android/`, for example `gradle :app:assembleDebug`.
 - First Android setup should be initiated locally from LuCI by scanning an admin-device pairing QR code or entering manual settings.
-- Android first setup screen order is: agreement, home Wi-Fi connection, real Wi-Fi MAC check/guidance, router setup by QR/manual entry, then local app password/PIN.
+- Android first setup screen order is: agreement, home local network connection, real Wi-Fi MAC check/guidance when applicable, router setup by QR/manual entry, then local app password/PIN.
+- Android first setup must require Wi-Fi or wired Ethernet/local network access to the router. Do not allow continuing setup over cellular/mobile data.
+- If the active network is wired Ethernet, skip Wi-Fi-specific randomized MAC instructions but warn that the router sees the Ethernet adapter MAC, not the phone Wi-Fi MAC.
 - The OpenWRT backend must expose a Sheepfold-specific local discovery endpoint so Android can detect that the current Wi-Fi network contains a Sheepfold router before asking the parent to confirm the home network manually.
 - Discovery must not rely on a generic HTTP/LuCI response. It must verify a Sheepfold marker and return structured JSON with package/app marker, version, router name, and API base URL.
 - Supported discovery endpoints should include `/cgi-bin/luci/admin/services/sheepfold/api/ping`, `/cgi-bin/luci/admin/sheepfold/api/ping`, or `/.well-known/sheepfold.json`.

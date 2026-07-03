@@ -40,8 +40,8 @@ First pairing should be started locally from LuCI.
 Android first setup screen order:
 
 1. User agreement and data-processing consent.
-2. Connect the phone to the home Wi-Fi network.
-3. Check/guide the parent to use the real device MAC for this Wi-Fi network.
+2. Connect the phone to the home local network through Wi-Fi or wired Ethernet. Do not allow first setup to continue over cellular/mobile data.
+3. Check/guide the parent to use the real device MAC for the current Wi-Fi network. If the active network is wired Ethernet, skip Wi-Fi-specific MAC instructions and warn that the router sees the Ethernet adapter MAC instead.
 4. Choose router connection setup: QR scan/image import or manual setup.
 5. Set the local app password/PIN.
 
@@ -151,7 +151,7 @@ android/app/build/outputs/apk/debug/app-debug.apk
 After `gradle :app:assembleDebug`, the project also copies the APK to:
 
 ```text
-%USERPROFILE%\Downloads\sheepfold-v0.1.8.apk
+%USERPROFILE%\Downloads\sheepfold-v0.1.10.apk
 ```
 
 To copy it somewhere else, set `SHEEPFOLD_APK_OUTPUT_DIR` before building.
