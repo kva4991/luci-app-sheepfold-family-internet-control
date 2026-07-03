@@ -294,6 +294,26 @@
         fill: currentColor;
 }
 
+.sf-admin-crown-icon {
+        display: inline-flex;
+        width: 15px;
+        height: 15px;
+        margin-right: 5px;
+        color: #d6a100;
+        vertical-align: middle;
+        flex: 0 0 auto;
+}
+
+.sf-admin-crown-icon svg {
+        width: 15px;
+        height: 15px;
+        fill: #f4c430;
+        stroke: #a06a00;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+}
+
 .sf-mono {
         font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
         font-size: 12px;
@@ -519,6 +539,25 @@
         width: 16px;
         height: 16px;
         font-style: normal;
+}
+
+.sf-secret-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 32px;
+        gap: 6px;
+        align-items: center;
+}
+
+.sf-secret-row .sf-secret-input {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.sf-secret-toggle {
+        width: 32px;
+        height: 32px;
 }
 
 .sf-chip {

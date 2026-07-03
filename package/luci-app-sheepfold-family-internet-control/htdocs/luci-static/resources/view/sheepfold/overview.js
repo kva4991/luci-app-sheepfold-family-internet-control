@@ -129,7 +129,6 @@ var translations = {
         'Pairing': 'Сопряжение',
         'Pairing settings': 'Настройки сопряжения',
         'Scan this QR code with the Android app to connect it to this router.': 'Отсканируйте QR-код Android-приложением, чтобы подключить его к этому роутеру.',
-        'The QR code must contain a short-lived one-time token, not the router root password.': 'QR-код должен содержать короткоживущий одноразовый токен, а не root-пароль роутера.',
         'Manual setup': 'Ручная настройка',
         'Router address': 'Адрес роутера',
         'Server IP address': 'IP адрес сервера',
@@ -138,6 +137,8 @@ var translations = {
         'Administrator settings': 'Настройки администратора',
         'Admin name': 'Имя',
         'Temporary password': 'Временный пароль',
+        'Show temporary password': 'Показать временный пароль',
+        'Hide temporary password': 'Скрыть временный пароль',
         'Scan this QR code in the Android app for quick setup.': 'Отсканируйте этот QR-код в Android-приложении для быстрой настройки.',
         'Sheepfold API URL': 'URL API Sheepfold',
         'Administrator login': 'Логин администратора',
@@ -399,6 +400,46 @@ function adminDeviceIcon() {
                         'M4 5h11a2 2 0 0 1 2 2v8H2V7a2 2 0 0 1 2-2z',
                         'M1 17h17v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z',
                         'M19 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z'
+                ])
+        ]);
+}
+
+function adminCrownIcon() {
+        return E('span', { 'class': 'sf-admin-crown-icon', 'title': T('Admin device') }, [
+                svgIcon([
+                        'M3 8l4 4 5-7 5 7 4-4-2 11H5L3 8z',
+                        'M6 19h12'
+                ])
+        ]);
+}
+
+function passwordRevealField(label, value) {
+        var input = E('input', {
+                'class': 'cbi-input-text sf-secret-input',
+                'type': 'password',
+                'readonly': 'readonly',
+                'value': value || ''
+        });
+        var button = E('button', {
+                'class': 'sf-icon-action sf-secret-toggle',
+                'title': T('Show temporary password'),
+                'aria-label': T('Show temporary password'),
+                'click': function (ev) {
+                        var visible;
+
+                        ev.preventDefault();
+                        visible = input.type === 'password';
+                        input.type = visible ? 'text' : 'password';
+                        button.setAttribute('title', visible ? T('Hide temporary password') : T('Show temporary password'));
+                        button.setAttribute('aria-label', visible ? T('Hide temporary password') : T('Show temporary password'));
+                }
+        }, iconSvg('eye'));
+
+        return E('label', { 'class': 'sf-field sf-secret-field' }, [
+                E('span', {}, label),
+                E('div', { 'class': 'sf-secret-row' }, [
+                        input,
+                        button
                 ])
         ]);
 }
@@ -691,8 +732,7 @@ function showPairingModal(device) {
                 E('div', { 'class': 'sf-modal-pairing' }, [
                         E('div', { 'class': 'sf-qr-wrap' }, [
                                 qrCode(pairingPayload),
-                                E('p', {}, T('Scan this QR code with the Android app to connect it to this router.')),
-                                E('small', {}, T('The QR code must contain a short-lived one-time token, not the router root password.'))
+                                E('p', {}, T('Scan this QR code with the Android app to connect it to this router.'))
                         ]),
                         E('div', { 'class': 'sf-manual-settings' }, [
                                 E('h4', {}, T('Manual setup')),
@@ -726,13 +766,12 @@ function showAdminSettingsModal(admin) {
                 E('div', { 'class': 'sf-modal-pairing' }, [
                         E('div', { 'class': 'sf-qr-wrap' }, [
                                 qrCode(pairingPayload),
-                                E('p', {}, T('Scan this QR code in the Android app for quick setup.')),
-                                E('small', {}, T('The QR code must contain a short-lived one-time token, not the router root password.'))
+                                E('p', {}, T('Scan this QR code in the Android app for quick setup.'))
                         ]),
                         E('div', { 'class': 'sf-manual-settings' }, [
                                 field(T('Admin name'), admin.name),
                                 field(T('Login'), admin.login),
-                                settingLine(T('Temporary password'), temporaryPassword),
+                                passwordRevealField(T('Temporary password'), temporaryPassword),
                                 settingLine(T('Server IP address'), routerAddress),
                                 settingLine(T('Port'), port)
                         ])
@@ -1059,7 +1098,7 @@ function deviceTable(rows, options) {
                         E('div', { 'class': 'sf-device-index' }, deviceDisplayId(device)),
                         E('div', { 'class': 'sf-device-name' }, [
                                         E('strong', {}, [
-                                                device.adminDevice ? adminDeviceIcon() : '',
+                                                device.adminDevice ? adminCrownIcon() : '',
                                                 E('span', {}, device.name)
                                         ]),
                                         E('small', {}, device.note)
@@ -1132,6 +1171,10 @@ function iconSvg(name) {
                 link: [
                         'M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1',
                         'M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1'
+                ],
+                eye: [
+                        'M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z',
+                        'M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z'
                 ]
         };
 
@@ -1828,7 +1871,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-27';
+                var assetVersion = '0.1.0-28';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var cssHref = L.resource('sheepfold/sheepfold.css') + '?v=' + encodeURIComponent(assetVersion);
