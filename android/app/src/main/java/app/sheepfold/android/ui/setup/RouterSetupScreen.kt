@@ -23,6 +23,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -56,6 +57,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -131,6 +133,12 @@ private enum class NetworkTransport(
     Cellular("мобильная сеть"),
     Other("другая сеть"),
     None("нет подключения")
+}
+
+private enum class DiscoveryStatus {
+    Checking,
+    Found,
+    Attention
 }
 
 @Composable
@@ -355,26 +363,13 @@ private fun AgreementScreen(onAccept: () -> Unit) {
             }
         }
 
-        Button(
+        RoundNextButton(
             enabled = canContinue,
             onClick = onAccept,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 20.dp)
-                .size(112.dp),
-            shape = CircleShape,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                disabledContainerColor = Color(0xFFB8BEBB),
-                disabledContentColor = Color(0xFF707774)
-            )
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(text = ">")
-                Text(text = "далее")
-            }
-        }
+        )
     }
 }
 
@@ -387,76 +382,159 @@ private fun WifiConnectScreen(
     val context = LocalContext.current
     var networkTransport by remember { mutableStateOf(readNetworkTransport(context)) }
     var isDetecting by remember { mutableStateOf(true) }
+    var refreshNonce by remember { mutableIntStateOf(0) }
     var detectionMessage by remember { mutableStateOf("Ищу Sheepfold в текущей локальной сети...") }
+    var discoveryStatus by remember { mutableStateOf(DiscoveryStatus.Checking) }
     val localNetworkAllowed = networkTransport == NetworkTransport.Wifi ||
         networkTransport == NetworkTransport.Ethernet
 
-    LaunchedEffect(networkTransport) {
+    LaunchedEffect(networkTransport, refreshNonce) {
         isDetecting = true
+        discoveryStatus = DiscoveryStatus.Checking
         if (localNetworkAllowed) {
             val discovery = routerConnectionManager.discoverLocalSheepfold(context)
             if (discovery != null) {
                 detectionMessage = "Sheepfold найден на роутере ${discovery.routerName}"
+                discoveryStatus = DiscoveryStatus.Found
                 onDetected(discovery)
             } else {
                 detectionMessage = "Sheepfold автоматически не найден. Проверьте, что телефон подключён к домашней локальной сети."
+                discoveryStatus = DiscoveryStatus.Attention
             }
         } else {
             detectionMessage = "Для первичной настройки нужна домашняя Wi-Fi сеть или проводное подключение к роутеру. Через мобильную сеть продолжать нельзя."
+            discoveryStatus = DiscoveryStatus.Attention
         }
         isDetecting = false
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        ScreenHeader(text = "Подключение к локальной сети")
-        Text(
-            text = "Подключите телефон к домашней Wi-Fi сети или проводной сети роутера, на котором установлен Sheepfold.",
-            style = MaterialTheme.typography.bodyLarge
-        )
-        SetupCard(
-            title = "Важно",
-            body = "Полная настройка работает локально. Через мобильную сеть продолжать нельзя."
-        )
-        SetupCard(
-            title = "Текущее подключение",
-            body = networkTransport.displayName
-        )
-        SetupCard(
-            title = "Автопоиск",
-            body = detectionMessage
-        )
-        FramedButton(
-            onClick = {
-                context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-            },
-            modifier = Modifier.fillMaxWidth()
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 144.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = "Открыть настройки Wi-Fi")
-        }
-        FramedButton(
-            onClick = { networkTransport = readNetworkTransport(context) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(text = "Обновить тип подключения")
-        }
-        FramedButton(
-            enabled = !isDetecting && localNetworkAllowed,
-            onClick = onContinue,
-            modifier = Modifier.fillMaxWidth()
-        ) {
+            ScreenHeader(text = "Подключение к локальной сети")
             Text(
-                text = when {
-                    isDetecting -> "Проверяю сеть..."
-                    localNetworkAllowed -> "Продолжить"
-                    else -> "Нужна Wi-Fi или проводная сеть"
+                text = "Подключите телефон к домашней Wi-Fi сети или проводной сети роутера, на котором установлен Sheepfold.",
+                style = MaterialTheme.typography.bodyLarge
+            )
+            SetupCard(
+                title = "Важно",
+                body = "Полная настройка работает локально. Через мобильную сеть продолжать нельзя."
+            )
+            SetupCard(
+                title = "Текущее подключение",
+                body = if (localNetworkAllowed) {
+                    "✓ ${networkTransport.displayName}"
+                } else {
+                    networkTransport.displayName
+                },
+                bodyColor = if (localNetworkAllowed) Color(0xFF2E7D32) else null
+            )
+            StatusActionCard(
+                title = "Автопоиск",
+                body = detectionMessage,
+                status = discoveryStatus,
+                onClick = {
+                    networkTransport = readNetworkTransport(context)
+                    refreshNonce += 1
                 }
             )
+            FramedButton(
+                onClick = {
+                    context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = "Открыть настройки Wi-Fi")
+            }
+        }
+
+        RoundNextButton(
+            enabled = !isDetecting && localNetworkAllowed,
+            onClick = onContinue,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 20.dp)
+        )
+    }
+}
+
+@Composable
+private fun RoundNextButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        enabled = enabled,
+        onClick = onClick,
+        modifier = modifier.size(112.dp),
+        shape = CircleShape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            disabledContainerColor = Color(0xFFB8BEBB),
+            disabledContentColor = Color(0xFF707774)
+        )
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = ">")
+            Text(text = "далее")
+        }
+    }
+}
+
+@Composable
+private fun StatusActionCard(
+    title: String,
+    body: String,
+    status: DiscoveryStatus,
+    onClick: () -> Unit
+) {
+    val statusColor = when (status) {
+        DiscoveryStatus.Found -> Color(0xFF2E7D32)
+        DiscoveryStatus.Checking,
+        DiscoveryStatus.Attention -> Color(0xFFF9A825)
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(2.dp, statusColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(text = title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "⟳",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = statusColor
+                )
+            }
+            Text(
+                text = when (status) {
+                    DiscoveryStatus.Found -> "Статус: найдено"
+                    DiscoveryStatus.Checking -> "Статус: проверка"
+                    DiscoveryStatus.Attention -> "Статус: требуется внимание"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = statusColor
+            )
+            Text(text = body, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -1211,7 +1289,11 @@ private fun FramedButton(
 }
 
 @Composable
-private fun SetupCard(title: String, body: String) {
+private fun SetupCard(
+    title: String,
+    body: String,
+    bodyColor: Color? = null
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -1221,7 +1303,11 @@ private fun SetupCard(title: String, body: String) {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(text = title, style = MaterialTheme.typography.titleMedium)
-            Text(text = body, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = bodyColor ?: MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
