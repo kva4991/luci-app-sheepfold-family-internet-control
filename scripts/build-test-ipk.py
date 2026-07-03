@@ -92,6 +92,33 @@ ensure_global_option block_on_boot '0'
 ensure_global_option new_device_policy 'allow'
 ensure_global_option log_retention '3d'
 ensure_global_option offline_device_retention_days '90'
+detect_installed() {{
+        pkg="$1"
+        init="$2"
+        config="$3"
+        opkg status "$pkg" 2>/dev/null | grep -q "Status:.* installed" && return 0
+        [ -n "$init" ] && [ -x "/etc/init.d/$init" ] && return 0
+        [ -n "$config" ] && [ -f "/etc/config/$config" ] && return 0
+        return 1
+}}
+detect_installed AdGuardHome AdGuardHome AdGuardHome || detect_installed adguardhome adguardhome adguardhome
+has_adguard="$?"
+detect_installed podkop podkop podkop
+has_podkop="$?"
+if [ "$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null)" != "1" ]; then
+        if [ "$has_adguard" = "0" ] && [ "$has_podkop" = "0" ]; then
+                uci -q set sheepfold.global.integration_mode='adguard_podkop'
+        elif [ "$has_adguard" = "0" ]; then
+                uci -q set sheepfold.global.integration_mode='adguard'
+        elif [ "$has_podkop" = "0" ]; then
+                uci -q set sheepfold.global.integration_mode='podkop'
+        else
+                uci -q set sheepfold.global.integration_mode='none'
+        fi
+        uci -q set sheepfold.global.integration_mode_source='auto'
+        uci -q set sheepfold.global.adguard_integration="$([ "$has_adguard" = "0" ] && printf 1 || printf 0)"
+        uci -q set sheepfold.global.podkop_compatibility="$([ "$has_podkop" = "0" ] && printf 1 || printf 0)"
+fi
 uci -q set sheepfold.global.ui_asset_version='{version}-{release}'
 uci -q commit sheepfold
 rm -f /var/luci-indexcache* 2>/dev/null || true

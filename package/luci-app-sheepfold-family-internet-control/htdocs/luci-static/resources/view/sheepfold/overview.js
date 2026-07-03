@@ -116,7 +116,7 @@ var translations = {
         'This action is a visual prototype only.': 'Это действие работает только как визуальная заглушка.',
         'Configure': 'Настроить',
         'Device editor is not implemented in this visual test build.': 'Редактор устройства не реализован в этой визуальной тестовой сборке.',
-        'Device ID': 'ID устройства',
+        'ID': 'ID',
         'Bind devices': 'Привязать устройства',
         'Administrator device binding is not implemented in this visual test build.': 'Привязка устройств администратора пока не реализована в этой визуальной сборке.',
         'Admin device': 'Админское устройство',
@@ -257,10 +257,10 @@ var translations = {
         'Language': 'Язык',
         'Russian': 'Русский',
         'English': 'Английский',
-        'New device behavior': 'Поведение новых устройств',
+        'New device behavior': 'Поведение для новых устройств',
         'Allow internet by default': 'Разрешать интернет по умолчанию',
         'Restrict until configured': 'Ограничивать до настройки',
-        'Known offline devices cleanup': 'Очистка известных офлайн-устройств',
+        'Known offline devices cleanup': 'Очистка логов устройств офлайн',
         '30 days': '30 дней',
         '90 days': '90 дней',
         '180 days': '180 дней',
@@ -277,9 +277,9 @@ var translations = {
         'Router reboot requires confirmation.': 'Перезагрузка роутера требует подтверждения.',
         'Sheepfold Family Internet Control': 'Sheepfold : контроль доступа в интернет для семьи',
         'Visual test build. Router rules and persistence are not active yet.': 'Визуальная тестовая сборка. Правила роутера и сохранение настроек пока не активны.',
-        'Block internet': 'Выключить интернет',
+        'Internet disabled': 'Интернет отключен',
         'Global block would block every device except allowlist.': 'Глобальная блокировка заблокирует все устройства, кроме белого списка.',
-        'Unblock internet': 'Включить интернет',
+        'Internet enabled': 'Интернет включен',
         'Global block would be disabled after confirmation.': 'Глобальная блокировка будет выключена после подтверждения.',
         'Export': 'Экспорт',
         'Default export is readable JSON without secrets.': 'Экспорт по умолчанию — читаемый JSON без секретов.',
@@ -290,7 +290,8 @@ var translations = {
         'Save changes. This visual build does not use a separate Apply button.': 'Сохранить изменения. В этой визуальной сборке отдельная кнопка "Применить" не используется.',
         'Router root password check': 'Проверка root-пароля роутера',
         'Root password is not set. Sheepfold settings must stay locked until the router password is configured.': 'Root-пароль не задан. Настройки Sheepfold должны быть заблокированы до установки пароля роутера.',
-        'Open router password page': 'Открыть страницу пароля роутера'
+        'Open router password page': 'Открыть страницу пароля роутера',
+        'Auto-detected during installation. You can change it manually if needed.': 'Автоопределено при установке. При необходимости можно изменить вручную.'
 };
 
 function T(text) {
@@ -846,13 +847,13 @@ function domainCard(site) {
 function deviceTable(rows, options) {
         options = options || {};
 
-        var tableRows = rows.map(function (device) {
+        var tableRows = rows.map(function (device, index) {
                 return E('div', { 'class': 'sf-device-row' }, [
+                        E('div', { 'class': 'sf-device-index' }, String(index + 1)),
                         E('div', { 'class': 'sf-device-name' }, [
                                         E('strong', {}, [
                                                 device.adminDevice ? adminDeviceIcon() : '',
-                                                E('span', {}, device.name),
-                                                E('span', { 'class': 'sf-device-id', 'title': T('Device ID') }, device.id)
+                                                E('span', {}, device.name)
                                         ]),
                                         E('small', {}, device.note)
                         ]),
@@ -869,6 +870,7 @@ function deviceTable(rows, options) {
 
         return E('div', { 'class': 'sf-device-table' }, [
                 E('div', { 'class': 'sf-device-row sf-device-head' }, [
+                        E('div', {}, T('ID')),
                         E('div', {}, T('Device')),
                         E('div', {}, T('IP address')),
                         E('div', {}, T('MAC address')),
@@ -939,18 +941,6 @@ function iconButton(title, icon, tone, handler) {
                         handler();
                 }
         }, iconSvg(icon));
-}
-
-function faIconButton(title, iconClass, icon, tone, handler) {
-        return E('button', {
-                'class': 'sf-icon-action sf-icon-action-' + tone,
-                'title': title,
-                'aria-label': title,
-                'click': function (ev) {
-                        ev.preventDefault();
-                        handler();
-                }
-        }, E('i', { 'class': iconClass, 'aria-hidden': 'true' }, iconSvg(icon)));
 }
 
 function wifiQrEscape(value) {
@@ -1413,12 +1403,6 @@ return view.extend({
                 var networks = this.readWifiNetworks();
 
                 return E('div', { 'class': 'sf-panel' }, [
-                        E('div', { 'class': 'sf-panel-head' }, [
-                                E('div', {}, [
-                                        E('h3', {}, T('Wi-Fi')),
-                                        E('p', {}, T('Real router wireless settings are loaded from OpenWRT UCI.'))
-                                ])
-                        ]),
                         networks.length ?
                                 E('div', { 'class': 'sf-grid two' }, networks.map(wifiNetworkBox)) :
                                 E('div', { 'class': 'sf-note sf-note-warning' }, T('No active Wi-Fi networks were found in the router wireless config.'))
@@ -1437,7 +1421,7 @@ return view.extend({
         },
 
         renderIntegrations: function () {
-                var mode = 'adguard_podkop';
+                var mode = safeUciGet('sheepfold', 'global', 'integration_mode', 'none');
 
                 return E('div', { 'class': 'sf-settings-section' }, [
                         E('div', { 'class': 'sf-form-row' }, [
@@ -1446,7 +1430,7 @@ return view.extend({
                                         ['adguard', 'AdGuard Home'],
                                         ['podkop', 'Podkop'],
                                         ['adguard_podkop', 'AdGuard Home + Podkop']
-                                ], T('Traffic order: Sheepfold -> AdGuard Home -> Podkop.'))
+                                ], T('Auto-detected during installation. You can change it manually if needed.'))
                         ]),
                         E('div', { 'class': 'sf-grid two' }, [
                                 E('div', { 'class': 'sf-box sf-status-card sf-status-warning' }, [
@@ -1529,7 +1513,7 @@ return view.extend({
                                                 iconButton(T('Configure'), 'gear', 'neutral', function () {
                                                         notify(T('This action is a visual prototype only.'), 'info');
                                                 }),
-                                                faIconButton(T('Bind devices'), 'fa-solid fa-link', 'link', 'neutral', function () {
+                                                iconButton(T('Bind devices'), 'link', 'neutral', function () {
                                                         notify(T('Administrator device binding is not implemented in this visual test build.'), 'info');
                                                 })
                                         ])
@@ -1644,8 +1628,8 @@ return view.extend({
                                 E('p', {}, T('Visual test build. Router rules and persistence are not active yet.'))
                         ]),
                         E('div', { 'class': 'sf-header-actions' }, [
-                                this.internetToggleButton(T('Unblock internet'), 'positive', false, internetBlocked, T('Global block would be disabled after confirmation.')),
-                                this.internetToggleButton(T('Block internet'), 'danger', true, internetBlocked, T('Global block would block every device except allowlist.'))
+                                this.internetToggleButton(T('Internet enabled'), 'positive', false, internetBlocked, T('Global block would be disabled after confirmation.')),
+                                this.internetToggleButton(T('Internet disabled'), 'danger', true, internetBlocked, T('Global block would block every device except allowlist.'))
                         ])
                 ]);
 
