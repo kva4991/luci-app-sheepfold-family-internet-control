@@ -289,6 +289,8 @@ var translations = {
         'Export': 'Экспорт',
         'Default export is readable JSON without secrets.': 'Экспорт по умолчанию — читаемый JSON без секретов.',
         'Import': 'Импорт',
+        'Import all settings and user list': 'Импорт всех настроек и списка пользователей',
+        'Export all settings and user list': 'Экспорт всех настроек и списка пользователей',
         'Import requires confirmation.': 'Импорт требует подтверждения.',
         'Devices': 'Устройства',
         'Save': 'Сохранить',
@@ -366,12 +368,31 @@ function actionButton(label, tone, message) {
         }, label);
 }
 
+function svgIcon(paths, attrs) {
+        var svgNs = 'http://www.w3.org/2000/svg';
+        var svg = document.createElementNS(svgNs, 'svg');
+
+        attrs = attrs || {};
+        svg.setAttribute('viewBox', attrs.viewBox || '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+
+        paths.forEach(function (pathData) {
+                var path = document.createElementNS(svgNs, 'path');
+
+                path.setAttribute('d', pathData);
+                svg.appendChild(path);
+        });
+
+        return svg;
+}
+
 function adminDeviceIcon() {
         return E('span', { 'class': 'sf-admin-device-icon', 'title': T('Admin device') }, [
-                E('svg', { 'viewBox': '0 0 24 24', 'aria-hidden': 'true' }, [
-                        E('path', { 'd': 'M4 5h11a2 2 0 0 1 2 2v8H2V7a2 2 0 0 1 2-2z' }),
-                        E('path', { 'd': 'M1 17h17v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z' }),
-                        E('path', { 'd': 'M19 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z' })
+                svgIcon([
+                        'M4 5h11a2 2 0 0 1 2 2v8H2V7a2 2 0 0 1 2-2z',
+                        'M1 17h17v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z',
+                        'M19 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z'
                 ])
         ]);
 }
@@ -1072,9 +1093,7 @@ function iconSvg(name) {
                 ]
         };
 
-        return E('svg', { 'viewBox': '0 0 24 24', 'aria-hidden': 'true' }, paths[name].map(function (path) {
-                return E('path', { 'd': path });
-        }));
+        return svgIcon(paths[name] || paths.gear);
 }
 
 function iconButton(title, icon, tone, handler) {
@@ -1712,8 +1731,8 @@ return view.extend({
                                 ['encrypted', T('Encrypted full backup')]
                         ]),
                         E('div', { 'class': 'sf-action-stack' }, [
-                                actionButton(T('Import'), 'neutral', T('Import requires confirmation.')),
-                                actionButton(T('Export'), 'neutral', T('Default export is readable JSON without secrets.')),
+                                actionButton(T('Import all settings and user list'), 'neutral', T('Import requires confirmation.')),
+                                actionButton(T('Export all settings and user list'), 'neutral', T('Default export is readable JSON without secrets.')),
                                 actionButton(T('Update app'), 'danger', T('Application update requires confirmation.')),
                                 actionButton(T('Reboot router'), 'danger', T('Router reboot requires confirmation.'))
                         ])
@@ -1762,7 +1781,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-23';
+                var assetVersion = '0.1.0-24';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var cssHref = L.resource('sheepfold/sheepfold.css') + '?v=' + encodeURIComponent(assetVersion);
