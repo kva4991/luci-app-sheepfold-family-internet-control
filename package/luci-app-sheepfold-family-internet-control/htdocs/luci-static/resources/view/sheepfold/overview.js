@@ -66,12 +66,14 @@ var emergencySites = [
 
 var admins = [
         {
+                id: 'A-0001',
                 name: 'Владелец',
                 login: 'owner',
                 role: 'owner',
                 deviceIds: ['D-0001']
         },
         {
+                id: 'A-0002',
                 name: 'Мама',
                 login: 'mama',
                 role: 'admin',
@@ -146,6 +148,11 @@ var translations = {
         'QR payload': 'Данные QR',
         'Token lifetime': 'Срок действия токена',
         '10 minutes': '10 минут',
+        'Admin setup link': 'Ссылка настройки администратора',
+        'Open this link on the computer where LuCI is open.': 'Откройте эту ссылку на компьютере, где открыт LuCI.',
+        'Click the field to copy the link.': 'Нажмите на поле, чтобы скопировать ссылку.',
+        'Admin setup link copied to clipboard.': 'Ссылка настройки администратора скопирована в буфер обмена.',
+        'Could not copy the link automatically. Select and copy it manually.': 'Не удалось скопировать ссылку автоматически. Выделите и скопируйте её вручную.',
         'Wi-Fi MAC check': 'Проверка MAC Wi-Fi',
         'Use the real device MAC for this home Wi-Fi network.': 'Для этой домашней Wi-Fi сети используйте настоящий MAC устройства.',
         'Android must require the real device MAC for this home Wi-Fi network before continuing setup.': 'Android должен требовать настоящий MAC устройства для этой домашней Wi-Fi сети до продолжения настройки.',
@@ -338,6 +345,51 @@ var userListTabs = [
 
 function notify(message, level) {
         ui.addNotification(null, E('p', {}, message), level || 'info');
+}
+
+function copyTextToClipboard(text, successMessage) {
+        function fallbackCopy() {
+                var input = E('textarea', { 'class': 'sf-copy-helper' }, text);
+
+                document.body.appendChild(input);
+                input.select();
+
+                try {
+                        document.execCommand('copy');
+                        notify(successMessage, 'info');
+                } catch (e) {
+                        notify(T('Could not copy the link automatically. Select and copy it manually.'), 'warning');
+                }
+
+                document.body.removeChild(input);
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                        notify(successMessage, 'info');
+                }, fallbackCopy);
+                return;
+        }
+
+        fallbackCopy();
+}
+
+function copyableLinkField(label, value, hint) {
+        var input = E('input', {
+                'class': 'cbi-input-text sf-copy-link-input',
+                'readonly': 'readonly',
+                'value': value,
+                'click': function (ev) {
+                        ev.currentTarget.select();
+                        copyTextToClipboard(value, T('Admin setup link copied to clipboard.'));
+                }
+        });
+
+        return E('label', { 'class': 'sf-field sf-field-wide sf-copy-link-field' }, [
+                E('span', {}, label),
+                input,
+                hint ? E('small', {}, hint) : ''
+        ]);
 }
 
 function badge(status) {
@@ -760,6 +812,7 @@ function showAdminSettingsModal(admin) {
         var routerAddress = '192.168.1.1';
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
         var temporaryPassword = generatePairingCode();
+        var setupLink = adminSetupLink(admin);
         var pairingPayload = 'SF1|h=' + routerAddress + '|p=' + port + '|u=' +
                 admin.login + '|c=' + temporaryPassword + '|ttl=600';
 
@@ -774,7 +827,9 @@ function showAdminSettingsModal(admin) {
                                 field(T('Login'), admin.login),
                                 passwordRevealField(T('Temporary password'), temporaryPassword),
                                 settingLine(T('Server IP address'), routerAddress),
-                                settingLine(T('Port'), port)
+                                settingLine(T('Port'), port),
+                                E('div', { 'class': 'sf-note' }, T('Open this link on the computer where LuCI is open.')),
+                                copyableLinkField(T('Admin setup link'), setupLink, T('Click the field to copy the link.'))
                         ])
                 ]),
                 E('div', { 'class': 'right' }, [
@@ -1051,6 +1106,37 @@ function deviceById(id) {
         }
 
         return null;
+}
+
+function idNumber(value) {
+        var match = String(value || '').match(/(\d+)$/);
+
+        return match ? parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
+function firstAdminBySmallestId() {
+        return admins.slice().sort(function (left, right) {
+                return idNumber(left.id) - idNumber(right.id);
+        })[0] || null;
+}
+
+function adminByDeepLinkValue(value) {
+        if (!value || value === 'first')
+                return firstAdminBySmallestId();
+
+        for (var i = 0; i < admins.length; i++) {
+                if (admins[i].id === value || admins[i].login === value || admins[i].name === value)
+                        return admins[i];
+        }
+
+        return null;
+}
+
+function adminSetupLink(admin) {
+        var adminValue = admin && admin.id ? admin.id : 'first';
+        var baseUrl = window.location.origin + L.url('admin/services/sheepfold');
+
+        return baseUrl + '?view=admins&action=pair&admin=' + encodeURIComponent(adminValue);
 }
 
 function adminDeviceList(admin) {
@@ -1434,6 +1520,7 @@ return view.extend({
         activeTab: 'users',
         activeUserListTab: 'devices',
         activeSettingsTab: 'general',
+        deepLinkHandled: false,
         globalInternetBlocked: null,
         uciLoadState: {
                 sheepfold: false,
@@ -1473,6 +1560,44 @@ return view.extend({
                         node.classList.toggle('is-inactive', !active);
                         node.setAttribute('aria-pressed', active ? 'true' : 'false');
                 });
+        },
+
+        deepLinkParams: function () {
+                try {
+                        return new URLSearchParams(window.location.search || '');
+                } catch (e) {
+                        return null;
+                }
+        },
+
+        applyInitialDeepLinkState: function () {
+                var params = this.deepLinkParams();
+
+                if (!params)
+                        return;
+
+                if (params.get('view') === 'admins')
+                        this.activeTab = 'admins';
+        },
+
+        runInitialDeepLinkAction: function () {
+                var params = this.deepLinkParams();
+                var admin;
+
+                if (this.deepLinkHandled || !params)
+                        return;
+
+                if (params.get('view') !== 'admins' || params.get('action') !== 'pair')
+                        return;
+
+                admin = adminByDeepLinkValue(params.get('admin'));
+                if (!admin)
+                        return;
+
+                this.deepLinkHandled = true;
+                window.setTimeout(function () {
+                        showAdminSettingsModal(admin);
+                }, 0);
         },
 
         internetToggleButton: function (label, tone, blocked, currentBlocked, message) {
@@ -1963,10 +2088,11 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-30';
+                var assetVersion = '0.1.0-31';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var cssHref = L.resource('sheepfold/sheepfold.css') + '?v=' + encodeURIComponent(assetVersion);
+                var page;
                 var header = E('div', { 'class': 'sf-header' }, [
                         E('div', {}, [
                                 E('h2', {}, T('Sheepfold Family Internet Control')),
@@ -1978,6 +2104,8 @@ return view.extend({
                         ])
                 ]);
 
+                this.applyInitialDeepLinkState();
+
                 if (!rootPasswordIsSet) {
                         return E('div', { 'class': 'sf-page' }, [
                                 E('link', { 'rel': 'stylesheet', 'href': cssHref }),
@@ -1986,7 +2114,7 @@ return view.extend({
                         ]);
                 }
 
-                return E('div', { 'class': 'sf-page' }, [
+                page = E('div', { 'class': 'sf-page' }, [
                         E('link', { 'rel': 'stylesheet', 'href': cssHref }),
                         header,
                         E('div', { 'class': 'sf-metrics' }, [
@@ -2006,5 +2134,9 @@ return view.extend({
                         this.renderTabs(),
                         E('div', { 'class': 'sf-panels' }, this.renderPanels())
                 ]);
+
+                this.runInitialDeepLinkAction();
+
+                return page;
         }
 });

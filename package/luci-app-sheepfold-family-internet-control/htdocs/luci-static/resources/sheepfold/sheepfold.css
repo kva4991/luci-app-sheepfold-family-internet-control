@@ -255,6 +255,32 @@
         resize: vertical;
 }
 
+.sf-copy-link-field {
+        cursor: pointer;
+}
+
+.sf-copy-link-input {
+        cursor: pointer;
+        font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+        background: #f8fafc;
+        color: var(--sf-ink);
+}
+
+.sf-copy-link-input:focus {
+        border-color: #1d8a57;
+        box-shadow: 0 0 0 2px rgba(29, 138, 87, 0.14);
+        outline: none;
+}
+
+.sf-copy-helper {
+        position: fixed;
+        left: -9999px;
+        top: -9999px;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+}
+
 .sf-search {
         min-width: 240px;
         flex: 1 1 260px;

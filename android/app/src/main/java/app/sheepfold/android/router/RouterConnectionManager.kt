@@ -27,6 +27,11 @@ data class LocalSheepfoldDiscovery(
 class RouterConnectionManager {
     fun getAutoRouterAddress(): String? = "192.168.1.1"
 
+    fun adminSetupLink(gatewayHost: String? = getAutoRouterAddress()): String {
+        val host = gatewayHost.orEmpty().ifBlank { "192.168.1.1" }
+        return "http://$host/cgi-bin/luci/admin/services/sheepfold?view=admins&action=pair&admin=first"
+    }
+
     fun parseQrPayload(payload: String): RouterConnectionRequest {
         val trimmed = payload.trim()
         if (trimmed.startsWith("{")) {

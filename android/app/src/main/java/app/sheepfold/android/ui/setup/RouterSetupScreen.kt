@@ -2,6 +2,8 @@ package app.sheepfold.android.ui.setup
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -200,6 +202,12 @@ fun RouterSetupScreen(onSetupComplete: () -> Unit) {
                 )
 
                 SetupStep.PairingChoice -> PairingChoiceScreen(
+                    adminSetupLink = routerConnectionManager.adminSetupLink(),
+                    onShowMessage = { message ->
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(message)
+                        }
+                    },
                     onQrClick = { setupStep = SetupStep.QrScanner },
                     onManualClick = { setupStep = SetupStep.ManualSetup }
                 )
@@ -747,6 +755,8 @@ private fun MacCheckScreen(onContinue: () -> Unit) {
 
 @Composable
 private fun PairingChoiceScreen(
+    adminSetupLink: String,
+    onShowMessage: (String) -> Unit,
     onQrClick: () -> Unit,
     onManualClick: () -> Unit
 ) {
@@ -761,6 +771,10 @@ private fun PairingChoiceScreen(
         Text(
             text = "Выберите способ подключения к Sheepfold на OpenWRT-роутере.",
             style = MaterialTheme.typography.bodyLarge
+        )
+        CopyableAdminSetupLink(
+            link = adminSetupLink,
+            onCopied = { onShowMessage("Ссылка скопирована в буфер обмена") }
         )
         Column(
             modifier = Modifier
@@ -790,6 +804,50 @@ private fun PairingChoiceScreen(
             title = "Следующий шаг",
             body = "После выбора способа приложение проверит подключение к домашнему Wi-Fi и настоящий MAC-адрес телефона."
         )
+    }
+}
+
+@Composable
+private fun CopyableAdminSetupLink(
+    link: String,
+    onCopied: () -> Unit
+) {
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Откройте эту ссылку на компьютере, где открыт LuCI.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFF17211D)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .border(
+                    width = 1.dp,
+                    color = Color(0xFF7BAF9A),
+                    shape = RoundedCornerShape(10.dp)
+                )
+                .background(Color(0xFFF6FAF8))
+                .clickable {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(
+                        ClipData.newPlainText("Sheepfold admin setup link", link)
+                    )
+                    onCopied()
+                }
+                .padding(12.dp)
+        ) {
+            Text(
+                text = link,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF14532D)
+            )
+        }
     }
 }
 
