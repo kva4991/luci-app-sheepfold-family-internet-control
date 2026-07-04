@@ -98,6 +98,7 @@ Avoid:
 - Keep `docs/privacy.md` as the English routing/summary document until a full English privacy policy is prepared.
 - Android first setup must require a checkbox before use: `Я принимаю пользовательское соглашение и даю согласие на обработку персональных и технических данных, необходимых для работы Sheepfold.`
 - OpenWRT installer must show a link to the full agreement and require explicit `yes`, `y`, or `да` input before applying installation or configuration changes.
+- The OpenWRT installer must ask for application language before the agreement prompt. Use a simple console prompt: `Choose application language / Выберите язык приложения: Русский ru, English en`, with `ru` as the default.
 - The agreement must be visible before first use in LuCI/Android when practical.
 - Do not claim that the agreement is final legal advice; production releases should be reviewed by a qualified lawyer.
 - Sheepfold is self-hosted for family use by default. Do not introduce a developer-operated cloud dependency unless explicitly requested later.
@@ -178,10 +179,13 @@ Avoid:
 - The `No restrictions` group is a group-level trusted service-device rule: it may bypass schedules, temporary restrictions, new-device restrictions, and global block, but it must never override the blocklist. Blocklist remains the highest priority.
 - Strong device detection may suggest or confirm `No restrictions` for infrastructure devices such as NAS, Home Assistant, AdGuard Home, Proxmox, video recorders, and smart-home hubs.
 - Full detection should combine several router-side signals such as DHCP/static lease data, hostname, vendor/OUI when available, open ports, service banners, mDNS/SSDP/UPnP names, and previously confirmed device fingerprints. Treat port/banner checks as confidence signals, not as cryptographic identity.
-- Installation may offer a reduced mode. Reduced mode uses only lightweight current metadata detection and must not auto-assign newly detected devices to `No restrictions`.
-- The OpenWRT installer must ask `Apply Sheepfold automatic setup?` / `Применить автонастройку программы?`. If the parent/admin explicitly answers `yes`, `y`, or `да`, set `auto_configure=1`, `detection_mode=full`, and `no_restrictions_auto_assign=1`.
+- Implement strong device detection as a separate optional backend/package, for example `sheepfold-device-detector`, not inside the LuCI-only package. The LuCI package should call a Sheepfold backend API and remain lightweight.
+- The detector may use existing OpenWRT tools when available, such as `nmap`/`nmap-ssl` for port and banner detection, `avahi-utils` or equivalent mDNS clients for service discovery, and SSDP/UPnP probes. These tools must be optional/full-mode dependencies, not mandatory dependencies for reduced installations.
+- Do not run heavy scans continuously. Use bounded local-network scans, cache results, explain detector confidence in UI, and let the parent correct the result.
+- Full automatic setup is the default because it is the useful path for most families. Reduced mode is for routers with very little free space or constrained resources.
+- The OpenWRT installer must ask `Apply Sheepfold automatic setup?` / `Применить автонастройку программы?`. If the parent/admin presses Enter or answers `yes`, `y`, or `да`, set `auto_configure=1`, `detection_mode=full`, and `no_restrictions_auto_assign=1`.
 - Full automatic setup may place confidently detected infrastructure devices into `No restrictions` automatically. The UI should still make this visible and explain why the device was trusted, so the parent can correct mistakes.
-- If the parent/admin declines automatic setup, set or keep `auto_configure=0`, `detection_mode=reduced`, and `no_restrictions_auto_assign=0`.
+- If the parent/admin explicitly declines automatic setup with `no`, `n`, or `нет`, set or keep `auto_configure=0`, `detection_mode=reduced`, and `no_restrictions_auto_assign=0`.
 - Offline known devices should be cleaned after a configurable number of inactive days; default is 90 days.
 - Blocked-page placeholder text must be configurable by the parent/admin.
 - Allowlist should support quick add mode: a parent opens a 30 second connection window, sees a Wi-Fi QR code and devices that connected after the window started, then explicitly presses `Add` / `Добавить` for each candidate.

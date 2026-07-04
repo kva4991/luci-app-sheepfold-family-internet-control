@@ -215,12 +215,17 @@ This group must not override the blocklist. Priority is:
 
 Strong device detection should use router-side signals such as DHCP/static lease data, hostname, vendor/OUI, open ports, service banners, mDNS/SSDP/UPnP names, and a previously confirmed device fingerprint. Detection by MAC, hostname, or open ports alone is not a cryptographic guarantee, so the UI must show why a device was trusted and allow the parent to correct it.
 
+Strong detection should be implemented as an optional backend component/package, for example `sheepfold-device-detector`, while the LuCI package stays lightweight and calls Sheepfold backend APIs. The full detector may use existing OpenWRT tools when installed, such as `nmap`/`nmap-ssl` for ports and banners, `avahi-utils` or equivalent mDNS clients, and SSDP/UPnP probes. These must be optional full-mode dependencies, not mandatory dependencies for reduced installations.
+
+The detector must avoid continuous heavy scanning. It should run bounded local-network checks, cache results, expose confidence/explanation to LuCI/Android, and let the parent override the detected type or group.
+
 Installer mode:
 
 - the OpenWRT installer must ask `Apply Sheepfold automatic setup?` / `Применить автонастройку программы?`;
-- if the parent/admin answers `yes`, `y`, or `да`, set `auto_configure=1`, `detection_mode=full`, and `no_restrictions_auto_assign=1`;
+- full automatic setup is the default because it is the useful path for most families;
+- if the parent/admin presses Enter or answers `yes`, `y`, or `да`, set `auto_configure=1`, `detection_mode=full`, and `no_restrictions_auto_assign=1`;
 - full automatic setup may place confidently detected infrastructure devices into the `No restrictions` group automatically;
-- if the parent/admin declines, set or keep `auto_configure=0`, `detection_mode=reduced`, and `no_restrictions_auto_assign=0`;
+- if the parent/admin explicitly answers `no`, `n`, or `нет`, set or keep `auto_configure=0`, `detection_mode=reduced`, and `no_restrictions_auto_assign=0`;
 - reduced mode uses only lightweight metadata detection and must not auto-assign devices to the `No restrictions` group.
 
 Allowlist quick add:

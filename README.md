@@ -13,7 +13,7 @@ It is planned as an OpenWRT router application with a LuCI web interface, backen
 ## Installation
 
 The installer is a placeholder until the first package release is published.
-It asks for user-agreement consent and offers automatic setup: if accepted, Sheepfold may automatically assign confidently detected infrastructure devices to the `No restrictions` group; if declined, reduced/manual mode is used.
+It first asks for application language (`ru` by default, `en` for English), then asks for user-agreement consent and offers automatic setup. Full automatic setup is the default and may assign confidently detected infrastructure devices to the `No restrictions` group. Reduced mode can be selected explicitly for routers with very little free space.
 
 ```sh
 wget -O /tmp/sheepfold-install.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/install.sh

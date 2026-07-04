@@ -19,6 +19,28 @@ fi
 echo "Detected OpenWRT: ${DISTRIB_DESCRIPTION:-unknown}"
 echo "Package: ${PACKAGE}"
 
+echo ""
+echo "Choose application language / Выберите язык приложения:"
+echo "  Русский: ru"
+echo "  English: en"
+printf "Language [ru]: "
+if ! read -r APP_LANGUAGE; then
+    APP_LANGUAGE=""
+fi
+
+case "${APP_LANGUAGE}" in
+    ""|ru|RU|Ru)
+        APP_LANGUAGE="ru"
+        ;;
+    en|EN|En)
+        APP_LANGUAGE="en"
+        ;;
+    *)
+        echo "Unknown language. Using Russian / Неизвестный язык. Используется русский." >&2
+        APP_LANGUAGE="ru"
+        ;;
+esac
+
 if ! command -v opkg >/dev/null 2>&1; then
     echo "ERROR: opkg was not found." >&2
     exit 1
@@ -50,23 +72,30 @@ echo "Apply Sheepfold automatic setup?"
 echo "If enabled, Sheepfold may automatically configure safe defaults and put confidently detected home infrastructure devices"
 echo "such as NAS, Home Assistant, AdGuard Home, Proxmox, video recorders, and smart-home hubs into the No restrictions group."
 echo "The blocklist will still override this group."
-printf "Type yes, y, or да to enable automatic setup, or press Enter for reduced/manual mode: "
+printf "Press Enter or type yes/y/да to use full automatic setup, or type no/n/нет for reduced mode: "
 if ! read -r AUTO_CONFIGURE_ACCEPTED; then
     AUTO_CONFIGURE_ACCEPTED=""
 fi
 
-AUTO_CONFIGURE=0
-DETECTION_MODE="reduced"
-NO_RESTRICTIONS_AUTO_ASSIGN=0
+AUTO_CONFIGURE=1
+DETECTION_MODE="full"
+NO_RESTRICTIONS_AUTO_ASSIGN=1
 case "${AUTO_CONFIGURE_ACCEPTED}" in
-    yes|YES|Yes|y|Y|да|Да|ДА)
+    ""|yes|YES|Yes|y|Y|да|Да|ДА)
         AUTO_CONFIGURE=1
         DETECTION_MODE="full"
         NO_RESTRICTIONS_AUTO_ASSIGN=1
         echo "Automatic setup enabled."
         ;;
-    *)
+    no|NO|No|n|N|нет|Нет|НЕТ)
+        AUTO_CONFIGURE=0
+        DETECTION_MODE="reduced"
+        NO_RESTRICTIONS_AUTO_ASSIGN=0
         echo "Reduced/manual setup selected."
+        ;;
+    *)
+        echo "Installation cancelled: automatic setup answer was not understood." >&2
+        exit 1
         ;;
 esac
 
@@ -105,6 +134,7 @@ echo "Recommended Sheepfold integration mode: ${INTEGRATION_MODE}"
 
 if [ -r /etc/config/sheepfold ] && command -v uci >/dev/null 2>&1; then
     echo "Applying detected integration mode to existing Sheepfold config."
+    uci -q set sheepfold.global.language="${APP_LANGUAGE}"
     uci -q set sheepfold.global.integration_mode="${INTEGRATION_MODE}"
     uci -q set sheepfold.global.adguard_integration="${ADGUARD_DETECTED}"
     uci -q set sheepfold.global.podkop_compatibility="${PODKOP_DETECTED}"
@@ -117,6 +147,7 @@ if [ -r /etc/config/sheepfold ] && command -v uci >/dev/null 2>&1; then
 else
     echo "Sheepfold config is not installed yet; the package installer should apply this mode after installation."
     echo "Automatic setup choice:"
+    echo "  language=${APP_LANGUAGE}"
     echo "  auto_configure=${AUTO_CONFIGURE}"
     echo "  detection_mode=${DETECTION_MODE}"
     echo "  no_restrictions_auto_assign=${NO_RESTRICTIONS_AUTO_ASSIGN}"

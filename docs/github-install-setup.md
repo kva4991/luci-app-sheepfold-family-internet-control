@@ -26,13 +26,14 @@ sh /tmp/sheepfold-uninstall.sh
 2. Publish packages to GitHub Releases.
 3. Teach `install.sh` to detect OpenWRT architecture.
 4. Detect existing AdGuard Home and Podkop installations.
-5. Ask whether to apply Sheepfold automatic setup and persist `auto_configure`, `detection_mode`, and `no_restrictions_auto_assign`.
-6. Download the matching `.ipk`.
-7. Install dependencies through `opkg`.
-8. Install Sheepfold through `opkg install`.
-9. Apply the recommended Sheepfold `integration_mode`.
-10. Enable and start the service.
-11. Restart `rpcd`, `uhttpd`, and `firewall` when needed.
+5. Ask for application language first and persist `language`, defaulting to `ru`.
+6. Ask whether to apply Sheepfold automatic setup, use full automatic setup by default, and persist `auto_configure`, `detection_mode`, and `no_restrictions_auto_assign`.
+7. Download the matching `.ipk`.
+8. Install dependencies through `opkg`.
+9. Install Sheepfold through `opkg install`.
+10. Apply the recommended Sheepfold `integration_mode`.
+11. Enable and start the service.
+12. Restart `rpcd`, `uhttpd`, and `firewall` when needed.
 
 ## Update Plan
 

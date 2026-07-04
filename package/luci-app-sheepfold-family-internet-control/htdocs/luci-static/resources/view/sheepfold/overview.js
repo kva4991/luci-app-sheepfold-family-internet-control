@@ -282,6 +282,12 @@ var translations = {
         'New device behavior': 'Поведение для новых устройств',
         'Allow internet by default': 'Разрешать интернет по умолчанию',
         'Restrict until configured': 'Ограничивать до настройки',
+        'New device automatic setup': 'Автонастройка новых устройств',
+        'Full automatic setup': 'Полная автонастройка',
+        'Reduced automatic setup': 'Урезанная автонастройка',
+        'Full mode can automatically place confidently detected home infrastructure devices into No restrictions. Reduced mode is for routers with very little free space.': 'Полный режим может автоматически помещать уверенно распознанные домашние инфраструктурные устройства в группу "Без ограничений". Урезанный режим нужен для роутеров с очень малым запасом места.',
+        'New device automatic setup saved.': 'Автонастройка новых устройств сохранена.',
+        'Could not save new device automatic setup.': 'Не удалось сохранить автонастройку новых устройств.',
         'Known offline devices cleanup': 'Очистка логов устройств офлайн',
         '30 days': '30 дней',
         '90 days': '90 дней',
@@ -2086,6 +2092,41 @@ function blocklistEmergencyAccessField() {
         ]);
 }
 
+function autoConfigureDevicesField() {
+        var value = safeUciGet('sheepfold', 'global', 'auto_configure', '1') === '1' ? 'full' : 'reduced';
+        var select = E('select', {
+                'class': 'cbi-input-select',
+                'change': function (ev) {
+                        var nextValue = ev.currentTarget.value;
+                        var enabled = nextValue === 'full' ? '1' : '0';
+                        var mode = nextValue === 'full' ? 'full' : 'reduced';
+
+                        uci.set('sheepfold', 'global', 'auto_configure', enabled);
+                        uci.set('sheepfold', 'global', 'detection_mode', mode);
+                        uci.set('sheepfold', 'global', 'no_restrictions_auto_assign', enabled);
+
+                        uci.save().then(function () {
+                                return uci.apply();
+                        }).then(function () {
+                                value = nextValue;
+                                notify(T('New device automatic setup saved.'), 'info');
+                        }, function () {
+                                ev.currentTarget.value = value;
+                                notify(T('Could not save new device automatic setup.'), 'warning');
+                        });
+                }
+        }, [
+                E('option', { 'value': 'full', 'selected': value === 'full' ? 'selected' : null }, T('Full automatic setup')),
+                E('option', { 'value': 'reduced', 'selected': value === 'reduced' ? 'selected' : null }, T('Reduced automatic setup'))
+        ]);
+
+        return E('label', { 'class': 'sf-field sf-field-wide' }, [
+                E('span', {}, T('New device automatic setup')),
+                select,
+                E('small', {}, T('Full mode can automatically place confidently detected home infrastructure devices into No restrictions. Reduced mode is for routers with very little free space.'))
+        ]);
+}
+
 function inputControl(label, value, attrs, hint) {
         var input = E('input', Object.assign({
                 'class': 'cbi-input-text',
@@ -3357,6 +3398,7 @@ return view.extend({
                                 ['allow', T('Allow internet by default')],
                                 ['restrict_until_configured', T('Restrict until configured')]
                         ]),
+                        autoConfigureDevicesField(),
                         blocklistEmergencyAccessField(),
                         selectField(T('Known offline devices cleanup'), '90', [
                                 ['30', T('30 days')],
@@ -3424,7 +3466,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-52';
+                var assetVersion = '0.1.0-53';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
