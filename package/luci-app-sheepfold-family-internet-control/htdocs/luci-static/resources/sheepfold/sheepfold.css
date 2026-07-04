@@ -319,7 +319,7 @@
         justify-content: center;
         color: var(--sf-muted);
         font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 700;
 }
 
@@ -384,16 +384,16 @@
 
 .sf-device-type-icon {
         display: inline-flex;
-        width: 22px;
-        height: 22px;
+        width: 28px;
+        height: 28px;
         align-items: center;
         justify-content: center;
         color: #315f55;
 }
 
 .sf-device-type-icon svg {
-        width: 20px;
-        height: 20px;
+        width: 24px;
+        height: 24px;
         fill: none;
         stroke: currentColor;
         stroke-width: 1.9;
@@ -439,7 +439,7 @@
 
 .sf-device-type-select-button .sf-device-type-icon,
 .sf-device-type-select-option .sf-device-type-icon {
-        flex: 0 0 22px;
+        flex: 0 0 28px;
 }
 
 .sf-device-type-select-label {
@@ -506,7 +506,7 @@
 
 .sf-device-row {
         display: grid;
-        grid-template-columns: 32px minmax(96px, 1.12fr) 38px minmax(72px, 0.64fr) minmax(100px, 0.84fr) minmax(62px, 0.55fr) minmax(68px, 0.58fr) minmax(82px, 0.68fr);
+        grid-template-columns: 38px minmax(90px, 1.08fr) 46px minmax(72px, 0.64fr) minmax(92px, 0.8fr) minmax(60px, 0.54fr) minmax(66px, 0.58fr) minmax(76px, 0.66fr);
         gap: 4px;
         align-items: center;
         min-width: 0;

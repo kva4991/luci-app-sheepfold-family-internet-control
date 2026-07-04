@@ -20,17 +20,10 @@ var emergencySites = [
 var admins = [
         {
                 id: 'A-0001',
-                name: 'Владелец',
-                login: 'owner',
+                name: 'Родитель',
+                login: 'SuperParent',
                 role: 'owner',
                 deviceIds: ['D-0001']
-        },
-        {
-                id: 'A-0002',
-                name: 'Мама',
-                login: 'mama',
-                role: 'admin',
-                deviceIds: ['D-0002', 'D-0003']
         }
 ];
 
@@ -130,6 +123,7 @@ var translations = {
         'Game console': 'Игровая приставка',
         'Printer': 'Принтер',
         'Camera': 'Камера',
+        'Server': 'Сервер',
         'Smart speaker': 'Умная колонка',
         'Robot vacuum': 'Робот-пылесос',
         'Engineering device': 'Инженерное устройство',
@@ -254,6 +248,7 @@ var translations = {
         'Administrator accounts': 'Учётные записи администраторов',
         'Add administrator': 'Добавить администратора',
         'Adding a new administrator requires confirmation.': 'Добавление администратора требует подтверждения.',
+        'Admin name': 'Имя',
         'Login': 'Логин',
         'Admin devices': 'Админские устройства',
         'Commands': 'Команды',
@@ -589,6 +584,20 @@ function deviceTypeDefinitions() {
                         ]
                 },
                 {
+                        value: 'server',
+                        label: T('Server'),
+                        mark: '▦',
+                        paths: [
+                                'M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z',
+                                'M8 7h8',
+                                'M8 11h8',
+                                'M8 15h4',
+                                'M16 15h.01',
+                                'M16 18h.01',
+                                'M8 18h4'
+                        ]
+                },
+                {
                         value: 'camera',
                         label: T('Camera'),
                         mark: '◉',
@@ -695,6 +704,8 @@ function inferDeviceType(item, configured) {
                 return 'console';
         if (/(printer|print|epson|canon|hp-|принтер)/.test(text))
                 return 'printer';
+        if (/(nvr|dvr|xvr|hybrid recorder|video recorder|videoregistrar|видеорегистратор|регистратор|cctv server|surveillance server|video server|сервер видеонаблюдения|ltv-rne|rne-\d|rvi-r|trassir|xmeye|ivms|hik-connect|smartpss|gdmss|idmss|unv.*nvr|uniview.*nvr|hikvision.*nvr|hiwatch.*nvr|hilook.*nvr|dahua.*nvr|beward.*nvr|optimus.*nvr|tantos.*nvr|polyvision.*nvr|hanwha.*nvr|wisenet.*nvr|axis.*nvr|vivotek.*nvr|tiandy.*nvr)/.test(text))
+                return 'server';
         if (/(camera|cam|ipcam|камера)/.test(text))
                 return 'camera';
         if (/(alice|alisa|yandex|яндекс|алиса|station|станци[яи]|smart speaker|speaker|колонк|sonos|homepod|alexa|amazon echo|google home|sberboom|сбербум|маруся|marusya|капсул)/.test(text))
@@ -1169,13 +1180,58 @@ function deviceSortHeader(label, key) {
         ]);
 }
 
+function sortAdminTable(table, key) {
+        var currentKey = table.getAttribute('data-sort-key');
+        var currentDirection = table.getAttribute('data-sort-direction') || 'asc';
+        var direction = currentKey === key && currentDirection === 'asc' ? 'desc' : 'asc';
+        var rows = Array.prototype.slice.call(table.querySelectorAll('.sf-admin-row:not(.sf-admin-head)'));
+
+        rows.sort(function (left, right) {
+                var leftValue = left.getAttribute('data-sort-' + key) || '';
+                var rightValue = right.getAttribute('data-sort-' + key) || '';
+                var result = leftValue.localeCompare(rightValue, undefined, {
+                        numeric: true,
+                        sensitivity: 'base'
+                });
+
+                return direction === 'asc' ? result : -result;
+        });
+
+        table.setAttribute('data-sort-key', key);
+        table.setAttribute('data-sort-direction', direction);
+        table.querySelectorAll('.sf-admin-sort').forEach(function (button) {
+                var active = button.getAttribute('data-sort-key') === key;
+
+                button.classList.toggle('active', active);
+                button.setAttribute('data-sort-direction', active ? direction : '');
+        });
+
+        rows.forEach(function (row) {
+                table.appendChild(row);
+        });
+}
+
+function adminSortHeader(label, key) {
+        return E('button', {
+                'class': 'sf-device-sort sf-admin-sort',
+                'data-sort-key': key,
+                'click': function (ev) {
+                        ev.preventDefault();
+                        sortAdminTable(ev.currentTarget.closest('.sf-admin-table'), key);
+                }
+        }, [
+                E('span', {}, label),
+                E('span', { 'class': 'sf-sort-arrow' }, '')
+        ]);
+}
+
 function showPairingModal(device) {
         var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
         var apiUrl = 'http://' + routerAddress + ':' + port + '/api/v1';
         var pairingCode = device.pairingCode || generatePairingCode();
         var pairingPayload = 'SF1|h=' + routerAddress + '|p=' + port + '|u=' +
-                (device.adminLogin || 'owner') + '|c=' + pairingCode + '|ttl=600';
+                (device.adminLogin || 'SuperParent') + '|c=' + pairingCode + '|ttl=600';
 
         ui.showModal(T('Pairing settings'), [
                 E('div', { 'class': 'sf-modal-pairing' }, [
@@ -1187,7 +1243,7 @@ function showPairingModal(device) {
                                 E('h4', {}, T('Manual setup')),
                                 settingLine(T('Router address'), routerAddress),
                                 settingLine(T('Sheepfold API URL'), apiUrl),
-                                settingLine(T('Administrator login'), device.adminLogin || 'owner'),
+                                settingLine(T('Administrator login'), device.adminLogin || 'SuperParent'),
                                 settingLine(T('Pairing code'), pairingCode),
                                 settingLine(T('Token lifetime'), T('10 minutes')),
                                 settingLine(T('QR payload'), pairingPayload),
@@ -3214,15 +3270,19 @@ return view.extend({
                         ]),
                         E('div', { 'class': 'sf-admin-table' }, [
                                 E('div', { 'class': 'sf-admin-row sf-admin-head' }, [
-                                        E('div', {}, T('Admin name')),
-                                        E('div', {}, T('Login')),
+                                        E('div', {}, adminSortHeader(T('Admin name'), 'name')),
+                                        E('div', {}, adminSortHeader(T('Login'), 'login')),
                                         E('div', {}, T('Admin devices')),
                                         E('div', {}, T('Actions'))
                                 ])
                         ].concat(admins.map(function (admin) {
                                 var devicesCell = E('div', {}, adminDeviceList(admin));
 
-                                return E('div', { 'class': 'sf-admin-row' }, [
+                                return E('div', {
+                                        'class': 'sf-admin-row',
+                                        'data-sort-name': admin.name || '',
+                                        'data-sort-login': admin.login || ''
+                                }, [
                                         E('div', {}, [
                                                 E('strong', {}, admin.name)
                                         ]),
@@ -3360,7 +3420,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-47';
+                var assetVersion = '0.1.0-48';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
