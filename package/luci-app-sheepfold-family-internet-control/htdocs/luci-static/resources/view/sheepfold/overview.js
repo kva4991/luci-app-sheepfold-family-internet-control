@@ -602,10 +602,12 @@ function deviceTypeDefinitions() {
                         label: T('Smart speaker'),
                         mark: '♪',
                         paths: [
-                                'M8 5h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z',
-                                'M10 9h4',
-                                'M10 15h4',
-                                'M12 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2z'
+                                'M8 6a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-2a3 3 0 0 1-3-3z',
+                                'M10 8h4',
+                                'M10 11h4',
+                                'M12 17h.01',
+                                'M18 9c1.2 1.6 1.2 4.4 0 6',
+                                'M20.5 7c2 2.8 2 7.2 0 10'
                         ]
                 },
                 {
@@ -624,12 +626,12 @@ function deviceTypeDefinitions() {
                         label: T('Engineering device'),
                         mark: '⚙',
                         paths: [
-                                'M4 14h16',
-                                'M6 10h12',
-                                'M8 6h8',
-                                'M7 14v5',
-                                'M17 14v5',
-                                'M10 19h4'
+                                'M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+                                'M9 8h6',
+                                'M9 11h3',
+                                'M7 20v2',
+                                'M17 20v2',
+                                'M12 18c-1.6-.8-2.4-1.9-2-3.2.3-1 1.2-1.6 1.7-2.8 1.6 1.1 3.3 2.4 3.3 4 0 1.2-1 2-3 2z'
                         ]
                 },
                 {
@@ -2065,7 +2067,16 @@ function deviceTypeSelectControl(label, value, hint) {
                 deviceTypeIcon(selected.value)
         ]);
         var currentLabel = E('span', { 'class': 'sf-device-type-select-label' }, selected.label);
+        var root;
         var menu;
+        var closeOnOutsideClick = function (ev) {
+                if (root && !root.contains(ev.target))
+                        setOpen(false);
+        };
+        var closeOnEscape = function (ev) {
+                if (ev.key === 'Escape')
+                        setOpen(false);
+        };
         var toggle = E('button', {
                 'class': 'sf-device-type-select-button',
                 'type': 'button',
@@ -2073,10 +2084,8 @@ function deviceTypeSelectControl(label, value, hint) {
                 'aria-expanded': 'false',
                 'click': function (ev) {
                         ev.preventDefault();
-                        var shouldOpen = menu.hidden;
-
-                        menu.hidden = !shouldOpen;
-                        toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+                        ev.stopPropagation();
+                        setOpen(menu.hidden);
                 }
         }, [
                 currentIcon,
@@ -2084,12 +2093,26 @@ function deviceTypeSelectControl(label, value, hint) {
                 E('span', { 'class': 'sf-device-type-select-caret' }, '▾')
         ]);
 
+        function setOpen(open) {
+                menu.hidden = !open;
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+
+                if (open) {
+                        window.setTimeout(function () {
+                                document.addEventListener('mousedown', closeOnOutsideClick);
+                                document.addEventListener('keydown', closeOnEscape);
+                        }, 0);
+                } else {
+                        document.removeEventListener('mousedown', closeOnOutsideClick);
+                        document.removeEventListener('keydown', closeOnEscape);
+                }
+        }
+
         function chooseType(item) {
                 input.value = item.value;
                 currentIcon.replaceChildren(deviceTypeIcon(item.value));
                 currentLabel.textContent = item.label;
-                menu.hidden = true;
-                toggle.setAttribute('aria-expanded', 'false');
+                setOpen(false);
         }
 
         menu = E('div', {
@@ -2104,6 +2127,7 @@ function deviceTypeSelectControl(label, value, hint) {
                         'aria-selected': item.value === selected.value ? 'true' : 'false',
                         'click': function (ev) {
                                 ev.preventDefault();
+                                ev.stopPropagation();
                                 Array.prototype.forEach.call(menu.querySelectorAll('.sf-device-type-select-option'), function (button) {
                                         button.classList.remove('is-selected');
                                         button.setAttribute('aria-selected', 'false');
@@ -2118,17 +2142,19 @@ function deviceTypeSelectControl(label, value, hint) {
                 ]);
         }));
 
+        root = E('div', { 'class': 'sf-field sf-device-type-select-field' }, [
+                E('span', {}, label),
+                input,
+                E('div', { 'class': 'sf-device-type-select' }, [
+                        toggle,
+                        menu
+                ]),
+                hint ? E('small', {}, hint) : ''
+        ]);
+
         return {
                 input: input,
-                node: E('div', { 'class': 'sf-field sf-device-type-select-field' }, [
-                        E('span', {}, label),
-                        input,
-                        E('div', { 'class': 'sf-device-type-select' }, [
-                                toggle,
-                                menu
-                        ]),
-                        hint ? E('small', {}, hint) : ''
-                ])
+                node: root
         };
 }
 
@@ -3334,7 +3360,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-45';
+                var assetVersion = '0.1.0-47';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
