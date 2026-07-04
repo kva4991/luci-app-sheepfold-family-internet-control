@@ -129,10 +129,6 @@ var translations = {
         'QR payload': 'Данные QR',
         'Token lifetime': 'Срок действия токена',
         '10 minutes': '10 минут',
-        'Admin setup link': 'Ссылка настройки администратора',
-        'Click the field to copy the link.': 'Нажмите на поле, чтобы скопировать ссылку.',
-        'Admin setup link copied to clipboard.': 'Ссылка настройки администратора скопирована в буфер обмена.',
-        'Could not copy the link automatically. Select and copy it manually.': 'Не удалось скопировать ссылку автоматически. Выделите и скопируйте её вручную.',
         'Wi-Fi MAC check': 'Проверка MAC Wi-Fi',
         'Use the real device MAC for this home Wi-Fi network.': 'Для этой домашней Wi-Fi сети используйте настоящий MAC устройства.',
         'Android must require the real device MAC for this home Wi-Fi network before continuing setup.': 'Android должен требовать настоящий MAC устройства для этой домашней Wi-Fi сети до продолжения настройки.',
@@ -175,7 +171,14 @@ var translations = {
         'Quick mode only collects candidates. A parent still presses Add for every device.': 'Быстрый режим только собирает кандидатов. Родитель всё равно нажимает "Добавить" для каждого устройства.',
         'Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API.': 'Устройства из чёрного списка не могут открывать интернет, LuCI, SSH и Sheepfold API.',
         'Blocklist changes require confirmation.': 'Изменения чёрного списка требуют подтверждения.',
-        'Emergency-useful sites for blocklisted devices require a separate explicit setting and still do not open router access.': 'Доступ к аварийно-полезным сайтам для чёрного списка требует отдельной явной настройки и всё равно не открывает доступ к роутеру.',
+        'Emergency-useful sites for blocklisted devices are enabled and still do not open router access.': 'Включен доступ к "аварийно-полезным сайтам" для чёрного списка (это не открывает доступ к роутеру).',
+        'Emergency-useful sites for blocklisted devices are disabled and still do not open router access.': 'Выключен доступ к "аварийно-полезным сайтам" для чёрного списка (это не открывает доступ к роутеру).',
+        'Blocklist emergency-useful sites access': 'Доступ пользователей из чёрного списка к "аварийно-полезным сайтам"',
+        'Allows only configured emergency-useful sites for blocklisted devices. Router access remains blocked.': 'Разрешает устройствам из чёрного списка только настроенные аварийно-полезные сайты. Доступ к роутеру остаётся закрытым.',
+        'Blocklist emergency-useful sites access saved.': 'Доступ чёрного списка к аварийно-полезным сайтам сохранён.',
+        'Could not save blocklist emergency-useful sites access.': 'Не удалось сохранить доступ чёрного списка к аварийно-полезным сайтам.',
+        'Yes': 'Да',
+        'No': 'Нет',
         'Allow and block rules for devices and groups.': 'Правила разрешения и блокировки для устройств и групп.',
         'Add rule': 'Добавить правило',
         'Schedule editor is not implemented in this visual test build.': 'Редактор расписаний пока не реализован в этой визуальной сборке.',
@@ -349,33 +352,6 @@ function notify(message, level) {
         ui.addNotification(null, E('p', {}, message), level || 'info');
 }
 
-function copyTextToClipboard(text, successMessage) {
-        function fallbackCopy() {
-                var input = E('textarea', { 'class': 'sf-copy-helper' }, text);
-
-                document.body.appendChild(input);
-                input.select();
-
-                try {
-                        document.execCommand('copy');
-                        notify(successMessage, 'info');
-                } catch (e) {
-                        notify(T('Could not copy the link automatically. Select and copy it manually.'), 'warning');
-                }
-
-                document.body.removeChild(input);
-        }
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text).then(function () {
-                        notify(successMessage, 'info');
-                }, fallbackCopy);
-                return;
-        }
-
-        fallbackCopy();
-}
-
 function logCachePath() {
         return safeUciGet('sheepfold', 'global', 'log_cache_path', defaultLogCachePath) || defaultLogCachePath;
 }
@@ -390,24 +366,6 @@ function saveGlobalOption(option, value) {
         return uci.save().then(function () {
                 return uci.apply();
         });
-}
-
-function copyableLinkField(label, value, hint) {
-        var input = E('input', {
-                'class': 'cbi-input-text sf-copy-link-input',
-                'readonly': 'readonly',
-                'value': value,
-                'click': function (ev) {
-                        ev.currentTarget.select();
-                        copyTextToClipboard(value, T('Admin setup link copied to clipboard.'));
-                }
-        });
-
-        return E('label', { 'class': 'sf-field sf-field-wide sf-copy-link-field' }, [
-                E('span', {}, label),
-                input,
-                hint ? E('small', {}, hint) : ''
-        ]);
 }
 
 function badge(status) {
@@ -913,7 +871,6 @@ function showAdminSettingsModal(admin) {
         var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
         var temporaryPassword = generatePairingCode();
-        var setupLink = adminSetupLink(admin);
         var pairingPayload = 'SF1|h=' + routerAddress + '|p=' + port + '|u=' +
                 admin.login + '|c=' + temporaryPassword + '|ttl=600';
 
@@ -928,9 +885,7 @@ function showAdminSettingsModal(admin) {
                                 field(T('Login'), admin.login),
                                 passwordRevealField(T('Temporary password'), temporaryPassword),
                                 settingLine(T('Server IP address'), routerAddress),
-                                settingLine(T('Port'), port),
-                                E('div', { 'class': 'sf-note' }, T('Open this link on the computer where LuCI is open.')),
-                                copyableLinkField(T('Admin setup link'), setupLink, T('Click the field to copy the link.'))
+                                settingLine(T('Port'), port)
                         ])
                 ]),
                 E('div', { 'class': 'right' }, [
@@ -1231,13 +1186,6 @@ function adminByDeepLinkValue(value) {
         }
 
         return null;
-}
-
-function adminSetupLink(admin) {
-        var adminValue = admin && admin.id ? admin.id : 'first';
-        var baseUrl = window.location.origin + L.url('admin/services/sheepfold');
-
-        return baseUrl + '?view=admins&action=pair&admin=' + encodeURIComponent(adminValue);
 }
 
 function adminDeviceList(admin) {
@@ -1616,6 +1564,33 @@ function cachePathField() {
                 E('span', {}, T('Cache file path')),
                 input,
                 E('small', {}, T('The cache file must be stored under /tmp/ so the log stays in RAM and does not wear router flash memory.'))
+        ]);
+}
+
+function blocklistEmergencyAccessField() {
+        var value = safeUciGet('sheepfold', 'global', 'domain_allowlist_for_blocklist', '1') === '1' ? '1' : '0';
+        var select = E('select', {
+                'class': 'cbi-input-select',
+                'change': function (ev) {
+                        var nextValue = ev.currentTarget.value;
+
+                        saveGlobalOption('domain_allowlist_for_blocklist', nextValue).then(function () {
+                                value = nextValue;
+                                notify(T('Blocklist emergency-useful sites access saved.'), 'info');
+                        }, function () {
+                                ev.currentTarget.value = value;
+                                notify(T('Could not save blocklist emergency-useful sites access.'), 'warning');
+                        });
+                }
+        }, [
+                E('option', { 'value': '1', 'selected': value === '1' ? 'selected' : null }, T('Yes')),
+                E('option', { 'value': '0', 'selected': value === '0' ? 'selected' : null }, T('No'))
+        ]);
+
+        return E('label', { 'class': 'sf-field sf-field-wide' }, [
+                E('span', {}, T('Blocklist emergency-useful sites access')),
+                select,
+                E('small', {}, T('Allows only configured emergency-useful sites for blocklisted devices. Router access remains blocked.'))
         ]);
 }
 
@@ -2458,6 +2433,8 @@ return view.extend({
         },
 
         renderBlocklist: function (embedded) {
+                var emergencyAccessEnabled = safeUciGet('sheepfold', 'global', 'domain_allowlist_for_blocklist', '1') === '1';
+
                 return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
@@ -2465,7 +2442,9 @@ return view.extend({
                                 ]),
                                 actionButton(T('Add device'), 'positive', T('Blocklist changes require confirmation.'))
                         ]),
-                        E('div', { 'class': 'sf-note sf-note-warning' }, T('Emergency-useful sites for blocklisted devices require a separate explicit setting and still do not open router access.')),
+                        E('div', { 'class': 'sf-note sf-note-warning' }, emergencyAccessEnabled ?
+                                T('Emergency-useful sites for blocklisted devices are enabled and still do not open router access.') :
+                                T('Emergency-useful sites for blocklisted devices are disabled and still do not open router access.')),
                         deviceTable(devices.filter(function (device) { return device.status === 'blocked'; }), { compact: true })
                 ]);
         },
@@ -2777,6 +2756,7 @@ return view.extend({
                                 ['allow', T('Allow internet by default')],
                                 ['restrict_until_configured', T('Restrict until configured')]
                         ]),
+                        blocklistEmergencyAccessField(),
                         selectField(T('Known offline devices cleanup'), '90', [
                                 ['30', T('30 days')],
                                 ['90', T('90 days')],
@@ -2843,7 +2823,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-37';
+                var assetVersion = '0.1.0-38';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;

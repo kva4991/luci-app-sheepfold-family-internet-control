@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=37
+PKG_RELEASE:=38
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -24,6 +24,11 @@ ensure_global_option enabled '0'
 ensure_global_option language 'ru'
 ensure_global_option block_on_boot '0'
 ensure_global_option new_device_policy 'allow'
+ensure_global_option domain_allowlist_for_blocklist '1'
+if [ "$$(uci -q get sheepfold.global.domain_allowlist_for_blocklist_default_migrated 2>/dev/null)" != "1" ]; then
+	uci -q set sheepfold.global.domain_allowlist_for_blocklist='1'
+	uci -q set sheepfold.global.domain_allowlist_for_blocklist_default_migrated='1'
+fi
 ensure_global_option log_retention '3d'
 ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
