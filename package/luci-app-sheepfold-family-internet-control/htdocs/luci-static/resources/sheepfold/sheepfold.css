@@ -249,6 +249,29 @@
         font-weight: 600;
 }
 
+.sf-check-field {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr);
+        gap: 6px 8px;
+        align-items: center;
+        min-width: 220px;
+        margin-bottom: 10px;
+}
+
+.sf-check-field input {
+        width: 18px;
+        height: 18px;
+}
+
+.sf-check-field span {
+        font-weight: 600;
+}
+
+.sf-check-field small {
+        grid-column: 2;
+        color: var(--sf-muted);
+}
+
 .sf-field textarea {
         width: 100%;
         min-height: 96px;
@@ -339,6 +362,32 @@
         stroke-width: 1.8;
         stroke-linecap: round;
         stroke-linejoin: round;
+}
+
+.sf-static-lease-icon {
+        display: inline-flex;
+        width: 15px;
+        height: 15px;
+        color: #64748b;
+        vertical-align: middle;
+        flex: 0 0 auto;
+}
+
+.sf-static-lease-icon svg {
+        width: 15px;
+        height: 15px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+}
+
+.sf-ip-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
 }
 
 .sf-mono {
@@ -629,6 +678,20 @@
         padding: 7px 9px;
         border: 1px solid var(--sf-border);
         border-radius: 6px;
+        background: #f8fafc;
+}
+
+.sf-device-editor {
+        display: grid;
+        gap: 14px;
+}
+
+.sf-device-info-lines {
+        display: grid;
+        gap: 8px;
+        padding: 10px 12px;
+        border: 1px solid var(--sf-border);
+        border-radius: 8px;
         background: #f8fafc;
 }
 

@@ -69,7 +69,26 @@ var translations = {
         'New': 'Новое',
         'This action is a visual prototype only.': 'Это действие работает только как визуальная заглушка.',
         'Configure': 'Настроить',
-        'Device editor is not implemented in this visual test build.': 'Редактор устройства не реализован в этой визуальной тестовой сборке.',
+        'Device settings': 'Настройки устройства',
+        'Device settings saved.': 'Настройки устройства сохранены.',
+        'Could not save device settings.': 'Не удалось сохранить настройки устройства.',
+        'This device is already in the blocklist. Remove it from the blocklist before adding it to the allowlist.': 'Это устройство уже в чёрном списке. Сначала уберите его из чёрного списка, потом добавляйте в белый.',
+        'This device is already in the allowlist. Remove it from the allowlist before adding it to the blocklist.': 'Это устройство уже в белом списке. Сначала уберите его из белого списка, потом добавляйте в чёрный.',
+        'Permanent DHCP lease': 'Постоянная аренда DHCP',
+        'Permanent IP lease': 'Постоянная аренда IP',
+        'Create permanent DHCP lease': 'Создать постоянную аренду DHCP',
+        'Existing permanent DHCP lease will be updated, not removed.': 'Существующая постоянная аренда DHCP будет обновлена, а не удалена.',
+        'Static lease requires an IP address.': 'Для постоянной аренды нужен IP-адрес.',
+        'Device name': 'Имя устройства',
+        'Hostname': 'Имя в сети',
+        'Detection source': 'Источник обнаружения',
+        'Parents': 'Родители',
+        'Children': 'Дети',
+        'TV / media': 'ТВ / медиа',
+        'Guests': 'Гости',
+        'Custom': 'Своя',
+        'Use custom group': 'Использовать свою группу',
+        'Access mode': 'Режим доступа',
         'ID': 'ID',
         'Bind devices': 'Привязать устройства',
         'Device binding': 'Привязка устройств',
@@ -421,6 +440,16 @@ function adminCrownIcon() {
                 svgIcon([
                         'M3 8l4 4 5-7 5 7 4-4-2 11H5L3 8z',
                         'M6 19h12'
+                ])
+        ]);
+}
+
+function staticLeaseIcon() {
+        return E('span', { 'class': 'sf-static-lease-icon', 'title': T('Permanent IP lease') }, [
+                svgIcon([
+                        'M7 11V8a5 5 0 0 1 10 0v3',
+                        'M6 11h12v10H6z',
+                        'M12 15v2'
                 ])
         ]);
 }
@@ -1233,6 +1262,143 @@ function showAdminDeviceBindingModal(admin, onSave) {
         ]);
 }
 
+function showDeviceSettingsModal(device) {
+        var knownGroups = [
+                [T('Not configured'), T('Not configured')],
+                [T('Parents'), T('Parents')],
+                [T('Children'), T('Children')],
+                [T('TV / media'), T('TV / media')],
+                [T('Guests'), T('Guests')]
+        ];
+        var knownGroupValues = knownGroups.map(function (item) { return item[0]; });
+        var groupIsCustom = device.group && knownGroupValues.indexOf(device.group) === -1;
+        var nameField = inputControl(T('Device name'), device.name);
+        var ipField = inputControl(T('IP address'), device.ip);
+        var groupField = selectControl(T('Group'), groupIsCustom ? '__custom' : device.group, knownGroups.concat([
+                ['__custom', T('Custom')]
+        ]));
+        var customGroupField = inputControl(T('Use custom group'), groupIsCustom ? device.group : '');
+        var statusField = selectControl(T('Access mode'), device.status, [
+                ['new', T('Not configured')],
+                ['allow', T('Allowlist')],
+                ['blocked', T('Blocklist')],
+                ['scheduled', T('Scheduled')],
+                ['restricted', T('Restricted')]
+        ]);
+        var staticLeaseField = checkboxControl(
+                device.staticLease ? T('Permanent DHCP lease') : T('Create permanent DHCP lease'),
+                device.staticLease,
+                device.staticLease ? T('Existing permanent DHCP lease will be updated, not removed.') : '',
+                device.staticLease ? { 'disabled': 'disabled' } : null
+        );
+        var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
+        var infoLines = E('div', { 'class': 'sf-device-info-lines' }, [
+                settingLine(T('ID'), formattedDeviceDisplayId(device)),
+                settingLine(T('MAC address'), device.mac),
+                settingLine(T('Hostname'), device.hostname || '-'),
+                settingLine(T('Detection source'), device.sourceLabel || '-')
+        ]);
+
+        function updateCustomGroupVisibility() {
+                customGroupField.node.hidden = groupField.input.value === '__custom' ? null : 'hidden';
+        }
+
+        groupField.input.addEventListener('change', updateCustomGroupVisibility);
+        updateCustomGroupVisibility();
+
+        ui.showModal(T('Device settings'), [
+                E('div', { 'class': 'sf-device-editor' }, [
+                        infoLines,
+                        conflictNote,
+                        E('div', { 'class': 'sf-grid two' }, [
+                                nameField.node,
+                                ipField.node,
+                                groupField.node,
+                                customGroupField.node,
+                                statusField.node,
+                                staticLeaseField.node
+                        ])
+                ]),
+                E('div', { 'class': 'right sf-modal-actions' }, [
+                        E('button', {
+                                'class': 'btn cbi-button',
+                                'click': ui.hideModal
+                        }, T('Cancel')),
+                        E('button', {
+                                'class': 'btn cbi-button cbi-button-positive',
+                                'click': function () {
+                                        var sectionName;
+                                        var staticSectionName;
+                                        var name = nameField.input.value.trim() || device.name;
+                                        var ip = ipField.input.value.trim();
+                                        var group = groupField.input.value === '__custom' ?
+                                                customGroupField.input.value.trim() :
+                                                groupField.input.value;
+                                        var status = statusField.input.value;
+                                        var configs = ['sheepfold'];
+
+                                        conflictNote.hidden = true;
+                                        conflictNote.textContent = '';
+
+                                        if (status === 'allow' && macInSheepfoldList('blocklist', device.mac)) {
+                                                conflictNote.textContent = T('This device is already in the blocklist. Remove it from the blocklist before adding it to the allowlist.');
+                                                conflictNote.hidden = false;
+                                                return;
+                                        }
+
+                                        if (status === 'blocked' && macInSheepfoldList('allowlist', device.mac)) {
+                                                conflictNote.textContent = T('This device is already in the allowlist. Remove it from the allowlist before adding it to the blocklist.');
+                                                conflictNote.hidden = false;
+                                                return;
+                                        }
+
+                                        if (staticLeaseField.input.checked && !ip) {
+                                                notify(T('Static lease requires an IP address.'), 'warning');
+                                                return;
+                                        }
+
+                                        sectionName = ensureSheepfoldDeviceSection(device);
+                                        uci.set('sheepfold', sectionName, 'mac', device.mac);
+                                        uci.set('sheepfold', sectionName, 'name', name);
+                                        uci.set('sheepfold', sectionName, 'ip', ip);
+                                        uci.set('sheepfold', sectionName, 'group', group || T('Not configured'));
+                                        uci.set('sheepfold', sectionName, 'status', status);
+
+                                        if (status === 'allow')
+                                                updateMacList('allowlist', device.mac, true);
+                                        else if (status !== 'blocked')
+                                                updateMacList('allowlist', device.mac, false);
+
+                                        if (status === 'blocked')
+                                                updateMacList('blocklist', device.mac, true);
+                                        else if (status !== 'allow')
+                                                updateMacList('blocklist', device.mac, false);
+
+                                        if (staticLeaseField.input.checked) {
+                                                staticSectionName = ensureStaticDhcpSection(device);
+                                                uci.set('dhcp', staticSectionName, 'mac', device.mac);
+                                                uci.set('dhcp', staticSectionName, 'ip', ip);
+                                                uci.set('dhcp', staticSectionName, 'name', name);
+                                                configs.push('dhcp');
+                                        }
+
+                                        saveUciChanges(configs.filter(function (config, index) {
+                                                return configs.indexOf(config) === index;
+                                        })).then(function () {
+                                                notify(T('Device settings saved.'), 'info');
+                                                ui.hideModal();
+                                                window.setTimeout(function () {
+                                                        window.location.reload();
+                                                }, 700);
+                                        }, function () {
+                                                notify(T('Could not save device settings.'), 'warning');
+                                        });
+                                }
+                        }, T('Save'))
+                ])
+        ]);
+}
+
 function deviceTable(rows, options) {
         options = options || {};
 
@@ -1240,19 +1406,22 @@ function deviceTable(rows, options) {
                 return E('div', { 'class': 'sf-device-row' }, [
                         E('div', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
                         E('div', { 'class': 'sf-device-name' }, [
-                                        E('strong', {}, [
-                                                device.adminDevice ? adminCrownIcon() : '',
-                                                E('span', {}, device.name)
-                                        ]),
-                                        E('small', {}, device.note)
+                                         E('strong', {}, [
+                                                 device.adminDevice ? adminCrownIcon() : '',
+                                                 E('span', {}, device.name)
+                                         ]),
+                                         E('small', {}, device.note)
+                         ]),
+                        E('div', { 'class': 'sf-ip-cell' }, [
+                                E('span', {}, device.ip || '-'),
+                                device.staticLease ? staticLeaseIcon() : ''
                         ]),
-                        E('div', {}, device.ip),
                         E('div', { 'class': 'sf-mono' }, device.mac),
                         E('div', {}, device.group),
                         E('div', {}, badge(device.status)),
                         E('div', { 'class': 'sf-row-actions' }, [
                                 iconButton(T('Configure'), 'gear', 'neutral', function () {
-                                        notify(T('Device editor is not implemented in this visual test build.'), 'info');
+                                        showDeviceSettingsModal(device);
                                 }),
                                 options.compact ? '' : actionButton(T('+30 min'), 'positive', T('Temporary access would require confirmation.'))
                         ])
@@ -1296,6 +1465,53 @@ function textareaField(label, value, hint) {
                 E('textarea', { 'class': 'cbi-input-textarea', 'rows': 4 }, value || ''),
                 hint ? E('small', {}, hint) : ''
         ]);
+}
+
+function inputControl(label, value, attrs, hint) {
+        var input = E('input', Object.assign({
+                'class': 'cbi-input-text',
+                'value': value || ''
+        }, attrs || {}));
+
+        return {
+                input: input,
+                node: E('label', { 'class': 'sf-field' }, [
+                        E('span', {}, label),
+                        input,
+                        hint ? E('small', {}, hint) : ''
+                ])
+        };
+}
+
+function selectControl(label, value, values, hint) {
+        var input = E('select', { 'class': 'cbi-input-select' }, values.map(function (item) {
+                return E('option', { 'value': item[0], 'selected': item[0] === value ? 'selected' : null }, item[1]);
+        }));
+
+        return {
+                input: input,
+                node: E('label', { 'class': 'sf-field' }, [
+                        E('span', {}, label),
+                        input,
+                        hint ? E('small', {}, hint) : ''
+                ])
+        };
+}
+
+function checkboxControl(label, checked, hint, attrs) {
+        var input = E('input', Object.assign({
+                'type': 'checkbox',
+                'checked': checked ? 'checked' : null
+        }, attrs || {}));
+
+        return {
+                input: input,
+                node: E('label', { 'class': 'sf-check-field' }, [
+                        input,
+                        E('span', {}, label),
+                        hint ? E('small', {}, hint) : ''
+                ])
+        };
 }
 
 function iconSvg(name) {
@@ -1461,12 +1677,14 @@ function addStaticDhcpLeases(map) {
         safeUciSections('dhcp', 'host').forEach(function (section) {
                 var name = section.name || section.hostname || section.dns || '';
                 var ip = section.ip || '';
+                var sectionName = section['.name'] || '';
 
                 listOptionValues(section.mac).forEach(function (mac) {
                         addRouterDevice(map, mac, {
                                 staticName: name,
                                 staticIp: ip,
                                 ip: ip,
+                                staticSection: sectionName,
                                 source: 'static'
                         });
                 });
@@ -1503,6 +1721,82 @@ function sheepfoldListMacs(listName) {
         });
 
         return result;
+}
+
+function macInSheepfoldList(listName, mac) {
+        var normalizedMac = normalizeMac(mac);
+        var found = false;
+
+        safeUciSections('sheepfold', 'list').forEach(function (section) {
+                if (found || section['.name'] !== listName)
+                        return;
+
+                found = listOptionValues(section.mac).concat(listOptionValues(section.macs)).map(normalizeMac).indexOf(normalizedMac) !== -1;
+        });
+
+        return found;
+}
+
+function generatedSectionName(prefix, mac) {
+        return prefix + '_' + normalizeMac(mac).toLowerCase().replace(/:/g, '');
+}
+
+function ensureSection(config, type, preferredName) {
+        var existing = safeUciSections(config, type).filter(function (section) {
+                return section['.name'] === preferredName;
+        })[0];
+
+        if (existing)
+                return existing['.name'];
+
+        try {
+                return uci.add(config, type, preferredName) || preferredName;
+        } catch (e) {
+                return uci.add(config, type);
+        }
+}
+
+function ensureSheepfoldDeviceSection(device) {
+        if (device.configSection)
+                return device.configSection;
+
+        return ensureSection('sheepfold', 'device', generatedSectionName('device', device.mac));
+}
+
+function ensureSheepfoldListSection(listName) {
+        return ensureSection('sheepfold', 'list', listName);
+}
+
+function updateMacList(listName, mac, enabled) {
+        var sectionName = ensureSheepfoldListSection(listName);
+        var values = listOptionValues(uci.get('sheepfold', sectionName, 'mac')).map(normalizeMac).filter(Boolean);
+        var normalizedMac = normalizeMac(mac);
+        var exists = values.indexOf(normalizedMac) !== -1;
+
+        if (enabled && !exists)
+                values.push(normalizedMac);
+
+        if (!enabled)
+                values = values.filter(function (value) {
+                        return value !== normalizedMac;
+                });
+
+        uci.set('sheepfold', sectionName, 'mac', values);
+}
+
+function ensureStaticDhcpSection(device) {
+        if (device.staticSection)
+                return device.staticSection;
+
+        return ensureSection('dhcp', 'host', generatedSectionName('sheepfold', device.mac));
+}
+
+function saveUciChanges(configs) {
+        return Promise.all(configs.map(function (config) {
+                return uci.save(config);
+        })).then(function () {
+                return uci.apply();
+        });
 }
 
 function routerDeviceNote(item, configured) {
@@ -1571,6 +1865,16 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                                 (item.staticName || item.hostname || T('Unknown device')),
                         ip: configured && configured.ip ? configured.ip : (item.ip || item.staticIp || ''),
                         mac: mac,
+                        hostname: item.hostname || '',
+                        staticIp: item.staticIp || '',
+                        staticLease: !!item.sources.static,
+                        staticSection: item.staticSection || '',
+                        configSection: configured && configured['.name'],
+                        sourceLabel: Object.keys(item.sources).map(function (source) {
+                                return source === 'dhcp' ? T('Active DHCP lease') :
+                                        source === 'arp' ? T('ARP/neighbor entry') :
+                                                T('Static DHCP lease');
+                        }).join(', '),
                         group: configured && configured.group ? configured.group : T('Not configured'),
                         status: status,
                         note: routerDeviceNote(item, configured),
@@ -2263,7 +2567,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-33';
+                var assetVersion = '0.1.0-34';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
