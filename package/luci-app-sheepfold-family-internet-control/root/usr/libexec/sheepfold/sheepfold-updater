@@ -13,21 +13,87 @@ PACKAGE_FILE="${WORK_DIR}/${PACKAGE}-latest.ipk"
 LOG_FILE="${RUNTIME_DIR}/update.log"
 STATUS_FILE="${RUNTIME_DIR}/update.status"
 PID_FILE="${RUNTIME_DIR}/update.pid"
+LANGUAGE="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
 
 mkdir -p "$RUNTIME_DIR" "$WORK_DIR"
 chmod 700 "$WORK_DIR"
+
+text() {
+        key="$1"
+        shift || true
+
+        if [ "$LANGUAGE" = "ru" ]; then
+                case "$key" in
+                        updater_title) printf '%s' "Обновление Sheepfold" ;;
+                        checking_release) printf '%s' "Проверка последнего релиза GitHub..." ;;
+                        downloading) printf 'Загрузка: %s' "$1" ;;
+                        download_failed) printf 'Загрузка через %s не удалась, код выхода %s.' "$1" "$2" ;;
+                        no_downloader) printf '%s' "Не найден загрузчик. Установите uclient-fetch или wget." ;;
+                        no_tag) printf '%s' "Не удалось прочитать тег последнего stable-релиза с GitHub." ;;
+                        no_package) printf 'Последний stable-релиз %s не содержит пакет Sheepfold .ipk.' "$1" ;;
+                        no_package_version) printf '%s' "Не удалось прочитать версию пакета Sheepfold из имени файла релиза." ;;
+                        current_version) printf 'Текущая установленная версия: %s' "${1:-unknown}" ;;
+                        latest_release) printf 'Последний stable-релиз: %s' "$1" ;;
+                        latest_package_version) printf 'Версия пакета в релизе: %s' "$1" ;;
+                        package_url) printf 'Адрес пакета: %s' "$1" ;;
+                        update_available) printf '%s' "Доступно обновление." ;;
+                        no_updates) printf '%s' "Обновлений нет. Установленная версия уже актуальна." ;;
+                        downloading_package) printf '%s' "Загрузка пакета..." ;;
+                        empty_package) printf '%s' "Загруженный пакет пустой." ;;
+                        installing_package) printf '%s' "Установка пакета..." ;;
+                        reloading_service) printf '%s' "Перезапуск сервиса Sheepfold..." ;;
+                        update_completed) printf '%s' "Обновление завершено." ;;
+                        already_running) printf 'Обновление уже выполняется. PID: %s' "$1" ;;
+                        started_background) printf 'Обновление запущено в фоне. PID: %s' "$1" ;;
+                        usage) printf '%s' "Использование: sheepfold-updater [check|start|status|log|install]" ;;
+                        *) printf '%s' "$key" ;;
+                esac
+                return
+        fi
+
+        case "$key" in
+                updater_title) printf '%s' "Sheepfold updater" ;;
+                checking_release) printf '%s' "Checking latest GitHub release..." ;;
+                downloading) printf 'Downloading: %s' "$1" ;;
+                download_failed) printf 'Download failed with %s, exit code %s.' "$1" "$2" ;;
+                no_downloader) printf '%s' "No downloader found. Install uclient-fetch or wget." ;;
+                no_tag) printf '%s' "Could not read latest stable release tag from GitHub." ;;
+                no_package) printf 'Latest stable release %s does not contain a Sheepfold .ipk package.' "$1" ;;
+                no_package_version) printf '%s' "Could not read Sheepfold package version from release asset name." ;;
+                current_version) printf 'Current installed version: %s' "${1:-unknown}" ;;
+                latest_release) printf 'Latest stable release: %s' "$1" ;;
+                latest_package_version) printf 'Latest package version: %s' "$1" ;;
+                package_url) printf 'Package URL: %s' "$1" ;;
+                update_available) printf '%s' "Update is available." ;;
+                no_updates) printf '%s' "No updates available. Installed version is already current." ;;
+                downloading_package) printf '%s' "Downloading package..." ;;
+                empty_package) printf '%s' "Downloaded package is empty." ;;
+                installing_package) printf '%s' "Installing package..." ;;
+                reloading_service) printf '%s' "Reloading Sheepfold service..." ;;
+                update_completed) printf '%s' "Update completed." ;;
+                already_running) printf 'Update is already running. PID: %s' "$1" ;;
+                started_background) printf 'Update started in background. PID: %s' "$1" ;;
+                usage) printf '%s' "Usage: sheepfold-updater [check|start|status|log|install]" ;;
+                *) printf '%s' "$key" ;;
+        esac
+}
+
+say() {
+        text "$@"
+        printf '\n'
+}
 
 fetch() {
         url="$1"
         output="$2"
 
-        echo "Downloading: ${url}"
+        say downloading "$url"
         if command -v uclient-fetch >/dev/null 2>&1; then
                 if uclient-fetch -q -O "$output" "$url"; then
                         return
                 fi
                 code="$?"
-                echo "Download failed with uclient-fetch, exit code ${code}." >&2
+                say download_failed uclient-fetch "$code" >&2
                 exit "$code"
         fi
 
@@ -36,11 +102,11 @@ fetch() {
                         return
                 fi
                 code="$?"
-                echo "Download failed with wget, exit code ${code}." >&2
+                say download_failed wget "$code" >&2
                 exit "$code"
         fi
 
-        echo "No downloader found. Install uclient-fetch or wget." >&2
+        say no_downloader >&2
         exit 1
 }
 
@@ -63,7 +129,7 @@ version_is_newer() {
 }
 
 read_release_info() {
-        echo "Checking latest GitHub release..."
+        say checking_release
         fetch "$API_URL" "$RELEASE_JSON"
 
         TAG="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RELEASE_JSON" | sed -n '1p')"
@@ -71,17 +137,17 @@ read_release_info() {
         LATEST_VERSION="$(latest_package_version)"
 
         if [ -z "${TAG:-}" ]; then
-                echo "Could not read latest stable release tag from GitHub." >&2
+                say no_tag >&2
                 exit 1
         fi
 
         if [ -z "${PACKAGE_URL:-}" ]; then
-                echo "Latest stable release ${TAG} does not contain a Sheepfold .ipk package." >&2
+                say no_package "$TAG" >&2
                 exit 1
         fi
 
         if [ -z "${LATEST_VERSION:-}" ]; then
-                echo "Could not read Sheepfold package version from release asset name." >&2
+                say no_package_version >&2
                 exit 1
         fi
 }
@@ -89,35 +155,35 @@ read_release_info() {
 print_check() {
         read_release_info
         CURRENT_VERSION="$(current_version || true)"
-        echo "Current installed version: ${CURRENT_VERSION:-unknown}"
-        echo "Latest stable release: ${TAG}"
-        echo "Latest package version: ${LATEST_VERSION}"
-        echo "Package URL: ${PACKAGE_URL}"
+        say current_version "${CURRENT_VERSION:-unknown}"
+        say latest_release "$TAG"
+        say latest_package_version "$LATEST_VERSION"
+        say package_url "$PACKAGE_URL"
         if version_is_newer "$LATEST_VERSION" "$CURRENT_VERSION"; then
-                echo "Update is available."
+                say update_available
         else
-                echo "No updates available. Installed version is already current."
+                say no_updates
         fi
 }
 
 install_update() {
-        echo "Sheepfold updater"
+        say updater_title
         read_release_info
         CURRENT_VERSION="$(current_version || true)"
-        echo "Current installed version: ${CURRENT_VERSION:-unknown}"
-        echo "Latest stable release: ${TAG}"
-        echo "Latest package version: ${LATEST_VERSION}"
+        say current_version "${CURRENT_VERSION:-unknown}"
+        say latest_release "$TAG"
+        say latest_package_version "$LATEST_VERSION"
 
         if ! version_is_newer "$LATEST_VERSION" "$CURRENT_VERSION"; then
-                echo "No updates available. Installed version is already current."
+                say no_updates
                 return 2
         fi
 
-        echo "Downloading package..."
+        say downloading_package
         fetch "$PACKAGE_URL" "$PACKAGE_FILE"
 
         if [ ! -s "$PACKAGE_FILE" ]; then
-                echo "Downloaded package is empty." >&2
+                say empty_package >&2
                 exit 1
         fi
 
@@ -126,14 +192,14 @@ install_update() {
                 chmod 600 "${WORK_DIR}/sheepfold-config-before-update"
         fi
 
-        echo "Installing package..."
+        say installing_package
         opkg install "$PACKAGE_FILE"
 
-        echo "Reloading Sheepfold service..."
+        say reloading_service
         [ -x /etc/init.d/sheepfold ] && /etc/init.d/sheepfold restart || true
         [ -x /etc/init.d/rpcd ] && /etc/init.d/rpcd reload || true
 
-        echo "Update completed."
+        say update_completed
 }
 
 pid_running() {
@@ -145,7 +211,7 @@ pid_running() {
 
 start_update() {
         if pid_running; then
-                echo "Update is already running. PID: $(cat "$PID_FILE")"
+                say already_running "$(cat "$PID_FILE")"
                 return 0
         fi
 
@@ -153,7 +219,7 @@ start_update() {
         echo "running" > "$STATUS_FILE"
         "$0" run-background >/dev/null 2>&1 </dev/null &
         echo "$!" > "$PID_FILE"
-        echo "Update started in background. PID: $!"
+        say started_background "$!"
 }
 
 run_background() {
@@ -214,7 +280,7 @@ case "$COMMAND" in
                 run_background
                 ;;
         *)
-                echo "Usage: sheepfold-updater [check|start|status|log|install]" >&2
+                say usage >&2
                 exit 1
                 ;;
 esac

@@ -325,7 +325,7 @@ var translations = {
         'Update started. Do not close this page until the result appears.': 'Обновление запущено. Не закрывайте страницу до появления результата.',
         'Update result': 'Результат обновления',
         'Starting update...': 'Запуск обновления...',
-        'Update request has been queued. Sheepfold service will start it shortly.': 'Заявка на обновление создана. Сервис Sheepfold скоро начнёт установку.',
+        'Checking for updates...': 'Идёт проверка наличия обновлений',
         'Update is running. Waiting for router response...': 'Обновление выполняется. Ждём ответ роутера...',
         'Update log is empty yet.': 'Журнал обновления пока пуст.',
         'Update finished successfully.': 'Обновление успешно завершено.',
@@ -538,11 +538,11 @@ function updateAppButton() {
 
                         Promise.all([
                                 fs.write('/tmp/sheepfold/update.status', 'queued\n'),
-                                fs.write('/tmp/sheepfold/update.log', T('Update request has been queued. Sheepfold service will start it shortly.') + '\n'),
+                                fs.write('/tmp/sheepfold/update.log', T('Checking for updates...') + '\n'),
                                 fs.write('/tmp/sheepfold/update.request', String(Date.now()) + '\n')
                         ]).then(function () {
-                                statusNode.textContent = T('Update request has been queued. Sheepfold service will start it shortly.');
-                                outputNode.textContent = T('Update request has been queued. Sheepfold service will start it shortly.');
+                                statusNode.textContent = T('Checking for updates...');
+                                outputNode.textContent = T('Checking for updates...');
                                 pollUpdate();
                         }, function (error) {
                                 outputNode.textContent = String(error && error.message ? error.message : error);
@@ -3696,7 +3696,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-60';
+                var assetVersion = '0.1.0-61';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
