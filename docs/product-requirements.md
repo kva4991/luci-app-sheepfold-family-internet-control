@@ -213,12 +213,15 @@ This group must not override the blocklist. Priority is:
 5. schedule;
 6. general rules.
 
-Strong device detection should use router-side signals such as DHCP/static lease data, hostname, vendor/OUI, open ports, service banners, mDNS/SSDP/UPnP names, and a previously confirmed device fingerprint. Detection by MAC, hostname, or open ports alone is not enough to silently grant permanent trust, because a child may spoof easy identifiers.
+Strong device detection should use router-side signals such as DHCP/static lease data, hostname, vendor/OUI, open ports, service banners, mDNS/SSDP/UPnP names, and a previously confirmed device fingerprint. Detection by MAC, hostname, or open ports alone is not a cryptographic guarantee, so the UI must show why a device was trusted and allow the parent to correct it.
 
 Installer mode:
 
-- reduced mode uses only lightweight metadata detection and must not auto-assign devices to the `No restrictions` group;
-- full mode may run stronger local detection and suggest `No restrictions`, but automatic placement requires parent confirmation or a previously trusted fingerprint.
+- the OpenWRT installer must ask `Apply Sheepfold automatic setup?` / `Применить автонастройку программы?`;
+- if the parent/admin answers `yes`, `y`, or `да`, set `auto_configure=1`, `detection_mode=full`, and `no_restrictions_auto_assign=1`;
+- full automatic setup may place confidently detected infrastructure devices into the `No restrictions` group automatically;
+- if the parent/admin declines, set or keep `auto_configure=0`, `detection_mode=reduced`, and `no_restrictions_auto_assign=0`;
+- reduced mode uses only lightweight metadata detection and must not auto-assign devices to the `No restrictions` group.
 
 Allowlist quick add:
 

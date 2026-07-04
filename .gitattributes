@@ -8,6 +8,7 @@ Makefile text eol=lf
 *.js text eol=lf
 *.css text eol=lf
 *.json text eol=lf
+*.py text eol=lf
 *.md text eol=lf
 *.kts text eol=lf
 *.kt text eol=lf

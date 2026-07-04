@@ -45,6 +45,31 @@ case "${AGREEMENT_ACCEPTED}" in
         ;;
 esac
 
+echo ""
+echo "Apply Sheepfold automatic setup?"
+echo "If enabled, Sheepfold may automatically configure safe defaults and put confidently detected home infrastructure devices"
+echo "such as NAS, Home Assistant, AdGuard Home, Proxmox, video recorders, and smart-home hubs into the No restrictions group."
+echo "The blocklist will still override this group."
+printf "Type yes, y, or да to enable automatic setup, or press Enter for reduced/manual mode: "
+if ! read -r AUTO_CONFIGURE_ACCEPTED; then
+    AUTO_CONFIGURE_ACCEPTED=""
+fi
+
+AUTO_CONFIGURE=0
+DETECTION_MODE="reduced"
+NO_RESTRICTIONS_AUTO_ASSIGN=0
+case "${AUTO_CONFIGURE_ACCEPTED}" in
+    yes|YES|Yes|y|Y|да|Да|ДА)
+        AUTO_CONFIGURE=1
+        DETECTION_MODE="full"
+        NO_RESTRICTIONS_AUTO_ASSIGN=1
+        echo "Automatic setup enabled."
+        ;;
+    *)
+        echo "Reduced/manual setup selected."
+        ;;
+esac
+
 package_installed() {
     opkg status "$1" >/dev/null 2>&1
 }
@@ -83,11 +108,18 @@ if [ -r /etc/config/sheepfold ] && command -v uci >/dev/null 2>&1; then
     uci -q set sheepfold.global.integration_mode="${INTEGRATION_MODE}"
     uci -q set sheepfold.global.adguard_integration="${ADGUARD_DETECTED}"
     uci -q set sheepfold.global.podkop_compatibility="${PODKOP_DETECTED}"
+    uci -q set sheepfold.global.auto_configure="${AUTO_CONFIGURE}"
+    uci -q set sheepfold.global.detection_mode="${DETECTION_MODE}"
+    uci -q set sheepfold.global.no_restrictions_auto_assign="${NO_RESTRICTIONS_AUTO_ASSIGN}"
     uci -q set sheepfold.adguard.enabled="${ADGUARD_DETECTED}"
     uci -q set sheepfold.podkop.enabled="${PODKOP_DETECTED}"
     uci -q commit sheepfold
 else
     echo "Sheepfold config is not installed yet; the package installer should apply this mode after installation."
+    echo "Automatic setup choice:"
+    echo "  auto_configure=${AUTO_CONFIGURE}"
+    echo "  detection_mode=${DETECTION_MODE}"
+    echo "  no_restrictions_auto_assign=${NO_RESTRICTIONS_AUTO_ASSIGN}"
 fi
 
 echo "This is a scaffold installer."
