@@ -34,21 +34,6 @@ var admins = [
         }
 ];
 
-var quickAllowlistCandidates = [
-        {
-                name: 'iPhone гостя',
-                ip: '192.168.1.104',
-                mac: '8C:85:90:44:11:2A',
-                joinedAgo: '7 sec ago'
-        },
-        {
-                name: 'Android ученика',
-                ip: '192.168.1.105',
-                mac: '34:2E:B7:91:8A:10',
-                joinedAgo: '18 sec ago'
-        }
-];
-
 var logEntries = [];
 
 var rootPasswordIsSet = true;
@@ -168,10 +153,13 @@ var translations = {
         'Connection allowed': 'Разрешено подключение',
         'Connection window expired': 'Окно подключения истекло',
         'Click to restart the 30 second window.': 'Нажмите, чтобы снова запустить окно на 30 секунд.',
-        'seconds left': 'секунд осталось',
+        'There are no newly connected devices yet. Keep this window open after the phone joins Wi-Fi.': 'Пока нет только что подключившихся устройств. Оставьте это окно открытым после подключения телефона к Wi-Fi.',
         'Connected after quick add started.': 'Подключились после запуска быстрого добавления.',
+        'seconds ago': 'секунд назад',
+        'minute ago': 'минуту назад',
+        'minutes ago': 'минут назад',
         'Add': 'Добавить',
-        'Candidate would be added to allowlist after confirmation.': 'Кандидат будет добавлен в белый список после подтверждения.',
+        'Candidate added to allowlist. Save changes to apply.': 'Кандидат добавлен в белый список. Сохраните изменения, чтобы применить.',
         'Quick mode only collects candidates. A parent still presses Add for every device.': 'Быстрый режим только собирает кандидатов. Родитель всё равно нажимает "Добавить" для каждого устройства.',
         'Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API.': 'Устройства из чёрного списка не могут открывать интернет, LuCI, SSH и Sheepfold API.',
         'Blocklist changes require confirmation.': 'Изменения чёрного списка требуют подтверждения.',
@@ -850,6 +838,66 @@ function quickAllowlistUrl(token) {
         return window.location.protocol + '//' + currentRouterAddress() + '/q/' + encodeURIComponent(token);
 }
 
+function readRouterDevicesNow() {
+        return Promise.all([
+                fs.read('/tmp/dhcp.leases').catch(function () {
+                        return '';
+                }),
+                fs.read('/proc/net/arp').catch(function () {
+                        return '';
+                })
+        ]).then(function (results) {
+                devices = buildRouterDevices(results[0], results[1]);
+                return devices;
+        });
+}
+
+function quickCandidateKey(device) {
+        return normalizeMac(device.mac) || device.ip || device.name;
+}
+
+function quickCandidateAgeText(ageMs) {
+        var seconds = Math.max(0, Math.floor(ageMs / 1000));
+        var minutes;
+
+        if (seconds < 60)
+                return seconds + ' ' + T('seconds ago');
+
+        minutes = Math.floor(seconds / 60);
+
+        if (minutes === 1)
+                return T('minute ago');
+
+        return minutes + ' ' + T('minutes ago');
+}
+
+function renderQuickCandidate(candidate, onAdd) {
+        return E('div', { 'class': 'sf-quick-candidate' }, [
+                E('div', { 'class': 'sf-quick-candidate-main' }, [
+                        E('strong', {}, candidate.device.name),
+                        E('small', {}, T('Connected after quick add started.'))
+                ]),
+                E('div', { 'class': 'sf-quick-candidate-data' }, [
+                        E('span', {}, [
+                                E('b', {}, 'IP'),
+                                E('code', {}, candidate.device.ip || '-')
+                        ]),
+                        E('span', {}, [
+                                E('b', {}, 'MAC'),
+                                E('code', {}, candidate.device.mac || '-')
+                        ]),
+                        E('small', {}, quickCandidateAgeText(Date.now() - candidate.firstSeenAt))
+                ]),
+                E('button', {
+                        'class': 'sf-action sf-action-positive',
+                        'click': function (ev) {
+                                ev.preventDefault();
+                                onAdd(candidate.device, ev.currentTarget);
+                        }
+                }, T('Add'))
+        ]);
+}
+
 function showPairingModal(device) {
         var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
@@ -933,30 +981,109 @@ function showQuickAllowlistModal() {
         var allowlistToken = generateUrlToken(18);
         var allowlistUrl = quickAllowlistUrl(allowlistToken);
         var progressFill = E('span', { 'class': 'sf-quick-progress-fill' });
-        var statusText = E('span', { 'class': 'sf-quick-status-text' });
         var permitButton;
         var timer = null;
+        var refreshTimer = null;
+        var startSequence = 0;
         var secondsTotal = 30;
+        var windowStartedAt = 0;
+        var windowExpiresAt = 0;
+        var baselineKeys = {};
+        var candidateMap = {};
+        var candidatesNode = E('div', { 'class': 'sf-quick-candidates' });
+
+        devices.forEach(function (device) {
+                baselineKeys[quickCandidateKey(device)] = true;
+        });
+
+        function candidateList() {
+                return Object.keys(candidateMap).map(function (key) {
+                        return candidateMap[key];
+                }).sort(function (left, right) {
+                        return right.firstSeenAt - left.firstSeenAt;
+                });
+        }
+
+        function renderCandidates() {
+                var candidates = candidateList();
+
+                if (!candidates.length) {
+                        candidatesNode.replaceChildren(E('div', {
+                                'class': 'sf-empty'
+                        }, T('There are no newly connected devices yet. Keep this window open after the phone joins Wi-Fi.')));
+                        return;
+                }
+
+                candidatesNode.replaceChildren.apply(candidatesNode, candidates.map(function (candidate) {
+                        return renderQuickCandidate(candidate, function (device, button) {
+                                updateMacList('allowlist', device.mac, true);
+                                button.disabled = true;
+                                button.textContent = T('Candidate added to allowlist. Save changes to apply.');
+                        });
+                }));
+        }
+
+        function refreshCandidates() {
+                if (!windowStartedAt || Date.now() > windowExpiresAt)
+                        return Promise.resolve();
+
+                return readRouterDevicesNow().then(function (currentDevices) {
+                        currentDevices.forEach(function (device) {
+                                var key = quickCandidateKey(device);
+
+                                if (!key || baselineKeys[key] || candidateMap[key] || device.status === 'blocked' || device.status === 'allow')
+                                        return;
+
+                                candidateMap[key] = {
+                                        device: device,
+                                        firstSeenAt: Date.now()
+                                };
+                        });
+
+                        renderCandidates();
+                });
+        }
 
         function startWindow() {
                 var remaining = secondsTotal;
+                var sequence = ++startSequence;
 
                 if (timer)
                         window.clearInterval(timer);
+                if (refreshTimer)
+                        window.clearInterval(refreshTimer);
 
                 permitButton.classList.remove('expired');
+                windowStartedAt = Date.now();
+                windowExpiresAt = windowStartedAt + secondsTotal * 1000;
+                baselineKeys = {};
+                candidateMap = {};
+
+                renderCandidates();
+                readRouterDevicesNow().then(function (currentDevices) {
+                        if (sequence !== startSequence)
+                                return;
+
+                        currentDevices.forEach(function (device) {
+                                baselineKeys[quickCandidateKey(device)] = true;
+                        });
+
+                        refreshCandidates();
+                        refreshTimer = window.setInterval(refreshCandidates, 3000);
+                });
 
                 function tick() {
                         var percent = Math.max(0, remaining / secondsTotal * 100);
 
                         progressFill.style.width = percent + '%';
-                        statusText.textContent = remaining > 0 ?
-                                remaining + ' ' + T('seconds left') :
-                                T('Connection window expired');
 
                         if (remaining <= 0) {
                                 window.clearInterval(timer);
                                 timer = null;
+                                if (refreshTimer) {
+                                        window.clearInterval(refreshTimer);
+                                        refreshTimer = null;
+                                }
                                 permitButton.classList.add('expired');
                         }
 
@@ -974,45 +1101,35 @@ function showQuickAllowlistModal() {
                         startWindow();
                 }
         }, [
+                progressFill,
                 E('strong', {}, T('Connection allowed')),
                 E('small', {}, T('Click to restart the 30 second window.'))
         ]);
 
         ui.showModal(T('Quick allowlist add'), [
                 E('div', { 'class': 'sf-modal-quick' }, [
-                        E('div', { 'class': 'sf-qr-wrap' }, [
-                                E('h4', {}, T('Wi-Fi access QR')),
-                                qrCode(wifiPayload),
-                                E('p', {}, T('Scan Wi-Fi QR, then add newly connected devices manually.')),
-                                E('code', {}, wifiPayload)
-                        ]),
-                        E('div', { 'class': 'sf-qr-wrap' }, [
-                                E('h4', {}, T('Allowlist request QR')),
-                                qrCode(allowlistUrl),
-                                E('p', {}, T('After connecting to Wi-Fi, scan this QR to request allowlist access from this phone.')),
-                                settingLine(T('One-time allowlist link'), allowlistUrl),
-                                E('small', {}, T('Router backend must consume this one-time token, detect the phone MAC from router-side data, and reject reuse.'))
-                        ]),
-                        E('div', { 'class': 'sf-quick-side' }, [
-                                permitButton,
-                                E('div', { 'class': 'sf-quick-progress' }, [
-                                        progressFill,
-                                        statusText
+                        E('div', { 'class': 'sf-modal-quick-top' }, [
+                                E('div', { 'class': 'sf-qr-wrap' }, [
+                                        E('h4', {}, T('Wi-Fi access QR')),
+                                        qrCode(wifiPayload),
+                                        E('p', {}, T('Scan Wi-Fi QR, then add newly connected devices manually.')),
+                                        E('code', {}, wifiPayload)
                                 ]),
-                                E('div', { 'class': 'sf-note' }, T('Quick mode only collects candidates. A parent still presses Add for every device.')),
+                                E('div', { 'class': 'sf-qr-wrap' }, [
+                                        E('h4', {}, T('Allowlist request QR')),
+                                        qrCode(allowlistUrl),
+                                        E('p', {}, T('After connecting to Wi-Fi, scan this QR to request allowlist access from this phone.')),
+                                        settingLine(T('One-time allowlist link'), allowlistUrl),
+                                        E('small', {}, T('Router backend must consume this one-time token, detect the phone MAC from router-side data, and reject reuse.'))
+                                ]),
+                                E('div', { 'class': 'sf-quick-side' }, [
+                                        permitButton,
+                                        E('div', { 'class': 'sf-note' }, T('Quick mode only collects candidates. A parent still presses Add for every device.'))
+                                ])
+                        ]),
+                        E('div', { 'class': 'sf-quick-candidates-wrap' }, [
                                 E('h4', {}, T('Newly connected devices')),
-                                E('div', { 'class': 'sf-quick-candidates' }, quickAllowlistCandidates.map(function (candidate) {
-                                        return E('div', { 'class': 'sf-quick-candidate' }, [
-                                                E('div', {}, [
-                                                        E('strong', {}, candidate.name),
-                                                        E('small', {}, T('Connected after quick add started.'))
-                                                ]),
-                                                E('div', { 'class': 'sf-mono' }, candidate.ip),
-                                                E('div', { 'class': 'sf-mono' }, candidate.mac),
-                                                E('small', {}, candidate.joinedAgo),
-                                                actionButton(T('Add'), 'positive', T('Candidate would be added to allowlist after confirmation.'))
-                                        ]);
-                                }))
+                                candidatesNode
                         ])
                 ]),
                 E('div', { 'class': 'right' }, [
@@ -1021,6 +1138,8 @@ function showQuickAllowlistModal() {
                                 'click': function () {
                                         if (timer)
                                                 window.clearInterval(timer);
+                                        if (refreshTimer)
+                                                window.clearInterval(refreshTimer);
                                         ui.hideModal();
                                 }
                         }, T('Close'))
@@ -2850,7 +2969,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-40';
+                var assetVersion = '0.1.0-41';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
