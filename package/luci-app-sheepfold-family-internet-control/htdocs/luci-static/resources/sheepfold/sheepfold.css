@@ -447,6 +447,42 @@
         text-transform: uppercase;
 }
 
+.sf-device-sort {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        max-width: 100%;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        text-transform: inherit;
+        cursor: pointer;
+}
+
+.sf-device-sort:hover,
+.sf-device-sort.active {
+        color: #0f766e;
+}
+
+.sf-sort-arrow::after {
+        content: "↕";
+        font-size: 10px;
+        color: #94a3b8;
+}
+
+.sf-device-sort[data-sort-direction="asc"] .sf-sort-arrow::after {
+        content: "↑";
+        color: #0f766e;
+}
+
+.sf-device-sort[data-sort-direction="desc"] .sf-sort-arrow::after {
+        content: "↓";
+        color: #0f766e;
+}
+
 .sf-device-row .sf-row-actions {
         gap: 4px;
         flex-wrap: nowrap;

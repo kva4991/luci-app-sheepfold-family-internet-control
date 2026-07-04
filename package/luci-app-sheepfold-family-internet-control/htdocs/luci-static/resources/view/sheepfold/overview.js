@@ -1061,6 +1061,68 @@ function renderQuickCandidate(candidate, onAdd) {
         ]);
 }
 
+function ipSortValue(ip) {
+        var parts = String(ip || '').split('.').map(function (part) {
+                return parseInt(part, 10);
+        });
+
+        if (parts.length !== 4 || parts.some(function (part) { return isNaN(part); }))
+                return -1;
+
+        return (((parts[0] * 256) + parts[1]) * 256 + parts[2]) * 256 + parts[3];
+}
+
+function sortDeviceTable(table, key) {
+        var currentKey = table.getAttribute('data-sort-key');
+        var currentDirection = table.getAttribute('data-sort-direction') || 'asc';
+        var direction = currentKey === key && currentDirection === 'asc' ? 'desc' : 'asc';
+        var rows = Array.prototype.slice.call(table.querySelectorAll('.sf-device-row:not(.sf-device-head)'));
+
+        rows.sort(function (left, right) {
+                var leftValue = left.getAttribute('data-sort-' + key) || '';
+                var rightValue = right.getAttribute('data-sort-' + key) || '';
+                var result;
+
+                if (key === 'id' || key === 'ip') {
+                        result = Number(leftValue) - Number(rightValue);
+                } else {
+                        result = leftValue.localeCompare(rightValue, undefined, {
+                                numeric: true,
+                                sensitivity: 'base'
+                        });
+                }
+
+                return direction === 'asc' ? result : -result;
+        });
+
+        table.setAttribute('data-sort-key', key);
+        table.setAttribute('data-sort-direction', direction);
+        table.querySelectorAll('.sf-device-sort').forEach(function (button) {
+                var active = button.getAttribute('data-sort-key') === key;
+
+                button.classList.toggle('active', active);
+                button.setAttribute('data-sort-direction', active ? direction : '');
+        });
+
+        rows.forEach(function (row) {
+                table.appendChild(row);
+        });
+}
+
+function deviceSortHeader(label, key) {
+        return E('button', {
+                'class': 'sf-device-sort',
+                'data-sort-key': key,
+                'click': function (ev) {
+                        ev.preventDefault();
+                        sortDeviceTable(ev.currentTarget.closest('.sf-device-table'), key);
+                }
+        }, [
+                E('span', {}, label),
+                E('span', { 'class': 'sf-sort-arrow' }, '')
+        ]);
+}
+
 function showPairingModal(device) {
         var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
@@ -1772,7 +1834,14 @@ function deviceTable(rows, options) {
         options = options || {};
 
         var tableRows = rows.map(function (device, index) {
-                return E('div', { 'class': 'sf-device-row' }, [
+                return E('div', {
+                        'class': 'sf-device-row',
+                        'data-sort-id': String(index + 1),
+                        'data-sort-device': device.name || '',
+                        'data-sort-ip': String(ipSortValue(device.ip)),
+                        'data-sort-group': device.group || '',
+                        'data-sort-status': device.status || ''
+                }, [
                         E('div', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
                         E('div', { 'class': 'sf-device-name' }, [
                                          E('strong', {}, [
@@ -1793,20 +1862,22 @@ function deviceTable(rows, options) {
                                 iconButton(T('Configure'), 'gear', 'neutral', function () {
                                         showDeviceSettingsModal(device);
                                 }),
-                                options.compact ? '' : actionButton(T('+30 min'), 'positive', T('Temporary access would require confirmation.'))
+                                options.compact || device.adminDevice || device.status === 'allow' || device.status === 'blocked' ?
+                                        '' :
+                                        actionButton(T('+30 min'), 'positive', T('Temporary access would require confirmation.'))
                         ])
                 ]);
         });
 
         return E('div', { 'class': 'sf-device-table' }, [
                 E('div', { 'class': 'sf-device-row sf-device-head' }, [
-                        E('div', {}, T('ID')),
-                        E('div', {}, T('Device')),
+                        E('div', {}, deviceSortHeader(T('ID'), 'id')),
+                        E('div', {}, deviceSortHeader(T('Device'), 'device')),
                         E('div', {}, T('Type')),
-                        E('div', {}, T('IP address')),
+                        E('div', {}, deviceSortHeader(T('IP address'), 'ip')),
                         E('div', {}, T('MAC address')),
-                        E('div', {}, T('Group')),
-                        E('div', {}, T('Status')),
+                        E('div', {}, deviceSortHeader(T('Group'), 'group')),
+                        E('div', {}, deviceSortHeader(T('Status'), 'status')),
                         E('div', {}, T('Actions'))
                 ])
         ].concat(tableRows));
@@ -3142,7 +3213,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-42';
+                var assetVersion = '0.1.0-43';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
