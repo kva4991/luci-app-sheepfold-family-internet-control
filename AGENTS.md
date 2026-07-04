@@ -29,6 +29,8 @@ Avoid:
 - Keep user-facing strings localizable. Do not hardcode menu labels, validation messages, or bot replies when a localization resource should be used.
 - In Sheepfold LuCI, prefer one clear `Save` / `Сохранить` action. Do not expose separate `Apply` and `Save` actions unless OpenWRT internals force it; if both exist technically, hide or merge `Apply` in the Sheepfold UI so parents are not asked to understand the distinction.
 - In Sheepfold LuCI, keep `All devices`, `Allowlist`, and `Blocklist` as nested tabs inside the top-level `User lists` / `Списки пользователей` tab. `All devices` must be the default nested tab.
+- Design the interface for a normal busy parent, not for a network engineer. Reuse the same visual pattern, wording, icon meaning, button placement, and confirmation style for the same action everywhere, so the parent can recognize behavior quickly without studying every screen.
+- If a feature appears in LuCI, Android, and bot/messenger flows, keep the user-facing names and mental model aligned across all of them unless the platform truly requires different wording.
 
 ## Coding Style
 

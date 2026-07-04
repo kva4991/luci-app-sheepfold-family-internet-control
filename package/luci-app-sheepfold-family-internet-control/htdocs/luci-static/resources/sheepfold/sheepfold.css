@@ -401,6 +401,91 @@
         stroke-linejoin: round;
 }
 
+.sf-device-type-select-field {
+        position: relative;
+}
+
+.sf-device-type-select {
+        position: relative;
+        display: block;
+}
+
+.sf-device-type-select-button,
+.sf-device-type-select-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 34px;
+        border: 1px solid var(--sf-border);
+        background: #ffffff;
+        color: var(--sf-ink);
+        text-align: left;
+        cursor: pointer;
+}
+
+.sf-device-type-select-button {
+        justify-content: flex-start;
+        border-radius: 6px;
+        padding: 6px 10px;
+}
+
+.sf-device-type-select-button:focus,
+.sf-device-type-select-option:focus {
+        border-color: var(--sf-blue);
+        outline: 2px solid rgba(37, 99, 235, 0.18);
+        outline-offset: 1px;
+}
+
+.sf-device-type-select-button .sf-device-type-icon,
+.sf-device-type-select-option .sf-device-type-icon {
+        flex: 0 0 22px;
+}
+
+.sf-device-type-select-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-weight: 400 !important;
+}
+
+.sf-device-type-select-caret {
+        margin-left: auto;
+        color: var(--sf-muted);
+        font-size: 12px;
+        font-weight: 400 !important;
+}
+
+.sf-device-type-select-menu {
+        position: absolute;
+        z-index: 30;
+        left: 0;
+        right: 0;
+        top: calc(100% + 4px);
+        max-height: 260px;
+        overflow-y: auto;
+        border: 1px solid var(--sf-border);
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+        padding: 4px;
+}
+
+.sf-device-type-select-option {
+        border-color: transparent;
+        border-radius: 6px;
+        padding: 7px 8px;
+}
+
+.sf-device-type-select-option:hover,
+.sf-device-type-select-option.is-selected {
+        background: #eef7f3;
+        border-color: #bdd7ce;
+}
+
+.sf-device-type-select-option span:last-child {
+        font-weight: 500;
+}
+
 .sf-ip-cell {
         display: inline-flex;
         align-items: center;

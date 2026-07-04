@@ -130,6 +130,9 @@ var translations = {
         'Game console': 'Игровая приставка',
         'Printer': 'Принтер',
         'Camera': 'Камера',
+        'Smart speaker': 'Умная колонка',
+        'Robot vacuum': 'Робот-пылесос',
+        'Engineering device': 'Инженерное устройство',
         'Smart device': 'Умное устройство',
         'Network device': 'Сетевое устройство',
         'IP address': 'IP-адрес',
@@ -595,6 +598,41 @@ function deviceTypeDefinitions() {
                         ]
                 },
                 {
+                        value: 'speaker',
+                        label: T('Smart speaker'),
+                        mark: '♪',
+                        paths: [
+                                'M8 5h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z',
+                                'M10 9h4',
+                                'M10 15h4',
+                                'M12 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2z'
+                        ]
+                },
+                {
+                        value: 'vacuum',
+                        label: T('Robot vacuum'),
+                        mark: '◌',
+                        paths: [
+                                'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
+                                'M9 10h6',
+                                'M9 14h6',
+                                'M16 7l3-3'
+                        ]
+                },
+                {
+                        value: 'engineering',
+                        label: T('Engineering device'),
+                        mark: '⚙',
+                        paths: [
+                                'M4 14h16',
+                                'M6 10h12',
+                                'M8 6h8',
+                                'M7 14v5',
+                                'M17 14v5',
+                                'M10 19h4'
+                        ]
+                },
+                {
                         value: 'smart',
                         label: T('Smart device'),
                         mark: '◇',
@@ -631,7 +669,7 @@ function deviceTypeByValue(value) {
 
 function deviceTypeOptions() {
         return deviceTypeDefinitions().map(function (item) {
-                return [item.value, item.mark + ' ' + item.label];
+                return [item.value, item.label];
         });
 }
 
@@ -657,6 +695,12 @@ function inferDeviceType(item, configured) {
                 return 'printer';
         if (/(camera|cam|ipcam|камера)/.test(text))
                 return 'camera';
+        if (/(alice|alisa|yandex|яндекс|алиса|station|станци[яи]|smart speaker|speaker|колонк|sonos|homepod|alexa|amazon echo|google home|sberboom|сбербум|маруся|marusya|капсул)/.test(text))
+                return 'speaker';
+        if (/(vacuum|roborock|dreame|deebot|ecovacs|irobot|roomba|пылесос|miio|xiaomi-vacuum|viomi|ilife|eufy|yeedi)/.test(text))
+                return 'vacuum';
+        if (/(zont|зонт|ectostroy|ectocontrol|эктоконтрол|myheat|teplocom|теплоком|xital|кситал|телеметрик|telemetrika|owen|овен|saures|boiler|kotel|кот[её]л|baxi|navien|vaillant|buderus|protherm|ariston|heating|thermostat|термостат|отоплен|контроллер|alarm|сигнализац)/.test(text))
+                return 'engineering';
         if (/(router|gateway|repeater|extender|openwrt|роутер|шлюз|точка)/.test(text))
                 return 'network';
 
@@ -1705,7 +1749,7 @@ function showDeviceSettingsModal(device) {
                 ['__custom', T('Custom')]
         ]));
         var customGroupField = inputControl(T('Use custom group'), groupIsCustom ? device.group : '');
-        var typeField = selectControl(T('Device type'), device.deviceType, deviceTypeOptions());
+        var typeField = deviceTypeSelectControl(T('Device type'), device.deviceType);
         var statusField = selectControl(T('Access mode'), device.status, [
                 ['new', T('Not configured')],
                 ['allow', T('Allowlist')],
@@ -2006,6 +2050,83 @@ function selectControl(label, value, values, hint) {
                 node: E('label', { 'class': 'sf-field' }, [
                         E('span', {}, label),
                         input,
+                        hint ? E('small', {}, hint) : ''
+                ])
+        };
+}
+
+function deviceTypeSelectControl(label, value, hint) {
+        var selected = deviceTypeByValue(value);
+        var input = E('input', {
+                'type': 'hidden',
+                'value': selected.value
+        });
+        var currentIcon = E('span', { 'class': 'sf-device-type-select-icon' }, [
+                deviceTypeIcon(selected.value)
+        ]);
+        var currentLabel = E('span', { 'class': 'sf-device-type-select-label' }, selected.label);
+        var menu;
+        var toggle = E('button', {
+                'class': 'sf-device-type-select-button',
+                'type': 'button',
+                'aria-haspopup': 'listbox',
+                'aria-expanded': 'false',
+                'click': function (ev) {
+                        ev.preventDefault();
+                        var shouldOpen = menu.hidden;
+
+                        menu.hidden = !shouldOpen;
+                        toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+                }
+        }, [
+                currentIcon,
+                currentLabel,
+                E('span', { 'class': 'sf-device-type-select-caret' }, '▾')
+        ]);
+
+        function chooseType(item) {
+                input.value = item.value;
+                currentIcon.replaceChildren(deviceTypeIcon(item.value));
+                currentLabel.textContent = item.label;
+                menu.hidden = true;
+                toggle.setAttribute('aria-expanded', 'false');
+        }
+
+        menu = E('div', {
+                'class': 'sf-device-type-select-menu',
+                'role': 'listbox',
+                'hidden': 'hidden'
+        }, deviceTypeDefinitions().map(function (item) {
+                return E('button', {
+                        'class': 'sf-device-type-select-option' + (item.value === selected.value ? ' is-selected' : ''),
+                        'type': 'button',
+                        'role': 'option',
+                        'aria-selected': item.value === selected.value ? 'true' : 'false',
+                        'click': function (ev) {
+                                ev.preventDefault();
+                                Array.prototype.forEach.call(menu.querySelectorAll('.sf-device-type-select-option'), function (button) {
+                                        button.classList.remove('is-selected');
+                                        button.setAttribute('aria-selected', 'false');
+                                });
+                                ev.currentTarget.classList.add('is-selected');
+                                ev.currentTarget.setAttribute('aria-selected', 'true');
+                                chooseType(item);
+                        }
+                }, [
+                        deviceTypeIcon(item.value),
+                        E('span', {}, item.label)
+                ]);
+        }));
+
+        return {
+                input: input,
+                node: E('div', { 'class': 'sf-field sf-device-type-select-field' }, [
+                        E('span', {}, label),
+                        input,
+                        E('div', { 'class': 'sf-device-type-select' }, [
+                                toggle,
+                                menu
+                        ]),
                         hint ? E('small', {}, hint) : ''
                 ])
         };
@@ -3213,7 +3334,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-43';
+                var assetVersion = '0.1.0-45';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
