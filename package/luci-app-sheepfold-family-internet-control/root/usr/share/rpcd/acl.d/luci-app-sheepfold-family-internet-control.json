@@ -5,11 +5,17 @@
       "uci": [ "sheepfold", "dhcp", "wireless" ],
       "file": {
         "/tmp/dhcp.leases": [ "read" ],
-        "/proc/net/arp": [ "read" ]
+        "/proc/net/arp": [ "read" ],
+        "/tmp/sheepfold/events.log": [ "read" ],
+        "/tmp/sheepfold/*": [ "read" ]
       }
     },
     "write": {
-      "uci": [ "sheepfold", "dhcp", "wireless" ]
+      "uci": [ "sheepfold", "dhcp", "wireless" ],
+      "file": {
+        "/tmp/sheepfold/events.log": [ "write" ],
+        "/tmp/sheepfold/*": [ "write" ]
+      }
     }
   }
 }

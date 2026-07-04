@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=34
+PKG_RELEASE:=36
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -27,6 +27,16 @@ ensure_global_option new_device_policy 'allow'
 ensure_global_option log_retention '3d'
 ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
+ensure_global_option log_storage 'ram'
+ensure_global_option log_cache_path '/tmp/sheepfold/events.log'
+log_cache_path="$$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf '%s' /tmp/sheepfold/events.log)"
+case "$$log_cache_path" in
+	/tmp/sheepfold/*) ;;
+	*) log_cache_path='/tmp/sheepfold/events.log' ;;
+esac
+mkdir -p "$${log_cache_path%/*}"
+touch "$$log_cache_path"
+chmod 600 "$$log_cache_path"
 detect_installed() {
 	pkg="$$1"
 	init="$$2"

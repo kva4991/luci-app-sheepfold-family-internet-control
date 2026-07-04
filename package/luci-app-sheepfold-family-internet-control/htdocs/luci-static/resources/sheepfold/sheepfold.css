@@ -227,6 +227,25 @@
         padding: 14px;
 }
 
+.sf-group-box {
+        display: grid;
+        gap: 8px;
+}
+
+.sf-group-device-list {
+        display: grid;
+        gap: 5px;
+        margin-top: 4px;
+        color: #34527a;
+        font-size: 13px;
+}
+
+.sf-group-device-list > div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+}
+
 .sf-form-row {
         display: flex;
         gap: 12px;
@@ -710,6 +729,10 @@
 .sf-log time {
         color: var(--sf-muted);
         min-width: 145px;
+}
+
+.sf-log-empty {
+        color: var(--sf-muted);
 }
 
 .sf-binding-modal {

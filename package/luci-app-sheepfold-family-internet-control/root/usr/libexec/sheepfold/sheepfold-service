@@ -2,13 +2,30 @@
 set -eu
 
 COMMAND="${1:-run}"
+DEFAULT_RAM_LOG="/tmp/sheepfold/events.log"
+
+init_ram_log() {
+        RAM_LOG="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf '%s' "$DEFAULT_RAM_LOG")"
+
+        case "$RAM_LOG" in
+                /tmp/sheepfold/*) ;;
+                *) RAM_LOG="$DEFAULT_RAM_LOG" ;;
+        esac
+
+        RAM_DIR="${RAM_LOG%/*}"
+        mkdir -p "$RAM_DIR"
+        touch "$RAM_LOG"
+        chmod 600 "$RAM_LOG"
+}
 
 case "$COMMAND" in
         run)
+                init_ram_log
                 echo "Sheepfold service placeholder"
                 sleep 3600
                 ;;
         reload)
+                init_ram_log
                 echo "Sheepfold reload placeholder"
                 ;;
         *)

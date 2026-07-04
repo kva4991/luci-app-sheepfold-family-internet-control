@@ -5,6 +5,7 @@
 'require fs';
 
 var devices = [];
+var defaultLogCachePath = '/tmp/sheepfold/events.log';
 
 var emergencySites = [
         ['gosuslugi.ru', 'Госуслуги', 'Государственные услуги'],
@@ -48,14 +49,23 @@ var quickAllowlistCandidates = [
         }
 ];
 
+var logEntries = [];
+
 var rootPasswordIsSet = true;
 
 var translations = {
         'All devices': 'Все устройства',
         'User lists': 'Списки пользователей',
+        'User management': 'Управление пользователями',
         'Allowlist': 'Белый список',
         'Blocklist': 'Чёрный список',
         'Schedules': 'Расписания',
+        'Groups': 'Группы',
+        'Group devices': 'Устройства группы',
+        'Add group': 'Добавить группу',
+        'No groups yet. Assign devices to groups in device settings.': 'Групп пока нет. Назначьте устройства в группы в настройках устройства.',
+        'Groups collect devices so schedules and access rules can be applied to several devices at once.': 'Группы объединяют устройства, чтобы расписания и правила доступа можно было применять сразу к нескольким устройствам.',
+        'Group editor is not implemented in this visual test build.': 'Редактор групп пока не реализован в этой тестовой сборке.',
         'Emergency-useful sites': 'Аварийно-полезные сайты',
         'Wi-Fi': 'Wi-Fi',
         'Integrations': 'Интеграции',
@@ -243,13 +253,22 @@ var translations = {
         'unblock internet': 'включить интернет',
         'grant +30 minutes': 'дать +30 минут',
         'status': 'статус',
-        'Administrative action log with masking.': 'Журнал действий администраторов с маскированием.',
+        'Administrative action log. Export masks sensitive fields.': 'Журнал действий администраторов. При экспорте чувствительные поля маскируются.',
         'Clear log': 'Очистить журнал',
         'Clearing logs requires confirmation.': 'Очистка журнала требует подтверждения.',
+        'Log cleared.': 'Журнал очищен.',
+        'Could not clear log.': 'Не удалось очистить журнал.',
+        'Log is empty.': 'Журнал пуст.',
+        'The log is stored in RAM and is cleared after router reboot. Export masks sensitive fields.': 'Журнал хранится в RAM и очищается после перезагрузки роутера. При экспорте чувствительные поля маскируются.',
+        'Cache file path': 'Путь к файлу кэша',
+        'The cache file must be stored under /tmp/ so the log stays in RAM and does not wear router flash memory.': 'Файл кэша должен лежать внутри /tmp/, чтобы журнал оставался в RAM и не изнашивал flash-память роутера.',
+        'Cache file path saved.': 'Путь к файлу кэша сохранён.',
+        'Could not save cache file path.': 'Не удалось сохранить путь к файлу кэша.',
+        'Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen.': 'Путь к файлу кэша должен начинаться с /tmp/ и содержать только буквы, цифры, точку, слэш, подчёркивание и дефис.',
         'Export masked': 'Экспорт с маскированием',
-        'Masked log export is not implemented in this visual test build.': 'Экспорт журнала с маскированием пока не реализован в этой визуальной сборке.',
+        'Masked log export has been saved.': 'Экспорт журнала с маскированием сохранён.',
         'Owner granted +30 minutes to Child tablet': 'Владелец дал +30 минут устройству "Планшет ребёнка"',
-        'New device detected: #4, DC:A6:32:xx:xx:19, IP 192.168.1.98': 'Обнаружено новое устройство: #4, DC:A6:32:xx:xx:19, IP 192.168.1.98',
+        'New device detected: #4, DC:A6:32:EC:00:19, IP 192.168.1.98': 'Обнаружено новое устройство: #4, DC:A6:32:EC:00:19, IP 192.168.1.98',
         'Global block disabled by owner': 'Глобальная блокировка выключена владельцем',
         'General': 'Общие',
         'Application language': 'Язык приложения',
@@ -299,10 +318,8 @@ function T(text) {
 }
 
 var tabs = [
-        ['users', T('User lists')],
-        ['schedules', T('Schedules')],
+        ['users', T('User management')],
         ['wifi', T('Wi-Fi')],
-        ['admins', T('Administrators')],
         ['logs', T('Logs')],
         ['settings', T('Settings')]
 ];
@@ -318,7 +335,10 @@ var settingsTabs = [
 var userListTabs = [
         ['devices', T('All devices')],
         ['allowlist', T('Allowlist')],
-        ['blocklist', T('Blocklist')]
+        ['blocklist', T('Blocklist')],
+        ['schedules', T('Schedules')],
+        ['groups', T('Groups')],
+        ['admins', T('Administrators')]
 ];
 
 function notify(message, level) {
@@ -350,6 +370,22 @@ function copyTextToClipboard(text, successMessage) {
         }
 
         fallbackCopy();
+}
+
+function logCachePath() {
+        return safeUciGet('sheepfold', 'global', 'log_cache_path', defaultLogCachePath) || defaultLogCachePath;
+}
+
+function validRamCachePath(path) {
+        return /^\/tmp\/[A-Za-z0-9_./-]+$/.test(path || '') && path.indexOf('..') === -1 && path.charAt(path.length - 1) !== '/';
+}
+
+function saveGlobalOption(option, value) {
+        uci.set('sheepfold', 'global', option, value);
+
+        return uci.save().then(function () {
+                return uci.apply();
+        });
 }
 
 function copyableLinkField(label, value, hint) {
@@ -404,6 +440,74 @@ function actionButton(label, tone, message) {
                         notify(message || T('This action is a visual prototype only.'), tone === 'danger' ? 'warning' : 'info');
                 }
         }, label);
+}
+
+function maskLogMessage(message) {
+        return String(message || '')
+                .replace(/\b([0-9a-f]{2}):([0-9a-f]{2}):([0-9a-f]{2}):([0-9a-f]{2}):([0-9a-f]{2}):([0-9a-f]{2})\b/gi, function (match, first, second, third, fourth, fifth, sixth) {
+                        return [first, second, third, 'xx', 'xx', sixth].join(':').toUpperCase();
+                })
+                .replace(/\b(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}\b/g, '$1.x');
+}
+
+function parseRamLog(text) {
+        return String(text || '').split(/\r?\n/).map(function (line) {
+                var parts;
+
+                line = line.trim();
+                if (!line)
+                        return null;
+
+                parts = line.split('\t');
+                if (parts.length >= 2) {
+                        return {
+                                time: parts.shift(),
+                                message: parts.join('\t')
+                        };
+                }
+
+                return {
+                        time: '',
+                        message: line
+                };
+        }).filter(Boolean);
+}
+
+function renderLogRows() {
+        if (!logEntries.length)
+                return [E('div', { 'class': 'sf-log-empty' }, T('Log is empty.'))];
+
+        return logEntries.map(function (entry) {
+                return E('div', {}, [
+                        E('time', {}, entry.time),
+                        E('span', {}, T(entry.message))
+                ]);
+        });
+}
+
+function maskedLogExportText() {
+        if (!logEntries.length)
+                return T('Log is empty.') + '\n';
+
+        return logEntries.map(function (entry) {
+                return entry.time + ' ' + maskLogMessage(T(entry.message));
+        }).join('\n') + '\n';
+}
+
+function downloadTextFile(filename, text) {
+        var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        var url = window.URL.createObjectURL(blob);
+        var link = document.createElement('a');
+
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        window.setTimeout(function () {
+                window.URL.revokeObjectURL(url);
+        }, 0);
 }
 
 function svgIcon(paths, attrs) {
@@ -1467,6 +1571,50 @@ function textareaField(label, value, hint) {
         ]);
 }
 
+function cachePathField() {
+        var input = E('input', {
+                'class': 'cbi-input-text',
+                'value': logCachePath(),
+                'placeholder': defaultLogCachePath
+        });
+        var lastValue = input.value;
+
+        function saveIfChanged() {
+                var value = input.value.trim();
+
+                if (value === lastValue)
+                        return;
+
+                if (!validRamCachePath(value)) {
+                        input.value = lastValue;
+                        notify(T('Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen.'), 'warning');
+                        return;
+                }
+
+                saveGlobalOption('log_cache_path', value).then(function () {
+                        lastValue = value;
+                        notify(T('Cache file path saved.'), 'info');
+                }, function () {
+                        input.value = lastValue;
+                        notify(T('Could not save cache file path.'), 'warning');
+                });
+        }
+
+        input.addEventListener('blur', saveIfChanged);
+        input.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                        ev.preventDefault();
+                        saveIfChanged();
+                }
+        });
+
+        return E('label', { 'class': 'sf-field sf-field-wide' }, [
+                E('span', {}, T('Cache file path')),
+                input,
+                E('small', {}, T('The cache file must be stored under /tmp/ so the log stays in RAM and does not wear router flash memory.'))
+        ]);
+}
+
 function inputControl(label, value, attrs, hint) {
         var input = E('input', Object.assign({
                 'class': 'cbi-input-text',
@@ -2010,15 +2158,22 @@ return view.extend({
                         }, function () {
                                 self.uciLoadState.sheepfold = false;
                         }),
-                        uci.load('dhcp'),
-                        fs.read('/tmp/dhcp.leases').catch(function () {
-                                return '';
-                        }),
-                        fs.read('/proc/net/arp').catch(function () {
-                                return '';
-                        })
-                ]).then(function (results) {
-                        devices = buildRouterDevices(results[3], results[4]);
+                        uci.load('dhcp')
+                ]).then(function () {
+                        return Promise.all([
+                                fs.read('/tmp/dhcp.leases').catch(function () {
+                                        return '';
+                                }),
+                                fs.read('/proc/net/arp').catch(function () {
+                                        return '';
+                                }),
+                                fs.read(logCachePath()).catch(function () {
+                                        return '';
+                                })
+                        ]);
+                }).then(function (results) {
+                        devices = buildRouterDevices(results[0], results[1]);
+                        logEntries = parseRamLog(results[2]);
                 });
         },
 
@@ -2054,8 +2209,10 @@ return view.extend({
                 if (!params)
                         return;
 
-                if (params.get('view') === 'admins')
-                        this.activeTab = 'admins';
+                if (params.get('view') === 'admins') {
+                        this.activeTab = 'users';
+                        this.activeUserListTab = 'admins';
+                }
         },
 
         runInitialDeepLinkAction: function () {
@@ -2286,12 +2443,15 @@ return view.extend({
                         this.renderUserListTabs(),
                         this.renderUserListPanel('devices', this.renderDevices(true)),
                         this.renderUserListPanel('allowlist', this.renderAllowlist(true)),
-                        this.renderUserListPanel('blocklist', this.renderBlocklist(true))
+                        this.renderUserListPanel('blocklist', this.renderBlocklist(true)),
+                        this.renderUserListPanel('schedules', this.renderSchedules(true)),
+                        this.renderUserListPanel('groups', this.renderGroups(true)),
+                        this.renderUserListPanel('admins', this.renderAdmins(true))
                 ]);
         },
 
-        renderSchedules: function () {
-                return E('div', { 'class': 'sf-panel' }, [
+        renderSchedules: function (embedded) {
+                return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
                                         E('p', {}, T('Allow and block rules for devices and groups.'))
@@ -2322,6 +2482,48 @@ return view.extend({
                         E('div', { 'class': 'sf-form-row' }, [
                                 field(T('Default bedtime'), '21:00', T('Used by the "until bedtime" quick action.'))
                         ])
+                ]);
+        },
+
+        renderGroups: function (embedded) {
+                var grouped = {};
+                var groupNames;
+
+                devices.forEach(function (device) {
+                        if (!device.group)
+                                return;
+
+                        if (!grouped[device.group])
+                                grouped[device.group] = [];
+
+                        grouped[device.group].push(device);
+                });
+
+                groupNames = Object.keys(grouped).sort(function (left, right) {
+                        return left.localeCompare(right);
+                });
+
+                return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
+                        E('div', { 'class': 'sf-panel-head' }, [
+                                E('div', {}, [
+                                        E('p', {}, T('Groups collect devices so schedules and access rules can be applied to several devices at once.'))
+                                ]),
+                                actionButton(T('Add group'), 'positive', T('Group editor is not implemented in this visual test build.'))
+                        ]),
+                        groupNames.length ?
+                                E('div', { 'class': 'sf-grid two' }, groupNames.map(function (groupName) {
+                                        return E('div', { 'class': 'sf-box sf-group-box' }, [
+                                                E('h4', {}, groupName),
+                                                E('strong', {}, grouped[groupName].length + ' ' + T('Devices')),
+                                                E('div', { 'class': 'sf-group-device-list' }, grouped[groupName].map(function (device) {
+                                                        return E('div', {}, [
+                                                                E('span', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
+                                                                E('span', {}, device.name)
+                                                        ]);
+                                                }))
+                                        ]);
+                                })) :
+                                E('div', { 'class': 'sf-note sf-note-warning' }, T('No groups yet. Assign devices to groups in device settings.'))
                 ]);
         },
 
@@ -2432,8 +2634,8 @@ return view.extend({
                 ]);
         },
 
-        renderAdmins: function () {
-                return E('div', { 'class': 'sf-panel' }, [
+        renderAdmins: function (embedded) {
+                return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
                                         E('h3', {}, T('Administrator accounts'))
@@ -2475,18 +2677,38 @@ return view.extend({
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('p', {}, T('Administrative action log with masking.'))
+                                        E('p', {}, T('The log is stored in RAM and is cleared after router reboot. Export masks sensitive fields.'))
                                 ]),
                                 E('div', { 'class': 'sf-toolbar' }, [
-                                        actionButton(T('Clear log'), 'danger', T('Clearing logs requires confirmation.')),
-                                        actionButton(T('Export masked'), 'neutral', T('Masked log export is not implemented in this visual test build.'))
+                                        E('button', {
+                                                'class': 'sf-action sf-action-danger',
+                                                'click': function (ev) {
+                                                        var logNode = ev.currentTarget.closest('.sf-panel').querySelector('.sf-log');
+
+                                                        ev.preventDefault();
+                                                        fs.write(logCachePath(), '').then(function () {
+                                                                logEntries = [];
+                                                                if (logNode)
+                                                                        logNode.replaceChildren.apply(logNode, renderLogRows());
+                                                                notify(T('Log cleared.'), 'info');
+                                                        }, function () {
+                                                                notify(T('Could not clear log.'), 'warning');
+                                                        });
+                                                }
+                                        }, T('Clear log')),
+                                        E('button', {
+                                                'class': 'sf-action sf-action-neutral',
+                                                'click': function (ev) {
+                                                        var stamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+                                                        ev.preventDefault();
+                                                        downloadTextFile('sheepfold-log-masked-' + stamp + '.txt', maskedLogExportText());
+                                                        notify(T('Masked log export has been saved.'), 'info');
+                                                }
+                                        }, T('Export masked'))
                                 ])
                         ]),
-                        E('div', { 'class': 'sf-log' }, [
-                                E('div', {}, [E('time', {}, '03.07.2026 20:31:12'), E('span', {}, T('Owner granted +30 minutes to Child tablet'))]),
-                                E('div', {}, [E('time', {}, '03.07.2026 19:55:04'), E('span', {}, T('New device detected: #4, DC:A6:32:xx:xx:19, IP 192.168.1.98'))]),
-                                E('div', {}, [E('time', {}, '03.07.2026 18:10:44'), E('span', {}, T('Global block disabled by owner'))])
-                        ])
+                        E('div', { 'class': 'sf-log' }, renderLogRows())
                 ]);
         },
 
@@ -2506,6 +2728,7 @@ return view.extend({
                                 ['90', T('90 days')],
                                 ['180', T('180 days')]
                         ]),
+                        cachePathField(),
                         textareaField(T('Blocked page text'), T('Internet is temporarily unavailable by family rules.'))
                 ]);
         },
@@ -2558,16 +2781,14 @@ return view.extend({
         renderPanels: function () {
                 return [
                         this.renderPanel('users', this.renderUsers()),
-                        this.renderPanel('schedules', this.renderSchedules()),
                         this.renderPanel('wifi', this.renderWifi()),
-                        this.renderPanel('admins', this.renderAdmins()),
                         this.renderPanel('logs', this.renderLogs()),
                         this.renderPanel('settings', this.renderSettings())
                 ];
         },
 
         render: function () {
-                var assetVersion = '0.1.0-34';
+                var assetVersion = '0.1.0-36';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
