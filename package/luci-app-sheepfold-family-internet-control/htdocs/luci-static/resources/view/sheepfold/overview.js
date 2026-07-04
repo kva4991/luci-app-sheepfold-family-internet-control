@@ -324,9 +324,15 @@ var translations = {
         'Install Sheepfold update now?': 'Установить обновление Sheepfold сейчас?',
         'Update started. Do not close this page until the result appears.': 'Обновление запущено. Не закрывайте страницу до появления результата.',
         'Update result': 'Результат обновления',
+        'Starting update...': 'Запуск обновления...',
+        'Update is running. Waiting for router response...': 'Обновление выполняется. Ждём ответ роутера...',
+        'Update log is empty yet.': 'Журнал обновления пока пуст.',
+        'Update finished successfully.': 'Обновление успешно завершено.',
         'Update completed. Refresh LuCI if the interface still shows old files.': 'Обновление завершено. Обновите LuCI, если интерфейс всё ещё показывает старые файлы.',
         'Update failed.': 'Обновление не удалось.',
-        'Updater output is empty.': 'Updater не вернул текстовый вывод.',
+        'Update failed. See log above.': 'Обновление не удалось. Смотрите журнал выше.',
+        'No updates available. Installed version is already current.': 'Обновлений нет. Установленная версия уже актуальна.',
+        'Could not start updater.': 'Не удалось запустить обновление.',
         'Reboot router': 'Перезагрузить роутер',
         'Router reboot requires confirmation.': 'Перезагрузка роутера требует подтверждения.',
         'Sheepfold Family Internet Control': 'Sheepfold : контроль доступа в интернет для семьи',
@@ -444,6 +450,11 @@ function updateAppButton() {
                 'class': 'sf-action sf-action-danger',
                 'click': function (ev) {
                         var button = ev.currentTarget;
+                        var spinner;
+                        var statusNode;
+                        var outputNode;
+                        var pollTimer = null;
+                        var pollingActive = true;
 
                         ev.preventDefault();
 
@@ -451,40 +462,94 @@ function updateAppButton() {
                                 return;
 
                         button.disabled = true;
-                        notify(T('Update started. Do not close this page until the result appears.'), 'info');
 
-                        fs.exec('/usr/libexec/sheepfold/sheepfold-updater', ['install']).then(function (result) {
+                        spinner = E('span', { 'class': 'sf-spinner' });
+                        statusNode = E('p', {}, T('Update started. Do not close this page until the result appears.'));
+                        outputNode = E('pre', { 'class': 'sf-pre' }, T('Starting update...'));
+
+                        function closeModal() {
+                                pollingActive = false;
+                                if (pollTimer)
+                                        window.clearTimeout(pollTimer);
+                                ui.hideModal();
+                        }
+
+                        function finishUpdate(spinnerClass, message, notificationType) {
+                                pollingActive = false;
+                                if (pollTimer)
+                                        window.clearTimeout(pollTimer);
+                                spinner.className = 'sf-spinner ' + spinnerClass;
+                                statusNode.textContent = message;
+                                button.disabled = false;
+                                if (notificationType)
+                                        notify(message, notificationType);
+                        }
+
+                        function pollUpdate() {
+                                if (!pollingActive)
+                                        return;
+
+                                Promise.all([
+                                        fs.read('/tmp/sheepfold/update.status').catch(function () { return ''; }),
+                                        fs.read('/tmp/sheepfold/update.log').catch(function () { return ''; })
+                                ]).then(function (values) {
+                                        var status = String(values[0] || '').trim();
+                                        var log = String(values[1] || '').trim();
+
+                                        outputNode.textContent = log || T('Update log is empty yet.');
+
+                                        if (status === 'ok') {
+                                                finishUpdate('sf-spinner-done', T('Update completed. Refresh LuCI if the interface still shows old files.'), 'info');
+                                                return;
+                                        }
+
+                                        if (status === 'no_update') {
+                                                finishUpdate('sf-spinner-done', T('No updates available. Installed version is already current.'), 'info');
+                                                return;
+                                        }
+
+                                        if (status.indexOf('failed') === 0) {
+                                                finishUpdate('sf-spinner-failed', T('Update failed. See log above.'), 'warning');
+                                                return;
+                                        }
+
+                                        statusNode.textContent = T('Update is running. Waiting for router response...');
+                                        pollTimer = window.setTimeout(pollUpdate, 2000);
+                                }, function () {
+                                        statusNode.textContent = T('Update is running. Waiting for router response...');
+                                        pollTimer = window.setTimeout(pollUpdate, 2000);
+                                });
+                        }
+
+                        ui.showModal(T('Update result'), [
+                                E('div', { 'class': 'sf-update-progress' }, [
+                                        spinner,
+                                        statusNode
+                                ]),
+                                outputNode,
+                                E('div', { 'class': 'right sf-modal-actions' }, [
+                                        E('button', {
+                                                'class': 'btn cbi-button',
+                                                'click': closeModal
+                                        }, T('Close'))
+                                ])
+                        ]);
+
+                        fs.exec('/usr/libexec/sheepfold/sheepfold-updater', ['start']).then(function (result) {
                                 var output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
 
-                                if (!output)
-                                        output = T('Updater output is empty.');
+                                if (output)
+                                        outputNode.textContent = output;
 
-                                ui.showModal(T('Update result'), [
-                                        E('pre', { 'class': 'sf-pre' }, output),
-                                        E('div', { 'class': 'right sf-modal-actions' }, [
-                                                E('button', {
-                                                        'class': 'btn cbi-button',
-                                                        'click': ui.hideModal
-                                                }, T('Close'))
-                                        ])
-                                ]);
+                                if (result.code !== 0) {
+                                        finishUpdate('sf-spinner-failed', T('Could not start updater.'), 'warning');
+                                        return;
+                                }
 
-                                if (result.code === 0)
-                                        notify(T('Update completed. Refresh LuCI if the interface still shows old files.'), 'info');
-                                else
-                                        notify(T('Update failed.'), 'warning');
-                                button.disabled = false;
+                                pollUpdate();
                         }, function (error) {
-                                notify(T('Update failed.'), 'warning');
-                                ui.showModal(T('Update result'), [
-                                        E('pre', { 'class': 'sf-pre' }, String(error && error.message ? error.message : error)),
-                                        E('div', { 'class': 'right sf-modal-actions' }, [
-                                                E('button', {
-                                                        'class': 'btn cbi-button',
-                                                        'click': ui.hideModal
-                                                }, T('Close'))
-                                        ])
-                                ]);
+                                outputNode.textContent = String(error && error.message ? error.message : error);
+                                finishUpdate('sf-spinner-failed', T('Could not start updater.'), 'warning');
                                 button.disabled = false;
                         });
                 }
@@ -3634,7 +3699,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-58';
+                var assetVersion = '0.1.0-59';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;

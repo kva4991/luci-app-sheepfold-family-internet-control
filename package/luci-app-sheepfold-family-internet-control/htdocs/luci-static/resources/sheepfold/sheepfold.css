@@ -1065,6 +1065,43 @@
         word-break: break-word;
 }
 
+.sf-update-progress {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 12px;
+}
+
+.sf-update-progress p {
+        margin: 0;
+}
+
+.sf-spinner {
+        width: 24px;
+        height: 24px;
+        flex: 0 0 24px;
+        border: 3px solid #bdd7ce;
+        border-top-color: #087f5b;
+        border-radius: 50%;
+        animation: sf-spin 0.8s linear infinite;
+}
+
+.sf-spinner-done {
+        border-color: #16a34a;
+        animation: none;
+}
+
+.sf-spinner-failed {
+        border-color: #dc2626;
+        animation: none;
+}
+
+@keyframes sf-spin {
+        to {
+                transform: rotate(360deg);
+        }
+}
+
 .sf-settings-tabs {
         margin-bottom: 14px;
 }

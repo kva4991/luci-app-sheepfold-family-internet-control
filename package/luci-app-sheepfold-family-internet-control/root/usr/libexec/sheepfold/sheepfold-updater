@@ -6,25 +6,38 @@ OWNER="kva4991"
 REPO="luci-app-sheepfold-family-internet-control"
 PACKAGE="luci-app-sheepfold-family-internet-control"
 WORK_DIR="/tmp/sheepfold/update"
+RUNTIME_DIR="/tmp/sheepfold"
 API_URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/latest"
 RELEASE_JSON="${WORK_DIR}/latest-release.json"
 PACKAGE_FILE="${WORK_DIR}/${PACKAGE}-latest.ipk"
+LOG_FILE="${RUNTIME_DIR}/update.log"
+STATUS_FILE="${RUNTIME_DIR}/update.status"
+PID_FILE="${RUNTIME_DIR}/update.pid"
 
-mkdir -p "$WORK_DIR"
+mkdir -p "$RUNTIME_DIR" "$WORK_DIR"
 chmod 700 "$WORK_DIR"
 
 fetch() {
         url="$1"
         output="$2"
 
+        echo "Downloading: ${url}"
         if command -v uclient-fetch >/dev/null 2>&1; then
-                uclient-fetch -q -O "$output" "$url"
-                return
+                if uclient-fetch -q -O "$output" "$url"; then
+                        return
+                fi
+                code="$?"
+                echo "Download failed with uclient-fetch, exit code ${code}." >&2
+                exit "$code"
         fi
 
         if command -v wget >/dev/null 2>&1; then
-                wget -q -O "$output" "$url"
-                return
+                if wget -q -O "$output" "$url"; then
+                        return
+                fi
+                code="$?"
+                echo "Download failed with wget, exit code ${code}." >&2
+                exit "$code"
         fi
 
         echo "No downloader found. Install uclient-fetch or wget." >&2
@@ -35,11 +48,27 @@ current_version() {
         opkg status "$PACKAGE" 2>/dev/null | sed -n 's/^Version: //p' | sed -n '1p'
 }
 
+latest_package_version() {
+        basename "$PACKAGE_URL" | sed -n "s/^${PACKAGE}_\\([^_]*\\)_all\\.ipk$/\\1/p" | sed -n '1p'
+}
+
+version_is_newer() {
+        latest="$1"
+        current="$2"
+
+        [ -z "$current" ] && return 0
+        [ -z "$latest" ] && return 1
+
+        opkg compare-versions "$latest" '>' "$current" >/dev/null 2>&1
+}
+
 read_release_info() {
+        echo "Checking latest GitHub release..."
         fetch "$API_URL" "$RELEASE_JSON"
 
         TAG="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RELEASE_JSON" | sed -n '1p')"
         PACKAGE_URL="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*luci-app-sheepfold-family-internet-control[^"]*_all\.ipk\)".*/\1/p' "$RELEASE_JSON" | sed -n '1p')"
+        LATEST_VERSION="$(latest_package_version)"
 
         if [ -z "${TAG:-}" ]; then
                 echo "Could not read latest stable release tag from GitHub." >&2
@@ -50,19 +79,40 @@ read_release_info() {
                 echo "Latest stable release ${TAG} does not contain a Sheepfold .ipk package." >&2
                 exit 1
         fi
+
+        if [ -z "${LATEST_VERSION:-}" ]; then
+                echo "Could not read Sheepfold package version from release asset name." >&2
+                exit 1
+        fi
 }
 
 print_check() {
         read_release_info
-        echo "Current installed version: $(current_version || true)"
+        CURRENT_VERSION="$(current_version || true)"
+        echo "Current installed version: ${CURRENT_VERSION:-unknown}"
         echo "Latest stable release: ${TAG}"
+        echo "Latest package version: ${LATEST_VERSION}"
         echo "Package URL: ${PACKAGE_URL}"
+        if version_is_newer "$LATEST_VERSION" "$CURRENT_VERSION"; then
+                echo "Update is available."
+        else
+                echo "No updates available. Installed version is already current."
+        fi
 }
 
 install_update() {
+        echo "Sheepfold updater"
         read_release_info
-        echo "Current installed version: $(current_version || true)"
+        CURRENT_VERSION="$(current_version || true)"
+        echo "Current installed version: ${CURRENT_VERSION:-unknown}"
         echo "Latest stable release: ${TAG}"
+        echo "Latest package version: ${LATEST_VERSION}"
+
+        if ! version_is_newer "$LATEST_VERSION" "$CURRENT_VERSION"; then
+                echo "No updates available. Installed version is already current."
+                return 2
+        fi
+
         echo "Downloading package..."
         fetch "$PACKAGE_URL" "$PACKAGE_FILE"
 
@@ -86,15 +136,85 @@ install_update() {
         echo "Update completed."
 }
 
+pid_running() {
+        [ -r "$PID_FILE" ] || return 1
+        pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+        [ -n "$pid" ] || return 1
+        kill -0 "$pid" 2>/dev/null
+}
+
+start_update() {
+        if pid_running; then
+                echo "Update is already running. PID: $(cat "$PID_FILE")"
+                return 0
+        fi
+
+        : > "$LOG_FILE"
+        echo "running" > "$STATUS_FILE"
+        "$0" run-background >/dev/null 2>&1 </dev/null &
+        echo "$!" > "$PID_FILE"
+        echo "Update started in background. PID: $!"
+}
+
+run_background() {
+        echo "$$" > "$PID_FILE"
+        : > "$LOG_FILE"
+        echo "running" > "$STATUS_FILE"
+
+        code=0
+        "$0" install-foreground >>"$LOG_FILE" 2>&1 || code="$?"
+
+        if [ "$code" = "0" ]; then
+                echo "ok" > "$STATUS_FILE"
+        elif [ "$code" = "2" ]; then
+                echo "no_update" > "$STATUS_FILE"
+        else
+                echo "failed:${code}" > "$STATUS_FILE"
+        fi
+
+        rm -f "$PID_FILE"
+}
+
+print_status() {
+        if pid_running; then
+                cat "$STATUS_FILE" 2>/dev/null || echo "running"
+                return 0
+        fi
+
+        cat "$STATUS_FILE" 2>/dev/null || echo "idle"
+}
+
+print_log() {
+        cat "$LOG_FILE" 2>/dev/null || true
+}
+
 case "$COMMAND" in
         check)
                 print_check
                 ;;
+        start)
+                start_update
+                ;;
+        status)
+                print_status
+                ;;
+        log)
+                print_log
+                ;;
         install)
+                code=0
+                install_update || code="$?"
+                [ "$code" = "2" ] && exit 0
+                exit "$code"
+                ;;
+        install-foreground)
                 install_update
                 ;;
+        run-background)
+                run_background
+                ;;
         *)
-                echo "Usage: sheepfold-updater [check|install]" >&2
+                echo "Usage: sheepfold-updater [check|start|status|log|install]" >&2
                 exit 1
                 ;;
 esac
