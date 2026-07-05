@@ -42,6 +42,18 @@ var translations = {
         'Group devices': 'Устройства группы',
         'Add group': 'Добавить группу',
         'Delete group': 'Удалить группу',
+        'Configure group': 'Настроить группу',
+        'Group settings': 'Настройки группы',
+        'Group name': 'Название группы',
+        'Group color': 'Цвет группы',
+        'Automatic color': 'Автоматический цвет',
+        'Group saved.': 'Группа сохранена.',
+        'Group created.': 'Группа создана.',
+        'Could not create group.': 'Не удалось создать группу.',
+        'Could not save group.': 'Не удалось сохранить группу.',
+        'Group name is required.': 'Название группы обязательно.',
+        'This group already exists.': 'Такая группа уже существует.',
+        'more devices hidden': 'ещё устройств скрыто',
         'Group deleted.': 'Группа удалена.',
         'Could not delete group.': 'Не удалось удалить группу.',
         'This group cannot be deleted while devices are assigned to it.': 'Эту группу нельзя удалить, пока к ней привязаны устройства.',
@@ -86,7 +98,7 @@ var translations = {
         'Auto-assigned to No restrictions': 'Автоматически добавлено в "Без ограничений"',
         'Parents': 'Родители',
         'Children': 'Дети',
-        'Child number 1': 'Ребёнок номер 1',
+        'Child number 1': 'Первый ребёнок',
         'TV / media': 'ТВ / медиа',
         'Guests': 'Гости',
         'No restrictions': 'Без ограничений',
@@ -168,6 +180,9 @@ var translations = {
         'Add device': 'Добавить устройство',
         'Add device to allowlist': 'Добавить устройство в белый список',
         'Add device to blocklist': 'Добавить устройство в чёрный список',
+        'Available devices': 'Доступные устройства',
+        'Select': 'Выбрать',
+        'No devices available to add.': 'Нет устройств, доступных для добавления.',
         'MAC address is required.': 'MAC-адрес обязателен.',
         'Enter a valid MAC address.': 'Введите корректный MAC-адрес.',
         'Device added to allowlist.': 'Устройство добавлено в белый список.',
@@ -196,7 +211,7 @@ var translations = {
         'Quick mode only collects candidates. A parent still presses Add for every device.': 'Быстрый режим только собирает кандидатов. Родитель всё равно нажимает "Добавить" для каждого устройства.',
         'Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API.': 'Устройства из чёрного списка не могут открывать интернет, LuCI, SSH и Sheepfold API.',
         'Blocklist changes require confirmation.': 'Изменения чёрного списка требуют подтверждения.',
-        'Emergency-useful sites for blocklisted devices are enabled and still do not open router access.': 'Включен доступ к "аварийно-полезным сайтам" для чёрного списка (а доступ к роутеру всё-равно закрыт).',
+        'Emergency-useful sites for blocklisted devices are enabled and still do not open router access.': 'Включен доступ к "аварийно-полезным сайтам" для чёрного списка (но доступ к роутеру всё-равно закрыт).',
         'Emergency-useful sites for blocklisted devices are disabled and still do not open router access.': 'Выключен доступ к "аварийно-полезным сайтам" для чёрного списка (это не открывает доступ к роутеру).',
         'Blocklist emergency-useful sites access': 'Доступ пользователей из чёрного списка к "аварийно-полезным сайтам"',
         'Allows blocklisted devices to access only sites added to the emergency-useful sites list. Router access remains blocked.': 'Разрешает устройствам из чёрного списка доступ только к сайтам добавленым в список аварийно-полезные сайты. Доступ к роутеру остаётся закрытым.',
@@ -268,6 +283,7 @@ var translations = {
         'Disabled': 'Выключено',
         'Messenger settings saved.': 'Настройки мессенджера сохранены.',
         'Could not save messenger settings.': 'Не удалось сохранить настройки мессенджера.',
+        'Stored on the router.': 'Хранится на роутере.',
         'VK community access token': 'Ключ доступа сообщества VK',
         'VK community ID': 'ID сообщества VK',
         'VK admin user ID': 'VK ID родителя-администратора',
@@ -279,10 +295,13 @@ var translations = {
         'Administrator accounts': 'Учётные записи администраторов',
         'Add administrator': 'Добавить администратора',
         'Adding a new administrator requires confirmation.': 'Добавление администратора требует подтверждения.',
+        'Administrator added.': 'Администратор добавлен.',
+        'Name and login are required.': 'Имя и логин обязательны.',
+        'This login is already used.': 'Этот логин уже используется.',
         'Admin name': 'Имя',
         'Login': 'Логин',
         'Admin devices': 'Админские устройства',
-        'Commands': 'Команды',
+        'Commands': 'Доступные команды',
         'show all devices': 'показать все устройства',
         'block internet': 'выключить интернет',
         'unblock internet': 'включить интернет',
@@ -297,13 +316,13 @@ var translations = {
         'Log cleared.': 'Журнал очищен.',
         'Could not clear log.': 'Не удалось очистить журнал.',
         'Log is empty.': 'Журнал пуст.',
-        'The log is stored in RAM and is cleared after router reboot. Export masks sensitive fields.': 'Журнал хранится в RAM и очищается после перезагрузки роутера. При экспорте чувствительные поля маскируются.',
+        'The log is stored in RAM and is cleared after router reboot. Export masks sensitive fields.': 'Журнал очищается после перезагрузки роутера.',
         'Cache file path': 'Путь к файлу кэша',
         'The cache file should be stored under /tmp/ so it does not wear router flash memory.': 'Файлу кэша лучше лежать внутри /tmp/, чтобы не изнашивал flash-память роутера.',
         'Cache file path saved.': 'Путь к файлу кэша сохранён.',
         'Could not save cache file path.': 'Не удалось сохранить путь к файлу кэша.',
         'Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen.': 'Путь к файлу кэша должен начинаться с /tmp/ и содержать только буквы, цифры, точку, слэш, подчёркивание и дефис.',
-        'Export masked': 'Экспорт с маскированием',
+        'Export masked': 'Экспорт',
         'Masked log export has been saved.': 'Экспорт журнала с маскированием сохранён.',
         'Owner granted +30 minutes to Child tablet': 'Владелец дал +30 минут устройству "Планшет ребёнка"',
         'New device detected: #4, DC:A6:32:EC:00:19, IP 192.168.1.98': 'Обнаружено новое устройство: #4, DC:A6:32:EC:00:19, IP 192.168.1.98',
@@ -389,6 +408,9 @@ var translations = {
         'Could not queue update request.': 'Не удалось создать заявку на обновление.',
         'Reboot router': 'Перезагрузить роутер',
         'Router reboot requires confirmation.': 'Перезагрузка роутера требует подтверждения.',
+        'Reboot router now?': 'Перезагрузить роутер сейчас?',
+        'Router reboot request queued.': 'Заявка на перезагрузку роутера создана.',
+        'Could not queue router reboot request.': 'Не удалось создать заявку на перезагрузку роутера.',
         'Sheepfold Family Internet Control': 'Sheepfold : контроль доступа в интернет для семьи',
         'Visual test build. Router rules and persistence are not active yet.': 'Визуальная тестовая сборка. Правила роутера и сохранение настроек пока не активны.',
         'Internet disabled': 'Интернет отключен',
@@ -504,6 +526,24 @@ function actionButton(label, tone, message) {
                         notify(message || T('This action is a visual prototype only.'), tone === 'danger' ? 'warning' : 'info');
                 }
         }, label);
+}
+
+function rebootRouterButton() {
+        return E('button', {
+                'class': 'sf-action sf-action-danger',
+                'click': function (ev) {
+                        ev.preventDefault();
+
+                        if (!window.confirm(T('Reboot router now?')))
+                                return;
+
+                        fs.write('/tmp/sheepfold/reboot.request', String(Date.now()) + '\n').then(function () {
+                                notify(T('Router reboot request queued.'), 'warning');
+                        }, function () {
+                                notify(T('Could not queue router reboot request.'), 'warning');
+                        });
+                }
+        }, T('Reboot router'));
 }
 
 function updateAppButton() {
@@ -1495,7 +1535,7 @@ function showPairingModal(device) {
 function showAdminSettingsModal(admin) {
         var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
-        var temporaryPassword = generatePairingCode();
+        var temporaryPassword = admin.temporaryPassword || generatePairingCode();
         var pairingPayload = 'SF1|h=' + routerAddress + '|p=' + port + '|u=' +
                 admin.login + '|c=' + temporaryPassword + '|ttl=600';
 
@@ -1532,6 +1572,68 @@ function pairingButton(device) {
         }, [adminDeviceIcon(), E('span', {}, T('Pairing'))]);
 }
 
+function listDeviceCanBeAdded(device, targetStatus) {
+        var mac = normalizeMac(device && device.mac);
+
+        if (!mac)
+                return false;
+
+        if (targetStatus === 'blocked')
+                return !isAdminDevice(device) &&
+                        device.status !== 'blocked' &&
+                        device.status !== 'allow' &&
+                        !macInSheepfoldList('allowlist', mac);
+
+        return device.status !== 'allow' &&
+                device.status !== 'blocked' &&
+                !macInSheepfoldList('allowlist', mac) &&
+                !macInSheepfoldList('blocklist', mac);
+}
+
+function listDeviceCandidateTable(targetStatus, onSelect) {
+        var rows = devices.filter(function (device) {
+                return listDeviceCanBeAdded(device, targetStatus);
+        });
+
+        if (!rows.length)
+                return E('div', { 'class': 'sf-note sf-note-warning' }, T('No devices available to add.'));
+
+        return E('div', { 'class': 'sf-add-device-candidates' }, [
+                E('strong', {}, T('Available devices')),
+                E('table', { 'class': 'sf-quick-table sf-add-device-table' }, [
+                        E('thead', {}, [
+                                E('tr', {}, [
+                                        E('th', {}, T('ID')),
+                                        E('th', {}, T('Device')),
+                                        E('th', {}, T('IP address')),
+                                        E('th', {}, T('MAC address')),
+                                        E('th', {}, T('Actions'))
+                                ])
+                        ]),
+                        E('tbody', {}, rows.map(function (device) {
+                                return E('tr', {}, [
+                                        E('td', {}, formattedDeviceDisplayId(device)),
+                                        E('td', {}, [
+                                                E('strong', {}, device.name || T('Unknown device')),
+                                                E('small', {}, device.group || T('Not configured'))
+                                        ]),
+                                        E('td', {}, device.ip || '-'),
+                                        E('td', { 'class': 'sf-mono' }, device.mac || '-'),
+                                        E('td', {}, [
+                                                E('button', {
+                                                        'class': 'sf-action sf-action-positive',
+                                                        'click': function (ev) {
+                                                                ev.preventDefault();
+                                                                onSelect(device);
+                                                        }
+                                                }, T('Select'))
+                                        ])
+                                ]);
+                        }))
+                ])
+        ]);
+}
+
 function showManualListDeviceModal(targetStatus) {
         var isAllowlist = targetStatus === 'allow';
         var title = isAllowlist ? T('Add device to allowlist') : T('Add device to blocklist');
@@ -1539,6 +1641,13 @@ function showManualListDeviceModal(targetStatus) {
         var nameField = inputControl(T('Device name'), '');
         var ipField = inputControl(T('IP address'), '');
         var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
+        var candidateTable = listDeviceCandidateTable(targetStatus, function (device) {
+                macField.input.value = device.mac || '';
+                nameField.input.value = device.name || '';
+                ipField.input.value = device.ip || '';
+                conflictNote.hidden = true;
+                conflictNote.textContent = '';
+        });
 
         function showError(message) {
                 conflictNote.textContent = message;
@@ -1552,7 +1661,8 @@ function showManualListDeviceModal(targetStatus) {
                                 macField.node,
                                 nameField.node,
                                 ipField.node
-                        ])
+                        ]),
+                        candidateTable
                 ]),
                 E('div', { 'class': 'right sf-modal-actions' }, [
                         E('button', {
@@ -1950,6 +2060,13 @@ function formattedDeviceDisplayId(device) {
         return '#' + deviceDisplayId(device);
 }
 
+function normalizeGroupName(groupName) {
+        if (groupName === 'Ребёнок номер 1' || groupName === 'Child number 1')
+                return T('Child number 1');
+
+        return groupName;
+}
+
 function deviceById(id) {
         for (var i = 0; i < devices.length; i++) {
                 if (devices[i].id === id)
@@ -1957,6 +2074,18 @@ function deviceById(id) {
         }
 
         return null;
+}
+
+function isAdminDevice(device) {
+        if (!device)
+                return false;
+
+        if (device.adminDevice)
+                return true;
+
+        return admins.some(function (admin) {
+                return (admin.deviceIds || []).indexOf(device.id) !== -1;
+        });
 }
 
 function idNumber(value) {
@@ -1995,6 +2124,332 @@ function adminDeviceList(admin) {
                         E('span', {}, device.name)
                 ]);
         }));
+}
+
+function hashString(text) {
+        var hash = 0;
+
+        String(text || '').split('').forEach(function (char) {
+                hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
+        });
+
+        return Math.abs(hash);
+}
+
+function groupAutoColor(groupName) {
+        var palette = groupColorPalette();
+
+        return palette[hashString(groupName) % palette.length];
+}
+
+function groupColorPalette() {
+        return [
+                '#e8f4ef',
+                '#eef2ff',
+                '#fff4dd',
+                '#fceeee',
+                '#edf7fb',
+                '#f5f0ff',
+                '#eef8e7',
+                '#f8f1e8',
+                '#eaf3f8'
+        ];
+}
+
+function validGroupColor(color) {
+        return /^#[0-9a-f]{6}$/i.test(String(color || ''));
+}
+
+function usedGroupColors(exceptGroupName) {
+        var used = {};
+
+        safeUciSections('sheepfold', 'group').forEach(function (section) {
+                var name = normalizeGroupName(section.name || section['.name']);
+                var color = String(section.color || '').toLowerCase();
+
+                if (name === exceptGroupName || !validGroupColor(color))
+                        return;
+
+                used[color] = true;
+        });
+
+        return used;
+}
+
+function nextAvailableGroupColor(groupName, exceptGroupName) {
+        var used = usedGroupColors(exceptGroupName);
+        var palette = groupColorPalette();
+        var fallback = groupAutoColor(groupName);
+
+        for (var i = 0; i < palette.length; i++) {
+                if (!used[palette[i].toLowerCase()])
+                        return palette[i];
+        }
+
+        return fallback;
+}
+
+function groupColor(groupName, section) {
+        return section && validGroupColor(section.color) ? section.color : nextAvailableGroupColor(groupName, groupName);
+}
+
+function groupSectionName(groupName) {
+        return 'group_' + hashString(groupName).toString(16);
+}
+
+function ensureGroupSection(groupName, section) {
+        if (section && section['.name'])
+                return section['.name'];
+
+        return ensureSection('sheepfold', 'group', groupSectionName(groupName));
+}
+
+function showGroupSettingsModal(groupName, section, onSave) {
+        var nameField = inputControl(T('Group name'), groupName, section && section.protected === '1' ? { 'readonly': 'readonly' } : {});
+        var colorField = inputControl(T('Group color'), groupColor(groupName, section), { 'type': 'color' });
+        var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
+
+        function showError(message) {
+                conflictNote.textContent = message;
+                conflictNote.hidden = false;
+        }
+
+        ui.showModal(T('Group settings'), [
+                E('div', { 'class': 'sf-device-editor' }, [
+                        conflictNote,
+                        E('div', { 'class': 'sf-grid two' }, [
+                                nameField.node,
+                                colorField.node
+                        ])
+                ]),
+                E('div', { 'class': 'right sf-modal-actions' }, [
+                        E('button', {
+                                'class': 'btn cbi-button',
+                                'click': ui.hideModal
+                        }, T('Cancel')),
+                        E('button', {
+                                'class': 'btn cbi-button cbi-button-positive',
+                                'click': function () {
+                                        var oldName = groupName;
+                                        var newName = normalizeGroupName(nameField.input.value.trim());
+                                        var color = colorField.input.value;
+                                        var sectionName;
+
+                                        conflictNote.hidden = true;
+                                        conflictNote.textContent = '';
+
+                                        if (!newName) {
+                                                showError(T('Group name is required.'));
+                                                return;
+                                        }
+
+                                        if (newName !== oldName && safeUciSections('sheepfold', 'group').some(function (item) {
+                                                return normalizeGroupName(item.name || item['.name']) === newName;
+                                        })) {
+                                                showError(T('This group already exists.'));
+                                                return;
+                                        }
+
+                                        if (!validGroupColor(color))
+                                                color = groupAutoColor(newName);
+
+                                        sectionName = ensureGroupSection(oldName, section);
+                                        uci.set('sheepfold', sectionName, 'name', newName);
+                                        uci.set('sheepfold', sectionName, 'color', color);
+                                        if (!section)
+                                                uci.set('sheepfold', sectionName, 'protected', '0');
+
+                                        safeUciSections('sheepfold', 'device').forEach(function (deviceSection) {
+                                                if (normalizeGroupName(deviceSection.group) === oldName)
+                                                        uci.set('sheepfold', deviceSection['.name'], 'group', newName);
+                                        });
+
+                                        saveUciChanges(['sheepfold']).then(function () {
+                                                notify(T('Group saved.'), 'info');
+                                                if (onSave)
+                                                        onSave();
+                                                ui.hideModal();
+                                                window.setTimeout(function () {
+                                                        window.location.reload();
+                                                }, 700);
+                                        }, function () {
+                                                notify(T('Could not save group.'), 'warning');
+                                        });
+                                }
+                        }, T('Save'))
+                ])
+        ]);
+}
+
+function showAddGroupModal(existingNames) {
+        var nameField = inputControl(T('Group name'), '');
+        var colorField = inputControl(T('Group color'), nextAvailableGroupColor(T('Custom')), { 'type': 'color' }, T('Automatic color'));
+        var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
+
+        function showError(message) {
+                conflictNote.textContent = message;
+                conflictNote.hidden = false;
+        }
+
+        ui.showModal(T('Add group'), [
+                E('div', { 'class': 'sf-device-editor' }, [
+                        conflictNote,
+                        E('div', { 'class': 'sf-grid two' }, [
+                                nameField.node,
+                                colorField.node
+                        ])
+                ]),
+                E('div', { 'class': 'right sf-modal-actions' }, [
+                        E('button', {
+                                'class': 'btn cbi-button',
+                                'click': ui.hideModal
+                        }, T('Cancel')),
+                        E('button', {
+                                'class': 'btn cbi-button cbi-button-positive',
+                                'click': function () {
+                                        var groupName = normalizeGroupName(nameField.input.value.trim());
+                                        var color = colorField.input.value;
+                                        var sectionName;
+
+                                        conflictNote.hidden = true;
+                                        conflictNote.textContent = '';
+
+                                        if (!groupName) {
+                                                showError(T('Group name is required.'));
+                                                return;
+                                        }
+
+                                        if (existingNames[groupName]) {
+                                                showError(T('This group already exists.'));
+                                                return;
+                                        }
+
+                                        if (!validGroupColor(color))
+                                                color = nextAvailableGroupColor(groupName);
+
+                                        sectionName = ensureGroupSection(groupName, null);
+                                        uci.set('sheepfold', sectionName, 'name', groupName);
+                                        uci.set('sheepfold', sectionName, 'color', color);
+                                        uci.set('sheepfold', sectionName, 'protected', '0');
+                                        uci.set('sheepfold', sectionName, 'auto_assignable', '0');
+
+                                        saveUciChanges(['sheepfold']).then(function () {
+                                                notify(T('Group created.'), 'info');
+                                                ui.hideModal();
+                                                window.setTimeout(function () {
+                                                        window.location.reload();
+                                                }, 700);
+                                        }, function () {
+                                                notify(T('Could not create group.'), 'warning');
+                                        });
+                                }
+                        }, T('Save'))
+                ])
+        ]);
+}
+
+function nextAdminId() {
+        var next = admins.reduce(function (max, admin) {
+                return Math.max(max, idNumber(admin.id));
+        }, 0) + 1;
+
+        return 'A-' + String(next).padStart(4, '0');
+}
+
+function adminLoginExists(login) {
+        var normalized = String(login || '').trim().toLowerCase();
+
+        return admins.some(function (admin) {
+                return String(admin.login || '').trim().toLowerCase() === normalized;
+        });
+}
+
+function adminTableRow(admin) {
+        var devicesCell = E('div', {}, adminDeviceList(admin));
+
+        return E('div', {
+                'class': 'sf-admin-row',
+                'data-sort-name': admin.name || '',
+                'data-sort-login': admin.login || ''
+        }, [
+                E('div', {}, [
+                        E('strong', {}, admin.name)
+                ]),
+                E('div', { 'class': 'sf-mono' }, admin.login),
+                devicesCell,
+                E('div', { 'class': 'sf-row-actions' }, [
+                        iconButton(T('Configure'), 'gear', 'neutral', function () {
+                                showAdminSettingsModal(admin);
+                        }),
+                        iconButton(T('Bind devices'), 'link', 'neutral', function () {
+                                showAdminDeviceBindingModal(admin, function () {
+                                        devicesCell.replaceChildren(adminDeviceList(admin));
+                                });
+                        })
+                ])
+        ]);
+}
+
+function showAddAdministratorModal(onAdd) {
+        var nameField = inputControl(T('Admin name'), '');
+        var loginField = inputControl(T('Login'), '');
+        var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
+
+        function showError(message) {
+                conflictNote.textContent = message;
+                conflictNote.hidden = false;
+        }
+
+        ui.showModal(T('Add administrator'), [
+                E('div', { 'class': 'sf-device-editor' }, [
+                        conflictNote,
+                        E('div', { 'class': 'sf-grid two' }, [
+                                nameField.node,
+                                loginField.node
+                        ])
+                ]),
+                E('div', { 'class': 'right sf-modal-actions' }, [
+                        E('button', {
+                                'class': 'btn cbi-button',
+                                'click': ui.hideModal
+                        }, T('Cancel')),
+                        E('button', {
+                                'class': 'btn cbi-button cbi-button-positive',
+                                'click': function () {
+                                        var name = nameField.input.value.trim();
+                                        var login = loginField.input.value.trim();
+                                        var admin;
+
+                                        conflictNote.hidden = true;
+                                        conflictNote.textContent = '';
+
+                                        if (!name || !login) {
+                                                showError(T('Name and login are required.'));
+                                                return;
+                                        }
+
+                                        if (adminLoginExists(login)) {
+                                                showError(T('This login is already used.'));
+                                                return;
+                                        }
+
+                                        admin = {
+                                                id: nextAdminId(),
+                                                name: name,
+                                                login: login,
+                                                deviceIds: [],
+                                                temporaryPassword: generatePairingCode()
+                                        };
+
+                                        admins.push(admin);
+                                        if (onAdd)
+                                                onAdd(admin);
+                                        notify(T('Administrator added.'), 'info');
+                                        ui.hideModal();
+                                }
+                        }, T('Save'))
+                ])
+        ]);
 }
 
 function showAdminDeviceBindingModal(admin, onSave) {
@@ -2260,6 +2715,8 @@ function deviceTable(rows, options) {
         options = options || {};
 
         var tableRows = rows.map(function (device, index) {
+                var adminDevice = isAdminDevice(device);
+
                 return E('div', {
                         'class': 'sf-device-row',
                         'data-sort-id': String(index + 1),
@@ -2271,9 +2728,9 @@ function deviceTable(rows, options) {
                         E('div', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
                         E('div', { 'class': 'sf-device-name' }, [
                                          E('strong', {}, [
-                                                 device.adminDevice ? adminCrownIcon() : '',
+                                                 adminDevice ? adminCrownIcon() : '',
                                                  E('span', {}, device.name)
-                                         ]),
+                                          ]),
                                          E('small', {}, device.note)
                           ]),
                         E('div', { 'class': 'sf-device-type-cell' }, deviceTypeIcon(device.deviceType)),
@@ -2288,7 +2745,7 @@ function deviceTable(rows, options) {
                                 iconButton(T('Configure'), 'gear', 'neutral', function () {
                                         showDeviceSettingsModal(device);
                                 }),
-                                options.compact || device.adminDevice || device.status === 'allow' || device.status === 'blocked' ?
+                                options.compact || adminDevice || device.status === 'allow' || device.status === 'blocked' ?
                                         '' :
                                         actionButton(T('+30 min'), 'positive', T('Temporary access would require confirmation.'))
                         ])
@@ -2728,13 +3185,13 @@ function messengerField(label, option, placeholder, hint, secret) {
 
 function messengerSettingsBox() {
         var activeValue = safeUciGet('sheepfold', 'global', 'active_messenger', 'none');
-        var vkFields = E('div', { 'class': 'sf-messenger-fields', 'hidden': activeValue === 'vk' ? null : 'hidden' }, [
+        var vkFields = E('div', { 'class': 'sf-messenger-fields' }, [
                 E('div', { 'class': 'sf-note' }, T('Create a VK community, enable messages, create an access token for community messages, then enter the community ID and the VK user ID of the parent whose commands are allowed.')),
                 messengerField(T('VK community access token'), 'vk_access_token', '', T('Stored on the router.'), true),
                 messengerField(T('VK community ID'), 'vk_community_id', 'club123456789', '', false),
                 messengerField(T('VK admin user ID'), 'vk_admin_user_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false)
         ]);
-        var telegramFields = E('div', { 'class': 'sf-messenger-fields', 'hidden': activeValue === 'telegram' ? null : 'hidden' }, [
+        var telegramFields = E('div', { 'class': 'sf-messenger-fields' }, [
                 E('div', { 'class': 'sf-note' }, T('Create a bot through BotFather, paste the bot token, send any message to the bot from the parent account, then enter that chat ID here.')),
                 messengerField(T('Telegram bot token'), 'telegram_bot_token', '123456:ABC...', T('Stored on the router.'), true),
                 messengerField(T('Telegram admin chat ID'), 'telegram_admin_chat_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false)
@@ -2746,11 +3203,11 @@ function messengerSettingsBox() {
 
                         saveGlobalOption('active_messenger', nextValue).then(function () {
                                 activeValue = nextValue;
-                                vkFields.hidden = activeValue === 'vk' ? null : 'hidden';
-                                telegramFields.hidden = activeValue === 'telegram' ? null : 'hidden';
+                                setMessengerFieldsVisibility(activeValue);
                                 notify(T('Messenger settings saved.'), 'info');
                         }, function () {
                                 ev.currentTarget.value = activeValue;
+                                setMessengerFieldsVisibility(activeValue);
                                 notify(T('Could not save messenger settings.'), 'warning');
                         });
                 }
@@ -2761,6 +3218,20 @@ function messengerSettingsBox() {
         ].map(function (item) {
                 return E('option', { 'value': item[0], 'selected': item[0] === activeValue ? 'selected' : null }, item[1]);
         }));
+
+        function setMessengerFieldsVisibility(value) {
+                if (value === 'vk')
+                        vkFields.removeAttribute('hidden');
+                else
+                        vkFields.setAttribute('hidden', 'hidden');
+
+                if (value === 'telegram')
+                        telegramFields.removeAttribute('hidden');
+                else
+                        telegramFields.setAttribute('hidden', 'hidden');
+        }
+
+        setMessengerFieldsVisibility(activeValue);
 
         return E('div', { 'class': 'sf-box' }, [
                 E('label', { 'class': 'sf-field sf-field-wide' }, [
@@ -3353,7 +3824,7 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                                         source === 'arp' ? T('ARP/neighbor entry') :
                                                 T('Static DHCP lease');
                         }).join(', '),
-                        group: configured && configured.group ? configured.group : T('Not configured'),
+                        group: configured && configured.group ? normalizeGroupName(configured.group) : T('Not configured'),
                         deviceType: deviceType,
                         detectionConfidence: configured && configured.detection_confidence,
                         detectionReason: configured && configured.detection_reason,
@@ -3879,7 +4350,7 @@ return view.extend({
                 var groupNames;
 
                 safeUciSections('sheepfold', 'group').forEach(function (section) {
-                        var groupName = section.name || section['.name'];
+                        var groupName = normalizeGroupName(section.name || section['.name']);
 
                         if (groupName && !grouped[groupName])
                                 grouped[groupName] = [];
@@ -3895,6 +4366,8 @@ return view.extend({
                 devices.forEach(function (device) {
                         if (!device.group)
                                 return;
+
+                        device.group = normalizeGroupName(device.group);
 
                         if (!grouped[device.group])
                                 grouped[device.group] = [];
@@ -3939,33 +4412,61 @@ return view.extend({
                         return left.localeCompare(right);
                 });
 
+                function groupCard(groupName) {
+                        var section = groupSections[groupName];
+                        var groupDevices = grouped[groupName] || [];
+                        var visibleDevices = groupDevices.slice(0, 5);
+                        var hiddenCount = Math.max(0, groupDevices.length - visibleDevices.length);
+
+                        return E('div', {
+                                'class': 'sf-box sf-group-box',
+                                'style': 'background-color: ' + groupColor(groupName, section) + ';'
+                        }, [
+                                E('div', { 'class': 'sf-group-head' }, [
+                                        E('div', {}, [
+                                                E('h4', { 'class': 'sf-group-title' }, groupName),
+                                                E('strong', { 'class': 'sf-group-count' }, groupDevices.length + ' ' + T('Devices'))
+                                        ]),
+                                        E('div', { 'class': 'sf-row-actions' }, [
+                                                iconButton(T('Configure group'), 'gear', 'neutral', function () {
+                                                        showGroupSettingsModal(groupName, section);
+                                                }),
+                                                iconButton(T('Delete group'), 'trash', 'danger', function () {
+                                                        deleteGroup(groupName);
+                                                })
+                                        ])
+                                ]),
+                                visibleDevices.length ? E('div', { 'class': 'sf-group-device-list' }, visibleDevices.map(function (device) {
+                                        return E('div', {}, [
+                                                E('span', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
+                                                E('span', {}, device.name)
+                                        ]);
+                                }).concat(hiddenCount ? [
+                                        E('div', { 'class': 'sf-group-device-more' }, '+ ' + hiddenCount + ' ' + T('more devices hidden'))
+                                ] : [])) : E('div', { 'class': 'sf-muted' }, T('No devices'))
+                        ]);
+                }
+
                 return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
                                         E('p', {}, T('Groups collect devices so schedules and access rules can be applied to several devices at once.'))
                                 ]),
-                                actionButton(T('Add group'), 'positive', T('Group editor is not implemented in this visual test build.'))
+                                E('button', {
+                                        'class': 'sf-action sf-action-positive',
+                                        'click': function (ev) {
+                                                var existingNames = {};
+
+                                                ev.preventDefault();
+                                                groupNames.forEach(function (groupName) {
+                                                        existingNames[groupName] = true;
+                                                });
+                                                showAddGroupModal(existingNames);
+                                        }
+                                }, T('Add group'))
                         ]),
                         groupNames.length ?
-                                E('div', { 'class': 'sf-grid two' }, groupNames.map(function (groupName) {
-                                        return E('div', { 'class': 'sf-box sf-group-box' }, [
-                                                E('h4', {}, groupName),
-                                                E('strong', {}, grouped[groupName].length + ' ' + T('Devices')),
-                                                grouped[groupName].length ? E('div', { 'class': 'sf-group-device-list' }, grouped[groupName].map(function (device) {
-                                                        return E('div', {}, [
-                                                                E('span', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
-                                                                E('span', {}, device.name)
-                                                        ]);
-                                                })) : E('div', { 'class': 'sf-muted' }, T('No devices')),
-                                                E('button', {
-                                                        'class': 'sf-action sf-action-danger sf-group-delete',
-                                                        'click': function (ev) {
-                                                                ev.preventDefault();
-                                                                deleteGroup(groupName);
-                                                        }
-                                                }, T('Delete group'))
-                                        ]);
-                                })) :
+                                E('div', { 'class': 'sf-grid two' }, groupNames.map(groupCard)) :
                                 E('div', { 'class': 'sf-note sf-note-warning' }, T('No groups yet. Assign devices to groups in device settings.'))
                 ]);
         },
@@ -4073,45 +4574,31 @@ return view.extend({
         },
 
         renderAdmins: function (embedded) {
+                var table = E('div', { 'class': 'sf-admin-table' }, [
+                        E('div', { 'class': 'sf-admin-row sf-admin-head' }, [
+                                E('div', {}, adminSortHeader(T('Admin name'), 'name')),
+                                E('div', {}, adminSortHeader(T('Login'), 'login')),
+                                E('div', {}, T('Admin devices')),
+                                E('div', {}, T('Actions'))
+                        ])
+                ].concat(admins.map(adminTableRow)));
+
                 return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
                                         E('h3', {}, T('Administrator accounts'))
                                 ]),
-                                actionButton(T('Add administrator'), 'positive', T('Adding a new administrator requires confirmation.'))
+                                E('button', {
+                                        'class': 'sf-action sf-action-positive',
+                                        'click': function (ev) {
+                                                ev.preventDefault();
+                                                showAddAdministratorModal(function (admin) {
+                                                        table.appendChild(adminTableRow(admin));
+                                                });
+                                        }
+                                }, T('Add administrator'))
                         ]),
-                        E('div', { 'class': 'sf-admin-table' }, [
-                                E('div', { 'class': 'sf-admin-row sf-admin-head' }, [
-                                        E('div', {}, adminSortHeader(T('Admin name'), 'name')),
-                                        E('div', {}, adminSortHeader(T('Login'), 'login')),
-                                        E('div', {}, T('Admin devices')),
-                                        E('div', {}, T('Actions'))
-                                ])
-                        ].concat(admins.map(function (admin) {
-                                var devicesCell = E('div', {}, adminDeviceList(admin));
-
-                                return E('div', {
-                                        'class': 'sf-admin-row',
-                                        'data-sort-name': admin.name || '',
-                                        'data-sort-login': admin.login || ''
-                                }, [
-                                        E('div', {}, [
-                                                E('strong', {}, admin.name)
-                                        ]),
-                                        E('div', { 'class': 'sf-mono' }, admin.login),
-                                        devicesCell,
-                        E('div', { 'class': 'sf-row-actions' }, [
-                                                iconButton(T('Configure'), 'gear', 'neutral', function () {
-                                                        showAdminSettingsModal(admin);
-                                                }),
-                                                iconButton(T('Bind devices'), 'link', 'neutral', function () {
-                                                        showAdminDeviceBindingModal(admin, function () {
-                                                                devicesCell.replaceChildren(adminDeviceList(admin));
-                                                        });
-                                                })
-                                        ])
-                                ]);
-                        })))
+                        table
                 ]);
         },
 
@@ -4121,7 +4608,7 @@ return view.extend({
                                 E('div', {}, [
                                         E('p', {}, T('The log is stored in RAM and is cleared after router reboot. Export masks sensitive fields.'))
                                 ]),
-                                E('div', { 'class': 'sf-toolbar' }, [
+                                E('div', { 'class': 'sf-toolbar sf-log-toolbar' }, [
                                         E('button', {
                                                 'class': 'sf-action sf-action-danger',
                                                 'click': function (ev) {
@@ -4197,7 +4684,7 @@ return view.extend({
                                 actionButton(T('Import all settings and user list'), 'neutral', T('Import requires confirmation.')),
                                 actionButton(T('Export all settings and user list'), 'neutral', T('Default export is readable JSON without secrets.')),
                                 updateAppButton(),
-                                actionButton(T('Reboot router'), 'danger', T('Router reboot requires confirmation.'))
+                                rebootRouterButton()
                         ])
                 ]);
         },
@@ -4262,7 +4749,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-63';
+                var assetVersion = '0.1.0-70';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;

@@ -229,7 +229,28 @@
 
 .sf-group-box {
         display: grid;
-        gap: 8px;
+        gap: 10px;
+        border-color: rgba(91, 112, 131, 0.22);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.44);
+}
+
+.sf-group-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+}
+
+.sf-group-title {
+        margin: 0 0 3px;
+        color: #0f2942;
+        font-size: 18px;
+        font-weight: 800;
+}
+
+.sf-group-count {
+        color: #28435e;
+        font-size: 13px;
 }
 
 .sf-group-device-list {
@@ -244,6 +265,11 @@
         display: flex;
         align-items: center;
         gap: 8px;
+}
+
+.sf-group-device-more {
+        color: var(--sf-muted);
+        font-weight: 700;
 }
 
 .sf-form-row {
@@ -1251,6 +1277,39 @@
 .sf-quick-candidates-wrap {
         display: grid;
         gap: 8px;
+}
+
+.sf-add-device-candidates {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+        max-width: 100%;
+        overflow-x: auto;
+}
+
+.sf-quick-table.sf-add-device-table th:nth-child(1),
+.sf-quick-table.sf-add-device-table td:nth-child(1) {
+        width: 8%;
+}
+
+.sf-quick-table.sf-add-device-table th:nth-child(2),
+.sf-quick-table.sf-add-device-table td:nth-child(2) {
+        width: 28%;
+}
+
+.sf-quick-table.sf-add-device-table th:nth-child(3),
+.sf-quick-table.sf-add-device-table td:nth-child(3) {
+        width: 18%;
+}
+
+.sf-quick-table.sf-add-device-table th:nth-child(4),
+.sf-quick-table.sf-add-device-table td:nth-child(4) {
+        width: 26%;
+}
+
+.sf-quick-table.sf-add-device-table th:nth-child(5),
+.sf-quick-table.sf-add-device-table td:nth-child(5) {
+        width: 20%;
 }
 
 .sf-quick-table {

@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=68
+PKG_RELEASE:=70
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -65,7 +65,7 @@ uci -q set sheepfold.no_restrictions.protected='1'
 uci -q set sheepfold.no_restrictions.auto_assignable='1'
 uci -q set sheepfold.no_restrictions.description='Trusted home infrastructure devices that should not be limited unless they are blocklisted'
 uci -q get sheepfold.child_1 >/dev/null || uci -q set sheepfold.child_1='group'
-uci -q set sheepfold.child_1.name='Ребёнок номер 1'
+	uci -q set sheepfold.child_1.name='Первый ребёнок'
 uci -q set sheepfold.child_1.protected='0'
 uci -q set sheepfold.child_1.auto_assignable='0'
 uci -q set sheepfold.child_1.description='Default first child group'

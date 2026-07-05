@@ -8,6 +8,7 @@ UPDATER="/usr/libexec/sheepfold/sheepfold-updater"
 ROUTER_CONTROL="/usr/libexec/sheepfold/sheepfold-router-control"
 LEASES_FILE="/tmp/dhcp.leases"
 UPDATE_REQUEST_FILE="/tmp/sheepfold/update.request"
+REBOOT_REQUEST_FILE="/tmp/sheepfold/reboot.request"
 LED_ALERT_ACK_FILE="/tmp/sheepfold/new-device-alert.ack"
 
 init_ram_log() {
@@ -33,6 +34,15 @@ handle_update_request() {
         fi
 }
 
+handle_reboot_request() {
+        [ -e "$REBOOT_REQUEST_FILE" ] || return 0
+        rm -f "$REBOOT_REQUEST_FILE"
+
+        sync
+        sleep 2
+        reboot
+}
+
 handle_router_control() {
         [ -x "$ROUTER_CONTROL" ] || return 0
 
@@ -54,6 +64,7 @@ case "$COMMAND" in
                 LAST_FULL_SCAN=0
                 while :; do
                         handle_update_request
+                        handle_reboot_request
                         handle_router_control
 
                         DETECTION_MODE="$(uci -q get sheepfold.global.detection_mode 2>/dev/null || printf full)"
@@ -93,6 +104,7 @@ case "$COMMAND" in
         reload)
                 init_ram_log
                 handle_update_request
+                handle_reboot_request
                 handle_router_control
                 [ -x "$DETECTOR" ] && "$DETECTOR" scan >/dev/null 2>&1 || true
                 echo "Sheepfold reload complete"

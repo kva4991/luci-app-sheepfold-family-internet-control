@@ -133,7 +133,7 @@ uci -q set sheepfold.no_restrictions.protected='1'
 uci -q set sheepfold.no_restrictions.auto_assignable='1'
 uci -q set sheepfold.no_restrictions.description='Trusted home infrastructure devices that should not be limited unless they are blocklisted'
 uci -q get sheepfold.child_1 >/dev/null || uci -q set sheepfold.child_1='group'
-uci -q set sheepfold.child_1.name='Ребёнок номер 1'
+uci -q set sheepfold.child_1.name='Первый ребёнок'
 uci -q set sheepfold.child_1.protected='0'
 uci -q set sheepfold.child_1.auto_assignable='0'
 uci -q set sheepfold.child_1.description='Default first child group'
@@ -187,6 +187,31 @@ def write_data_tar(path: Path) -> None:
         add_tree(tar, PKG_DIR / "htdocs", "www")
 
 
+def ar_header(name: str, data: bytes) -> bytes:
+    if len(name) > 15:
+        raise RuntimeError(f"ar member name is too long: {name}")
+
+    return (
+        f"{name + '/':<16}"
+        f"{int(time.time()):<12}"
+        f"{0:<6}"
+        f"{0:<6}"
+        f"{0o644:<8o}"
+        f"{len(data):<10}"
+        "`\n"
+    ).encode("ascii")
+
+
+def write_ipk_ar(path: Path, members: list[tuple[str, bytes]]) -> None:
+    with path.open("wb") as handle:
+        handle.write(b"!<arch>\n")
+        for name, data in members:
+            handle.write(ar_header(name, data))
+            handle.write(data)
+            if len(data) % 2:
+                handle.write(b"\n")
+
+
 def resolve_downloads_dir(value: str | None) -> Path | None:
     if value:
         return Path(value)
@@ -222,10 +247,11 @@ def main() -> None:
     write_data_tar(data_tar)
     write_control_tar(control_tar, version, release)
 
-    with tarfile.open(ipk, "w:gz", format=tarfile.GNU_FORMAT) as tar:
-        add_bytes(tar, "./debian-binary", debian_binary.read_bytes(), 0o644)
-        add_bytes(tar, "./data.tar.gz", data_tar.read_bytes(), 0o644)
-        add_bytes(tar, "./control.tar.gz", control_tar.read_bytes(), 0o644)
+    write_ipk_ar(ipk, [
+        ("debian-binary", debian_binary.read_bytes()),
+        ("control.tar.gz", control_tar.read_bytes()),
+        ("data.tar.gz", data_tar.read_bytes()),
+    ])
 
     print(ipk)
 
