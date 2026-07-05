@@ -174,13 +174,12 @@ var translations = {
         'Allowlist request QR': 'QR запроса в белый список',
         'After connecting to Wi-Fi, scan this QR to request allowlist access from this phone.': 'После подключения к Wi-Fi отсканируйте этот QR с телефона, чтобы запросить добавление в белый список.',
         'One-time allowlist link': 'Одноразовая ссылка добавления',
-        'Router backend must consume this one-time token, detect the phone MAC from router-side data, and reject reuse.': 'Backend роутера должен сжечь этот одноразовый токен, определить MAC телефона по данным роутера и отклонять повторное использование.',
         'Newly connected devices': 'Только что подключившиеся устройства',
-        'Connection allowed': 'Разрешено подключение',
-        'Connection window expired': 'Окно подключения истекло',
+        'Adding allowed': 'Разрешено добавление',
+        'Adding window expired': 'Время добавления истекло',
         'Click to restart the 30 second window.': 'Нажмите, чтобы снова запустить окно на 30 секунд.',
-        'There are no newly connected devices yet. Keep this window open after the phone joins Wi-Fi.': 'Пока нет только что подключившихся устройств. Оставьте это окно открытым после подключения телефона к Wi-Fi.',
         'Connected after quick add started.': 'Подключились после запуска быстрого добавления.',
+        'Seen': 'Обнаружено',
         'seconds': 'секунд',
         'seconds ago': 'секунд назад',
         'minute ago': 'минуту назад',
@@ -1304,30 +1303,38 @@ function quickCandidateAgeText(ageMs) {
         return minutes + ' ' + T('minutes ago');
 }
 
-function renderQuickCandidate(candidate, onAdd) {
-        return E('div', { 'class': 'sf-quick-candidate' }, [
-                E('div', { 'class': 'sf-quick-candidate-main' }, [
-                        E('strong', {}, candidate.device.name),
+function renderQuickCandidateRow(candidate, onAdd) {
+        return E('tr', {}, [
+                E('td', {}, [
+                        E('strong', {}, candidate.device.name || '-'),
                         E('small', {}, T('Connected after quick add started.'))
                 ]),
-                E('div', { 'class': 'sf-quick-candidate-data' }, [
-                        E('span', {}, [
-                                E('b', {}, 'IP'),
-                                E('code', {}, candidate.device.ip || '-')
-                        ]),
-                        E('span', {}, [
-                                E('b', {}, 'MAC'),
-                                E('code', {}, candidate.device.mac || '-')
-                        ]),
-                        E('small', {}, quickCandidateAgeText(Date.now() - candidate.firstSeenAt))
-                ]),
-                E('button', {
+                E('td', {}, candidate.device.ip || '-'),
+                E('td', {}, candidate.device.mac || '-'),
+                E('td', {}, quickCandidateAgeText(Date.now() - candidate.firstSeenAt)),
+                E('td', {}, E('button', {
                         'class': 'sf-action sf-action-positive',
+                        'disabled': candidate.added ? 'disabled' : null,
                         'click': function (ev) {
                                 ev.preventDefault();
-                                onAdd(candidate.device, ev.currentTarget);
+                                onAdd(candidate, ev.currentTarget);
                         }
-                }, T('Add'))
+                }, candidate.added ? T('Candidate added to allowlist. Save changes to apply.') : T('Add')))
+        ]);
+}
+
+function renderQuickCandidateTable(candidates, onAdd) {
+        return E('table', { 'class': 'sf-quick-table' }, [
+                E('thead', {}, E('tr', {}, [
+                        E('th', {}, T('Device')),
+                        E('th', {}, 'IP'),
+                        E('th', {}, 'MAC'),
+                        E('th', {}, T('Seen')),
+                        E('th', {}, T('Actions'))
+                ])),
+                E('tbody', {}, candidates.map(function (candidate) {
+                        return renderQuickCandidateRow(candidate, onAdd);
+                }))
         ]);
 }
 
@@ -1531,6 +1538,8 @@ function showQuickAllowlistModal() {
         var baselineKeys = {};
         var candidateMap = {};
         var candidatesNode = E('div', { 'class': 'sf-quick-candidates' });
+        var permitTitle;
+        var permitHint;
 
         devices.forEach(function (device) {
                 baselineKeys[quickCandidateKey(device)] = true;
@@ -1547,19 +1556,11 @@ function showQuickAllowlistModal() {
         function renderCandidates() {
                 var candidates = candidateList();
 
-                if (!candidates.length) {
-                        candidatesNode.replaceChildren(E('div', {
-                                'class': 'sf-empty'
-                        }, T('There are no newly connected devices yet. Keep this window open after the phone joins Wi-Fi.')));
-                        return;
-                }
-
-                candidatesNode.replaceChildren.apply(candidatesNode, candidates.map(function (candidate) {
-                        return renderQuickCandidate(candidate, function (device, button) {
-                                updateMacList('allowlist', device.mac, true);
-                                button.disabled = true;
-                                button.textContent = T('Candidate added to allowlist. Save changes to apply.');
-                        });
+                candidatesNode.replaceChildren(renderQuickCandidateTable(candidates, function (candidate, button) {
+                        updateMacList('allowlist', candidate.device.mac, true);
+                        candidate.added = true;
+                        button.disabled = true;
+                        button.textContent = T('Candidate added to allowlist. Save changes to apply.');
                 }));
         }
 
@@ -1594,10 +1595,11 @@ function showQuickAllowlistModal() {
                         window.clearInterval(refreshTimer);
 
                 permitButton.classList.remove('expired');
+                permitTitle.textContent = T('Adding allowed');
+                permitHint.textContent = T('Click to restart the 30 second window.');
                 windowStartedAt = Date.now();
                 windowExpiresAt = windowStartedAt + secondsTotal * 1000;
                 baselineKeys = {};
-                candidateMap = {};
 
                 renderCandidates();
                 readRouterDevicesNow().then(function (currentDevices) {
@@ -1625,6 +1627,8 @@ function showQuickAllowlistModal() {
                                         refreshTimer = null;
                                 }
                                 permitButton.classList.add('expired');
+                                permitTitle.textContent = T('Adding window expired');
+                                permitHint.textContent = T('Click to restart the 30 second window.');
                         }
 
                         remaining--;
@@ -1634,6 +1638,8 @@ function showQuickAllowlistModal() {
                 timer = window.setInterval(tick, 1000);
         }
 
+        permitTitle = E('strong', {}, T('Adding allowed'));
+        permitHint = E('small', {}, T('Click to restart the 30 second window.'));
         permitButton = E('button', {
                 'class': 'sf-action sf-action-positive sf-quick-permit',
                 'click': function (ev) {
@@ -1642,8 +1648,8 @@ function showQuickAllowlistModal() {
                 }
         }, [
                 progressFill,
-                E('strong', {}, T('Connection allowed')),
-                E('small', {}, T('Click to restart the 30 second window.'))
+                permitTitle,
+                permitHint
         ]);
 
         ui.showModal(T('Quick allowlist add'), [
@@ -1652,15 +1658,13 @@ function showQuickAllowlistModal() {
                                 E('div', { 'class': 'sf-qr-wrap' }, [
                                         E('h4', {}, T('Wi-Fi access QR')),
                                         qrCode(wifiPayload),
-                                        E('p', {}, T('Scan Wi-Fi QR, then add newly connected devices manually.')),
-                                        E('code', {}, wifiPayload)
+                                        E('p', {}, T('Scan Wi-Fi QR, then add newly connected devices manually.'))
                                 ]),
-                                E('div', { 'class': 'sf-qr-wrap' }, [
+                                E('div', { 'class': 'sf-qr-wrap sf-qr-divider' }, [
                                         E('h4', {}, T('Allowlist request QR')),
                                         qrCode(allowlistUrl),
                                         E('p', {}, T('After connecting to Wi-Fi, scan this QR to request allowlist access from this phone.')),
-                                        settingLine(T('One-time allowlist link'), allowlistUrl),
-                                        E('small', {}, T('Router backend must consume this one-time token, detect the phone MAC from router-side data, and reject reuse.'))
+                                        settingLine(T('One-time allowlist link'), allowlistUrl)
                                 ]),
                                 E('div', { 'class': 'sf-quick-side' }, [
                                         permitButton,
