@@ -4,6 +4,11 @@ DEFAULT_TEXT="Internet is temporarily unavailable by family rules."
 MESSAGE="$(uci -q get sheepfold.global.blocked_page_text 2>/dev/null || printf '%s' "$DEFAULT_TEXT")"
 METHOD="${REQUEST_METHOD:-GET}"
 ACCEPT="${HTTP_ACCEPT:-}"
+REMOTE_IP="${REMOTE_ADDR:-}"
+REQUEST_HOST="${HTTP_HOST:-}"
+REQUEST_URI_VALUE="${REQUEST_URI:-}"
+LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
+RUNTIME_DIR="/tmp/sheepfold"
 
 json_escape() {
         printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
@@ -13,12 +18,97 @@ html_escape() {
         printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g'
 }
 
+normalize_mac() {
+        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+mac_for_ip() {
+        ip="$1"
+        [ -n "$ip" ] || return 0
+
+        if [ -r /tmp/dhcp.leases ]; then
+                awk -v ip="$ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases
+        fi
+
+        if [ -r /proc/net/arp ]; then
+                awk -v ip="$ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp
+        fi
+}
+
+mac_in_named_list() {
+        list_name="$1"
+        wanted="$(normalize_mac "$2")"
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=list$/\1/p"); do
+                [ "$section" = "$list_name" ] || continue
+                for mac in $(uci -q get "sheepfold.$section.mac" 2>/dev/null || true); do
+                        [ "$(normalize_mac "$mac")" = "$wanted" ] && return 0
+                done
+                for mac in $(uci -q get "sheepfold.$section.macs" 2>/dev/null || true); do
+                        [ "$(normalize_mac "$mac")" = "$wanted" ] && return 0
+                done
+        done
+
+        return 1
+}
+
+admin_device_mac() {
+        wanted="$(normalize_mac "$1")"
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=device$/\1/p"); do
+                mac="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
+                [ "$mac" = "$wanted" ] || continue
+                [ "$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || true)" = "1" ] && return 0
+        done
+        return 1
+}
+
+looks_like_router_settings_request() {
+        lan_ip="$(uci -q get network.lan.ipaddr 2>/dev/null || true)"
+
+        case "$REQUEST_URI_VALUE" in
+                *"/cgi-bin/luci"*|*"/luci"*|*"/admin/"*) return 0 ;;
+        esac
+
+        [ -n "$lan_ip" ] && printf '%s' "$REQUEST_HOST" | grep -q "$lan_ip" && return 0
+        printf '%s' "$REQUEST_HOST" | grep -Eiq '(^|[.])openwrt(\.lan)?(:[0-9]+)?$' && return 0
+        return 1
+}
+
+log_router_settings_attempt() {
+        looks_like_router_settings_request || return 0
+        mac="$(mac_for_ip "$REMOTE_IP" | sed -n '1p')"
+        mac="$(normalize_mac "$mac")"
+        [ -n "$mac" ] || mac="MAC неизвестен"
+
+        if [ "$mac" != "MAC неизвестен" ]; then
+                mac_in_named_list allowlist "$mac" && return 0
+                admin_device_mac "$mac" && return 0
+        fi
+
+        mkdir -p "$RUNTIME_DIR"
+        key="$(printf '%s_%s_%s' "$REMOTE_IP" "$mac" "$REQUEST_HOST" | tr -c 'A-Za-z0-9_.-' '_')"
+        stamp_file="$RUNTIME_DIR/router-access-attempt-$key"
+        now="$(date +%s)"
+        last="$(cat "$stamp_file" 2>/dev/null || printf 0)"
+        case "$last" in
+                ''|*[!0-9]*) last=0 ;;
+        esac
+        [ $((now - last)) -ge 60 ] || return 0
+        printf '%s' "$now" > "$stamp_file"
+
+        if [ -x "$LOG_HELPER" ]; then
+                "$LOG_HELPER" "Устройство $mac, IP ${REMOTE_IP:-неизвестен} пыталось открыть настройки роутера, но доступ был заблокирован"
+        fi
+}
+
 common_headers() {
         printf 'Status: 403 Forbidden\r\n'
         printf 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n'
         printf 'Pragma: no-cache\r\n'
         printf 'X-Sheepfold-Blocked: 1\r\n'
 }
+
+log_router_settings_attempt
 
 case "$ACCEPT:$METHOD" in
         *application/json*|*:POST|*:PUT|*:PATCH|*:DELETE)

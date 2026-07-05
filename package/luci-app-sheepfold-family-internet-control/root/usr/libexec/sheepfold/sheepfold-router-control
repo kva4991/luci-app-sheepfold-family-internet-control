@@ -12,11 +12,21 @@ WPS_ALLOWLIST_FLAG="$RUNTIME_DIR/wps-allowlist-window"
 WIFI_LAST_ACTION="$RUNTIME_DIR/wifi-automation-last-action"
 BLOCKED_HTTPD_PID="$RUNTIME_DIR/blocked-httpd.pid"
 BLOCKED_HTTPD_ROOT="$RUNTIME_DIR/blocked-www"
+WAN_STATE_FILE="$RUNTIME_DIR/wan-state"
+LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
 
 mkdir -p "$RUNTIME_DIR"
 
 log() {
         logger -t sheepfold-router-control "$*"
+}
+
+log_event() {
+        if [ -x "$LOG_HELPER" ]; then
+                "$LOG_HELPER" "$*"
+        else
+                log "$*"
+        fi
 }
 
 global_get() {
@@ -75,12 +85,89 @@ wifi_set_all() {
 
 wifi_enable() {
         wifi_set_all 0
+        log_event "Wi-Fi включён Sheepfold"
         log "All Wi-Fi radios enabled"
 }
 
 wifi_disable() {
         wifi_set_all 1
+        log_event "Wi-Fi отключён Sheepfold"
         log "All Wi-Fi radios disabled"
+}
+
+ubus_wan_status() {
+        iface="$(global_get wan_interface wan)"
+        ubus -S call "network.interface.$iface" status 2>/dev/null || true
+}
+
+json_bool() {
+        key="$1"
+        sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\\(true\\|false\\).*/\\1/p"
+}
+
+json_string() {
+        key="$1"
+        sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p"
+}
+
+wan_connectivity_ok() {
+        ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1 && return 0
+        ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 && return 0
+        return 1
+}
+
+wan_status_tick() {
+        now="$(date +%s)"
+        last_line="$(cat "$WAN_STATE_FILE" 2>/dev/null || true)"
+        last_check="$(printf '%s' "$last_line" | awk -F '\t' '{ print $3 }')"
+
+        case "$last_check" in
+                ''|*[!0-9]*) last_check=0 ;;
+        esac
+
+        [ $((now - last_check)) -ge 60 ] || return 0
+
+        status_json="$(ubus_wan_status)"
+        if [ -z "$status_json" ]; then
+                state="offline"
+                reason="не удалось получить статус WAN через ubus"
+        else
+                up="$(printf '%s' "$status_json" | json_bool up | head -n 1)"
+                available="$(printf '%s' "$status_json" | json_bool available | head -n 1)"
+                device="$(printf '%s' "$status_json" | json_string l3_device | head -n 1)"
+
+                if [ -n "$device" ] && [ -r "/sys/class/net/$device/carrier" ] &&
+                        [ "$(cat "/sys/class/net/$device/carrier" 2>/dev/null || printf 1)" = "0" ]; then
+                        state="offline"
+                        reason="кабель WAN отключён или порт без линка"
+                elif [ "$up" != "true" ]; then
+                        state="offline"
+                        if [ "$available" = "false" ]; then
+                                reason="WAN-интерфейс недоступен"
+                        else
+                                reason="WAN-интерфейс не поднят"
+                        fi
+                elif wan_connectivity_ok; then
+                        state="online"
+                        reason="проверка связи прошла успешно"
+                else
+                        state="offline"
+                        reason="таймаут проверки связи"
+                fi
+        fi
+
+        previous_state="$(printf '%s' "$last_line" | awk -F '\t' '{ print $1 }')"
+        previous_reason="$(printf '%s' "$last_line" | awk -F '\t' '{ print $2 }')"
+
+        if [ "$state" != "$previous_state" ] || { [ "$state" = "offline" ] && [ "$reason" != "$previous_reason" ]; }; then
+                if [ "$state" = "online" ]; then
+                        log_event "Интернет на роутере восстановлен: $reason"
+                else
+                        log_event "У роутера пропал интернет: $reason"
+                fi
+        fi
+
+        printf '%s\t%s\t%s\n' "$state" "$reason" "$now" > "$WAN_STATE_FILE"
 }
 
 blocked_httpd_running() {
@@ -279,6 +366,7 @@ start_wps_pbc() {
         fi
 
         [ "$started" = "1" ] && log "WPS PBC started" || log "WPS PBC could not be started on this router"
+        [ "$started" = "1" ] && log_event "WPS-подключение разрешено на 30 секунд" || log_event "Не удалось запустить WPS-подключение на роутере"
         return 0
 }
 
@@ -297,6 +385,7 @@ wps_allowlist_window() {
 
         uci -q commit sheepfold
         rm -f "$WPS_ALLOWLIST_FLAG" "$WPS_LEASES_BEFORE"
+        log_event "Окно WPS-добавления в белый список завершено"
         log "WPS allowlist window finished"
 }
 
@@ -368,6 +457,9 @@ case "$COMMAND" in
         wifi-automation-tick)
                 wifi_automation_tick
                 ;;
+        wan-status-tick)
+                wan_status_tick
+                ;;
         wps-button)
                 wps_button "${2:-short}"
                 ;;
@@ -406,6 +498,7 @@ case "$COMMAND" in
                 printf 'wps_long=%s\n' "$(global_get wps_long_press_action router_default)"
                 printf 'router_led_control=%s\n' "$(global_get router_led_control router_default)"
                 printf 'blocked_page=%s %s\n' "$(global_get blocked_page_enabled 1)" "$(global_get blocked_page_port 5202)"
+                printf 'wan_state=%s\n' "$(cat "$WAN_STATE_FILE" 2>/dev/null || true)"
                 ;;
         *)
                 echo "Usage: sheepfold-router-control [wifi-enable|wifi-disable|wifi-automation-tick|wps-button|led-apply|led-alert-ack|blocked-page-apply|status]" >&2

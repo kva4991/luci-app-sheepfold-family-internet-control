@@ -52,6 +52,7 @@ def add_tree(tar: tarfile.TarFile, source: Path, target_prefix: str) -> None:
         "./etc/hotplug.d/button/90-sheepfold-wps",
         "./usr/libexec/sheepfold/sheepfold-service",
         "./usr/libexec/sheepfold/sheepfold-device-detector",
+        "./usr/libexec/sheepfold/sheepfold-log",
         "./usr/libexec/sheepfold/sheepfold-updater",
         "./usr/libexec/sheepfold/sheepfold-router-control",
         "./www/cgi-bin/sheepfold-blocked",

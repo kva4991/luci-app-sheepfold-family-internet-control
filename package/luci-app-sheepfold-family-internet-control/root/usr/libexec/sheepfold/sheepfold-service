@@ -41,6 +41,7 @@ handle_router_control() {
         fi
 
         "$ROUTER_CONTROL" wifi-automation-tick >/dev/null 2>&1 || true
+        "$ROUTER_CONTROL" wan-status-tick >/dev/null 2>&1 || true
         "$ROUTER_CONTROL" led-apply >/dev/null 2>&1 || true
         "$ROUTER_CONTROL" blocked-page-apply >/dev/null 2>&1 || true
 }

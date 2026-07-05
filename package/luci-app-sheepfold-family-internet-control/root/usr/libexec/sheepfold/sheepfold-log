@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+DEFAULT_LOG="/tmp/sheepfold/events.log"
+MESSAGE="${*:-}"
+
+log_path() {
+        path="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf '%s' "$DEFAULT_LOG")"
+        case "$path" in
+                /tmp/*) printf '%s\n' "$path" ;;
+                *) printf '%s\n' "$DEFAULT_LOG" ;;
+        esac
+}
+
+[ -n "$MESSAGE" ] || exit 0
+
+LOG_FILE="$(log_path)"
+LOG_DIR="${LOG_FILE%/*}"
+mkdir -p "$LOG_DIR"
+chmod 700 "$LOG_DIR" 2>/dev/null || true
+
+printf '%s\t%s\n' "$(date '+%d.%m.%Y %H:%M:%S')" "$(printf '%s' "$MESSAGE" | tr '\r\n\t' '   ')" >> "$LOG_FILE"
+chmod 600 "$LOG_FILE" 2>/dev/null || true
+logger -t sheepfold "$MESSAGE" 2>/dev/null || true
