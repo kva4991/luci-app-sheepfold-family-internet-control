@@ -4907,7 +4907,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-74';
+                var assetVersion = '0.1.0-75';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;

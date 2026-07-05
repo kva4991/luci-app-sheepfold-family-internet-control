@@ -159,7 +159,9 @@ wan_status_tick() {
         previous_state="$(printf '%s' "$last_line" | awk -F '\t' '{ print $1 }')"
         previous_reason="$(printf '%s' "$last_line" | awk -F '\t' '{ print $2 }')"
 
-        if [ "$state" != "$previous_state" ] || { [ "$state" = "offline" ] && [ "$reason" != "$previous_reason" ]; }; then
+        if [ -z "$previous_state" ] && [ "$state" = "online" ]; then
+                :
+        elif [ "$state" != "$previous_state" ] || { [ "$state" = "offline" ] && [ "$reason" != "$previous_reason" ]; }; then
                 if [ "$state" = "online" ]; then
                         log_event "Интернет на роутере восстановлен: $reason"
                 else
