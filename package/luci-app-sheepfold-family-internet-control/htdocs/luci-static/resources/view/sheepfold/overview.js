@@ -340,10 +340,11 @@ var translations = {
         'Adding devices to allowlist from WPS is dangerous and must require an explicit confirmation window in the router backend.': 'Добавление устройств в белый список через WPS опасно и должно требовать отдельного окна подтверждения в backend-части роутера.',
         'Router LED control': 'Управление светодиодами роутера',
         'Turn off all LEDs permanently': 'Отключить навсегда все светодиоды',
-        'Blink LEDs when a new device connects until LuCI is opened': 'Мигать светодиодами, если подключилось новое устройство и с этого момента ещё не открывали LuCI',
+        'New device LED alert until LuCI login': 'Сигнал светодиодами о новом устройстве до входа в LuCI',
         'LED setting saved.': 'Настройка светодиодов сохранена.',
         'Could not save LED setting.': 'Не удалось сохранить настройку светодиодов.',
         'LED behavior depends on the router model and available OpenWrt LED triggers.': 'Поведение светодиодов зависит от модели роутера и доступных OpenWrt LED-триггеров.',
+        'When a new device connects, several LEDs should light one after another like a running chain. If the router has one RGB LED, use a rainbow loop. After a successful LuCI password login or after any admin views the new-device notification on the phone, restore the router default LED behavior immediately.': 'Когда подключилось новое устройство, несколько светодиодов должны зажигаться по очереди, как бегущая цепочка. Если у роутера один RGB-светодиод, используйте радужный цикл. После успешного входа в LuCI с паролем или после просмотра уведомления о новом устройстве на телефоне любым админом сразу верните дефолтное поведение светодиодов роутера.',
         'Known offline devices cleanup': 'Очистка логов устройств офлайн',
         '30 days': '30 дней',
         '90 days': '90 дней',
@@ -2570,8 +2571,8 @@ function ledControlField() {
         return saveSelectGlobalField(T('Router LED control'), 'router_led_control', 'router_default', [
                 ['router_default', T('Router default behavior')],
                 ['off_forever', T('Turn off all LEDs permanently')],
-                ['blink_new_device_until_luci_seen', T('Blink LEDs when a new device connects until LuCI is opened')]
-        ], T('LED setting saved.'), T('Could not save LED setting.'), T('LED behavior depends on the router model and available OpenWrt LED triggers.'));
+                ['new_device_alert_until_luci_login', T('New device LED alert until LuCI login')]
+        ], T('LED setting saved.'), T('Could not save LED setting.'), T('When a new device connects, several LEDs should light one after another like a running chain. If the router has one RGB LED, use a rainbow loop. After a successful LuCI password login or after any admin views the new-device notification on the phone, restore the router default LED behavior immediately.'));
 }
 
 function inputControl(label, value, attrs, hint) {
@@ -4009,7 +4010,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-62';
+                var assetVersion = '0.1.0-63';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
