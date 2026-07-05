@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import gzip
 import io
 import os
 import shutil
@@ -69,6 +70,21 @@ def add_tree(tar: tarfile.TarFile, source: Path, target_prefix: str) -> None:
 
         mode = 0o755 if target in executable_paths else 0o644
         add_bytes(tar, target, path.read_bytes(), mode)
+
+
+def open_gzip_tar(path: Path) -> tarfile.TarFile:
+    raw = path.open("wb")
+    gz = gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0)
+    tar = tarfile.open(fileobj=gz, mode="w", format=tarfile.GNU_FORMAT)
+    original_close = tar.close
+
+    def close_all() -> None:
+        original_close()
+        gz.close()
+        raw.close()
+
+    tar.close = close_all
+    return tar
 
 
 def write_control_tar(path: Path, version: str, release: str) -> None:
@@ -175,41 +191,22 @@ rm -f /tmp/luci-modulecache/* 2>/dev/null || true
 exit 0
 """.encode("utf-8")
 
-    with tarfile.open(path, "w:gz", format=tarfile.GNU_FORMAT) as tar:
+    with open_gzip_tar(path) as tar:
         add_bytes(tar, "./control", control, 0o644)
         add_bytes(tar, "./conffiles", conffiles, 0o644)
         add_bytes(tar, "./postinst", postinst, 0o755)
 
 
 def write_data_tar(path: Path) -> None:
-    with tarfile.open(path, "w:gz", format=tarfile.GNU_FORMAT) as tar:
+    with open_gzip_tar(path) as tar:
         add_tree(tar, PKG_DIR / "root", "")
         add_tree(tar, PKG_DIR / "htdocs", "www")
 
 
-def ar_header(name: str, data: bytes) -> bytes:
-    if len(name) > 15:
-        raise RuntimeError(f"ar member name is too long: {name}")
-
-    return (
-        f"{name:<16}"
-        f"{int(time.time()):<12}"
-        f"{0:<6}"
-        f"{0:<6}"
-        f"{0o644:<8o}"
-        f"{len(data):<10}"
-        "`\n"
-    ).encode("ascii")
-
-
-def write_ipk_ar(path: Path, members: list[tuple[str, bytes]]) -> None:
-    with path.open("wb") as handle:
-        handle.write(b"!<arch>\n")
+def write_ipk_tar(path: Path, members: list[tuple[str, bytes]]) -> None:
+    with open_gzip_tar(path) as tar:
         for name, data in members:
-            handle.write(ar_header(name, data))
-            handle.write(data)
-            if len(data) % 2:
-                handle.write(b"\n")
+            add_bytes(tar, f"./{name}", data, 0o644)
 
 
 def resolve_downloads_dir(value: str | None) -> Path | None:
@@ -247,10 +244,10 @@ def main() -> None:
     write_data_tar(data_tar)
     write_control_tar(control_tar, version, release)
 
-    write_ipk_ar(ipk, [
+    write_ipk_tar(ipk, [
         ("debian-binary", debian_binary.read_bytes()),
-        ("control.tar.gz", control_tar.read_bytes()),
         ("data.tar.gz", data_tar.read_bytes()),
+        ("control.tar.gz", control_tar.read_bytes()),
     ])
 
     print(ipk)
