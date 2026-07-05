@@ -1164,6 +1164,15 @@
         gap: 14px;
 }
 
+.sf-messenger-fields {
+        display: grid;
+        gap: 10px;
+}
+
+.sf-messenger-fields[hidden] {
+        display: none !important;
+}
+
 .sf-status-card {
         border-width: 2px;
 }

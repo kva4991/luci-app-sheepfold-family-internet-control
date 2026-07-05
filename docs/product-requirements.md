@@ -234,7 +234,7 @@ Installer mode:
 - the OpenWRT installer must ask `Apply Sheepfold automatic setup?` / `Применить автонастройку программы?`;
 - full automatic setup is the default because it is the useful path for most families;
 - if the parent/admin presses Enter or answers `yes`, `y`, or `да`, set `auto_configure=1`, `detection_mode=full`, and `no_restrictions_auto_assign=1`;
-- full automatic setup may place confidently detected infrastructure devices into the `No restrictions` group automatically;
+- full automatic setup may add confidently detected infrastructure devices to the `No restrictions` group automatically;
 - if the parent/admin explicitly answers `no`, `n`, or `нет`, set or keep `auto_configure=1`, `detection_mode=reduced`, and `no_restrictions_auto_assign=1`;
 - reduced mode uses only lightweight metadata detection and avoids heavy port checks, but it may still auto-assign confidently detected infrastructure devices to the `No restrictions` group.
 

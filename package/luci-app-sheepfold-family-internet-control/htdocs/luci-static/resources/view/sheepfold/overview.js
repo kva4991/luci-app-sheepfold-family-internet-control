@@ -199,7 +199,7 @@ var translations = {
         'Emergency-useful sites for blocklisted devices are enabled and still do not open router access.': 'Включен доступ к "аварийно-полезным сайтам" для чёрного списка (а доступ к роутеру всё-равно закрыт).',
         'Emergency-useful sites for blocklisted devices are disabled and still do not open router access.': 'Выключен доступ к "аварийно-полезным сайтам" для чёрного списка (это не открывает доступ к роутеру).',
         'Blocklist emergency-useful sites access': 'Доступ пользователей из чёрного списка к "аварийно-полезным сайтам"',
-        'Allows only configured emergency-useful sites for blocklisted devices. Router access remains blocked.': 'Разрешает устройствам из чёрного списка только настроенные аварийно-полезные сайты. Доступ к роутеру остаётся закрытым.',
+        'Allows blocklisted devices to access only sites added to the emergency-useful sites list. Router access remains blocked.': 'Разрешает устройствам из чёрного списка доступ только к сайтам добавленым в список аварийно-полезные сайты. Доступ к роутеру остаётся закрытым.',
         'Blocklist emergency-useful sites access saved.': 'Доступ чёрного списка к аварийно-полезным сайтам сохранён.',
         'Could not save blocklist emergency-useful sites access.': 'Не удалось сохранить доступ чёрного списка к аварийно-полезным сайтам.',
         'Yes': 'Да',
@@ -266,10 +266,16 @@ var translations = {
         'Active messenger': 'Активный мессенджер',
         'Messenger integration lets approved parents receive notifications and control Sheepfold with short commands when they are away from home.': 'Интеграция с мессенджером позволяет одобренным родителям получать уведомления и управлять Sheepfold короткими командами вне дома.',
         'Disabled': 'Выключено',
-        'MAX experimental': 'MAX экспериментально',
-        'VK is shown first during setup, but activation requires credentials and an approved admin.': 'VK предлагается первым при настройке, но включение требует данных доступа и разрешённого администратора.',
-        'Approved admin ID': 'ID разрешённого администратора',
-        'Stored on the router.': 'Хранится на роутере.',
+        'Messenger settings saved.': 'Настройки мессенджера сохранены.',
+        'Could not save messenger settings.': 'Не удалось сохранить настройки мессенджера.',
+        'VK community access token': 'Ключ доступа сообщества VK',
+        'VK community ID': 'ID сообщества VK',
+        'VK admin user ID': 'VK ID родителя-администратора',
+        'Telegram bot token': 'Токен Telegram-бота',
+        'Telegram admin chat ID': 'Chat ID родителя-администратора',
+        'Create a VK community, enable messages, create an access token for community messages, then enter the community ID and the VK user ID of the parent whose commands are allowed.': 'Создайте сообщество VK, включите сообщения, создайте ключ доступа для сообщений сообщества, затем укажите ID сообщества и VK ID родителя, команды которого разрешены.',
+        'Create a bot through BotFather, paste the bot token, send any message to the bot from the parent account, then enter that chat ID here.': 'Создайте бота через BotFather, вставьте токен, отправьте боту любое сообщение с аккаунта родителя, затем укажите здесь chat ID этого диалога.',
+        'Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.': 'Sheepfold принимает команды мессенджера только от указанного здесь администратора. Остальные пользователи игнорируются.',
         'Administrator accounts': 'Учётные записи администраторов',
         'Add administrator': 'Добавить администратора',
         'Adding a new administrator requires confirmation.': 'Добавление администратора требует подтверждения.',
@@ -293,7 +299,7 @@ var translations = {
         'Log is empty.': 'Журнал пуст.',
         'The log is stored in RAM and is cleared after router reboot. Export masks sensitive fields.': 'Журнал хранится в RAM и очищается после перезагрузки роутера. При экспорте чувствительные поля маскируются.',
         'Cache file path': 'Путь к файлу кэша',
-        'The cache file must be stored under /tmp/ so the log stays in RAM and does not wear router flash memory.': 'Файл кэша должен лежать внутри /tmp/, чтобы журнал оставался в RAM и не изнашивал flash-память роутера.',
+        'The cache file should be stored under /tmp/ so it does not wear router flash memory.': 'Файлу кэша лучше лежать внутри /tmp/, чтобы не изнашивал flash-память роутера.',
         'Cache file path saved.': 'Путь к файлу кэша сохранён.',
         'Could not save cache file path.': 'Не удалось сохранить путь к файлу кэша.',
         'Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen.': 'Путь к файлу кэша должен начинаться с /tmp/ и содержать только буквы, цифры, точку, слэш, подчёркивание и дефис.',
@@ -312,8 +318,7 @@ var translations = {
         'New device automatic setup': 'Автонастройка новых устройств',
         'Full automatic setup': 'Полная автонастройка',
         'Reduced automatic setup': 'Урезанная автонастройка',
-        'Full mode can use port checks when available. Reduced mode avoids heavy checks but still can place confidently detected home infrastructure devices into No restrictions.': 'Полный режим может использовать проверку портов, если она доступна. Урезанный режим избегает тяжёлых проверок, но тоже может помещать уверенно распознанные домашние инфраструктурные устройства в группу "Без ограничений".',
-        'Detector reacts to DHCP lease changes and runs a rare control scan. It does not continuously scan the whole network.': 'Детектор реагирует на изменения DHCP-аренд и редко делает контрольный проход. Он не сканирует всю сеть постоянно.',
+        'Full mode can use port checks when available. Reduced mode avoids heavy checks but still can automatically add confidently detected home infrastructure devices to No restrictions.': 'Полный режим может использовать проверку портов, если она доступна. Урезанная автонастройка избегает тяжёлых проверок, но тоже может автоматически добавлять уверенно распознанные домашние инфраструктурные устройства в группу "Без ограничений".',
         'New device automatic setup saved.': 'Автонастройка новых устройств сохранена.',
         'Could not save new device automatic setup.': 'Не удалось сохранить автонастройку новых устройств.',
         'Update check and installation': 'Проверка обновления и его установка',
@@ -323,7 +328,7 @@ var translations = {
         'Never': 'Никогда',
         'Update check policy saved.': 'Настройка проверки обновлений сохранена.',
         'Could not save update check policy.': 'Не удалось сохранить настройку проверки обновлений.',
-        'Defines how often Sheepfold should check for a stable release and install it after confirmation.': 'Определяет, как часто Sheepfold должен проверять stable-релиз и устанавливать его после подтверждения.',
+        'Defines how often Sheepfold should check for and install updates after confirmation.': 'Определяет, как часто Sheepfold должен проверять и устанавливать обновления (после подтверждения).',
         'Enable Wi-Fi automatically': 'Включать Wi-Fi автоматически',
         'Disable Wi-Fi automatically': 'Выключать Wi-Fi автоматически',
         'At time': 'В указанное время',
@@ -2370,7 +2375,7 @@ function cachePathField() {
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
                 E('span', {}, T('Cache file path')),
                 input,
-                E('small', {}, T('The cache file must be stored under /tmp/ so the log stays in RAM and does not wear router flash memory.'))
+                E('small', {}, T('The cache file should be stored under /tmp/ so it does not wear router flash memory.'))
         ]);
 }
 
@@ -2397,7 +2402,7 @@ function blocklistEmergencyAccessField() {
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
                 E('span', {}, T('Blocklist emergency-useful sites access')),
                 select,
-                E('small', {}, T('Allows only configured emergency-useful sites for blocklisted devices. Router access remains blocked.'))
+                E('small', {}, T('Allows blocklisted devices to access only sites added to the emergency-useful sites list. Router access remains blocked.'))
         ]);
 }
 
@@ -2431,8 +2436,7 @@ function autoConfigureDevicesField() {
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
                 E('span', {}, T('New device automatic setup')),
                 select,
-                E('small', {}, T('Full mode can use port checks when available. Reduced mode avoids heavy checks but still can place confidently detected home infrastructure devices into No restrictions.')),
-                E('small', {}, T('Detector reacts to DHCP lease changes and runs a rare control scan. It does not continuously scan the whole network.'))
+                E('small', {}, T('Full mode can use port checks when available. Reduced mode avoids heavy checks but still can automatically add confidently detected home infrastructure devices to No restrictions.'))
         ]);
 }
 
@@ -2464,7 +2468,7 @@ function updateCheckInstallField() {
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
                 E('span', {}, T('Update check and installation')),
                 select,
-                E('small', {}, T('Defines how often Sheepfold should check for a stable release and install it after confirmation.'))
+                E('small', {}, T('Defines how often Sheepfold should check for and install updates after confirmation.'))
         ]);
 }
 
@@ -2680,6 +2684,91 @@ function saveSelectGlobalField(label, option, value, values, successMessage, err
                 E('span', {}, label),
                 select,
                 hint ? E('small', {}, hint) : ''
+        ]);
+}
+
+function messengerField(label, option, placeholder, hint, secret) {
+        var input = E('input', {
+                'class': 'cbi-input-text',
+                'type': secret ? 'password' : 'text',
+                'value': safeUciGet('sheepfold', 'global', option, ''),
+                'placeholder': placeholder || ''
+        });
+        var lastValue = input.value;
+
+        function saveIfChanged() {
+                var value = input.value.trim();
+
+                if (value === lastValue)
+                        return;
+
+                saveGlobalOption(option, value).then(function () {
+                        lastValue = value;
+                        notify(T('Messenger settings saved.'), 'info');
+                }, function () {
+                        input.value = lastValue;
+                        notify(T('Could not save messenger settings.'), 'warning');
+                });
+        }
+
+        input.addEventListener('blur', saveIfChanged);
+        input.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                        ev.preventDefault();
+                        saveIfChanged();
+                }
+        });
+
+        return E('label', { 'class': 'sf-field sf-field-wide' }, [
+                E('span', {}, label),
+                input,
+                hint ? E('small', {}, hint) : ''
+        ]);
+}
+
+function messengerSettingsBox() {
+        var activeValue = safeUciGet('sheepfold', 'global', 'active_messenger', 'none');
+        var vkFields = E('div', { 'class': 'sf-messenger-fields', 'hidden': activeValue === 'vk' ? null : 'hidden' }, [
+                E('div', { 'class': 'sf-note' }, T('Create a VK community, enable messages, create an access token for community messages, then enter the community ID and the VK user ID of the parent whose commands are allowed.')),
+                messengerField(T('VK community access token'), 'vk_access_token', '', T('Stored on the router.'), true),
+                messengerField(T('VK community ID'), 'vk_community_id', 'club123456789', '', false),
+                messengerField(T('VK admin user ID'), 'vk_admin_user_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false)
+        ]);
+        var telegramFields = E('div', { 'class': 'sf-messenger-fields', 'hidden': activeValue === 'telegram' ? null : 'hidden' }, [
+                E('div', { 'class': 'sf-note' }, T('Create a bot through BotFather, paste the bot token, send any message to the bot from the parent account, then enter that chat ID here.')),
+                messengerField(T('Telegram bot token'), 'telegram_bot_token', '123456:ABC...', T('Stored on the router.'), true),
+                messengerField(T('Telegram admin chat ID'), 'telegram_admin_chat_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false)
+        ]);
+        var select = E('select', {
+                'class': 'cbi-input-select',
+                'change': function (ev) {
+                        var nextValue = ev.currentTarget.value;
+
+                        saveGlobalOption('active_messenger', nextValue).then(function () {
+                                activeValue = nextValue;
+                                vkFields.hidden = activeValue === 'vk' ? null : 'hidden';
+                                telegramFields.hidden = activeValue === 'telegram' ? null : 'hidden';
+                                notify(T('Messenger settings saved.'), 'info');
+                        }, function () {
+                                ev.currentTarget.value = activeValue;
+                                notify(T('Could not save messenger settings.'), 'warning');
+                        });
+                }
+        }, [
+                ['none', T('Disabled')],
+                ['vk', 'VK'],
+                ['telegram', 'Telegram']
+        ].map(function (item) {
+                return E('option', { 'value': item[0], 'selected': item[0] === activeValue ? 'selected' : null }, item[1]);
+        }));
+
+        return E('div', { 'class': 'sf-box' }, [
+                E('label', { 'class': 'sf-field sf-field-wide' }, [
+                        E('span', {}, T('Active messenger')),
+                        select
+                ]),
+                vkFields,
+                telegramFields
         ]);
 }
 
@@ -3963,15 +4052,7 @@ return view.extend({
                 return E('div', { 'class': 'sf-settings-section' }, [
                         E('p', { 'class': 'sf-section-intro' }, T('Messenger integration lets approved parents receive notifications and control Sheepfold with short commands when they are away from home.')),
                         E('div', { 'class': 'sf-grid two' }, [
-                                E('div', { 'class': 'sf-box' }, [
-                                        selectField(T('Active messenger'), 'none', [
-                                                ['none', T('Disabled')],
-                                                ['vk', 'VK'],
-                                                ['telegram', 'Telegram'],
-                                                ['max', T('MAX experimental')]
-                                        ], T('VK is shown first during setup, but activation requires credentials and an approved admin.')),
-                                        field(T('Approved admin ID'), 'vk:123***789', T('Stored on the router.'))
-                                ]),
+                                messengerSettingsBox(),
                                 E('div', { 'class': 'sf-box' }, [
                                         E('h4', {}, T('Commands')),
                                         E('div', { 'class': 'sf-command-list' }, [
