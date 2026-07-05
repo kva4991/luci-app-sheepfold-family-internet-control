@@ -72,6 +72,10 @@
         line-height: 1.2;
 }
 
+.sf-action-nowrap {
+        white-space: nowrap;
+}
+
 .sf-action-danger {
         border-color: #f0b8b2;
         color: #7f1d1d;
@@ -373,6 +377,12 @@
         font-weight: 700;
 }
 
+.sf-device-table .sf-device-index {
+        color: #24415f;
+        font-size: 22px;
+        line-height: 1;
+}
+
 .sf-admin-device-icon {
         display: inline-flex;
         width: 18px;
@@ -449,6 +459,17 @@
         stroke-width: 1.9;
         stroke-linecap: round;
         stroke-linejoin: round;
+}
+
+.sf-device-table .sf-device-type-icon {
+        width: 42px;
+        height: 42px;
+}
+
+.sf-device-table .sf-device-type-icon svg {
+        width: 36px;
+        height: 36px;
+        stroke-width: 2;
 }
 
 .sf-device-type-select-field {

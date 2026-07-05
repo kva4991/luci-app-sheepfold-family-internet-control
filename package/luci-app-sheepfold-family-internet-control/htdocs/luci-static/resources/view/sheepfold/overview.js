@@ -23,7 +23,7 @@ var admins = [
                 name: 'Родитель',
                 login: 'SuperParent',
                 role: 'owner',
-                deviceIds: ['D-0001']
+                deviceIds: []
         }
 ];
 
@@ -47,6 +47,12 @@ var translations = {
         'Group name': 'Название группы',
         'Group color': 'Цвет группы',
         'Automatic color': 'Автоматический цвет',
+        'Group schedules': 'Расписания группы',
+        'Assigned devices': 'Привязанные устройства',
+        'Schedule conflict': 'Конфликт расписаний',
+        'Selected schedules may conflict with each other. Saving is allowed, but review the rules carefully.': 'Выбранные расписания могут конфликтовать между собой. Сохранение разрешено, но внимательно проверьте правила.',
+        'Confirmation will be available in': 'Подтверждение будет доступно через',
+        'I understand the risk, continue': 'Я понимаю риск, продолжить',
         'Group saved.': 'Группа сохранена.',
         'Group created.': 'Группа создана.',
         'Could not create group.': 'Не удалось создать группу.',
@@ -233,7 +239,7 @@ var translations = {
         'Used by the "until bedtime" quick action.': 'Используется кнопкой быстрого доступа "до отбоя".',
         'Access to emergency-useful sites': 'Доступ к аварийно-полезным сайтам',
         'Editable list for necessary services during restricted access.': 'Редактируемый список необходимых сервисов при ограниченном доступе.',
-        'Emergency-useful sites are a small editable list of necessary services that may stay available during restricted access.': 'Аварийно-полезные сайты — это небольшой редактируемый список необходимых сервисов, которые могут оставаться доступными при ограничении интернета на роутере (при добавлении пользователя в чёрный список или выключении доступа в интернет).',
+        'Emergency-useful sites are a small editable list of necessary services that may stay available during restricted access.': 'Аварийно-полезные сайты — это редактируемый белый список необходимых сервисов,  которые могут оставаться доступными при ограничении интернета на роутере (при добавлении пользователя в чёрный список или выключении у него доступа в интернет).',
         'Add site': 'Добавить сайт',
         'Edit site': 'Редактировать сайт',
         'Delete site': 'Удалить сайт',
@@ -1637,32 +1643,15 @@ function listDeviceCandidateTable(targetStatus, onSelect) {
 function showManualListDeviceModal(targetStatus) {
         var isAllowlist = targetStatus === 'allow';
         var title = isAllowlist ? T('Add device to allowlist') : T('Add device to blocklist');
-        var macField = inputControl(T('MAC address'), '', { 'placeholder': 'AA:BB:CC:DD:EE:FF' });
-        var nameField = inputControl(T('Device name'), '');
-        var ipField = inputControl(T('IP address'), '');
-        var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
-        var candidateTable = listDeviceCandidateTable(targetStatus, function (device) {
-                macField.input.value = device.mac || '';
-                nameField.input.value = device.name || '';
-                ipField.input.value = device.ip || '';
-                conflictNote.hidden = true;
-                conflictNote.textContent = '';
+        var selector = createDeviceSelectionBox({
+                filter: function (device) {
+                        return listDeviceCanBeAdded(device, targetStatus);
+                }
         });
-
-        function showError(message) {
-                conflictNote.textContent = message;
-                conflictNote.hidden = false;
-        }
 
         ui.showModal(title, [
                 E('div', { 'class': 'sf-device-editor' }, [
-                        conflictNote,
-                        E('div', { 'class': 'sf-grid two' }, [
-                                macField.node,
-                                nameField.node,
-                                ipField.node
-                        ]),
-                        candidateTable
+                        selector.node
                 ]),
                 E('div', { 'class': 'right sf-modal-actions' }, [
                         E('button', {
@@ -1672,43 +1661,18 @@ function showManualListDeviceModal(targetStatus) {
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
-                                        var mac = normalizeMac(macField.input.value);
-                                        var name = nameField.input.value.trim();
-                                        var ip = ipField.input.value.trim();
-                                        var sectionName;
+                                        selector.selectedDevices().forEach(function (device) {
+                                                var mac = normalizeMac(device.mac);
+                                                var sectionName = ensureSheepfoldDeviceSection(device);
 
-                                        conflictNote.hidden = true;
-                                        conflictNote.textContent = '';
-
-                                        if (!macField.input.value.trim()) {
-                                                showError(T('MAC address is required.'));
-                                                return;
-                                        }
-
-                                        if (!mac) {
-                                                showError(T('Enter a valid MAC address.'));
-                                                return;
-                                        }
-
-                                        if (isAllowlist && macInSheepfoldList('blocklist', mac)) {
-                                                showError(T('This device is already in the blocklist. Remove it from the blocklist before adding it to the allowlist.'));
-                                                return;
-                                        }
-
-                                        if (!isAllowlist && macInSheepfoldList('allowlist', mac)) {
-                                                showError(T('This device is already in the allowlist. Remove it from the allowlist before adding it to the blocklist.'));
-                                                return;
-                                        }
-
-                                        sectionName = ensureSheepfoldDeviceSection({ mac: mac });
-                                        uci.set('sheepfold', sectionName, 'mac', mac);
-                                        uci.set('sheepfold', sectionName, 'name', name || mac);
-                                        uci.set('sheepfold', sectionName, 'ip', ip);
-                                        uci.set('sheepfold', sectionName, 'group', T('Not configured'));
-                                        uci.set('sheepfold', sectionName, 'device_type', 'smart');
-                                        uci.set('sheepfold', sectionName, 'status', targetStatus);
-
-                                        updateMacList(isAllowlist ? 'allowlist' : 'blocklist', mac, true);
+                                                uci.set('sheepfold', sectionName, 'mac', mac);
+                                                uci.set('sheepfold', sectionName, 'name', device.name || mac);
+                                                uci.set('sheepfold', sectionName, 'ip', device.ip || '');
+                                                uci.set('sheepfold', sectionName, 'group', device.group || T('Not configured'));
+                                                uci.set('sheepfold', sectionName, 'device_type', device.deviceType || 'smart');
+                                                uci.set('sheepfold', sectionName, 'status', targetStatus);
+                                                updateMacList(isAllowlist ? 'allowlist' : 'blocklist', mac, true);
+                                        });
 
                                         saveUciChanges(['sheepfold']).then(function () {
                                                 notify(isAllowlist ? T('Device added to allowlist.') : T('Device added to blocklist.'), 'info');
@@ -2126,6 +2090,126 @@ function adminDeviceList(admin) {
         }));
 }
 
+function adminAssignedDeviceIds(exceptAdmin) {
+        var assigned = {};
+
+        admins.forEach(function (admin) {
+                if (exceptAdmin && admin.id === exceptAdmin.id)
+                        return;
+
+                (admin.deviceIds || []).forEach(function (id) {
+                        assigned[id] = true;
+                });
+        });
+
+        return assigned;
+}
+
+function deviceMatchesSelectionFilter(device, needle) {
+        if (!needle)
+                return true;
+
+        return [
+                deviceDisplayId(device),
+                formattedDeviceDisplayId(device),
+                device.id,
+                device.name,
+                device.ip,
+                device.mac,
+                device.group
+        ].join(' ').toLowerCase().indexOf(needle) !== -1;
+}
+
+function createDeviceSelectionBox(options) {
+        var selected = {};
+        var filterInput = E('input', {
+                'class': 'cbi-input-text sf-search sf-binding-filter',
+                'placeholder': T('Search by name, IP, MAC, or ID')
+        });
+        var table = E('div', { 'class': 'sf-binding-table' });
+        var filter = options.filter || function () { return true; };
+        var sortSource = options.devices || devices;
+
+        (options.selectedIds || []).forEach(function (id) {
+                selected[id] = true;
+        });
+
+        function sortedRows() {
+                return sortSource.filter(filter).sort(function (left, right) {
+                        var leftSelected = selected[left.id] ? 1 : 0;
+                        var rightSelected = selected[right.id] ? 1 : 0;
+
+                        if (leftSelected !== rightSelected)
+                                return rightSelected - leftSelected;
+
+                        return devices.indexOf(right) - devices.indexOf(left);
+                });
+        }
+
+        function redraw() {
+                var needle = filterInput.value.trim().toLowerCase();
+                var rows = sortedRows().filter(function (device) {
+                        return deviceMatchesSelectionFilter(device, needle);
+                }).map(function (device) {
+                        var checkbox = E('input', {
+                                'type': 'checkbox',
+                                'checked': selected[device.id] ? 'checked' : null,
+                                'change': function (ev) {
+                                        selected[device.id] = ev.currentTarget.checked;
+                                        redraw();
+                                }
+                        });
+
+                        return E('div', { 'class': 'sf-binding-row' + (selected[device.id] ? ' is-selected' : '') }, [
+                                E('div', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
+                                E('div', { 'class': 'sf-device-name' }, [
+                                        E('strong', {}, device.name),
+                                        E('small', {}, device.group)
+                                ]),
+                                E('div', {}, device.ip || '-'),
+                                E('div', { 'class': 'sf-mono' }, device.mac || '-'),
+                                E('label', { 'class': 'sf-binding-check' }, checkbox)
+                        ]);
+                });
+
+                table.replaceChildren.apply(table, [
+                        E('div', { 'class': 'sf-binding-row sf-binding-head' }, [
+                                E('div', {}, T('ID')),
+                                E('div', {}, T('Device')),
+                                E('div', {}, T('IP address')),
+                                E('div', {}, T('MAC address')),
+                                E('div', {}, '')
+                        ])
+                ].concat(rows));
+        }
+
+        filterInput.addEventListener('input', redraw);
+        redraw();
+
+        return {
+                node: E('div', { 'class': 'sf-binding-selector' }, [
+                        E('div', { 'class': 'sf-panel-head sf-binding-toolbar' }, [
+                                filterInput,
+                                E('span', { 'class': 'sf-muted' }, T('Selected devices are shown first.'))
+                        ]),
+                        table
+                ]),
+                selectedDevices: function () {
+                        return sortedRows().filter(function (device) {
+                                return selected[device.id];
+                        });
+                },
+                selectedIds: function () {
+                        return this.selectedDevices().map(function (device) {
+                                return device.id;
+                        });
+                },
+                isSelected: function (device) {
+                        return !!selected[device.id];
+                }
+        };
+}
+
 function hashString(text) {
         var hash = 0;
 
@@ -2204,14 +2288,178 @@ function ensureGroupSection(groupName, section) {
         return ensureSection('sheepfold', 'group', groupSectionName(groupName));
 }
 
+function scheduleDefinitions() {
+        return [
+                ['school_days', T('School days')],
+                ['temporary_access', T('Temporary access')],
+                ['bedtime', T('Bedtime')]
+        ];
+}
+
+function scheduleCheckboxes(selectedSchedules) {
+        var selected = {};
+        var nodes;
+
+        selectedSchedules.forEach(function (value) {
+                selected[value] = true;
+        });
+
+        nodes = scheduleDefinitions().map(function (item) {
+                var checkbox = E('input', {
+                        'type': 'checkbox',
+                        'checked': selected[item[0]] ? 'checked' : null,
+                        'change': function (ev) {
+                                selected[item[0]] = ev.currentTarget.checked;
+                        }
+                });
+
+                return E('label', { 'class': 'sf-check-field' }, [
+                        checkbox,
+                        E('span', {}, item[1])
+                ]);
+        });
+
+        return {
+                node: E('div', { 'class': 'sf-schedule-list' }, nodes),
+                values: function () {
+                        return scheduleDefinitions().filter(function (item) {
+                                return selected[item[0]];
+                        }).map(function (item) {
+                                return item[0];
+                        });
+                }
+        };
+}
+
+function schedulesConflict(values) {
+        return values.length > 1;
+}
+
+function showScheduleConflictDisclaimer(onContinue) {
+        var seconds = 10;
+        var countdown = E('strong', {}, String(seconds));
+        var button = E('button', {
+                'class': 'btn cbi-button cbi-button-positive',
+                'disabled': 'disabled',
+                'click': function () {
+                        ui.hideModal();
+                        onContinue();
+                }
+        }, T('I understand the risk, continue'));
+        var timer = window.setInterval(function () {
+                seconds--;
+                countdown.textContent = String(Math.max(0, seconds));
+
+                if (seconds <= 0) {
+                        window.clearInterval(timer);
+                        button.disabled = false;
+                }
+        }, 1000);
+
+        ui.showModal(T('Schedule conflict'), [
+                E('div', { 'class': 'sf-device-editor' }, [
+                        E('div', { 'class': 'sf-note sf-note-warning' }, T('Selected schedules may conflict with each other. Saving is allowed, but review the rules carefully.')),
+                        E('p', {}, [
+                                T('Confirmation will be available in'),
+                                ' ',
+                                countdown
+                        ])
+                ]),
+                E('div', { 'class': 'right sf-modal-actions' }, [
+                        E('button', {
+                                'class': 'btn cbi-button',
+                                'click': function () {
+                                        window.clearInterval(timer);
+                                        ui.hideModal();
+                                }
+                        }, T('Cancel')),
+                        button
+                ])
+        ]);
+}
+
 function showGroupSettingsModal(groupName, section, onSave) {
         var nameField = inputControl(T('Group name'), groupName, section && section.protected === '1' ? { 'readonly': 'readonly' } : {});
         var colorField = inputControl(T('Group color'), groupColor(groupName, section), { 'type': 'color' });
+        var currentDeviceIds = devices.filter(function (device) {
+                return normalizeGroupName(device.group) === groupName;
+        }).map(function (device) {
+                return device.id;
+        });
+        var deviceSelector = createDeviceSelectionBox({
+                selectedIds: currentDeviceIds
+        });
+        var scheduleSelector = scheduleCheckboxes(listOptionValues(section && section.schedules));
         var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
 
         function showError(message) {
                 conflictNote.textContent = message;
                 conflictNote.hidden = false;
+        }
+
+        function saveGroupSettings() {
+                var oldName = groupName;
+                var newName = normalizeGroupName(nameField.input.value.trim());
+                var color = colorField.input.value;
+                var sectionName;
+                var selectedDevices;
+                var selectedSchedules = scheduleSelector.values();
+
+                conflictNote.hidden = true;
+                conflictNote.textContent = '';
+
+                if (!newName) {
+                        showError(T('Group name is required.'));
+                        return;
+                }
+
+                if (newName !== oldName && safeUciSections('sheepfold', 'group').some(function (item) {
+                        return normalizeGroupName(item.name || item['.name']) === newName;
+                })) {
+                        showError(T('This group already exists.'));
+                        return;
+                }
+
+                if (!validGroupColor(color))
+                        color = groupAutoColor(newName);
+
+                selectedDevices = deviceSelector.selectedDevices();
+                sectionName = ensureGroupSection(oldName, section);
+                uci.set('sheepfold', sectionName, 'name', newName);
+                uci.set('sheepfold', sectionName, 'color', color);
+                uci.set('sheepfold', sectionName, 'schedules', selectedSchedules);
+                if (!section)
+                        uci.set('sheepfold', sectionName, 'protected', '0');
+
+                safeUciSections('sheepfold', 'device').forEach(function (deviceSection) {
+                        var linked = selectedDevices.some(function (device) {
+                                return normalizeMac(device.mac) === normalizeMac(deviceSection.mac);
+                        });
+
+                        if (normalizeGroupName(deviceSection.group) === oldName || linked)
+                                uci.set('sheepfold', deviceSection['.name'], 'group', linked ? newName : T('Not configured'));
+                });
+
+                selectedDevices.forEach(function (device) {
+                        var sectionDeviceName = ensureSheepfoldDeviceSection(device);
+
+                        uci.set('sheepfold', sectionDeviceName, 'mac', normalizeMac(device.mac));
+                        uci.set('sheepfold', sectionDeviceName, 'name', device.name || device.mac);
+                        uci.set('sheepfold', sectionDeviceName, 'ip', device.ip || '');
+                        uci.set('sheepfold', sectionDeviceName, 'group', newName);
+                });
+
+                saveUciChanges(['sheepfold']).then(function () {
+                        notify(T('Group saved.'), 'info');
+                        if (onSave)
+                                onSave();
+                        ui.hideModal();
+                        window.setTimeout(function () {
+                                window.location.reload();
+                        }, 700);
+                }, function () {
+                        notify(T('Could not save group.'), 'warning');
+                });
         }
 
         ui.showModal(T('Group settings'), [
@@ -2220,7 +2468,11 @@ function showGroupSettingsModal(groupName, section, onSave) {
                         E('div', { 'class': 'sf-grid two' }, [
                                 nameField.node,
                                 colorField.node
-                        ])
+                        ]),
+                        E('strong', {}, T('Group schedules')),
+                        scheduleSelector.node,
+                        E('strong', {}, T('Assigned devices')),
+                        deviceSelector.node
                 ]),
                 E('div', { 'class': 'right sf-modal-actions' }, [
                         E('button', {
@@ -2230,51 +2482,12 @@ function showGroupSettingsModal(groupName, section, onSave) {
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
-                                        var oldName = groupName;
-                                        var newName = normalizeGroupName(nameField.input.value.trim());
-                                        var color = colorField.input.value;
-                                        var sectionName;
-
-                                        conflictNote.hidden = true;
-                                        conflictNote.textContent = '';
-
-                                        if (!newName) {
-                                                showError(T('Group name is required.'));
+                                        if (schedulesConflict(scheduleSelector.values())) {
+                                                showScheduleConflictDisclaimer(saveGroupSettings);
                                                 return;
                                         }
 
-                                        if (newName !== oldName && safeUciSections('sheepfold', 'group').some(function (item) {
-                                                return normalizeGroupName(item.name || item['.name']) === newName;
-                                        })) {
-                                                showError(T('This group already exists.'));
-                                                return;
-                                        }
-
-                                        if (!validGroupColor(color))
-                                                color = groupAutoColor(newName);
-
-                                        sectionName = ensureGroupSection(oldName, section);
-                                        uci.set('sheepfold', sectionName, 'name', newName);
-                                        uci.set('sheepfold', sectionName, 'color', color);
-                                        if (!section)
-                                                uci.set('sheepfold', sectionName, 'protected', '0');
-
-                                        safeUciSections('sheepfold', 'device').forEach(function (deviceSection) {
-                                                if (normalizeGroupName(deviceSection.group) === oldName)
-                                                        uci.set('sheepfold', deviceSection['.name'], 'group', newName);
-                                        });
-
-                                        saveUciChanges(['sheepfold']).then(function () {
-                                                notify(T('Group saved.'), 'info');
-                                                if (onSave)
-                                                        onSave();
-                                                ui.hideModal();
-                                                window.setTimeout(function () {
-                                                        window.location.reload();
-                                                }, 700);
-                                        }, function () {
-                                                notify(T('Could not save group.'), 'warning');
-                                        });
+                                        saveGroupSettings();
                                 }
                         }, T('Save'))
                 ])
@@ -2394,6 +2607,12 @@ function showAddAdministratorModal(onAdd) {
         var nameField = inputControl(T('Admin name'), '');
         var loginField = inputControl(T('Login'), '');
         var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
+        var assignedToAnyAdmin = adminAssignedDeviceIds(null);
+        var selector = createDeviceSelectionBox({
+                filter: function (device) {
+                        return device.status !== 'blocked' && !assignedToAnyAdmin[device.id];
+                }
+        });
 
         function showError(message) {
                 conflictNote.textContent = message;
@@ -2406,7 +2625,9 @@ function showAddAdministratorModal(onAdd) {
                         E('div', { 'class': 'sf-grid two' }, [
                                 nameField.node,
                                 loginField.node
-                        ])
+                        ]),
+                        E('strong', {}, T('Assigned devices')),
+                        selector.node
                 ]),
                 E('div', { 'class': 'right sf-modal-actions' }, [
                         E('button', {
@@ -2437,7 +2658,7 @@ function showAddAdministratorModal(onAdd) {
                                                 id: nextAdminId(),
                                                 name: name,
                                                 login: login,
-                                                deviceIds: [],
+                                                deviceIds: selector.selectedIds(),
                                                 temporaryPassword: generatePairingCode()
                                         };
 
@@ -2453,85 +2674,13 @@ function showAddAdministratorModal(onAdd) {
 }
 
 function showAdminDeviceBindingModal(admin, onSave) {
-        var selected = {};
-        var filterInput = E('input', {
-                'class': 'cbi-input-text sf-search sf-binding-filter',
-                'placeholder': T('Search by name, IP, MAC, or ID')
+        var assignedToOtherAdmin = adminAssignedDeviceIds(admin);
+        var selector = createDeviceSelectionBox({
+                selectedIds: admin.deviceIds || [],
+                filter: function (device) {
+                        return device.status !== 'blocked' && !assignedToOtherAdmin[device.id];
+                }
         });
-        var table = E('div', { 'class': 'sf-binding-table' });
-
-        (admin.deviceIds || []).forEach(function (id) {
-                selected[id] = true;
-        });
-
-        function matchesFilter(device, needle) {
-                if (!needle)
-                        return true;
-
-                return [
-                        deviceDisplayId(device),
-                        formattedDeviceDisplayId(device),
-                        device.id,
-                        device.name,
-                        device.ip,
-                        device.mac,
-                        device.group
-                ].join(' ').toLowerCase().indexOf(needle) !== -1;
-        }
-
-        function sortedRows() {
-                return devices.filter(function (device) {
-                        return device.status !== 'blocked';
-                }).sort(function (left, right) {
-                        var leftSelected = selected[left.id] ? 1 : 0;
-                        var rightSelected = selected[right.id] ? 1 : 0;
-
-                        if (leftSelected !== rightSelected)
-                                return rightSelected - leftSelected;
-
-                        return devices.indexOf(right) - devices.indexOf(left);
-                });
-        }
-
-        function redraw() {
-                var needle = filterInput.value.trim().toLowerCase();
-                var rows = sortedRows().filter(function (device) {
-                        return matchesFilter(device, needle);
-                }).map(function (device) {
-                        var checkbox = E('input', {
-                                'type': 'checkbox',
-                                'checked': selected[device.id] ? 'checked' : null,
-                                'change': function (ev) {
-                                        selected[device.id] = ev.currentTarget.checked;
-                                        redraw();
-                                }
-                        });
-
-                        return E('div', { 'class': 'sf-binding-row' + (selected[device.id] ? ' is-selected' : '') }, [
-                                E('div', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
-                                E('div', { 'class': 'sf-device-name' }, [
-                                        E('strong', {}, device.name),
-                                        E('small', {}, device.group)
-                                ]),
-                                E('div', {}, device.ip),
-                                E('div', { 'class': 'sf-mono' }, device.mac),
-                                E('label', { 'class': 'sf-binding-check' }, checkbox)
-                        ]);
-                });
-
-                table.replaceChildren.apply(table, [
-                        E('div', { 'class': 'sf-binding-row sf-binding-head' }, [
-                                E('div', {}, T('ID')),
-                                E('div', {}, T('Device')),
-                                E('div', {}, T('IP address')),
-                                E('div', {}, T('MAC address')),
-                                E('div', {}, '')
-                        ])
-                ].concat(rows));
-        }
-
-        filterInput.addEventListener('input', redraw);
-        redraw();
 
         ui.showModal(T('Device binding'), [
                 E('div', { 'class': 'sf-binding-modal' }, [
@@ -2539,11 +2688,7 @@ function showAdminDeviceBindingModal(admin, onSave) {
                                 E('p', {}, T('Select administrator devices') + ' ' + admin.name + '. ' + T('Selected administrator devices can manage Sheepfold.')),
                                 E('p', {}, T('Blocklisted devices are not available for binding.'))
                         ]),
-                        E('div', { 'class': 'sf-panel-head sf-binding-toolbar' }, [
-                                filterInput,
-                                E('span', { 'class': 'sf-muted' }, T('Selected devices are shown first.'))
-                        ]),
-                        table
+                        selector.node
                 ]),
                 E('div', { 'class': 'sf-modal-actions right' }, [
                         E('button', {
@@ -2553,11 +2698,7 @@ function showAdminDeviceBindingModal(admin, onSave) {
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
-                                        admin.deviceIds = sortedRows().filter(function (device) {
-                                                return selected[device.id];
-                                        }).map(function (device) {
-                                                return device.id;
-                                        });
+                                        admin.deviceIds = selector.selectedIds();
                                         if (onSave)
                                                 onSave();
                                         ui.hideModal();
@@ -4358,11 +4499,6 @@ return view.extend({
                                 groupSections[groupName] = section;
                 });
 
-                if (!grouped[T('No restrictions')])
-                        grouped[T('No restrictions')] = [];
-                if (!grouped[T('Child number 1')])
-                        grouped[T('Child number 1')] = [];
-
                 devices.forEach(function (device) {
                         if (!device.group)
                                 return;
@@ -4399,6 +4535,8 @@ return view.extend({
 
                         uci.remove('sheepfold', sectionName);
                         saveUciChanges(['sheepfold']).then(function () {
+                                delete grouped[groupName];
+                                delete groupSections[groupName];
                                 notify(T('Group deleted.'), 'info');
                                 window.setTimeout(function () {
                                         window.location.reload();
@@ -4412,6 +4550,26 @@ return view.extend({
                         return left.localeCompare(right);
                 });
 
+                var usedCardColors = {};
+
+                function cardColor(groupName, section) {
+                        var color = section && validGroupColor(section.color) ? section.color : '';
+                        var palette = groupColorPalette();
+
+                        if (!color) {
+                                for (var i = 0; i < palette.length; i++) {
+                                        if (!usedCardColors[palette[i].toLowerCase()]) {
+                                                color = palette[i];
+                                                break;
+                                        }
+                                }
+                        }
+
+                        color = color || groupAutoColor(groupName);
+                        usedCardColors[color.toLowerCase()] = true;
+                        return color;
+                }
+
                 function groupCard(groupName) {
                         var section = groupSections[groupName];
                         var groupDevices = grouped[groupName] || [];
@@ -4420,7 +4578,7 @@ return view.extend({
 
                         return E('div', {
                                 'class': 'sf-box sf-group-box',
-                                'style': 'background-color: ' + groupColor(groupName, section) + ';'
+                                'style': 'background-color: ' + cardColor(groupName, section) + ';'
                         }, [
                                 E('div', { 'class': 'sf-group-head' }, [
                                         E('div', {}, [
@@ -4453,7 +4611,7 @@ return view.extend({
                                         E('p', {}, T('Groups collect devices so schedules and access rules can be applied to several devices at once.'))
                                 ]),
                                 E('button', {
-                                        'class': 'sf-action sf-action-positive',
+                                        'class': 'sf-action sf-action-positive sf-action-nowrap',
                                         'click': function (ev) {
                                                 var existingNames = {};
 
@@ -4749,7 +4907,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-73';
+                var assetVersion = '0.1.0-74';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
