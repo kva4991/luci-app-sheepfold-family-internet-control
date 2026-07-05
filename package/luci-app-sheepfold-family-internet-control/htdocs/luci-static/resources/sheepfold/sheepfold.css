@@ -297,6 +297,30 @@
         resize: vertical;
 }
 
+.sf-radio-time-field {
+        gap: 8px;
+}
+
+.sf-inline-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 400;
+}
+
+.sf-inline-option input[type="radio"] {
+        width: 18px;
+        height: 18px;
+}
+
+.sf-inline-option span {
+        font-weight: 500;
+}
+
+.sf-time-input {
+        width: 120px;
+}
+
 .sf-search {
         min-width: 240px;
         flex: 1 1 260px;

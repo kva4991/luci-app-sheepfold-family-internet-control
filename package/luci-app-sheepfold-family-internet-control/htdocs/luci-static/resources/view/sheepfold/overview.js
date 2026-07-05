@@ -41,6 +41,11 @@ var translations = {
         'Groups': 'Группы',
         'Group devices': 'Устройства группы',
         'Add group': 'Добавить группу',
+        'Delete group': 'Удалить группу',
+        'Group deleted.': 'Группа удалена.',
+        'Could not delete group.': 'Не удалось удалить группу.',
+        'This group cannot be deleted while devices are assigned to it.': 'Эту группу нельзя удалить, пока к ней привязаны устройства.',
+        'Protected group cannot be deleted.': 'Защищённую группу нельзя удалить.',
         'No groups yet. Assign devices to groups in device settings.': 'Групп пока нет. Назначьте устройства в группы в настройках устройства.',
         'Groups collect devices so schedules and access rules can be applied to several devices at once.': 'Группы объединяют устройства, чтобы расписания и правила доступа можно было применять сразу к нескольким устройствам.',
         'Group editor is not implemented in this visual test build.': 'Редактор групп пока не реализован в этой тестовой сборке.',
@@ -81,6 +86,7 @@ var translations = {
         'Auto-assigned to No restrictions': 'Автоматически добавлено в "Без ограничений"',
         'Parents': 'Родители',
         'Children': 'Дети',
+        'Child number 1': 'Ребёнок номер 1',
         'TV / media': 'ТВ / медиа',
         'Guests': 'Гости',
         'No restrictions': 'Без ограничений',
@@ -175,6 +181,7 @@ var translations = {
         'Click to restart the 30 second window.': 'Нажмите, чтобы снова запустить окно на 30 секунд.',
         'There are no newly connected devices yet. Keep this window open after the phone joins Wi-Fi.': 'Пока нет только что подключившихся устройств. Оставьте это окно открытым после подключения телефона к Wi-Fi.',
         'Connected after quick add started.': 'Подключились после запуска быстрого добавления.',
+        'seconds': 'секунд',
         'seconds ago': 'секунд назад',
         'minute ago': 'минуту назад',
         'minutes ago': 'минут назад',
@@ -268,6 +275,9 @@ var translations = {
         'block internet': 'выключить интернет',
         'unblock internet': 'включить интернет',
         'grant +30 minutes': 'дать +30 минут',
+        'show Wi-Fi status': 'показать состояние Wi-Fi',
+        'enable Wi-Fi': 'включить Wi-Fi',
+        'disable Wi-Fi': 'выключить Wi-Fi',
         'status': 'статус',
         'Administrative action log. Export masks sensitive fields.': 'Журнал действий администраторов. При экспорте чувствительные поля маскируются.',
         'Clear log': 'Очистить журнал',
@@ -308,6 +318,32 @@ var translations = {
         'Update check policy saved.': 'Настройка проверки обновлений сохранена.',
         'Could not save update check policy.': 'Не удалось сохранить настройку проверки обновлений.',
         'Defines how often Sheepfold should check for a stable release and install it after confirmation.': 'Определяет, как часто Sheepfold должен проверять stable-релиз и устанавливать его после подтверждения.',
+        'Enable Wi-Fi automatically': 'Включать Wi-Fi автоматически',
+        'Disable Wi-Fi automatically': 'Выключать Wi-Fi автоматически',
+        'At time': 'В указанное время',
+        'Wi-Fi auto-disable warning': 'Предупреждение об автоматическом выключении Wi-Fi',
+        'When Wi-Fi turns off, you will not be able to turn it back on from a phone connected only by Wi-Fi. Configure messenger control or a WPS button action so you can enable Wi-Fi outside the schedule if needed.': 'Когда Wi-Fi отключится, с телефона, подключённого только по Wi-Fi, вы уже не сможете включить его обратно. Заранее настройте управление через мессенджер или действие кнопки WPS, чтобы при необходимости включить Wi-Fi вне расписания.',
+        'Auto-disable time': 'Время автоматического выключения',
+        'Confirmation will be available in': 'Подтверждение будет доступно через',
+        'I understand the risk, continue': 'Я понимаю риск, продолжить',
+        'Wi-Fi automation settings saved.': 'Настройки автоматического Wi-Fi сохранены.',
+        'Could not save Wi-Fi automation settings.': 'Не удалось сохранить настройки автоматического Wi-Fi.',
+        'Applies to all Wi-Fi radios on the router. Real switching must require confirmation and be performed by the router backend.': 'Применяется ко всем Wi-Fi радиомодулям роутера. Реальное переключение должно требовать подтверждения и выполняться backend-частью роутера.',
+        'WPS short button press': 'Короткое нажатие кнопки WPS',
+        'WPS long button press': 'Долгое нажатие кнопки WPS',
+        'Router default behavior': 'Функционал роутера по умолчанию',
+        'Allow Wi-Fi connection': 'Дать подключиться к Wi-Fi',
+        'Allow Wi-Fi connection and add devices to allowlist (dangerous)': 'Дать подключиться к Wi-Fi и добавить устройства в белый список (опасно)',
+        'Disable Wi-Fi': 'Отключить Wi-Fi',
+        'WPS action saved.': 'Действие кнопки WPS сохранено.',
+        'Could not save WPS action.': 'Не удалось сохранить действие кнопки WPS.',
+        'Adding devices to allowlist from WPS is dangerous and must require an explicit confirmation window in the router backend.': 'Добавление устройств в белый список через WPS опасно и должно требовать отдельного окна подтверждения в backend-части роутера.',
+        'Router LED control': 'Управление светодиодами роутера',
+        'Turn off all LEDs permanently': 'Отключить навсегда все светодиоды',
+        'Blink LEDs when a new device connects until LuCI is opened': 'Мигать светодиодами, если подключилось новое устройство и с этого момента ещё не открывали LuCI',
+        'LED setting saved.': 'Настройка светодиодов сохранена.',
+        'Could not save LED setting.': 'Не удалось сохранить настройку светодиодов.',
+        'LED behavior depends on the router model and available OpenWrt LED triggers.': 'Поведение светодиодов зависит от модели роутера и доступных OpenWrt LED-триггеров.',
         'Known offline devices cleanup': 'Очистка логов устройств офлайн',
         '30 days': '30 дней',
         '90 days': '90 дней',
@@ -1959,6 +1995,7 @@ function showDeviceSettingsModal(device) {
         var knownGroups = [
                 [T('Not configured'), T('Not configured')],
                 [T('Parents'), T('Parents')],
+                [T('Child number 1'), T('Child number 1')],
                 [T('Children'), T('Children')],
                 [T('TV / media'), T('TV / media')],
                 [T('Guests'), T('Guests')],
@@ -2312,6 +2349,229 @@ function updateCheckInstallField() {
                 select,
                 E('small', {}, T('Defines how often Sheepfold should check for a stable release and install it after confirmation.'))
         ]);
+}
+
+function saveGlobalOptions(options) {
+        Object.keys(options).forEach(function (option) {
+                uci.set('sheepfold', 'global', option, options[option]);
+        });
+
+        return uci.save().then(function () {
+                return uci.apply();
+        });
+}
+
+function confirmWifiAutoDisable(timeValue) {
+        return new Promise(function (resolve) {
+                var remaining = 10;
+                var countdown = E('strong', {}, String(remaining));
+                var confirmButton;
+                var timer;
+                var resolved = false;
+
+                function done(confirmed) {
+                        if (resolved)
+                                return;
+
+                        resolved = true;
+                        if (timer)
+                                window.clearInterval(timer);
+                        ui.hideModal();
+                        resolve(confirmed);
+                }
+
+                confirmButton = E('button', {
+                        'class': 'btn cbi-button cbi-button-positive',
+                        'disabled': 'disabled',
+                        'click': function (ev) {
+                                ev.preventDefault();
+                                done(true);
+                        }
+                }, T('I understand the risk, continue') + ' (' + remaining + ')');
+
+                timer = window.setInterval(function () {
+                        remaining -= 1;
+                        countdown.textContent = String(Math.max(remaining, 0));
+                        confirmButton.textContent = remaining > 0 ?
+                                T('I understand the risk, continue') + ' (' + remaining + ')' :
+                                T('I understand the risk, continue');
+
+                        if (remaining <= 0) {
+                                confirmButton.disabled = false;
+                                window.clearInterval(timer);
+                        }
+                }, 1000);
+
+                ui.showModal(T('Wi-Fi auto-disable warning'), [
+                        E('div', { 'class': 'sf-warning-modal' }, [
+                                E('p', {}, T('When Wi-Fi turns off, you will not be able to turn it back on from a phone connected only by Wi-Fi. Configure messenger control or a WPS button action so you can enable Wi-Fi outside the schedule if needed.')),
+                                E('p', {}, [
+                                        E('strong', {}, T('Auto-disable time') + ': '),
+                                        E('span', {}, timeValue)
+                                ]),
+                                E('p', {}, [
+                                        E('span', {}, T('Confirmation will be available in') + ' '),
+                                        countdown,
+                                        E('span', {}, ' ' + T('seconds'))
+                                ])
+                        ]),
+                        E('div', { 'class': 'right sf-modal-actions' }, [
+                                E('button', {
+                                        'class': 'btn cbi-button',
+                                        'click': function (ev) {
+                                                ev.preventDefault();
+                                                done(false);
+                                        }
+                                }, T('Cancel')),
+                                confirmButton
+                        ])
+                ]);
+        });
+}
+
+function timeAutomationField(label, modeOption, timeOption, defaultTime) {
+        var currentMode = safeUciGet('sheepfold', 'global', modeOption, 'never');
+        var currentTime = safeUciGet('sheepfold', 'global', timeOption, defaultTime);
+        var modeName = 'sf-' + modeOption;
+        var neverRadio = E('input', {
+                'type': 'radio',
+                'name': modeName,
+                'value': 'never',
+                'checked': currentMode !== 'time' ? 'checked' : null
+        });
+        var timeRadio = E('input', {
+                'type': 'radio',
+                'name': modeName,
+                'value': 'time',
+                'checked': currentMode === 'time' ? 'checked' : null
+        });
+        var timeInput = E('input', {
+                'class': 'cbi-input-text sf-time-input',
+                'type': 'time',
+                'value': currentTime || defaultTime
+        });
+        var lastMode = currentMode === 'time' ? 'time' : 'never';
+        var lastTime = currentTime || defaultTime;
+        var confirmationOpen = false;
+
+        function selectedMode() {
+                return timeRadio.checked ? 'time' : 'never';
+        }
+
+        function restoreLastValue() {
+                neverRadio.checked = lastMode !== 'time';
+                timeRadio.checked = lastMode === 'time';
+                timeInput.value = lastTime;
+        }
+
+        function saveIfChanged() {
+                var nextMode = selectedMode();
+                var nextTime = timeInput.value || defaultTime;
+                var options = {};
+
+                if (nextMode === lastMode && nextTime === lastTime)
+                        return;
+
+                if (confirmationOpen)
+                        return;
+
+                options[modeOption] = nextMode;
+                options[timeOption] = nextTime;
+
+                function performSave() {
+                        saveGlobalOptions(options).then(function () {
+                        lastMode = nextMode;
+                        lastTime = nextTime;
+                        notify(T('Wi-Fi automation settings saved.'), 'info');
+                }, function () {
+                        restoreLastValue();
+                        notify(T('Could not save Wi-Fi automation settings.'), 'warning');
+                });
+                }
+
+                if (modeOption === 'wifi_auto_disable_mode' && nextMode === 'time') {
+                        confirmationOpen = true;
+                        confirmWifiAutoDisable(nextTime).then(function (confirmed) {
+                                confirmationOpen = false;
+                                if (!confirmed) {
+                                        restoreLastValue();
+                                        return;
+                                }
+                                performSave();
+                        });
+                        return;
+                }
+
+                performSave();
+        }
+
+        neverRadio.addEventListener('change', saveIfChanged);
+        timeRadio.addEventListener('change', saveIfChanged);
+        timeInput.addEventListener('blur', saveIfChanged);
+        timeInput.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                        ev.preventDefault();
+                        timeRadio.checked = true;
+                        saveIfChanged();
+                }
+        });
+
+        return E('div', { 'class': 'sf-field sf-field-wide sf-radio-time-field' }, [
+                E('span', {}, label),
+                E('label', { 'class': 'sf-inline-option' }, [
+                        neverRadio,
+                        E('span', {}, T('Never'))
+                ]),
+                E('label', { 'class': 'sf-inline-option' }, [
+                        timeRadio,
+                        E('span', {}, T('At time')),
+                        timeInput
+                ]),
+                E('small', {}, T('Applies to all Wi-Fi radios on the router. Real switching must require confirmation and be performed by the router backend.'))
+        ]);
+}
+
+function saveSelectGlobalField(label, option, value, values, successMessage, errorMessage, hint) {
+        var currentValue = safeUciGet('sheepfold', 'global', option, value);
+        var select = E('select', {
+                'class': 'cbi-input-select',
+                'change': function (ev) {
+                        var nextValue = ev.currentTarget.value;
+
+                        saveGlobalOption(option, nextValue).then(function () {
+                                currentValue = nextValue;
+                                notify(successMessage, 'info');
+                        }, function () {
+                                ev.currentTarget.value = currentValue;
+                                notify(errorMessage, 'warning');
+                        });
+                }
+        }, values.map(function (item) {
+                return E('option', { 'value': item[0], 'selected': item[0] === currentValue ? 'selected' : null }, item[1]);
+        }));
+
+        return E('label', { 'class': 'sf-field sf-field-wide' }, [
+                E('span', {}, label),
+                select,
+                hint ? E('small', {}, hint) : ''
+        ]);
+}
+
+function wpsActionField(label, option) {
+        return saveSelectGlobalField(label, option, 'router_default', [
+                ['router_default', T('Router default behavior')],
+                ['allow_wifi_connection', T('Allow Wi-Fi connection')],
+                ['allow_wifi_and_allowlist', T('Allow Wi-Fi connection and add devices to allowlist (dangerous)')],
+                ['disable_wifi', T('Disable Wi-Fi')]
+        ], T('WPS action saved.'), T('Could not save WPS action.'), T('Adding devices to allowlist from WPS is dangerous and must require an explicit confirmation window in the router backend.'));
+}
+
+function ledControlField() {
+        return saveSelectGlobalField(T('Router LED control'), 'router_led_control', 'router_default', [
+                ['router_default', T('Router default behavior')],
+                ['off_forever', T('Turn off all LEDs permanently')],
+                ['blink_new_device_until_luci_seen', T('Blink LEDs when a new device connects until LuCI is opened')]
+        ], T('LED setting saved.'), T('Could not save LED setting.'), T('LED behavior depends on the router model and available OpenWrt LED triggers.'));
 }
 
 function inputControl(label, value, attrs, hint) {
@@ -3358,6 +3618,7 @@ return view.extend({
 
         renderGroups: function (embedded) {
                 var grouped = {};
+                var groupSections = {};
                 var groupNames;
 
                 safeUciSections('sheepfold', 'group').forEach(function (section) {
@@ -3365,10 +3626,14 @@ return view.extend({
 
                         if (groupName && !grouped[groupName])
                                 grouped[groupName] = [];
+                        if (groupName)
+                                groupSections[groupName] = section;
                 });
 
                 if (!grouped[T('No restrictions')])
                         grouped[T('No restrictions')] = [];
+                if (!grouped[T('Child number 1')])
+                        grouped[T('Child number 1')] = [];
 
                 devices.forEach(function (device) {
                         if (!device.group)
@@ -3379,6 +3644,39 @@ return view.extend({
 
                         grouped[device.group].push(device);
                 });
+
+                function deleteGroup(groupName) {
+                        var section = groupSections[groupName];
+                        var sectionName = section && section['.name'];
+
+                        if (grouped[groupName] && grouped[groupName].length) {
+                                notify(T('This group cannot be deleted while devices are assigned to it.'), 'warning');
+                                return;
+                        }
+
+                        if (section && section.protected === '1') {
+                                notify(T('Protected group cannot be deleted.'), 'warning');
+                                return;
+                        }
+
+                        if (!sectionName) {
+                                notify(T('Group editor is not implemented in this visual test build.'), 'warning');
+                                return;
+                        }
+
+                        if (!window.confirm(T('Delete group') + ': ' + groupName + '?'))
+                                return;
+
+                        uci.remove('sheepfold', sectionName);
+                        saveUciChanges(['sheepfold']).then(function () {
+                                notify(T('Group deleted.'), 'info');
+                                window.setTimeout(function () {
+                                        window.location.reload();
+                                }, 700);
+                        }, function () {
+                                notify(T('Could not delete group.'), 'warning');
+                        });
+                }
 
                 groupNames = Object.keys(grouped).sort(function (left, right) {
                         return left.localeCompare(right);
@@ -3401,7 +3699,14 @@ return view.extend({
                                                                 E('span', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
                                                                 E('span', {}, device.name)
                                                         ]);
-                                                })) : E('div', { 'class': 'sf-muted' }, T('No devices'))
+                                                })) : E('div', { 'class': 'sf-muted' }, T('No devices')),
+                                                E('button', {
+                                                        'class': 'sf-action sf-action-danger sf-group-delete',
+                                                        'click': function (ev) {
+                                                                ev.preventDefault();
+                                                                deleteGroup(groupName);
+                                                        }
+                                                }, T('Delete group'))
                                         ]);
                                 })) :
                                 E('div', { 'class': 'sf-note sf-note-warning' }, T('No groups yet. Assign devices to groups in device settings.'))
@@ -3506,6 +3811,9 @@ return view.extend({
                                                 T('block internet'),
                                                 T('unblock internet'),
                                                 T('grant +30 minutes'),
+                                                T('show Wi-Fi status'),
+                                                T('enable Wi-Fi'),
+                                                T('disable Wi-Fi'),
                                                 T('status')
                                         ].map(function (command) {
                                                 return E('code', {}, command);
@@ -3623,6 +3931,11 @@ return view.extend({
 
         renderSettingsMisc: function () {
                 return E('div', { 'class': 'sf-flat-form sf-misc-actions' }, [
+                        timeAutomationField(T('Enable Wi-Fi automatically'), 'wifi_auto_enable_mode', 'wifi_auto_enable_time', '07:00'),
+                        timeAutomationField(T('Disable Wi-Fi automatically'), 'wifi_auto_disable_mode', 'wifi_auto_disable_time', '23:00'),
+                        wpsActionField(T('WPS short button press'), 'wps_short_press_action'),
+                        wpsActionField(T('WPS long button press'), 'wps_long_press_action'),
+                        ledControlField(),
                         selectField(T('Export mode'), 'safe', [
                                 ['safe', T('Readable JSON without secrets')],
                                 ['encrypted', T('Encrypted full backup')]
@@ -3696,7 +4009,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-61';
+                var assetVersion = '0.1.0-62';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;

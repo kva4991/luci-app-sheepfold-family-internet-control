@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=61
+PKG_RELEASE:=62
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -33,6 +33,13 @@ ensure_global_option detector_max_hosts_per_scan '16'
 ensure_global_option detector_min_no_restrictions_confidence '80'
 ensure_global_option detector_nmap_host_timeout_seconds '20'
 ensure_global_option update_check_install_mode 'weekly'
+ensure_global_option wifi_auto_enable_mode 'never'
+ensure_global_option wifi_auto_enable_time '07:00'
+ensure_global_option wifi_auto_disable_mode 'never'
+ensure_global_option wifi_auto_disable_time '23:00'
+ensure_global_option wps_short_press_action 'router_default'
+ensure_global_option wps_long_press_action 'router_default'
+ensure_global_option router_led_control 'router_default'
 ensure_global_option domain_allowlist_for_blocklist '1'
 if [ "$$(uci -q get sheepfold.global.domain_allowlist_for_blocklist_default_migrated 2>/dev/null)" != "1" ]; then
 	uci -q set sheepfold.global.domain_allowlist_for_blocklist='1'
@@ -48,6 +55,11 @@ uci -q set sheepfold.no_restrictions.name='Без ограничений'
 uci -q set sheepfold.no_restrictions.protected='1'
 uci -q set sheepfold.no_restrictions.auto_assignable='1'
 uci -q set sheepfold.no_restrictions.description='Trusted home infrastructure devices that should not be limited unless they are blocklisted'
+uci -q get sheepfold.child_1 >/dev/null || uci -q set sheepfold.child_1='group'
+uci -q set sheepfold.child_1.name='Ребёнок номер 1'
+uci -q set sheepfold.child_1.protected='0'
+uci -q set sheepfold.child_1.auto_assignable='0'
+uci -q set sheepfold.child_1.description='Default first child group'
 log_cache_path="$$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf '%s' /tmp/sheepfold/events.log)"
 case "$$log_cache_path" in
 	/tmp/sheepfold/*) ;;
