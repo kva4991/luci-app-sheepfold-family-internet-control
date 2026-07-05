@@ -41,6 +41,10 @@
 - Single parent-facing save action in LuCI instead of separate Save/Apply semantics.
 - First-open router root password gate.
 
+## Current Implementation Status
+
+This document is the product target. For the exact current package state, see [Current implementation status](current-implementation-status.md).
+
 ## Localization
 
 Sheepfold must support Russian and English UI text and should be ready for generated translations into popular languages.
@@ -131,22 +135,20 @@ Android Wi-Fi MAC check:
 
 Sheepfold must support parent/admin users configured on the router.
 
-Minimum roles:
-
-- `owner`: full control and administrator management;
-- `admin`: device, schedule, temporary access, Wi-Fi shortcut, and emergency-useful sites management.
+The current UX target keeps administrator accounts simple: each administrator has a name and login, and administrator devices are bound from the `Administrators` tab. A visible role selector is not required for the current MVP. A future `owner/admin` permission split may be added later if administrator-management permissions become necessary.
 
 Telegram/VK access must be bound to explicitly approved user IDs or chat IDs. MAX may be added as an experimental adapter, disabled by default. Children/client devices do not get a dedicated control interface by default.
 
 ## Administrator Devices And Pairing
 
-Any detected device can be marked as an administrator device.
+Administrator devices are bound from the `Administrators` tab, not from a dangerous action in the general device list.
 
 Requirements:
 
-- when making a device administrator-owned, LuCI must ask which administrator owns it;
-- the administrator must be selected from the configured administrator list;
-- an administrator device is still a normal network device for allowlist/blocklist/schedule purposes, but it also becomes eligible for Android app pairing;
+- when binding administrator-owned devices, LuCI must show all eligible devices except blocklisted devices and devices already bound to another administrator;
+- selected administrator devices should be removed from ordinary groups/schedules and added to allowlist-like trusted access so the parent does not lock themselves out;
+- blocklisted devices must not be eligible for administrator binding;
+- an administrator device is still a normal network device in the UI, but it also becomes eligible for Android app pairing;
 - the device table should show a special admin-device icon and a `Pairing` / `Сопряжение` action;
 - the icon should follow the idea of FontAwesome `laptop-mobile`, but must be bundled locally or implemented as a local asset/SVG, not hotlinked from a CDN;
 - pressing `Pairing` opens a modal with a QR code for the Android app and the same settings in text form for manual setup;
@@ -162,12 +164,12 @@ The LuCI interface must include an `Administrators` tab.
 
 Administrator requirements:
 
-- one default owner exists after installation/first setup;
-- additional administrators can be created by the owner;
-- every administrator has a unique display name, unique login, role, and password;
+- one default administrator exists after installation/first setup;
+- additional administrators can be created from the `Administrators` tab;
+- every administrator has a unique display name, unique login, and password;
 - passwords are stored only as salted password hashes;
-- minimum roles remain `owner` and `admin`;
-- deleting or demoting the last owner must be forbidden.
+- a visible role selector is not required for the current MVP;
+- if roles are added later, use `owner` and `admin`, and deleting or demoting the last owner must be forbidden.
 
 ## Target OpenWRT Scope
 

@@ -22,30 +22,44 @@ sh /tmp/sheepfold-uninstall.sh
 
 ## Release Plan
 
-1. Build `.ipk` packages in GitHub Actions.
-2. Publish packages to GitHub Releases.
-3. Teach `install.sh` to detect OpenWRT architecture.
-4. Detect existing AdGuard Home and Podkop installations.
-5. Ask for application language first and persist `language`, defaulting to `ru`.
-6. Ask whether to apply Sheepfold automatic setup, use full automatic setup by default, and persist `auto_configure`, `detection_mode`, and `no_restrictions_auto_assign`.
-7. Download the matching `.ipk`.
-8. Install dependencies through `opkg`.
-9. Install Sheepfold through `opkg install`.
-10. Apply the recommended Sheepfold `integration_mode`.
-11. Enable and start the service.
-12. Restart `rpcd`, `uhttpd`, and `firewall` when needed.
+Current package builds are architecture-independent `.ipk` files with `Architecture: all`.
+
+Already implemented locally:
+
+1. Build `.ipk` package artifacts with the repository build script.
+2. Publish/test packages through GitHub Releases manually.
+3. Ask for application language first and default to `ru`.
+4. Ask for user-agreement consent.
+5. Ask whether to apply Sheepfold automatic setup and persist the intended automatic setup values when config exists.
+6. Detect existing AdGuard Home and Podkop installations.
+7. Apply the recommended Sheepfold `integration_mode` when `/etc/config/sheepfold` already exists.
+
+Still needed for the public one-command installer:
+
+1. Read the latest stable GitHub Release.
+2. Download the latest `.ipk`.
+3. Install missing dependencies through `opkg`.
+4. Install Sheepfold through `opkg install`.
+5. Enable and start the service.
+6. Restart `rpcd`, `uhttpd`, and `firewall` when needed.
 
 ## Update Plan
 
-The LuCI and Android "Update app" buttons should:
+The installed LuCI "Update app" button and `update.sh` now use `/usr/libexec/sheepfold/sheepfold-updater` when the package is installed.
+
+The updater currently:
 
 1. Check latest GitHub Release.
 2. Compare current and latest versions.
-3. Create a settings backup.
-4. Download the matching `.ipk`.
-5. Install it.
-6. Restart required services.
-7. Report success or failure.
+3. Download the matching `.ipk` from the release assets.
+4. Install it with `opkg install`.
+5. Report success, no-update, or failure in localized text.
+
+Still needed:
+
+1. Create a settings backup before update.
+2. Restart only the required services after update.
+3. Add the Android-side update UI once Android authenticated API is complete.
 
 ## Uninstall Plan
 

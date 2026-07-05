@@ -8,11 +8,11 @@
 
 Sheepfold is a family internet access control system for an OpenWRT router.
 
-It is planned as an OpenWRT router application with a LuCI web interface, backend service, Android companion app named **Ovcharnya** / **Овчарня**, and messenger bot integration for managing household internet access.
+It is being built as an OpenWRT router application with a LuCI web interface, backend service, Android companion app named **Ovcharnya** / **Овчарня**, and messenger bot integration for managing household internet access.
 
 ## Installation
 
-The installer is a placeholder until the first package release is published.
+The install script currently performs first-run questions and integration detection, but it does not yet download and install the latest `.ipk` by itself.
 It first asks for application language (`ru` by default, `en` for English), then asks for user-agreement consent and offers automatic setup. Full automatic setup is the default and may assign confidently detected infrastructure devices to the `No restrictions` group. Reduced mode can be selected explicitly for routers with very little free space; it avoids heavy port checks but can still auto-assign confidently detected infrastructure devices.
 
 ```sh
@@ -22,7 +22,7 @@ sh /tmp/sheepfold-install.sh
 
 ## Update
 
-The updater is a placeholder until GitHub Releases are configured.
+After the OpenWRT package is installed, the update script delegates to the installed Sheepfold updater. The updater checks the latest stable GitHub Release, compares versions, downloads the `.ipk`, and runs `opkg install` when a newer package is available.
 
 ```sh
 wget -O /tmp/sheepfold-update.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/update.sh
@@ -99,10 +99,11 @@ uninstall.sh                                         Router uninstaller that pre
 
 ## Status
 
-This repository is in the planning/scaffolding stage.
+This repository is in active prototype development. Some LuCI/backend pieces already work, while firewall enforcement, schedules, full Android pairing, and messenger bots are still target features.
 
 See:
 
+- [Current implementation status](docs/current-implementation-status.md)
 - [Product requirements](docs/product-requirements.md)
 - [Direct task for AI developers](docs/developer-task.md)
 - [Android/OpenWRT API contract, Russian](docs/android-openwrt-api.ru.md)

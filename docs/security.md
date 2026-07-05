@@ -26,29 +26,26 @@ Fingerprint and face unlock may be available, but should not be recommended as t
 Password or PIN is recommended. Fingerprint or face unlock can be less safe for parental-control apps: a child may try to unlock the app while the parent is asleep.
 ```
 
-## Administrators And Roles
+## Administrators
 
 Sheepfold is administered by parent/admin users configured on the router.
 
-Minimum roles:
+The current MVP does not need a visible role selector. If a future permission split is added, use `owner` and `admin`: `owner` can add/remove administrators and perform dangerous maintenance actions; `admin` can manage family internet rules but cannot remove the owner.
 
-- `owner`: full control, can add/remove administrators, change messenger integration, import/export, update, reboot, and clear logs;
-- `admin`: can manage devices, schedules, temporary access, Wi-Fi shortcuts, and emergency-useful sites, but cannot remove the owner.
-
-Optional future roles may be added later, but do not add child/client roles unless explicitly requested.
+Do not add child/client roles unless explicitly requested.
 
 Each messenger administrator must be explicitly bound to a Telegram/VK/MAX user ID or chat ID in router settings. VK is the default first-run messenger choice, but no messenger must become active until credentials and at least one administrator binding are configured. MAX is experimental and must not be enabled by default.
 
 Administrator accounts:
 
-- one default `owner` must exist after installation/first setup;
+- one default administrator must exist after installation/first setup;
 - each administrator must have a unique display name and unique login;
 - administrator passwords must be stored only as salted hashes;
-- deleting or demoting the last owner must be forbidden.
+- if owner/admin roles are added later, deleting or demoting the last owner must be forbidden.
 
 ## Administrator Devices And Android Pairing
 
-Any detected device may be marked as an administrator device only after selecting the owning administrator.
+Administrator devices must be bound from the `Administrators` tab. Do not expose a `Make admin` action in the general device list. Blocklisted devices must not be eligible for administrator binding.
 
 Pairing rules:
 

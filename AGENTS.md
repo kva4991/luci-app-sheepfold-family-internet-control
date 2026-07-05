@@ -128,15 +128,17 @@ Avoid:
 
 ## Administrators And Roles
 
-- Minimum roles are `owner` and `admin`.
-- `owner` can manage administrators; `admin` can manage family internet rules but must not remove the owner.
+- Do not show an administrator role selector in the current MVP unless the project owner explicitly asks for roles again.
+- If a future permission split is added, use `owner` and `admin`: `owner` can manage administrators; `admin` can manage family internet rules but must not remove the owner.
 - Do not add child/client roles or child-facing control interfaces unless explicitly requested later.
 - Administrative logs should record who changed what, when, and with what result, without storing secrets.
 - LuCI must include a separate `Administrators` tab.
-- A default owner account must exist after installation/first setup.
-- Additional administrators must have unique display names, unique logins, roles, and passwords stored as salted hashes.
-- Do not allow deleting or demoting the last owner.
-- Any detected device can be marked as an administrator device only after selecting which administrator owns it.
+- A default administrator account must exist after installation/first setup.
+- Additional administrators must have unique display names, unique logins, and passwords stored as salted hashes.
+- Bind administrator devices only from the `Administrators` tab through the `Link devices` / `Привязать устройства` action.
+- Do not expose a `Make admin` action in the general device list.
+- Blocklisted devices must not be available for administrator binding.
+- When a device is bound to an administrator, remove ordinary group/schedule assignments and make sure the parent does not lock themselves out.
 - Admin devices should show a special local icon inspired by FontAwesome `laptop-mobile`; do not hotlink FontAwesome or any external CDN asset from LuCI.
 - Admin device rows must expose a `Pairing` / `Сопряжение` action that opens QR/manual Android setup.
 - Pairing payloads must use short-lived one-time tokens scoped to one administrator and one device. Never include router root passwords, LuCI session cookies, bot tokens, AI keys, or unrelated secrets in QR codes.

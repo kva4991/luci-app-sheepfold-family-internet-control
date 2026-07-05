@@ -27,9 +27,9 @@ Full Android management should be local-network only. Do not design full remote 
 
 During first setup, Android should try to detect Sheepfold automatically on the currently connected Wi-Fi network before asking the parent to confirm that this is the home network. Detection must verify a Sheepfold-specific endpoint on the router, not just any HTTP/LuCI response. Suggested endpoints:
 
-- `/cgi-bin/luci/admin/services/sheepfold/api/ping`
-- `/cgi-bin/luci/admin/sheepfold/api/ping`
 - `/.well-known/sheepfold.json`
+- `http://<router-host>:5201/cgi-bin/sheepfold-api`
+- later target: `http://<router-host>:5201/api/v1/ping`
 
 The response should contain a Sheepfold marker, package version, router name, and API base URL. If detection succeeds, continue to the MAC-check step without asking “are you connected to home Wi-Fi?”. If detection fails, show the manual Wi-Fi confirmation flow.
 
@@ -109,7 +109,7 @@ The repository has one Android build root: `android/`.
 
 Inside it, `android/app/` is the application module, not a second separate project. Run Gradle from `android/` so the build always uses `android/settings.gradle.kts`.
 
-This first scaffold uses Kotlin and Jetpack Compose. It currently shows a minimal router setup screen and keeps the package/application identity ready for future pairing, QR scanning, Android Keystore, and real router API integration.
+This scaffold uses Kotlin and Jetpack Compose. It currently focuses on first-run setup screens, local-network guidance, QR/manual connection setup, basic discovery against the router, and the package/application identity. Real secure pairing, token storage, Android Keystore integration, widgets, notifications, and the full authenticated router API still depend on the OpenWRT backend work described in `docs/android-openwrt-api.ru.md`.
 
 ## Build
 
