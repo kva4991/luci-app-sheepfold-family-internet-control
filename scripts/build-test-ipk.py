@@ -57,6 +57,7 @@ def add_tree(tar: tarfile.TarFile, source: Path, target_prefix: str) -> None:
         "./usr/libexec/sheepfold/sheepfold-updater",
         "./usr/libexec/sheepfold/sheepfold-router-control",
         "./www/cgi-bin/sheepfold-blocked",
+        "./www/cgi-bin/sheepfold-api",
     }
 
     for path in sorted(source.rglob("*")):
@@ -182,6 +183,19 @@ if [ "$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null)" != "
 fi
 uci -q set sheepfold.global.ui_asset_version='{version}-{release}'
 uci -q commit sheepfold
+app_port="$(uci -q get sheepfold.global.app_port 2>/dev/null || printf 5201)"
+mkdir -p /www/.well-known
+cat > /www/.well-known/sheepfold.json <<EOF
+{{
+  "service": "sheepfold",
+  "name": "Sheepfold Family Internet Control",
+  "routerName": "OpenWRT Sheepfold",
+  "appPort": "$app_port",
+  "apiPath": "/cgi-bin/sheepfold-api",
+  "apiBase": "/cgi-bin/sheepfold-api",
+  "version": "{version}-{release}"
+}}
+EOF
 rm -f /var/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-modulecache/* 2>/dev/null || true

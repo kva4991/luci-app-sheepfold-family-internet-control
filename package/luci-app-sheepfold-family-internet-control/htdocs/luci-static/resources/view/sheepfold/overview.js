@@ -130,6 +130,9 @@ var translations = {
         'Server IP address': 'IP адрес сервера',
         'Port': 'Порт',
         'Used by Android app and pairing QR codes.': 'Используется Android-приложением и QR-кодами подключения.',
+        'Port saved. Sheepfold service restart was requested. Android can discover the new port through the router discovery file.': 'Порт сохранён. Запрошен перезапуск сервиса Sheepfold. Android сможет узнать новый порт через файл обнаружения на роутере.',
+        'Could not save port.': 'Не удалось сохранить порт.',
+        'Enter a port from 1 to 65535.': 'Введите порт от 1 до 65535.',
         'Administrator settings': 'Настройки администратора',
         'Admin name': 'Имя',
         'Temporary password': 'Временный пароль',
@@ -1524,10 +1527,11 @@ function adminSortHeader(label, key) {
 function showPairingModal(device) {
         var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
-        var apiUrl = 'http://' + routerAddress + ':' + port + '/api/v1';
+        var apiPath = '/cgi-bin/sheepfold-api';
+        var apiUrl = 'http://' + routerAddress + ':' + port + apiPath;
         var pairingCode = device.pairingCode || generatePairingCode();
         var pairingPayload = 'SF1|h=' + routerAddress + '|p=' + port + '|u=' +
-                (device.adminLogin || 'SuperParent') + '|c=' + pairingCode + '|ttl=600';
+                (device.adminLogin || 'SuperParent') + '|c=' + pairingCode + '|ttl=600|api=' + apiPath;
 
         ui.showModal(T('Pairing settings'), [
                 E('div', { 'class': 'sf-modal-pairing' }, [
@@ -1559,9 +1563,11 @@ function showPairingModal(device) {
 function showAdminSettingsModal(admin) {
         var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
+        var apiPath = '/cgi-bin/sheepfold-api';
+        var apiUrl = 'http://' + routerAddress + ':' + port + apiPath;
         var temporaryPassword = admin.temporaryPassword || generatePairingCode();
         var pairingPayload = 'SF1|h=' + routerAddress + '|p=' + port + '|u=' +
-                admin.login + '|c=' + temporaryPassword + '|ttl=600';
+                admin.login + '|c=' + temporaryPassword + '|ttl=600|api=' + apiPath;
 
         ui.showModal(T('Administrator settings'), [
                 E('div', { 'class': 'sf-modal-pairing' }, [
@@ -1573,6 +1579,7 @@ function showAdminSettingsModal(admin) {
                                 field(T('Admin name'), admin.name),
                                 field(T('Login'), admin.login),
                                 passwordRevealField(T('Temporary password'), temporaryPassword),
+                                settingLine(T('Sheepfold API URL'), apiUrl),
                                 settingLine(T('Server IP address'), routerAddress),
                                 settingLine(T('Port'), port)
                         ])
@@ -2681,10 +2688,17 @@ function showAddAdministratorModal(onAdd) {
                                         };
 
                                         admins.push(admin);
-                                        if (onAdd)
-                                                onAdd(admin);
-                                        notify(T('Administrator added.'), 'info');
-                                        ui.hideModal();
+                                        applyAdminDeviceBindings(admin, selector.selectedDevices(), []).then(function () {
+                                                if (onAdd)
+                                                        onAdd(admin);
+                                                notify(T('Administrator added.'), 'info');
+                                                ui.hideModal();
+                                                window.setTimeout(function () {
+                                                        window.location.reload();
+                                                }, 700);
+                                        }, function () {
+                                                notify(T('Could not save device settings.'), 'warning');
+                                        });
                                 }
                         }, T('Save'))
                 ])
@@ -2716,11 +2730,22 @@ function showAdminDeviceBindingModal(admin, onSave) {
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
+                                        var previousIds = admin.deviceIds || [];
+                                        var selectedDevices = selector.selectedDevices();
+
                                         admin.deviceIds = selector.selectedIds();
-                                        if (onSave)
-                                                onSave();
-                                        ui.hideModal();
-                                        notify(T('Device bindings saved.'), 'info');
+                                        applyAdminDeviceBindings(admin, selectedDevices, previousIds).then(function () {
+                                                if (onSave)
+                                                        onSave();
+                                                ui.hideModal();
+                                                notify(T('Device bindings saved.'), 'info');
+                                                window.setTimeout(function () {
+                                                        window.location.reload();
+                                                }, 700);
+                                        }, function () {
+                                                admin.deviceIds = previousIds;
+                                                notify(T('Could not save device settings.'), 'warning');
+                                        });
                                 }
                         }, T('Save'))
                 ])
@@ -3350,6 +3375,71 @@ function messengerField(label, option, placeholder, hint, secret) {
         return node;
 }
 
+function appPortField() {
+        var currentValue = safeUciGet('sheepfold', 'global', 'app_port', '5201');
+        var input = E('input', {
+                'class': 'cbi-input-text',
+                'type': 'number',
+                'min': '1',
+                'max': '65535',
+                'value': currentValue
+        });
+        var lastValue = currentValue;
+
+        function discoveryJson(port) {
+                return JSON.stringify({
+                        service: 'sheepfold',
+                        name: 'Sheepfold Family Internet Control',
+                        routerName: 'OpenWRT Sheepfold',
+                        appPort: String(port),
+                        apiPath: '/cgi-bin/sheepfold-api',
+                        apiBase: '/cgi-bin/sheepfold-api',
+                        version: safeUciGet('sheepfold', 'global', 'ui_asset_version', '0.1.0')
+                }, null, 2) + '\n';
+        }
+
+        function saveIfChanged() {
+                var nextValue = String(input.value || '').trim();
+                var portNumber = parseInt(nextValue, 10);
+
+                if (nextValue === lastValue)
+                        return;
+
+                if (!nextValue || String(portNumber) !== nextValue || portNumber < 1 || portNumber > 65535) {
+                        input.value = lastValue;
+                        notify(T('Enter a port from 1 to 65535.'), 'warning');
+                        return;
+                }
+
+                saveGlobalOption('app_port', nextValue).then(function () {
+                        lastValue = nextValue;
+                        input.value = nextValue;
+                        return fs.write('/www/.well-known/sheepfold.json', discoveryJson(nextValue)).catch(function () {});
+                }).then(function () {
+                        return fs.exec('/etc/init.d/sheepfold', ['restart']).catch(function () {});
+                }).then(function () {
+                        notify(T('Port saved. Sheepfold service restart was requested. Android can discover the new port through the router discovery file.'), 'info');
+                }, function () {
+                        input.value = lastValue;
+                        notify(T('Could not save port.'), 'warning');
+                });
+        }
+
+        input.addEventListener('blur', saveIfChanged);
+        input.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                        ev.preventDefault();
+                        saveIfChanged();
+                }
+        });
+
+        return E('label', { 'class': 'sf-field sf-field-wide' }, [
+                E('span', {}, T('Port')),
+                input,
+                E('small', {}, T('Used by Android app and pairing QR codes.'))
+        ]);
+}
+
 function messengerSettingsBox() {
         var activeValue = safeUciGet('sheepfold', 'global', 'active_messenger', 'none');
         var vkToken = messengerField(T('VK community access token'), 'vk_access_token', '', T('Stored on the router.'), true);
@@ -3903,6 +3993,47 @@ function updateMacList(listName, mac, enabled) {
                 });
 
         uci.set('sheepfold', sectionName, 'mac', values.join(' '));
+}
+
+function applyAdminDeviceBindings(admin, selectedDevices, previousIds) {
+        var selectedById = {};
+
+        selectedDevices.forEach(function (device) {
+                var sectionName = ensureSheepfoldDeviceSection(device);
+                var mac = normalizeMac(device.mac);
+
+                selectedById[device.id] = true;
+
+                uci.set('sheepfold', sectionName, 'mac', mac);
+                uci.set('sheepfold', sectionName, 'name', device.name || mac);
+                uci.set('sheepfold', sectionName, 'ip', device.ip || '');
+                uci.set('sheepfold', sectionName, 'device_type', device.deviceType || 'phone');
+                uci.set('sheepfold', sectionName, 'group', T('Not configured'));
+                uci.set('sheepfold', sectionName, 'schedules', '');
+                uci.set('sheepfold', sectionName, 'status', 'allow');
+                uci.set('sheepfold', sectionName, 'admin_device', '1');
+                uci.set('sheepfold', sectionName, 'admin_owner', admin.name || '');
+                uci.set('sheepfold', sectionName, 'admin_login', admin.login || '');
+                updateMacList('allowlist', mac, true);
+                updateMacList('blocklist', mac, false);
+        });
+
+        (previousIds || []).forEach(function (id) {
+                var device = deviceById(id);
+                var sectionName;
+
+                if (!device || selectedById[id])
+                        return;
+
+                sectionName = ensureSheepfoldDeviceSection(device);
+                if (uci.get('sheepfold', sectionName, 'admin_login') === admin.login) {
+                        uci.set('sheepfold', sectionName, 'admin_device', '0');
+                        uci.set('sheepfold', sectionName, 'admin_owner', '');
+                        uci.set('sheepfold', sectionName, 'admin_login', '');
+                }
+        });
+
+        return saveUciChanges(['sheepfold']);
 }
 
 function ensureStaticDhcpSection(device) {
@@ -4876,7 +5007,7 @@ return view.extend({
                                 ['ru', T('Russian')],
                                 ['en', T('English')]
                         ]),
-                        field(T('Port'), safeUciGet('sheepfold', 'global', 'app_port', '5201'), T('Used by Android app and pairing QR codes.')),
+                        appPortField(),
                         selectField(T('New device behavior'), 'allow', [
                                 ['allow', T('Allow internet by default')],
                                 ['restrict_until_configured', T('Restrict until configured')]
@@ -4978,7 +5109,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-76';
+                var assetVersion = '0.1.0-77';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;

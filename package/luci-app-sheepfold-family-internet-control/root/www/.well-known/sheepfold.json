@@ -2,6 +2,8 @@
   "service": "sheepfold",
   "name": "Sheepfold Family Internet Control",
   "routerName": "OpenWRT Sheepfold",
-  "apiBase": "/cgi-bin/luci/admin/services/sheepfold/api",
+  "appPort": "5201",
+  "apiPath": "/cgi-bin/sheepfold-api",
+  "apiBase": "/cgi-bin/sheepfold-api",
   "version": "0.1.0"
 }

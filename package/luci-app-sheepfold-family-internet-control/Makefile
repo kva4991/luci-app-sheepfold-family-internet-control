@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=76
+PKG_RELEASE:=77
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -106,6 +106,19 @@ if [ "$$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null)" != 
 fi
 uci -q set sheepfold.global.ui_asset_version='$(SHEEPFOLD_UI_ASSET_VERSION)'
 uci -q commit sheepfold
+app_port="$$(uci -q get sheepfold.global.app_port 2>/dev/null || printf 5201)"
+mkdir -p /www/.well-known
+cat > /www/.well-known/sheepfold.json <<EOF
+{
+  "service": "sheepfold",
+  "name": "Sheepfold Family Internet Control",
+  "routerName": "OpenWRT Sheepfold",
+  "appPort": "$$app_port",
+  "apiPath": "/cgi-bin/sheepfold-api",
+  "apiBase": "/cgi-bin/sheepfold-api",
+  "version": "$(SHEEPFOLD_UI_ASSET_VERSION)"
+}
+EOF
 rm -f /var/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-modulecache/* 2>/dev/null || true

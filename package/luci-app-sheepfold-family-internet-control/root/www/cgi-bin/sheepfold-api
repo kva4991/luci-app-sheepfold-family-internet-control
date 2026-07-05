@@ -1,0 +1,45 @@
+#!/bin/sh
+
+json_escape() {
+        printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+header_json() {
+        printf 'Status: %s\r\n' "$1"
+        printf 'Content-Type: application/json; charset=utf-8\r\n'
+        printf 'Access-Control-Allow-Origin: *\r\n'
+        printf 'Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n'
+        printf 'Access-Control-Allow-Headers: Content-Type\r\n'
+        printf '\r\n'
+}
+
+router_name="$(uci -q get system.@system[0].hostname 2>/dev/null || printf OpenWrt)"
+version="$(uci -q get sheepfold.global.ui_asset_version 2>/dev/null || printf unknown)"
+app_port="$(uci -q get sheepfold.global.app_port 2>/dev/null || printf 5201)"
+api_path="/cgi-bin/sheepfold-api"
+http_host="${HTTP_HOST:-}"
+[ -n "$http_host" ] || http_host="127.0.0.1:$app_port"
+method="${REQUEST_METHOD:-GET}"
+
+case "$method" in
+        OPTIONS)
+                header_json "204 No Content"
+                exit 0
+                ;;
+        GET)
+                header_json "200 OK"
+                printf '{"app":"sheepfold","ok":true,"routerName":"%s","version":"%s","appPort":"%s","apiPath":"%s","apiUrl":"http://%s%s"}\n' \
+                        "$(json_escape "$router_name")" "$(json_escape "$version")" \
+                        "$(json_escape "$app_port")" "$(json_escape "$api_path")" \
+                        "$(json_escape "$http_host")" "$(json_escape "$api_path")"
+                ;;
+        POST)
+                header_json "200 OK"
+                printf '{"app":"sheepfold","ok":true,"routerName":"%s","paired":true,"message":"pairing endpoint placeholder"}\n' \
+                        "$(json_escape "$router_name")"
+                ;;
+        *)
+                header_json "405 Method Not Allowed"
+                printf '{"app":"sheepfold","ok":false,"error":"method_not_allowed"}\n'
+                ;;
+esac

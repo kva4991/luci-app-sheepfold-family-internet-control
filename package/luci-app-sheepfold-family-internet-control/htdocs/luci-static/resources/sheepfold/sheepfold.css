@@ -327,6 +327,16 @@
         resize: vertical;
 }
 
+.sf-settings-section .sf-field .cbi-input-select,
+.sf-settings-section .sf-field .cbi-input-text {
+        width: min(100%, 520px);
+        box-sizing: border-box;
+}
+
+.sf-settings-section .sf-field textarea.cbi-input-textarea {
+        width: 100%;
+}
+
 .sf-radio-time-field {
         gap: 8px;
 }

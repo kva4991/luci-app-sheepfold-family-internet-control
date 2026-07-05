@@ -195,14 +195,16 @@ class RouterConnectionManager {
                 return null
             }
 
-            val routerName = runCatching {
-                JSONObject(body).optString("routerName")
-                    .ifBlank { JSONObject(body).optString("name") }
-            }.getOrNull().orEmpty().ifBlank { gatewayHost }
+            val json = runCatching { JSONObject(body) }.getOrNull()
+            val routerName = json?.optString("routerName")
+                ?.ifBlank { json.optString("name") }
+                .orEmpty()
+                .ifBlank { gatewayHost }
+            val apiUrl = json?.let { discoveryApiUrl(it, gatewayHost, probe.apiUrl) } ?: probe.apiUrl
 
             LocalSheepfoldDiscovery(
                 gatewayHost = gatewayHost,
-                apiUrl = probe.apiUrl,
+                apiUrl = apiUrl,
                 routerName = routerName
             )
         } catch (_: Exception) {
@@ -220,6 +222,24 @@ class RouterConnectionManager {
         return defaultIpv4Route(linkProperties)
             ?.gateway
             ?.hostAddress
+    }
+
+    private fun discoveryApiUrl(json: JSONObject, gatewayHost: String, fallbackApiUrl: String): String {
+        val absoluteApiUrl = json.optString("apiUrl").trim()
+        if (absoluteApiUrl.startsWith("http://") || absoluteApiUrl.startsWith("https://")) {
+            return normalizeRouterUrl(absoluteApiUrl)
+        }
+
+        val port = json.optString("appPort").trim()
+        val path = json.optString("apiPath")
+            .ifBlank { json.optString("apiBase") }
+            .ifBlank { "/cgi-bin/sheepfold-api" }
+        if (port.isNotBlank()) {
+            val normalizedPath = if (path.startsWith("/")) path else "/$path"
+            return "http://$gatewayHost:$port$normalizedPath".trimEnd('/')
+        }
+
+        return fallbackApiUrl
     }
 
     private fun defaultIpv4Route(linkProperties: LinkProperties): RouteInfo? {
