@@ -65,6 +65,111 @@ add_mac_to_allowlist() {
         uci -q add_list "sheepfold.allowlist.mac=$mac"
 }
 
+remove_mac_from_list() {
+        list_name="$1"
+        mac="$(normalize_mac "$2")"
+        valid_mac "$mac" || return 0
+        ensure_list_section "$list_name"
+
+        values="$(uci -q get "sheepfold.$list_name.mac" 2>/dev/null || true)"
+        uci -q delete "sheepfold.$list_name.mac" 2>/dev/null || true
+
+        for existing in $values; do
+                normalized="$(normalize_mac "$existing")"
+                [ "$normalized" = "$mac" ] && continue
+                valid_mac "$normalized" || continue
+                uci -q add_list "sheepfold.$list_name.mac=$normalized"
+        done
+}
+
+add_mac_to_list() {
+        list_name="$1"
+        mac="$(normalize_mac "$2")"
+        valid_mac "$mac" || return 1
+        ensure_list_section "$list_name"
+
+        for existing in $(uci -q get "sheepfold.$list_name.mac" 2>/dev/null || true); do
+                [ "$(normalize_mac "$existing")" = "$mac" ] && return 0
+        done
+
+        uci -q add_list "sheepfold.$list_name.mac=$mac"
+}
+
+device_section_for_mac() {
+        mac="$(normalize_mac "$1")"
+        valid_mac "$mac" || return 1
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=device$/\1/p"); do
+                existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+                [ "$(normalize_mac "$existing")" = "$mac" ] && {
+                        printf '%s\n' "$section"
+                        return 0
+                }
+        done
+
+        section="device_$(printf '%s' "$mac" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+        uci -q get "sheepfold.$section" >/dev/null 2>&1 || uci -q set "sheepfold.$section=device"
+        printf '%s\n' "$section"
+}
+
+set_device_status() {
+        mac="$(normalize_mac "${1:-}")"
+        status="${2:-}"
+        name="${3:-}"
+        ip="${4:-}"
+        group="${5:-}"
+        device_type="${6:-}"
+
+        valid_mac "$mac" || {
+                echo "Invalid MAC address" >&2
+                return 2
+        }
+
+        case "$status" in
+                allow|blocked|restricted|scheduled|new) ;;
+                *)
+                        echo "Unsupported device status: $status" >&2
+                        return 2
+                        ;;
+        esac
+
+        section="$(device_section_for_mac "$mac")"
+
+        if [ "$status" = "blocked" ] &&
+                [ "$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)" = "1" ]; then
+                echo "Administrator device cannot be added to blocklist" >&2
+                return 3
+        fi
+
+        [ -n "$name" ] || name="$mac"
+        [ -n "$group" ] || group="Не настроено"
+        [ -n "$device_type" ] || device_type="smart"
+
+        uci -q set "sheepfold.$section.mac=$mac"
+        uci -q set "sheepfold.$section.name=$name"
+        uci -q set "sheepfold.$section.ip=$ip"
+        uci -q set "sheepfold.$section.group=$group"
+        uci -q set "sheepfold.$section.device_type=$device_type"
+        uci -q set "sheepfold.$section.status=$status"
+
+        if [ "$status" = "allow" ]; then
+                add_mac_to_list allowlist "$mac"
+                remove_mac_from_list blocklist "$mac"
+                log_event "Устройство добавлено в белый список: $mac, IP ${ip:-неизвестен}"
+        elif [ "$status" = "blocked" ]; then
+                add_mac_to_list blocklist "$mac"
+                remove_mac_from_list allowlist "$mac"
+                log_event "Устройство добавлено в чёрный список: $mac, IP ${ip:-неизвестен}"
+        else
+                remove_mac_from_list allowlist "$mac"
+                remove_mac_from_list blocklist "$mac"
+                log_event "Устройство добавлено вручную: $mac, IP ${ip:-неизвестен}"
+        fi
+
+        uci -q commit sheepfold
+        printf 'OK\n'
+}
+
 wifi_set_all() {
         disabled="$1"
         changed=0
@@ -462,6 +567,9 @@ case "$COMMAND" in
         wan-status-tick)
                 wan_status_tick
                 ;;
+        set-device-status)
+                set_device_status "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}"
+                ;;
         wps-button)
                 wps_button "${2:-short}"
                 ;;
@@ -503,7 +611,7 @@ case "$COMMAND" in
                 printf 'wan_state=%s\n' "$(cat "$WAN_STATE_FILE" 2>/dev/null || true)"
                 ;;
         *)
-                echo "Usage: sheepfold-router-control [wifi-enable|wifi-disable|wifi-automation-tick|wps-button|led-apply|led-alert-ack|blocked-page-apply|status]" >&2
+                echo "Usage: sheepfold-router-control [wifi-enable|wifi-disable|wifi-automation-tick|set-device-status|wps-button|led-apply|led-alert-ack|blocked-page-apply|status]" >&2
                 exit 1
                 ;;
 esac

@@ -186,6 +186,9 @@ var translations = {
         'Search by name, IP, or MAC': 'Поиск по имени, IP или MAC',
         'Search by name, IP, MAC, or ID': 'Поиск по имени, IP, MAC или ID',
         'Manual MAC-based add form is not implemented in this visual test build.': 'Ручное добавление по MAC пока не реализовано в этой визуальной сборке.',
+        'Add device manually': 'Добавить устройство вручную',
+        'Device name': 'Название устройства',
+        'Device added.': 'Устройство добавлено.',
         'These devices are never blocked by global blocking or schedules.': 'Эти устройства не блокируются глобальной блокировкой и расписаниями.',
         'Add device': 'Добавить устройство',
         'Add device to allowlist': 'Добавить устройство в белый список',
@@ -198,6 +201,9 @@ var translations = {
         'Device added to allowlist.': 'Устройство добавлено в белый список.',
         'Device added to blocklist.': 'Устройство добавлено в чёрный список.',
         'Could not add device.': 'Не удалось добавить устройство.',
+        'Action failed.': 'Не удалось выполнить действие.',
+        'Administrator device cannot be added to blocklist': 'Админское устройство нельзя добавить в чёрный список.',
+        'Invalid MAC address': 'Неверный MAC-адрес.',
         'The UI must prevent adding the same MAC to allowlist and blocklist.': 'Интерфейс должен запрещать добавление одного MAC одновременно в белый и чёрный список.',
         'Quick add to allowlist': 'Быстрое добавление в белый список',
         'Quick allowlist add': 'Быстрое добавление в белый список',
@@ -433,6 +439,10 @@ var translations = {
         'Import all settings and user list': 'Импорт всех настроек и списка пользователей',
         'Export all settings and user list': 'Экспорт всех настроек и списка пользователей',
         'Import requires confirmation.': 'Импорт требует подтверждения.',
+        'Settings export saved.': 'Экспорт настроек сохранён.',
+        'Could not read import file.': 'Не удалось прочитать файл импорта.',
+        'Import file checked. Applying imported settings will be added after backend import confirmation is implemented.': 'Файл импорта проверен. Применение импортированных настроек будет добавлено после реализации backend-подтверждения импорта.',
+        'Import file format is not recognized.': 'Формат файла импорта не распознан.',
         'Devices': 'Устройства',
         'Save': 'Сохранить',
         'Save changes. This visual build does not use a separate Apply button.': 'Сохранить изменения. В этой визуальной сборке отдельная кнопка "Применить" не используется.',
@@ -536,6 +546,21 @@ function actionButton(label, tone, message) {
                         notify(message || T('This action is a visual prototype only.'), tone === 'danger' ? 'warning' : 'info');
                 }
         }, label);
+}
+
+function routerControl(args) {
+        return fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', args);
+}
+
+function commandErrorText(error, fallback) {
+        var text = fallback || T('Action failed.');
+
+        if (error) {
+                text = error.stderr || error.stdout || error.message || text;
+                text = String(text).trim() || fallback || T('Action failed.');
+        }
+
+        return T(text);
 }
 
 function rebootRouterButton() {
@@ -729,6 +754,120 @@ function downloadTextFile(filename, text) {
         window.setTimeout(function () {
                 window.URL.revokeObjectURL(url);
         }, 0);
+}
+
+function secretOptionName(name) {
+        return /(password|passwd|token|secret|key|cookie|session)/i.test(String(name || ''));
+}
+
+function exportPlainSection(section) {
+        var result = {};
+
+        Object.keys(section || {}).forEach(function (key) {
+                var value = section[key];
+
+                if (typeof value === 'function')
+                        return;
+
+                result[key] = secretOptionName(key) ? '[secret]' : value;
+        });
+
+        return result;
+}
+
+function exportSections(config, type) {
+        return safeUciSections(config, type).map(exportPlainSection);
+}
+
+function sheepfoldSettingsExportText() {
+        var payload = {
+                format: 'sheepfold-settings-export-v1',
+                app: 'luci-app-sheepfold-family-internet-control',
+                exportedAt: new Date().toISOString(),
+                sheepfold: {
+                        global: exportSections('sheepfold', 'global'),
+                        devices: exportSections('sheepfold', 'device'),
+                        lists: exportSections('sheepfold', 'list'),
+                        groups: exportSections('sheepfold', 'group'),
+                        schedules: exportSections('sheepfold', 'schedule'),
+                        sites: exportSections('sheepfold', 'site')
+                },
+                router: {
+                        dhcpHosts: exportSections('dhcp', 'host'),
+                        wifiDevices: exportSections('wireless', 'wifi-device'),
+                        wifiIfaces: exportSections('wireless', 'wifi-iface')
+                },
+                uiState: {
+                        detectedDevices: devices.map(function (device) {
+                                return Object.assign({}, device);
+                        }),
+                        administrators: admins.map(function (admin) {
+                                var exportedAdmin = Object.assign({}, admin);
+
+                                delete exportedAdmin.temporaryPassword;
+                                return exportedAdmin;
+                        }),
+                        emergencySites: emergencySites.map(function (site) {
+                                return site.slice();
+                        })
+                }
+        };
+
+        return JSON.stringify(payload, null, 2) + '\n';
+}
+
+function exportSettingsAndUsers() {
+        var stamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+        downloadTextFile('sheepfold-settings-' + stamp + '.json', sheepfoldSettingsExportText());
+        notify(T('Settings export saved.'), 'info');
+}
+
+function importSettingsAndUsers() {
+        var input = E('input', {
+                'type': 'file',
+                'accept': 'application/json,.json',
+                'change': function () {
+                        var file = input.files && input.files[0];
+                        var reader;
+
+                        if (!file)
+                                return;
+
+                        reader = new FileReader();
+                        reader.onload = function () {
+                                var parsed;
+
+                                try {
+                                        parsed = JSON.parse(String(reader.result || ''));
+                                } catch (e) {
+                                        notify(T('Import file format is not recognized.'), 'warning');
+                                        return;
+                                }
+
+                                if (!parsed || parsed.format !== 'sheepfold-settings-export-v1') {
+                                        notify(T('Import file format is not recognized.'), 'warning');
+                                        return;
+                                }
+
+                                ui.showModal(T('Import all settings and user list'), [
+                                        E('div', { 'class': 'sf-note sf-note-warning' }, T('Import file checked. Applying imported settings will be added after backend import confirmation is implemented.')),
+                                        E('div', { 'class': 'right sf-modal-actions' }, [
+                                                E('button', {
+                                                        'class': 'btn cbi-button cbi-button-positive',
+                                                        'click': ui.hideModal
+                                                }, T('Close'))
+                                        ])
+                                ]);
+                        };
+                        reader.onerror = function () {
+                                notify(T('Could not read import file.'), 'warning');
+                        };
+                        reader.readAsText(file);
+                }
+        });
+
+        input.click();
 }
 
 function svgIcon(paths, attrs) {
@@ -1666,6 +1805,23 @@ function listDeviceCandidateTable(targetStatus, onSelect) {
         ]);
 }
 
+function setDeviceBackendStatus(device, status) {
+        var mac = normalizeMac(device && device.mac);
+
+        if (!mac)
+                return Promise.reject(new Error(T('Invalid MAC address')));
+
+        return routerControl([
+                'set-device-status',
+                mac,
+                status,
+                device.name || device.hostname || mac,
+                device.ip || '',
+                device.group || T('Not configured'),
+                device.deviceType || 'smart'
+        ]);
+}
+
 function showManualListDeviceModal(targetStatus) {
         var isAllowlist = targetStatus === 'allow';
         var title = isAllowlist ? T('Add device to allowlist') : T('Add device to blocklist');
@@ -1687,27 +1843,72 @@ function showManualListDeviceModal(targetStatus) {
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
-                                        selector.selectedDevices().forEach(function (device) {
-                                                var mac = normalizeMac(device.mac);
-                                                var sectionName = ensureSheepfoldDeviceSection(device);
+                                        var selectedDevices = selector.selectedDevices();
 
-                                                uci.set('sheepfold', sectionName, 'mac', mac);
-                                                uci.set('sheepfold', sectionName, 'name', device.name || mac);
-                                                uci.set('sheepfold', sectionName, 'ip', device.ip || '');
-                                                uci.set('sheepfold', sectionName, 'group', device.group || T('Not configured'));
-                                                uci.set('sheepfold', sectionName, 'device_type', device.deviceType || 'smart');
-                                                uci.set('sheepfold', sectionName, 'status', targetStatus);
-                                                updateMacList(isAllowlist ? 'allowlist' : 'blocklist', mac, true);
-                                        });
+                                        if (!selectedDevices.length) {
+                                                notify(T('No devices selected'), 'warning');
+                                                return;
+                                        }
 
-                                        saveUciChanges(['sheepfold']).then(function () {
+                                        Promise.all(selectedDevices.map(function (device) {
+                                                return setDeviceBackendStatus(device, targetStatus);
+                                        })).then(function () {
                                                 notify(isAllowlist ? T('Device added to allowlist.') : T('Device added to blocklist.'), 'info');
                                                 ui.hideModal();
                                                 window.setTimeout(function () {
                                                         window.location.reload();
                                                 }, 700);
-                                        }, function () {
-                                                notify(T('Could not add device.'), 'warning');
+                                        }, function (error) {
+                                                notify(commandErrorText(error, T('Could not add device.')), 'warning');
+                                        });
+                                }
+                        }, T('Save'))
+                ])
+        ]);
+}
+
+function showManualDeviceModal() {
+        var nameField = siteInputField(T('Device name'), '');
+        var macField = siteInputField(T('MAC address'), '');
+        var ipField = siteInputField(T('IP address'), '');
+        var typeField = deviceTypeSelectControl(T('Device type'), 'smart');
+
+        ui.showModal(T('Add device'), [
+                E('div', { 'class': 'sf-device-editor' }, [
+                        nameField.node,
+                        macField.node,
+                        ipField.node,
+                        typeField.node
+                ]),
+                E('div', { 'class': 'right sf-modal-actions' }, [
+                        E('button', {
+                                'class': 'btn cbi-button',
+                                'click': ui.hideModal
+                        }, T('Cancel')),
+                        E('button', {
+                                'class': 'btn cbi-button cbi-button-positive',
+                                'click': function () {
+                                        var mac = normalizeMac(macField.input.value);
+
+                                        if (!mac) {
+                                                notify(T('Enter a valid MAC address.'), 'warning');
+                                                return;
+                                        }
+
+                                        setDeviceBackendStatus({
+                                                mac: mac,
+                                                name: nameField.input.value.trim() || mac,
+                                                ip: ipField.input.value.trim(),
+                                                group: T('Not configured'),
+                                                deviceType: typeField.input.value
+                                        }, 'restricted').then(function () {
+                                                notify(T('Device added.'), 'info');
+                                                ui.hideModal();
+                                                window.setTimeout(function () {
+                                                        window.location.reload();
+                                                }, 700);
+                                        }, function (error) {
+                                                notify(commandErrorText(error, T('Could not add device.')), 'warning');
                                         });
                                 }
                         }, T('Save'))
@@ -1762,10 +1963,15 @@ function showQuickAllowlistModal() {
                 var candidates = candidateList();
 
                 candidatesNode.replaceChildren(renderQuickCandidateTable(candidates, function (candidate, button) {
-                        updateMacList('allowlist', candidate.device.mac, true);
-                        candidate.added = true;
                         button.disabled = true;
-                        button.textContent = T('Candidate added to allowlist. Save changes to apply.');
+                        setDeviceBackendStatus(candidate.device, 'allow').then(function () {
+                                candidate.added = true;
+                                button.textContent = T('Device added to allowlist.');
+                                notify(T('Device added to allowlist.'), 'info');
+                        }, function (error) {
+                                button.disabled = false;
+                                notify(commandErrorText(error, T('Could not add device.')), 'warning');
+                        });
                 }));
         }
 
@@ -4569,7 +4775,13 @@ return view.extend({
                         ]),
                         E('div', { 'class': 'sf-toolbar sf-device-toolbar' }, [
                                 search,
-                                actionButton(T('Add device'), 'positive', T('Manual MAC-based add form is not implemented in this visual test build.'))
+                                E('button', {
+                                        'class': 'sf-action sf-action-positive',
+                                        'click': function (ev) {
+                                                ev.preventDefault();
+                                                showManualDeviceModal();
+                                        }
+                                }, T('Add device'))
                         ]),
                         devices.length ? '' : E('div', { 'class': 'sf-note sf-note-warning' }, T('No devices found in DHCP leases, ARP, or static DHCP leases yet.')),
                         table
@@ -5051,8 +5263,20 @@ return view.extend({
                                 ['encrypted', T('Encrypted full backup')]
                         ]),
                         E('div', { 'class': 'sf-action-stack' }, [
-                                actionButton(T('Import all settings and user list'), 'neutral', T('Import requires confirmation.')),
-                                actionButton(T('Export all settings and user list'), 'neutral', T('Default export is readable JSON without secrets.')),
+                                E('button', {
+                                        'class': 'sf-action sf-action-neutral',
+                                        'click': function (ev) {
+                                                ev.preventDefault();
+                                                importSettingsAndUsers();
+                                        }
+                                }, T('Import all settings and user list')),
+                                E('button', {
+                                        'class': 'sf-action sf-action-neutral',
+                                        'click': function (ev) {
+                                                ev.preventDefault();
+                                                exportSettingsAndUsers();
+                                        }
+                                }, T('Export all settings and user list')),
                                 updateAppButton(),
                                 rebootRouterButton()
                         ])
@@ -5119,7 +5343,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-78';
+                var assetVersion = '0.1.0-79';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
