@@ -117,6 +117,7 @@ var translations = {
         'Select administrator devices': 'Выберите устройства администратора',
         'Selected administrator devices can manage Sheepfold.': 'Выбранные устройства смогут управлять программой.',
         'Blocklisted devices are not available for binding.': 'Устройства из чёрного списка недоступны для привязки.',
+        'A blocklisted device cannot become an administrator device. Remove it from the blocklist first.': 'Устройство из чёрного списка не может стать админским. Сначала уберите его из чёрного списка.',
         'Selected devices are shown first.': 'Выбранные устройства показаны сверху.',
         'No devices selected': 'Устройства не выбраны',
         'No devices': 'Нет устройств',
@@ -2130,6 +2131,12 @@ function adminAssignedDeviceIds(exceptAdmin) {
         return assigned;
 }
 
+function adminDeviceCanBeBound(device) {
+        return device &&
+                device.status !== 'blocked' &&
+                !macInSheepfoldList('blocklist', device.mac);
+}
+
 function deviceMatchesSelectionFilter(device, needle) {
         if (!needle)
                 return true;
@@ -2635,7 +2642,7 @@ function showAddAdministratorModal(onAdd) {
         var assignedToAnyAdmin = adminAssignedDeviceIds(null);
         var selector = createDeviceSelectionBox({
                 filter: function (device) {
-                        return device.status !== 'blocked' && !assignedToAnyAdmin[device.id];
+                        return adminDeviceCanBeBound(device) && !assignedToAnyAdmin[device.id];
                 }
         });
 
@@ -2696,8 +2703,8 @@ function showAddAdministratorModal(onAdd) {
                                                 window.setTimeout(function () {
                                                         window.location.reload();
                                                 }, 700);
-                                        }, function () {
-                                                notify(T('Could not save device settings.'), 'warning');
+                                        }, function (error) {
+                                                notify(error && error.message ? error.message : T('Could not save device settings.'), 'warning');
                                         });
                                 }
                         }, T('Save'))
@@ -2710,7 +2717,7 @@ function showAdminDeviceBindingModal(admin, onSave) {
         var selector = createDeviceSelectionBox({
                 selectedIds: admin.deviceIds || [],
                 filter: function (device) {
-                        return device.status !== 'blocked' && !assignedToOtherAdmin[device.id];
+                        return adminDeviceCanBeBound(device) && !assignedToOtherAdmin[device.id];
                 }
         });
 
@@ -2742,9 +2749,9 @@ function showAdminDeviceBindingModal(admin, onSave) {
                                                 window.setTimeout(function () {
                                                         window.location.reload();
                                                 }, 700);
-                                        }, function () {
+                                        }, function (error) {
                                                 admin.deviceIds = previousIds;
-                                                notify(T('Could not save device settings.'), 'warning');
+                                                notify(error && error.message ? error.message : T('Could not save device settings.'), 'warning');
                                         });
                                 }
                         }, T('Save'))
@@ -3998,6 +4005,9 @@ function updateMacList(listName, mac, enabled) {
 function applyAdminDeviceBindings(admin, selectedDevices, previousIds) {
         var selectedById = {};
 
+        if (selectedDevices.some(function (device) { return !adminDeviceCanBeBound(device); }))
+                return Promise.reject(new Error(T('A blocklisted device cannot become an administrator device. Remove it from the blocklist first.')));
+
         selectedDevices.forEach(function (device) {
                 var sectionName = ensureSheepfoldDeviceSection(device);
                 var mac = normalizeMac(device.mac);
@@ -5109,7 +5119,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-77';
+                var assetVersion = '0.1.0-78';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;
