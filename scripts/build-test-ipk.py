@@ -192,7 +192,7 @@ def ar_header(name: str, data: bytes) -> bytes:
         raise RuntimeError(f"ar member name is too long: {name}")
 
     return (
-        f"{name + '/':<16}"
+        f"{name:<16}"
         f"{int(time.time()):<12}"
         f"{0:<6}"
         f"{0:<6}"
