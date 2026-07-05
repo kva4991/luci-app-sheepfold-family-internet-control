@@ -253,7 +253,7 @@ var translations = {
         'Name': 'Название',
         'Description': 'Описание',
         'Cancel': 'Отмена',
-        'Do not add broad yandex.ru by default: it can open video, music, games, feeds, and other non-emergency services.': 'Не добавляйте широкий yandex.ru по умолчанию: он может открыть видео, музыку, игры, ленты и другие неаварийные сервисы.',
+        'Do not add broad yandex.ru by default: it can open video, music, games, feeds, and other non-emergency services.': 'Не добавляйте yandex.ru целиком в аварийно-полезные сайты. Это не только поиск: через общий домен и связанные сервисы могут открываться видео, музыка, игры, новости, ленты рекомендаций и другие развлечения. Для аварийного доступа лучше добавлять только узкие и понятные адреса, например ya.ru для поиска или конкретный сервис, который действительно нужен.',
         'Family-facing shortcut for common OpenWRT wireless settings.': 'Упрощённый семейный доступ к основным настройкам Wi-Fi OpenWRT.',
         'Connect QR': 'QR подключения',
         'Scan to connect to this Wi-Fi network.': 'Отсканируйте для подключения к этой Wi-Fi сети.',
@@ -1456,6 +1456,24 @@ function deviceSortHeader(label, key) {
                 E('span', {}, label),
                 E('span', { 'class': 'sf-sort-arrow' }, '')
         ]);
+}
+
+function filterDeviceTable(table, needle) {
+        var query = String(needle || '').trim().toLowerCase();
+
+        table.querySelectorAll('.sf-device-row:not(.sf-device-head)').forEach(function (row) {
+                var haystack = [
+                        row.getAttribute('data-sort-id') || '',
+                        row.getAttribute('data-sort-device') || '',
+                        row.getAttribute('data-sort-type') || '',
+                        row.getAttribute('data-sort-ip') || '',
+                        row.getAttribute('data-sort-group') || '',
+                        row.getAttribute('data-sort-status') || '',
+                        row.getAttribute('data-search') || ''
+                ].join(' ').toLowerCase();
+
+                row.hidden = query && haystack.indexOf(query) === -1;
+        });
 }
 
 function sortAdminTable(table, key) {
@@ -2857,14 +2875,17 @@ function deviceTable(rows, options) {
 
         var tableRows = rows.map(function (device, index) {
                 var adminDevice = isAdminDevice(device);
+                var type = deviceTypeByValue(device.deviceType);
 
                 return E('div', {
                         'class': 'sf-device-row',
                         'data-sort-id': String(index + 1),
                         'data-sort-device': device.name || '',
+                        'data-sort-type': type.label || '',
                         'data-sort-ip': String(ipSortValue(device.ip)),
                         'data-sort-group': device.group || '',
-                        'data-sort-status': device.status || ''
+                        'data-sort-status': device.status || '',
+                        'data-search': [device.id, device.mac, device.hostname, device.note, type.label].join(' ')
                 }, [
                         E('div', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
                         E('div', { 'class': 'sf-device-name' }, [
@@ -2897,7 +2918,7 @@ function deviceTable(rows, options) {
                 E('div', { 'class': 'sf-device-row sf-device-head' }, [
                         E('div', {}, deviceSortHeader(T('ID'), 'id')),
                         E('div', {}, deviceSortHeader(T('Device'), 'device')),
-                        E('div', {}, T('Type')),
+                        E('div', {}, deviceSortHeader(T('Type'), 'type')),
                         E('div', {}, deviceSortHeader(T('IP address'), 'ip')),
                         E('div', {}, T('MAC address')),
                         E('div', {}, deviceSortHeader(T('Group'), 'group')),
@@ -3317,40 +3338,44 @@ function messengerField(label, option, placeholder, hint, secret) {
                 }
         });
 
-        return E('label', { 'class': 'sf-field sf-field-wide' }, [
+        var node = E('label', { 'class': 'sf-field sf-field-wide' }, [
                 E('span', {}, label),
                 input,
                 hint ? E('small', {}, hint) : ''
         ]);
+
+        node.sfInput = input;
+        node.sfOption = option;
+
+        return node;
 }
 
 function messengerSettingsBox() {
         var activeValue = safeUciGet('sheepfold', 'global', 'active_messenger', 'none');
+        var vkToken = messengerField(T('VK community access token'), 'vk_access_token', '', T('Stored on the router.'), true);
+        var vkCommunity = messengerField(T('VK community ID'), 'vk_community_id', 'club123456789', '', false);
+        var vkAdmin = messengerField(T('VK admin user ID'), 'vk_admin_user_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false);
+        var telegramToken = messengerField(T('Telegram bot token'), 'telegram_bot_token', '123456:ABC...', T('Stored on the router.'), true);
+        var telegramAdmin = messengerField(T('Telegram admin chat ID'), 'telegram_admin_chat_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false);
+        var fields = [vkToken, vkCommunity, vkAdmin, telegramToken, telegramAdmin];
         var vkFields = E('div', { 'class': 'sf-messenger-fields' }, [
                 E('div', { 'class': 'sf-note' }, T('Create a VK community, enable messages, create an access token for community messages, then enter the community ID and the VK user ID of the parent whose commands are allowed.')),
-                messengerField(T('VK community access token'), 'vk_access_token', '', T('Stored on the router.'), true),
-                messengerField(T('VK community ID'), 'vk_community_id', 'club123456789', '', false),
-                messengerField(T('VK admin user ID'), 'vk_admin_user_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false)
+                vkToken,
+                vkCommunity,
+                vkAdmin
         ]);
         var telegramFields = E('div', { 'class': 'sf-messenger-fields' }, [
                 E('div', { 'class': 'sf-note' }, T('Create a bot through BotFather, paste the bot token, send any message to the bot from the parent account, then enter that chat ID here.')),
-                messengerField(T('Telegram bot token'), 'telegram_bot_token', '123456:ABC...', T('Stored on the router.'), true),
-                messengerField(T('Telegram admin chat ID'), 'telegram_admin_chat_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false)
+                telegramToken,
+                telegramAdmin
         ]);
         var select = E('select', {
                 'class': 'cbi-input-select',
                 'change': function (ev) {
                         var nextValue = ev.currentTarget.value;
 
-                        saveGlobalOption('active_messenger', nextValue).then(function () {
-                                activeValue = nextValue;
-                                setMessengerFieldsVisibility(activeValue);
-                                notify(T('Messenger settings saved.'), 'info');
-                        }, function () {
-                                ev.currentTarget.value = activeValue;
-                                setMessengerFieldsVisibility(activeValue);
-                                notify(T('Could not save messenger settings.'), 'warning');
-                        });
+                        activeValue = nextValue;
+                        setMessengerFieldsVisibility(activeValue);
                 }
         }, [
                 ['none', T('Disabled')],
@@ -3380,7 +3405,26 @@ function messengerSettingsBox() {
                         select
                 ]),
                 vkFields,
-                telegramFields
+                telegramFields,
+                E('button', {
+                        'class': 'sf-action sf-action-positive sf-action-nowrap',
+                        'click': function (ev) {
+                                var options = {
+                                        active_messenger: select.value
+                                };
+
+                                ev.preventDefault();
+                                fields.forEach(function (field) {
+                                        options[field.sfOption] = field.sfInput.value.trim();
+                                });
+
+                                saveGlobalOptions(options).then(function () {
+                                        notify(T('Messenger settings saved.'), 'info');
+                                }, function () {
+                                        notify(T('Could not save messenger settings.'), 'warning');
+                                });
+                        }
+                }, T('Save'))
         ]);
 }
 
@@ -3858,7 +3902,7 @@ function updateMacList(listName, mac, enabled) {
                         return value !== normalizedMac;
                 });
 
-        uci.set('sheepfold', sectionName, 'mac', values);
+        uci.set('sheepfold', sectionName, 'mac', values.join(' '));
 }
 
 function ensureStaticDhcpSection(device) {
@@ -4366,21 +4410,28 @@ return view.extend({
         },
 
         renderDevices: function (embedded) {
+                var table = deviceTable(devices);
+                var search = E('input', {
+                        'class': 'cbi-input-text sf-search',
+                        'placeholder': T('Search by name, IP, or MAC')
+                });
+
+                search.addEventListener('input', function () {
+                        filterDeviceTable(table, search.value);
+                });
+
                 return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
                                         E('p', {}, T('Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.'))
-                                ]),
-                                E('div', { 'class': 'sf-toolbar' }, [
-                                        E('input', {
-                                                'class': 'cbi-input-text sf-search',
-                                                'placeholder': T('Search by name, IP, or MAC')
-                                        }),
-                                        actionButton(T('Add device'), 'positive', T('Manual MAC-based add form is not implemented in this visual test build.'))
                                 ])
                         ]),
+                        E('div', { 'class': 'sf-toolbar sf-device-toolbar' }, [
+                                search,
+                                actionButton(T('Add device'), 'positive', T('Manual MAC-based add form is not implemented in this visual test build.'))
+                        ]),
                         devices.length ? '' : E('div', { 'class': 'sf-note sf-note-warning' }, T('No devices found in DHCP leases, ARP, or static DHCP leases yet.')),
-                        deviceTable(devices)
+                        table
                 ]);
         },
 
@@ -4497,6 +4548,26 @@ return view.extend({
                                 grouped[groupName] = [];
                         if (groupName)
                                 groupSections[groupName] = section;
+                });
+
+                function ensureVisibleDefaultGroup(groupName, data) {
+                        if (!grouped[groupName])
+                                grouped[groupName] = [];
+                        if (!groupSections[groupName])
+                                groupSections[groupName] = data;
+                }
+
+                ensureVisibleDefaultGroup(T('No restrictions'), {
+                        name: T('No restrictions'),
+                        protected: '1',
+                        auto_assignable: '1',
+                        color: '#e8f4ef'
+                });
+                ensureVisibleDefaultGroup(T('Child number 1'), {
+                        name: T('Child number 1'),
+                        protected: '0',
+                        auto_assignable: '0',
+                        color: '#eef2ff'
                 });
 
                 devices.forEach(function (device) {
@@ -4907,7 +4978,7 @@ return view.extend({
         },
 
         render: function () {
-                var assetVersion = '0.1.0-75';
+                var assetVersion = '0.1.0-76';
                 var self = this;
                 var internetBlocked = this.isGlobalInternetBlocked();
                 var allowlistCount = devices.filter(function (device) { return device.status === 'allow'; }).length;

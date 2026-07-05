@@ -356,6 +356,10 @@
         flex: 1 1 260px;
 }
 
+.sf-device-toolbar {
+        margin: -4px 0 14px;
+}
+
 .sf-device-name {
         display: grid;
         gap: 3px;
