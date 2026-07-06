@@ -5,20 +5,21 @@ These rules apply to the whole repository.
 ## Project Naming
 
 - Use `Sheepfold` as the main project and product name in English and Russian text.
-- Use `Овчарня` only when referring to the Android app name.
-- In LuCI Russian UI headings, keep the product word in English: `Sheepfold`. Do not write `Овчарня` in the LuCI header.
-- Do not use `Овчарня` as the generic Russian name for the whole project outside direct Android app naming.
+- Use `Sheepfold` as the public Android app name too.
+- In LuCI Russian UI headings, keep the product word in English: `Sheepfold`.
+- Do not use `Овчарня` in public product text unless the owner explicitly asks to discuss the old/internal name.
 
 Correct examples:
 
 - `Sheepfold — система семейного управления доступом...`
-- `Android-приложение: Овчарня`
+- `Android-приложение: Sheepfold`
 - `LuCI RU: Sheepfold : контроль доступа в интернет для семьи`
 
 Avoid:
 
 - `Овчарня — система...`
 - `Если Овчарня окажется полезной...`
+- `Android-приложение Овчарня`
 - `Овчарня : контроль доступа в интернет для семьи` in the LuCI header
 
 ## User-Facing Wording
@@ -30,7 +31,9 @@ Avoid:
 - In Sheepfold LuCI, prefer one clear `Save` / `Сохранить` action. Do not expose separate `Apply` and `Save` actions unless OpenWRT internals force it; if both exist technically, hide or merge `Apply` in the Sheepfold UI so parents are not asked to understand the distinction.
 - In Sheepfold LuCI, keep `All devices`, `Allowlist`, and `Blocklist` as nested tabs inside the top-level `User lists` / `Списки пользователей` tab. `All devices` must be the default nested tab.
 - Design the interface for a normal busy parent, not for a network engineer. Reuse the same visual pattern, wording, icon meaning, button placement, and confirmation style for the same action everywhere, so the parent can recognize behavior quickly without studying every screen.
+- Sheepfold UI must actively strive to be intuitive for a weak/uncertain PC user. Instructions, warnings, errors, confirmations, and notifications must be written in plain user language: what happened, why it matters, what will happen after the button press, and how to undo or fix it.
 - If a feature appears in LuCI, Android, and bot/messenger flows, keep the user-facing names and mental model aligned across all of them unless the platform truly requires different wording.
+- For every non-obvious feature, setting, status, or risky action, add contextual help opened by a visible `?` button or equivalent help icon. Keep the screen itself clean, but provide a short step-by-step explanation like the Telegram setup guide. See `docs/contextual-help.ru.md`.
 
 ## Coding Style
 
@@ -104,6 +107,7 @@ Avoid:
 - Sheepfold is self-hosted for family use by default. Do not introduce a developer-operated cloud dependency unless explicitly requested later.
 - Android is for parent/admin devices only; do not design hidden child-phone installation flows.
 - If app-store publication is added later, prepare store-specific privacy disclosures before release.
+- Do not collect website visit history as part of the normal administrative log. If per-device site activity history is added later, it must be a separate opt-in feature, off by default, excluded for administrator devices and allowlisted devices, and documented in privacy/legal text. See `docs/site-activity-logs.ru.md`.
 
 ## Messaging
 
@@ -182,6 +186,9 @@ Avoid:
 - Strong device detection may suggest or confirm `No restrictions` for infrastructure devices such as NAS, Home Assistant, AdGuard Home, Proxmox, video recorders, and smart-home hubs.
 - Keep end smart-home devices as a separate device type `Smart home` / `Умный дом`: floor-heating controllers, kettles, irons, light relays/switches, smart sockets, automatic curtains, sensors, and similar household endpoints. Do not confuse them with smart-home hubs/servers.
 - Full detection should combine several router-side signals such as DHCP/static lease data, hostname, vendor/OUI when available, open ports, service banners, mDNS/SSDP/UPnP names, and previously confirmed device fingerprints. Treat port/banner checks as confidence signals, not as cryptographic identity.
+- Sheepfold must assume children may use unregistered or borrowed phones. Do not trust child-device apps, self-reported phone data, or Android-side state for enforcement. Child-device decisions must be based on router-side data and clearly marked confidence.
+- If a parent manually sets a device type, stop further automatic type detection for that device. The router may still update IP/name/lease observations, but must not run type classification or overwrite the manual type.
+- If automatic detection has already identified a device type with confidence `>= 80`, further automatic type detection for that device may be skipped. Devices below `80` must be shown as `Unknown device type` / `Неизвестный тип` until clarified or manually set.
 - Implement strong device detection as a separate optional backend/package, for example `sheepfold-device-detector`, not inside the LuCI-only package. The LuCI package should call a Sheepfold backend API and remain lightweight.
 - The detector may use existing OpenWRT tools when available, such as `nmap`/`nmap-ssl` for port and banner detection, `avahi-utils` or equivalent mDNS clients for service discovery, and SSDP/UPnP probes. These tools must be optional/full-mode dependencies, not mandatory dependencies for reduced installations.
 - Do not run heavy scans continuously. Use bounded local-network scans, cache results, explain detector confidence in UI, and let the parent correct the result.
@@ -225,6 +232,19 @@ Avoid:
 - LuCI must call a narrow backend command/API layer such as `/usr/bin/sheepfold <method>` instead of building arbitrary shell commands.
 - rpcd ACL must explicitly allow only the Sheepfold files, UCI configs, ubus objects, and executable commands required by the UI.
 - Put diagnostics in a dedicated tab and return structured JSON for checks.
+
+## UCI Config Hygiene
+
+- Keep UCI section names unique inside `/etc/config/sheepfold`.
+- Only the main application section may be named `global`: `config sheepfold 'global'`.
+- Helper sections must use explicit names such as `messenger_global`, `export_global`, `wifi_control_global`, and `pairing_global`.
+- Do not add several `config ... 'global'` sections in the same UCI file. LuCI and commands like `uci get sheepfold.global.*` can otherwise read or write the wrong section.
+- When renaming UCI sections, add an install/update migration in `postinst` so existing routers are fixed automatically.
+
+## OpenWRT Test Package Builds
+
+- Test `.ipk` files for this project must be built in the OpenWRT/ipkg-compatible format used by `opkg`: a gzip-compressed tar containing `./debian-binary`, `./data.tar.gz`, and `./control.tar.gz`.
+- Do not switch the local test builder to Debian `ar` container format unless it is verified on the target OpenWRT `opkg`; the Xiaomi AX3000T test router rejected that format as `Malformed package file`.
 
 ## Export And Backup
 
@@ -271,6 +291,26 @@ Avoid:
 - The assistant may suggest settings but must not apply router actions without explicit parent confirmation.
 - Keep long assistant prompts in separate prompt documents, not buried inside architecture docs.
 - Assistant prompts are drafts until reviewed by the project owner and, for family/psychology guidance, a qualified family psychologist.
+- The assistant may propose router setting changes through Android only after an explicit preview and confirmation. Examples: static DHCP lease, emergency-useful site addition, group/schedule changes, whitelist-only group mode, temporary access, and activity-journal toggles.
+- The assistant may help compose bug reports, feature requests, and feedback for the developer. It must anonymize sensitive data, ask before sending, and may include a rough value/impact percentage as a subjective prioritization hint.
+
+## Site List Sources
+
+- Do not manually compile or maintain a huge built-in “safe child websites” list in the repository.
+- Use updateable external list sources and store them as configurable sources. See `docs/site-list-sources.ru.md`.
+- LuCI must expose `Whitelist sources` / `Источники белых списков` and `Site blacklist sources` / `Источники чёрного списка сайтов` in Settings -> Misc.
+- Groups may enable a “whitelist sources only” mode. This is different from device allowlist and must not override the device blocklist.
+- Site blacklist mode values: disabled, enabled for everyone, enabled for everyone except allowlist and administrators.
+- Sheepfold must clearly explain that external category lists can contain mistakes and are not a legal or safety guarantee.
+
+## Activity Journal
+
+- Internet activity journal is separate from the administrative action log.
+- It must be off by default and can be enabled per group or per device.
+- Do not collect activity journal data for administrator devices, device allowlist, or device blocklist.
+- Show only a visible badge/size/status in ordinary UI; do not display raw browsing history by default.
+- AI analysis of activity logs requires an explicit data-preview confirmation. The assistant should summarize patterns and risks, not hand the parent a raw list of sites to confront the child with.
+- Router-visible data is the boundary. DNS alone does not provide video titles, descriptions, or comments; collect such metadata only through a separate explicit mechanism and say when it is unavailable.
 
 ## Android App Security Copy
 

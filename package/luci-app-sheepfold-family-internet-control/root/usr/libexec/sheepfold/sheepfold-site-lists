@@ -1,0 +1,248 @@
+#!/bin/sh
+set -eu
+
+COMMAND="${1:-status}"
+RUNTIME_DIR="/tmp/sheepfold/site-lists"
+RAW_DIR="$RUNTIME_DIR/raw"
+ALLOWLIST_CACHE="$RUNTIME_DIR/allowlist.domains"
+BLOCKLIST_CACHE="$RUNTIME_DIR/blocklist.domains"
+STATUS_FILE="$RUNTIME_DIR/status"
+LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
+CRON_COMMAND="/usr/libexec/sheepfold/sheepfold-site-lists update"
+
+mkdir -p "$RAW_DIR"
+
+log_event() {
+        if [ -x "$LOG_HELPER" ]; then
+                "$LOG_HELPER" "$*"
+        else
+                logger -t sheepfold-site-lists "$*"
+        fi
+}
+
+global_get() {
+        uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "$2"
+}
+
+trim() {
+        sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+download_to_file() {
+        url="$1"
+        output="$2"
+
+        if command -v uclient-fetch >/dev/null 2>&1; then
+                uclient-fetch -q -O "$output" "$url"
+        elif command -v wget >/dev/null 2>&1; then
+                wget -q -O "$output" "$url"
+        elif command -v curl >/dev/null 2>&1; then
+                curl -fsSL -o "$output" "$url"
+        else
+                return 1
+        fi
+}
+
+source_url() {
+        line="$(printf '%s' "$1" | trim)"
+        [ -n "$line" ] || return 1
+
+        case "$line" in
+                *'|'*) line="${line##*|}" ;;
+        esac
+
+        line="$(printf '%s' "$line" | trim)"
+        case "$line" in
+                http://*|https://*) printf '%s\n' "$line" ;;
+                *) return 1 ;;
+        esac
+}
+
+sources_to_urls() {
+        option="$1"
+        sources="$(global_get "$option" '')"
+
+        printf '%s\n' "$sources" |
+                tr ';' '\n' |
+                while IFS= read -r line; do
+                        source_url "$line" || true
+                done
+}
+
+normalize_domains() {
+        awk '
+        function trim(s) {
+                gsub(/^[ \t]+|[ \t]+$/, "", s)
+                return s
+        }
+        function clean(candidate, lower) {
+                candidate = trim(candidate)
+                if (candidate == "")
+                        return
+
+                lower = tolower(candidate)
+                gsub(/\r/, "", lower)
+                sub(/^https?:\/\//, "", lower)
+                sub(/^www\./, "", lower)
+                sub(/\/.*$/, "", lower)
+                sub(/:[0-9]+$/, "", lower)
+                sub(/^\|\|/, "", lower)
+                sub(/\^.*$/, "", lower)
+                sub(/^\*\./, "", lower)
+                sub(/^\./, "", lower)
+                sub(/\.$/, "", lower)
+
+                if (lower ~ /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/)
+                        print lower
+        }
+        {
+                line = $0
+                gsub(/\r/, "", line)
+                line = trim(line)
+                if (line == "" || line ~ /^#/ || line ~ /^!/ || line ~ /^\[/ || line ~ /^@@/)
+                        next
+
+                sub(/[ \t]+#.*/, "", line)
+                sub(/[ \t]+\/\/.*/, "", line)
+
+                split(line, fields, /[ \t]+/)
+                if (fields[1] ~ /^(0\.0\.0\.0|127\.0\.0\.1|::1)$/ && fields[2] != "") {
+                        clean(fields[2])
+                        next
+                }
+
+                if (line ~ /^\|\|/) {
+                        clean(line)
+                        next
+                }
+
+                if (line ~ /^https?:\/\//) {
+                        clean(line)
+                        next
+                }
+
+                clean(fields[1])
+        }'
+}
+
+build_list() {
+        kind="$1"
+        option="$2"
+        output="$3"
+        raw_combined="$RAW_DIR/$kind.raw"
+        normalized="$RAW_DIR/$kind.normalized"
+        tmp_output="$output.tmp"
+        urls_file="$RAW_DIR/$kind.urls"
+        count=0
+        failed=0
+        index=0
+
+        : > "$raw_combined"
+        sources_to_urls "$option" > "$urls_file"
+
+        while IFS= read -r url; do
+                index=$((index + 1))
+                target="$RAW_DIR/$kind-$index.download"
+
+                if download_to_file "$url" "$target" && [ -s "$target" ]; then
+                        cat "$target" >> "$raw_combined"
+                        printf '\n' >> "$raw_combined"
+                else
+                        failed=$((failed + 1))
+                        printf '%s\n' "$url" >> "$RAW_DIR/$kind.failed"
+                fi
+        done < "$urls_file"
+
+        if [ -s "$raw_combined" ]; then
+                normalize_domains < "$raw_combined" | sort -u > "$normalized"
+        else
+                : > "$normalized"
+        fi
+
+        mv "$normalized" "$tmp_output"
+        mv "$tmp_output" "$output"
+        count="$(wc -l < "$output" | tr -d ' ')"
+
+        printf '%s_count=%s\n' "$kind" "$count"
+        [ "$failed" = "0" ] || printf '%s_failed=%s\n' "$kind" "$failed"
+}
+
+update_lists() {
+        mkdir -p "$RAW_DIR"
+        rm -f "$RAW_DIR"/*.failed
+
+        allow_result="$(build_list allowlist site_allowlist_sources "$ALLOWLIST_CACHE")"
+        block_result="$(build_list blocklist site_blocklist_sources "$BLOCKLIST_CACHE")"
+
+        {
+                printf 'updated_at=%s\n' "$(date +%s)"
+                printf '%s\n' "$allow_result"
+                printf '%s\n' "$block_result"
+        } > "$STATUS_FILE"
+
+        log_event "Списки сайтов Sheepfold обновлены: $(printf '%s' "$allow_result" | tr '\n' ' '), $(printf '%s' "$block_result" | tr '\n' ' ')"
+        printf '%s\n%s\n' "$allow_result" "$block_result"
+}
+
+cron_line_for_interval() {
+        interval="$(global_get site_lists_update_interval weekly)"
+
+        case "$interval" in
+                daily)
+                        printf '17 4 * * * %s\n' "$CRON_COMMAND"
+                        ;;
+                3days)
+                        printf '17 4 */3 * * %s\n' "$CRON_COMMAND"
+                        ;;
+                weekly|*)
+                        printf '17 4 * * 0 %s\n' "$CRON_COMMAND"
+                        ;;
+        esac
+}
+
+cron_apply() {
+        line="$(cron_line_for_interval)"
+
+        {
+                crontab -l 2>/dev/null | grep -v "$CRON_COMMAND" || true
+                printf '%s\n' "$line"
+        } | crontab -
+
+        /etc/init.d/cron restart >/dev/null 2>&1 || true
+        printf 'OK\n'
+}
+
+cron_remove() {
+        (crontab -l 2>/dev/null | grep -v "$CRON_COMMAND" || true) | crontab -
+        /etc/init.d/cron restart >/dev/null 2>&1 || true
+        printf 'OK\n'
+}
+
+status() {
+        if [ -r "$STATUS_FILE" ]; then
+                cat "$STATUS_FILE"
+        else
+                printf 'updated_at=\nallowlist_count=0\nblocklist_count=0\n'
+        fi
+        printf 'allowlist_cache=%s\n' "$ALLOWLIST_CACHE"
+        printf 'blocklist_cache=%s\n' "$BLOCKLIST_CACHE"
+}
+
+case "$COMMAND" in
+        update)
+                update_lists
+                ;;
+        cron-apply)
+                cron_apply
+                ;;
+        cron-remove)
+                cron_remove
+                ;;
+        status)
+                status
+                ;;
+        *)
+                echo "Usage: sheepfold-site-lists [update|cron-apply|cron-remove|status]" >&2
+                exit 1
+                ;;
+esac

@@ -6,6 +6,15 @@
 
 var devices = [];
 var defaultLogCachePath = '/tmp/sheepfold/events.log';
+var defaultSiteAllowlistSources = [
+        'UT1 child | https://dsi.ut-capitole.fr/blacklists/index_en.php#child'
+].join('\n');
+var defaultSiteBlocklistSources = [
+        'UT1 adult, malware, phishing, gambling, games, vpn | https://dsi.ut-capitole.fr/blacklists/index_en.php',
+        'StevenBlack hosts gambling-porn | https://github.com/StevenBlack/hosts',
+        'HaGeZi Threat Intelligence Feeds | https://github.com/hagezi/dns-blocklists',
+        'URLhaus malware URLs | https://urlhaus.abuse.ch/api/'
+].join('\n');
 
 var emergencySites = [
         ['gosuslugi.ru', 'Госуслуги', 'Государственные услуги'],
@@ -49,6 +58,10 @@ var translations = {
         'Automatic color': 'Автоматический цвет',
         'Group schedules': 'Расписания группы',
         'Assigned devices': 'Привязанные устройства',
+        'Allow only selected whitelist sources for this group': 'Разрешить только выбранные источники белых списков для этой группы',
+        'Devices in this group will be limited to domains from the selected whitelist sources and manually allowed emergency-useful sites.': 'Устройства этой группы будут ограничены доменами из выбранных источников белых списков и вручную разрешёнными аварийно-полезными сайтами.',
+        'Enable activity journal for all devices in this group': 'Включить журнал активности для всех устройств этой группы',
+        'Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices.': 'Журнал активности содержит чувствительные данные. Он не собирается для админских устройств, белого списка и чёрного списка.',
         'Schedule conflict': 'Конфликт расписаний',
         'Selected schedules may conflict with each other. Saving is allowed, but review the rules carefully.': 'Выбранные расписания могут конфликтовать между собой. Сохранение разрешено, но внимательно проверьте правила.',
         'Confirmation will be available in': 'Подтверждение будет доступно через',
@@ -81,6 +94,27 @@ var translations = {
         'GitHub Sponsors for international audience;': 'GitHub Sponsors для международной аудитории;',
         'Boosty or YooMoney for Russian-speaking users.': 'Boosty или ЮMoney для русскоязычных пользователей.',
         'Misc': 'Разное',
+        'Site list sources': 'Источники списков сайтов',
+        'Whitelist sources': 'Источники белых списков',
+        'One source per line: name | URL. Use updateable external sources instead of manually maintaining a huge list.': 'Один источник на строку: название | URL. Используйте обновляемые внешние источники, а не ручное ведение огромного списка.',
+        'Site blacklist': 'Чёрный список сайтов',
+        'Site blacklist sources': 'Источники чёрного списка сайтов',
+        'Disabled': 'Выключено',
+        'Enabled for everyone': 'Включить для всех',
+        'Enabled for everyone except allowlist and administrators': 'Включить для всех кроме белого списка и админов',
+        'Site blacklist mode saved.': 'Режим чёрного списка сайтов сохранён.',
+        'Could not save site blacklist mode.': 'Не удалось сохранить режим чёрного списка сайтов.',
+        'Site list update': 'Обновление списков сайтов',
+        'Every day': 'Каждый день',
+        'Every 3 days': 'Раз в 3 дня',
+        'Once a week': 'Раз в неделю',
+        'Site list update interval saved.': 'Период обновления списков сайтов сохранён.',
+        'Could not save site list update interval.': 'Не удалось сохранить период обновления списков сайтов.',
+        'Whitelist sources saved.': 'Источники белых списков сохранены.',
+        'Could not save whitelist sources.': 'Не удалось сохранить источники белых списков.',
+        'Site blacklist sources saved.': 'Источники чёрного списка сайтов сохранены.',
+        'Could not save site blacklist sources.': 'Не удалось сохранить источники чёрного списка сайтов.',
+        'Journal': 'Журнал',
         'Scheduled': 'По расписанию',
         'Restricted': 'Ограничено',
         'New': 'Новое',
@@ -89,6 +123,7 @@ var translations = {
         'Device settings': 'Настройки устройства',
         'Device settings saved.': 'Настройки устройства сохранены.',
         'Could not save device settings.': 'Не удалось сохранить настройки устройства.',
+        'Enable activity journal for this device': 'Включить журнал активности для этого устройства',
         'This device is already in the blocklist. Remove it from the blocklist before adding it to the allowlist.': 'Это устройство уже в чёрном списке. Сначала уберите его из чёрного списка, потом добавляйте в белый.',
         'This device is already in the allowlist. Remove it from the allowlist before adding it to the blocklist.': 'Это устройство уже в белом списке. Сначала уберите его из белого списка, потом добавляйте в чёрный.',
         'Permanent DHCP lease': 'Постоянная аренда DHCP',
@@ -100,6 +135,7 @@ var translations = {
         'Hostname': 'Имя в сети',
         'Detection source': 'Источник обнаружения',
         'Detection confidence': 'Уверенность автоопределения',
+        'Unknown device type': 'Неизвестный тип',
         'Auto-detected': 'Автоопределено',
         'Auto-assigned to No restrictions': 'Автоматически добавлено в "Без ограничений"',
         'Parents': 'Родители',
@@ -139,6 +175,8 @@ var translations = {
         'Temporary password': 'Временный пароль',
         'Show temporary password': 'Показать временный пароль',
         'Hide temporary password': 'Скрыть временный пароль',
+        'Show secret': 'Показать секрет',
+        'Hide secret': 'Скрыть секрет',
         'Scan this QR code in the Android app for quick setup.': 'Отсканируйте этот QR-код в Android-приложении для быстрой настройки.',
         'Sheepfold API URL': 'URL API Sheepfold',
         'Administrator login': 'Логин администратора',
@@ -193,6 +231,10 @@ var translations = {
         'Add device': 'Добавить устройство',
         'Add device to allowlist': 'Добавить устройство в белый список',
         'Add device to blocklist': 'Добавить устройство в чёрный список',
+        'Remove from allowlist': 'Удалить из белого списка',
+        'Remove from blocklist': 'Удалить из чёрного списка',
+        'Remove device from allowlist?': 'Удалить устройство из белого списка?',
+        'Remove device from blocklist?': 'Удалить устройство из чёрного списка?',
         'Available devices': 'Доступные устройства',
         'Select': 'Выбрать',
         'No devices available to add.': 'Нет устройств, доступных для добавления.',
@@ -200,6 +242,9 @@ var translations = {
         'Enter a valid MAC address.': 'Введите корректный MAC-адрес.',
         'Device added to allowlist.': 'Устройство добавлено в белый список.',
         'Device added to blocklist.': 'Устройство добавлено в чёрный список.',
+        'Device removed from allowlist.': 'Устройство удалено из белого списка.',
+        'Device removed from blocklist.': 'Устройство удалено из чёрного списка.',
+        'Could not remove device from list.': 'Не удалось удалить устройство из списка.',
         'Could not add device.': 'Не удалось добавить устройство.',
         'Action failed.': 'Не удалось выполнить действие.',
         'Administrator device cannot be added to blocklist': 'Админское устройство нельзя добавить в чёрный список.',
@@ -299,6 +344,8 @@ var translations = {
         'Disabled': 'Выключено',
         'Messenger settings saved.': 'Настройки мессенджера сохранены.',
         'Could not save messenger settings.': 'Не удалось сохранить настройки мессенджера.',
+        'Messenger settings were sent to the router, but the router still reports another active messenger. Reinstall the latest Sheepfold package and check UCI config.': 'Настройки мессенджера отправлены на роутер, но роутер всё ещё сообщает другой активный мессенджер. Установите последний пакет Sheepfold и проверьте UCI-конфиг.',
+        'Router reports active messenger:': 'Роутер сообщает активный мессенджер:',
         'Stored on the router.': 'Хранится на роутере.',
         'VK community access token': 'Ключ доступа сообщества VK',
         'VK community ID': 'ID сообщества VK',
@@ -307,6 +354,25 @@ var translations = {
         'Telegram admin chat ID': 'Chat ID родителя-администратора',
         'Create a VK community, enable messages, create an access token for community messages, then enter the community ID and the VK user ID of the parent whose commands are allowed.': 'Создайте сообщество VK, включите сообщения, создайте ключ доступа для сообщений сообщества, затем укажите ID сообщества и VK ID родителя, команды которого разрешены.',
         'Create a bot through BotFather, paste the bot token, send any message to the bot from the parent account, then enter that chat ID here.': 'Создайте бота через BotFather, вставьте токен, отправьте боту любое сообщение с аккаунта родителя, затем укажите здесь chat ID этого диалога.',
+        'Telegram setup short note': 'Создайте отдельного Telegram-бота для Sheepfold, вставьте токен и привяжите chat ID родителя. Sheepfold использует исходящее подключение к Telegram, поэтому роутеру не нужен публичный адрес.',
+        'Step-by-step Telegram setup': 'Пошаговая настройка Telegram',
+        'Open Telegram and find the official @BotFather account. Check the username carefully: @BotFather.': 'Откройте Telegram и найдите официальный аккаунт @BotFather. Внимательно проверьте имя: @BotFather.',
+        'Press Start or send /start.': 'Нажмите Start или отправьте команду /start.',
+        'Send /newbot and follow BotFather questions.': 'Отправьте /newbot и ответьте на вопросы BotFather.',
+        'Enter a visible bot name, for example Sheepfold Home. This name is shown in Telegram.': 'Введите видимое имя бота, например Sheepfold Home. Это имя будет видно в Telegram.',
+        'Enter a unique bot username. It must end with bot, for example my_sheepfold_home_bot.': 'Введите уникальное имя пользователя бота. Оно должно заканчиваться на bot, например my_sheepfold_home_bot.',
+        'BotFather will send a token that looks like 123456:ABC-DEF... Copy it into the Telegram bot token field. Treat this token like a password.': 'BotFather пришлёт токен похожий на 123456:ABC-DEF... Скопируйте его в поле “Токен Telegram-бота”. Относитесь к токену как к паролю.',
+        'Select Telegram as the active messenger and save settings in Sheepfold.': 'Выберите Telegram активным мессенджером и сохраните настройки Sheepfold.',
+        'Open the created bot from the parent Telegram account and send any message to it. If the chat ID field is empty, Sheepfold will reply with your chat ID.': 'Откройте созданного бота с Telegram-аккаунта родителя и отправьте ему любое сообщение. Если поле chat ID пустое, Sheepfold ответит вашим chat ID.',
+        'Copy that chat ID into the Telegram admin chat ID field and save settings again.': 'Скопируйте этот chat ID в поле “Chat ID родителя-администратора” и снова сохраните настройки.',
+        'Press the test message button. If everything is correct, the bot will send a message from the router.': 'Нажмите кнопку тестового сообщения. Если всё настроено правильно, бот пришлёт сообщение от роутера.',
+        'Keep the bot private. Do not publish its token, do not add it to public groups, and do not give the token to children.': 'Держите бота приватным. Не публикуйте токен, не добавляйте бота в публичные группы и не передавайте токен детям.',
+        'Official Telegram guide': 'Официальная инструкция Telegram',
+        'Available commands': 'Доступные команды',
+        'Telegram commands: /start, /help, /status, /devices, /internet_on, /internet_off, /wifi_on, /wifi_off, /support, /grant_time, /block_device, /unblock_device, /allowlist_add, /blocklist_add, /logs, /clear_logs, /update, /reboot, /emergency_sites, /wifi_status. Russian phrases like "помощь", "статус", "показать все устройства", "отключить интернет", and "саппорт" also work. Dangerous commands require confirmation. Commands are accepted only from the entered chat ID.': 'Команды Telegram: /start, /help, /status, /devices, /internet_on, /internet_off, /wifi_on, /wifi_off, /support, /grant_time, /block_device, /unblock_device, /allowlist_add, /blocklist_add, /logs, /clear_logs, /update, /reboot, /emergency_sites, /wifi_status. Русские фразы вроде «помощь», «статус», «показать все устройства», «отключить интернет» и «саппорт» тоже работают. Опасные команды требуют подтверждения. Команды принимаются только от разрешённого ID пользователя, указанного в настройках роутера.',
+        'Send test Telegram message': 'Отправить тестовое сообщение Telegram',
+        'Test Telegram message sent.': 'Тестовое сообщение Telegram отправлено.',
+        'Could not send test Telegram message. Check bot token, chat ID, internet access on the router, and that Telegram is selected as the active messenger.': 'Не удалось отправить тестовое сообщение Telegram. Проверьте токен бота, chat ID, доступ роутера в интернет и что Telegram выбран активным мессенджером.',
         'Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.': 'Sheepfold принимает команды мессенджера только от указанного здесь администратора. Остальные пользователи игнорируются.',
         'Administrator accounts': 'Учётные записи администраторов',
         'Add administrator': 'Добавить администратора',
@@ -325,7 +391,38 @@ var translations = {
         'show Wi-Fi status': 'показать состояние Wi-Fi',
         'enable Wi-Fi': 'включить Wi-Fi',
         'disable Wi-Fi': 'выключить Wi-Fi',
+        'help': 'помощь',
+        'disable internet': 'отключить интернет',
+        'block device #3': 'заблокировать #3',
+        'unblock device #3': 'разблокировать #3',
+        'add #3 to allowlist': 'добавить #3 в белый список',
+        'add #3 to blocklist': 'добавить #3 в чёрный список',
+        'show log': 'показать журнал',
+        'clear log': 'очистить журнал',
+        'update app': 'обновить приложение',
+        'reboot router': 'перезагрузить роутер',
+        'emergency-useful sites': 'аварийно-полезные сайты',
+        'support': 'поддержка',
         'status': 'статус',
+        'Shows all detected devices with Sheepfold IDs.': 'Показывает все найденные устройства с ID Sheepfold.',
+        'Turns on global blocking for everyone except the allowlist.': 'Включает глобальную блокировку для всех, кроме белого списка.',
+        'Turns global blocking off.': 'Выключает глобальную блокировку.',
+        'Grants temporary access to the selected device.': 'Выдаёт выбранному устройству временный доступ.',
+        'Shows whether Wi-Fi is enabled.': 'Показывает, включён ли Wi-Fi.',
+        'Turns router Wi-Fi on.': 'Включает Wi-Fi на роутере.',
+        'Turns router Wi-Fi off; use carefully.': 'Выключает Wi-Fi на роутере; используйте осторожно.',
+        'Blocks the selected device.': 'Блокирует выбранное устройство.',
+        'Removes blocking from the selected device.': 'Снимает блокировку с выбранного устройства.',
+        'Adds the selected device to the allowlist.': 'Добавляет выбранное устройство в белый список.',
+        'Adds the selected device to the blocklist.': 'Добавляет выбранное устройство в чёрный список.',
+        'Shows recent administrative log entries.': 'Показывает последние записи административного журнала.',
+        'Clears the administrative log after confirmation.': 'Очищает административный журнал после подтверждения.',
+        'Checks and installs an update after confirmation.': 'Проверяет и устанавливает обновление после подтверждения.',
+        'Reboots the router after confirmation.': 'Перезагружает роутер после подтверждения.',
+        'Shows configured emergency-useful sites.': 'Показывает настроенные аварийно-полезные сайты.',
+        'Shows available commands.': 'Показывает доступные команды.',
+        'Shows what to prepare before asking for support.': 'Показывает, что подготовить перед обращением в поддержку.',
+        'Shows Sheepfold and router status.': 'Показывает состояние Sheepfold и роутера.',
         'Administrative action log. Export masks sensitive fields.': 'Журнал действий администраторов. При экспорте чувствительные поля маскируются.',
         'Clear log': 'Очистить журнал',
         'Clearing logs requires confirmation.': 'Очистка журнала требует подтверждения.',
@@ -340,6 +437,16 @@ var translations = {
         'Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen.': 'Путь к файлу кэша должен начинаться с /tmp/ и содержать только буквы, цифры, точку, слэш, подчёркивание и дефис.',
         'Export masked': 'Экспорт',
         'Masked log export has been saved.': 'Экспорт журнала с маскированием сохранён.',
+        'Export log': 'Экспорт журнала',
+        'Export period': 'Период экспорта',
+        'Last hour': 'За последний час',
+        'Last week': 'За неделю',
+        'Custom period': 'С - по',
+        'All time': 'За всё время',
+        'From': 'С',
+        'To': 'По',
+        'Export selected period': 'Экспортировать',
+        'No log entries for selected period.': 'За выбранный период записей журнала нет.',
         'Owner granted +30 minutes to Child tablet': 'Владелец дал +30 минут устройству "Планшет ребёнка"',
         'New device detected: #4, DC:A6:32:EC:00:19, IP 192.168.1.98': 'Обнаружено новое устройство: #4, DC:A6:32:EC:00:19, IP 192.168.1.98',
         'Global block disabled by owner': 'Глобальная блокировка выключена владельцем',
@@ -408,6 +515,11 @@ var translations = {
         'Blocked internet page text shown instead of websites': 'Текст интернет-страницы блокировки открывающейся вместо сайтов',
         'Internet is temporarily unavailable by family rules.': 'Интернет временно недоступен по семейным правилам.',
         'Update app': 'Обновить приложение',
+        'current version': 'текущая версия',
+        'checking': 'проверяется',
+        'up to date': 'актуальная',
+        'outdated': 'устаревшая',
+        'could not check': 'не удалось проверить',
         'Application update requires confirmation.': 'Обновление приложения требует подтверждения.',
         'Install Sheepfold update now?': 'Установить обновление Sheepfold сейчас?',
         'Update started. Do not close this page until the result appears.': 'Обновление запущено. Не закрывайте страницу до появления результата.',
@@ -518,7 +630,8 @@ function badge(status) {
                 blocked: T('Blocklist'),
                 scheduled: T('Scheduled'),
                 restricted: T('Restricted'),
-                new: T('New')
+                new: T('New'),
+                journal: T('Journal')
         };
 
         return E('span', { 'class': 'sf-badge sf-badge-' + status }, labels[status] || status);
@@ -550,6 +663,19 @@ function actionButton(label, tone, message) {
 
 function routerControl(args) {
         return fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', args);
+}
+
+function parseKeyValueOutput(text) {
+        var values = {};
+
+        String(text || '').split(/\r?\n/).forEach(function (line) {
+                var index = line.indexOf('=');
+
+                if (index > 0)
+                        values[line.slice(0, index)] = line.slice(index + 1);
+        });
+
+        return values;
 }
 
 function commandErrorText(error, fallback) {
@@ -688,6 +814,44 @@ function updateAppButton() {
         }, T('Update app'));
 }
 
+function updateVersionStatusText(version, status) {
+        return T('current version') + ' ' + version + ' (' + T(status) + ')';
+}
+
+function updateAppRow() {
+        var version = safeUciGet('sheepfold', 'global', 'ui_asset_version', 'unknown') || 'unknown';
+        var statusNode = E('span', {
+                'class': 'sf-update-version sf-update-version-checking'
+        }, updateVersionStatusText(version, 'checking'));
+
+        window.setTimeout(function () {
+                fs.exec('/usr/libexec/sheepfold/sheepfold-updater', ['check']).then(function (result) {
+                        var output = String((result && (result.stdout || result.stderr)) || '');
+                        var status = 'could not check';
+                        var statusClass = 'sf-update-version-unknown';
+
+                        if (/No updates available|Обновлений нет/i.test(output)) {
+                                status = 'up to date';
+                                statusClass = 'sf-update-version-ok';
+                        } else if (/Update is available|Доступно обновление/i.test(output)) {
+                                status = 'outdated';
+                                statusClass = 'sf-update-version-warning';
+                        }
+
+                        statusNode.className = 'sf-update-version ' + statusClass;
+                        statusNode.textContent = updateVersionStatusText(version, status);
+                }, function () {
+                        statusNode.className = 'sf-update-version sf-update-version-unknown';
+                        statusNode.textContent = updateVersionStatusText(version, 'could not check');
+                });
+        }, 0);
+
+        return E('div', { 'class': 'sf-update-row' }, [
+                updateAppButton(),
+                statusNode
+        ]);
+}
+
 function maskLogMessage(message) {
         return String(message || '')
                 .replace(/\b([0-9a-f]{2}):([0-9a-f]{2}):([0-9a-f]{2}):([0-9a-f]{2}):([0-9a-f]{2}):([0-9a-f]{2})\b/gi, function (match, first, second, third, fourth, fifth, sixth) {
@@ -732,12 +896,113 @@ function renderLogRows() {
 }
 
 function maskedLogExportText() {
-        if (!logEntries.length)
+        return maskedLogExportTextForEntries(logEntries);
+}
+
+function parseLogTime(value) {
+        var match = String(value || '').match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+
+        if (!match)
+                return null;
+
+        return new Date(
+                Number(match[3]),
+                Number(match[2]) - 1,
+                Number(match[1]),
+                Number(match[4]),
+                Number(match[5]),
+                Number(match[6])
+        );
+}
+
+function filterLogEntriesByPeriod(period, fromValue, toValue) {
+        var now = new Date();
+        var from = null;
+        var to = null;
+
+        if (period === 'hour')
+                from = new Date(now.getTime() - 60 * 60 * 1000);
+        else if (period === 'week')
+                from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        else if (period === 'custom') {
+                from = fromValue ? new Date(fromValue) : null;
+                to = toValue ? new Date(toValue) : null;
+        }
+
+        if (period === 'all')
+                return logEntries.slice();
+
+        return logEntries.filter(function (entry) {
+                var time = parseLogTime(entry.time);
+
+                if (!time)
+                        return false;
+                if (from && time < from)
+                        return false;
+                if (to && time > to)
+                        return false;
+
+                return true;
+        });
+}
+
+function maskedLogExportTextForEntries(entries) {
+        if (!entries.length)
                 return T('Log is empty.') + '\n';
 
-        return logEntries.map(function (entry) {
+        return entries.map(function (entry) {
                 return entry.time + ' ' + maskLogMessage(T(entry.message));
         }).join('\n') + '\n';
+}
+
+function showLogExportModal() {
+        var periodField = selectControl(T('Export period'), 'week', [
+                ['hour', T('Last hour')],
+                ['week', T('Last week')],
+                ['custom', T('Custom period')],
+                ['all', T('All time')]
+        ]);
+        var fromField = inputControl(T('From'), '', { 'type': 'datetime-local' });
+        var toField = inputControl(T('To'), '', { 'type': 'datetime-local' });
+        var customRange = E('div', { 'class': 'sf-grid two', 'hidden': 'hidden' }, [
+                fromField.node,
+                toField.node
+        ]);
+
+        function updateRangeVisibility() {
+                customRange.hidden = periodField.input.value === 'custom' ? null : 'hidden';
+        }
+
+        periodField.input.addEventListener('change', updateRangeVisibility);
+        updateRangeVisibility();
+
+        ui.showModal(T('Export log'), [
+                E('div', { 'class': 'sf-device-editor' }, [
+                        periodField.node,
+                        customRange
+                ]),
+                E('div', { 'class': 'right sf-modal-actions' }, [
+                        E('button', {
+                                'class': 'btn cbi-button',
+                                'click': ui.hideModal
+                        }, T('Cancel')),
+                        E('button', {
+                                'class': 'btn cbi-button cbi-button-positive',
+                                'click': function () {
+                                        var period = periodField.input.value;
+                                        var entries = filterLogEntriesByPeriod(period, fromField.input.value, toField.input.value);
+                                        var stamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+                                        if (!entries.length)
+                                                notify(T('No log entries for selected period.'), 'warning');
+
+                                        downloadTextFile('sheepfold-log-masked-' + period + '-' + stamp + '.txt', maskedLogExportTextForEntries(entries));
+                                        notify(T('Masked log export has been saved.'), 'info');
+                                        ui.hideModal();
+                                }
+                        }, T('Export selected period'))
+                ])
+        ]);
 }
 
 function downloadTextFile(filename, text) {
@@ -921,6 +1186,15 @@ function staticLeaseIcon() {
 function deviceTypeDefinitions() {
         return [
                 {
+                        value: 'unknown',
+                        label: T('Unknown device type'),
+                        mark: '?',
+                        paths: [
+                                'M12 18h.01',
+                                'M9.1 9a3 3 0 1 1 5.8 1c-.4 1.3-1.6 1.9-2.3 2.5-.5.4-.6.8-.6 1.5'
+                        ]
+                },
+                {
                         value: 'phone',
                         label: T('Phone'),
                         mark: '▯',
@@ -1083,8 +1357,21 @@ function deviceTypeByValue(value) {
         return deviceTypeDefinitions().filter(function (item) {
                 return item.value === value;
         })[0] || deviceTypeDefinitions().filter(function (item) {
-                return item.value === 'smart';
+                return item.value === 'unknown';
         })[0];
+}
+
+function displayDeviceType(device) {
+        var confidence = parseInt(device && device.detectionConfidence, 10);
+        var minConfidence = parseInt(safeUciGet('sheepfold', 'global', 'detector_min_device_type_confidence', '70'), 10);
+
+        if (isNaN(minConfidence))
+                minConfidence = 70;
+
+        if (device && !device.manualDeviceType && !isNaN(confidence) && confidence < minConfidence)
+                return 'unknown';
+
+        return device && device.deviceType ? device.deviceType : 'unknown';
 }
 
 function deviceTypeOptions() {
@@ -1115,15 +1402,15 @@ function inferDeviceType(item, configured) {
                 return 'printer';
         if (/(home[ -]?assistant|hassio|hass\.io|haos|home assistant green|home assistant yellow|openhab|adguard[ -]?home|adguardhome|samba|smb|cifs|файловый сервер|file server|nas|proxmox|pve|truenas|freenas|openmediavault|omv|synology|diskstation|qnap|unraid|plex server|jellyfin|emby|docker host|portainer|мини[ -]?сервер|домашний сервер|smlight|slzb|slzb-mr4u|zigbee2mqtt|zha coordinator|zigbee coordinator|zigbee gateway|zigbee bridge|matter bridge|thread border router|homekit bridge|smart home hub|smarthome hub|хаб умного дома|координатор zigbee|zigbee шлюз|шлюз zigbee|шлюз умного дома|philips hue bridge|hue bridge|ikea dirigera|dirigera|tradfri gateway|trådfri gateway|aqara hub|xiaomi gateway|mijia gateway|tuya gateway|sonoff zigbee bridge|hubitat|smartthings hub|aeotec hub|homey|fibaro home center|homematic|deconz|conbee|skyconnect|zwavejs|z-wave js|z-wave gateway|zwave gateway)/.test(text))
                 return 'server';
-        if (/(nvr|dvr|xvr|hybrid recorder|video recorder|videoregistrar|видеорегистратор|регистратор|cctv server|surveillance server|video server|сервер видеонаблюдения|ltv-rne|rne-\d|rvi-r|trassir|xmeye|ivms|hik-connect|smartpss|gdmss|idmss|unv.*nvr|uniview.*nvr|hikvision.*nvr|hiwatch.*nvr|hilook.*nvr|dahua.*nvr|beward.*nvr|optimus.*nvr|tantos.*nvr|polyvision.*nvr|hanwha.*nvr|wisenet.*nvr|axis.*nvr|vivotek.*nvr|tiandy.*nvr)/.test(text))
+        if (/(nvr|dvr|xvr|hybrid recorder|video recorder|videoregistrar|videonablyudenie|videonablydenie|videonabludenie|video-nablyudenie|video-nablydenie|видеорегистратор|регистратор|cctv server|surveillance server|video server|сервер видеонаблюдения|ltv-rne|rne-\d|rvi-r|trassir|xmeye|ivms|hik-connect|smartpss|gdmss|idmss|unv.*nvr|uniview.*nvr|hikvision.*nvr|hiwatch.*nvr|hilook.*nvr|dahua.*nvr|beward.*nvr|optimus.*nvr|tantos.*nvr|polyvision.*nvr|hanwha.*nvr|wisenet.*nvr|axis.*nvr|vivotek.*nvr|tiandy.*nvr)/.test(text))
                 return 'server';
-        if (/(camera|cam|ipcam|камера)/.test(text))
+        if (/(camera|ip[-_ ]?cam|webcam|(^|[^a-z0-9])cam[0-9]+([^a-z0-9]|$)|(^|[^a-z0-9])cam[-_ ][0-9]+([^a-z0-9]|$)|камера)/.test(text))
                 return 'camera';
         if (/(alice|alisa|yandex|яндекс|алиса|station|станци[яи]|smart speaker|speaker|колонк|sonos|homepod|alexa|amazon echo|google home|sberboom|сбербум|маруся|marusya|капсул)/.test(text))
                 return 'speaker';
         if (/(vacuum|roborock|dreame|deebot|ecovacs|irobot|roomba|пылесос|miio|xiaomi-vacuum|viomi|ilife|eufy|yeedi)/.test(text))
                 return 'vacuum';
-        if (/(warm floor|underfloor|floor heating|heated floor|терморегулятор|термоголовк|т[её]пл[ыо]й пол|теплый пол|тёплый пол|подогрев пола|heater relay|smart relay|relay|реле|выключател|switch module|wall switch|light switch|освещен|свет|ламп|dimmer|диммер|curtain|curtains|blind|blinds|shade|roller shade|штор|жалюзи|карниз|чайник|kettle|утюг|iron|socket|plug|розетк|tuya|ewelink|sonoff|shelly|aqara|mijia|xiaomi smart|yeelight|philips hue|nanoleaf|wled|led controller|контроллер led|контроллер света|датчик движения|motion sensor|door sensor|window sensor|датчик двери|датчик окна|leak sensor|датчик протечки|smoke sensor|датчик дыма|temperature sensor|датчик температуры|humidity sensor|датчик влажности)/.test(text))
+        if (/(warm floor|underfloor|floor heating|heated floor|терморегулятор|термоголовк|т[её]пл[ыо]й пол|теплый пол|тёплый пол|подогрев пола|heater relay|smart relay|relay|реле|выключател|switch module|wall switch|light switch|освещен|свет|ламп|dimmer|диммер|curtain|curtains|blind|blinds|shade|roller shade|штор|жалюзи|карниз|чайник|kettle|утюг|iron|socket|plug|розетк|tuya|ewelink|sonoff|shelly|aqara|mijia|xiaomi smart|yeelight|philips hue|nanoleaf|wled|led controller|контроллер led|контроллер света|датчик движения|motion sensor|door sensor|window sensor|датчик двери|датчик окна|leak sensor|датчик протечки|smoke sensor|датчик дыма|temperature sensor|датчик температуры|humidity sensor|датчик влажности|espressif|esp8266|esp32|esp32c3|esp32-c3|esp32s3|esp32-s3|tasmota|esphome)/.test(text))
                 return 'smart_home';
         if (/(zont|зонт|ectostroy|ectocontrol|эктоконтрол|myheat|teplocom|теплоком|xital|кситал|телеметрик|telemetrika|owen|овен|saures|boiler|kotel|кот[её]л|baxi|navien|vaillant|buderus|protherm|ariston|heating|thermostat|термостат|отоплен|контроллер|alarm|сигнализац)/.test(text))
                 return 'engineering';
@@ -2519,6 +2806,18 @@ function groupSectionName(groupName) {
         return 'group_' + hashString(groupName).toString(16);
 }
 
+function groupSectionByName(groupName) {
+        var normalized = normalizeGroupName(groupName);
+        var result = null;
+
+        safeUciSections('sheepfold', 'group').forEach(function (section) {
+                if (!result && normalizeGroupName(section.name || section['.name']) === normalized)
+                        result = section;
+        });
+
+        return result;
+}
+
 function ensureGroupSection(groupName, section) {
         if (section && section['.name'])
                 return section['.name'];
@@ -2628,6 +2927,16 @@ function showGroupSettingsModal(groupName, section, onSave) {
                 selectedIds: currentDeviceIds
         });
         var scheduleSelector = scheduleCheckboxes(listOptionValues(section && section.schedules));
+        var allowlistOnlyField = checkboxControl(
+                T('Allow only selected whitelist sources for this group'),
+                section && section.allowlist_only === '1',
+                T('Devices in this group will be limited to domains from the selected whitelist sources and manually allowed emergency-useful sites.')
+        );
+        var activityLogField = checkboxControl(
+                T('Enable activity journal for all devices in this group'),
+                section && section.activity_log_enabled === '1',
+                T('Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices.')
+        );
         var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
 
         function showError(message) {
@@ -2666,6 +2975,8 @@ function showGroupSettingsModal(groupName, section, onSave) {
                 uci.set('sheepfold', sectionName, 'name', newName);
                 uci.set('sheepfold', sectionName, 'color', color);
                 uci.set('sheepfold', sectionName, 'schedules', selectedSchedules);
+                uci.set('sheepfold', sectionName, 'allowlist_only', allowlistOnlyField.input.checked ? '1' : '0');
+                uci.set('sheepfold', sectionName, 'activity_log_enabled', activityLogField.input.checked ? '1' : '0');
                 if (!section)
                         uci.set('sheepfold', sectionName, 'protected', '0');
 
@@ -2709,6 +3020,8 @@ function showGroupSettingsModal(groupName, section, onSave) {
                         ]),
                         E('strong', {}, T('Group schedules')),
                         scheduleSelector.node,
+                        allowlistOnlyField.node,
+                        activityLogField.node,
                         E('strong', {}, T('Assigned devices')),
                         deviceSelector.node
                 ]),
@@ -2783,6 +3096,8 @@ function showAddGroupModal(existingNames) {
                                         uci.set('sheepfold', sectionName, 'color', color);
                                         uci.set('sheepfold', sectionName, 'protected', '0');
                                         uci.set('sheepfold', sectionName, 'auto_assignable', '0');
+                                        uci.set('sheepfold', sectionName, 'allowlist_only', '0');
+                                        uci.set('sheepfold', sectionName, 'activity_log_enabled', '0');
 
                                         saveUciChanges(['sheepfold']).then(function () {
                                                 notify(T('Group created.'), 'info');
@@ -2983,7 +3298,7 @@ function showDeviceSettingsModal(device) {
                 ['__custom', T('Custom')]
         ]));
         var customGroupField = inputControl(T('Use custom group'), groupIsCustom ? device.group : '');
-        var typeField = deviceTypeSelectControl(T('Device type'), device.deviceType);
+        var typeField = deviceTypeSelectControl(T('Device type'), displayDeviceType(device));
         var statusField = selectControl(T('Access mode'), device.status, [
                 ['new', T('Not configured')],
                 ['allow', T('Allowlist')],
@@ -2996,6 +3311,11 @@ function showDeviceSettingsModal(device) {
                 device.staticLease,
                 device.staticLease ? T('Existing permanent DHCP lease will be updated, not removed.') : '',
                 device.staticLease ? { 'disabled': 'disabled' } : null
+        );
+        var activityLogField = checkboxControl(
+                T('Enable activity journal for this device'),
+                device.activityLogEnabled,
+                T('Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices.')
         );
         var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
         var infoLines = E('div', { 'class': 'sf-device-info-lines' }, [
@@ -3023,7 +3343,8 @@ function showDeviceSettingsModal(device) {
                                 groupField.node,
                                 customGroupField.node,
                                 statusField.node,
-                                staticLeaseField.node
+                                staticLeaseField.node,
+                                activityLogField.node
                         ])
                 ]),
                 E('div', { 'class': 'right sf-modal-actions' }, [
@@ -3071,7 +3392,9 @@ function showDeviceSettingsModal(device) {
                                         uci.set('sheepfold', sectionName, 'ip', ip);
                                         uci.set('sheepfold', sectionName, 'group', group || T('Not configured'));
                                         uci.set('sheepfold', sectionName, 'device_type', deviceType);
+                                        uci.set('sheepfold', sectionName, 'manual_device_type', deviceType === 'unknown' ? '0' : '1');
                                         uci.set('sheepfold', sectionName, 'status', status);
+                                        uci.set('sheepfold', sectionName, 'activity_log_enabled', activityLogField.input.checked ? '1' : '0');
 
                                         if (status === 'allow')
                                                 updateMacList('allowlist', device.mac, true);
@@ -3113,7 +3436,8 @@ function deviceTable(rows, options) {
 
         var tableRows = rows.map(function (device, index) {
                 var adminDevice = isAdminDevice(device);
-                var type = deviceTypeByValue(device.deviceType);
+                var displayType = displayDeviceType(device);
+                var type = deviceTypeByValue(displayType);
 
                 return E('div', {
                         'class': 'sf-device-row',
@@ -3133,18 +3457,31 @@ function deviceTable(rows, options) {
                                           ]),
                                          E('small', {}, device.note)
                           ]),
-                        E('div', { 'class': 'sf-device-type-cell' }, deviceTypeIcon(device.deviceType)),
+                        E('div', { 'class': 'sf-device-type-cell' }, deviceTypeIcon(displayType)),
                         E('div', { 'class': 'sf-ip-cell' }, [
                                 E('span', {}, device.ip || '-'),
                                 device.staticLease ? staticLeaseIcon() : ''
                         ]),
                         E('div', { 'class': 'sf-mono' }, device.mac),
                         E('div', {}, device.group),
-                        E('div', {}, badge(device.status)),
+                        E('div', { 'class': 'sf-status-stack' }, [
+                                badge(device.status),
+                                device.activityLogEnabled ? badge('journal') : ''
+                        ]),
                         E('div', { 'class': 'sf-row-actions' }, [
                                 iconButton(T('Configure'), 'gear', 'neutral', function () {
                                         showDeviceSettingsModal(device);
                                 }),
+                                options.removeFromList ?
+                                        iconButton(
+                                                options.removeFromList === 'allowlist' ? T('Remove from allowlist') : T('Remove from blocklist'),
+                                                'trash',
+                                                'danger',
+                                                function () {
+                                                        removeDeviceFromAccessList(device, options.removeFromList);
+                                                }
+                                        ) :
+                                        '',
                                 options.compact || adminDevice || device.status === 'allow' || device.status === 'blocked' ?
                                         '' :
                                         actionButton(T('+30 min'), 'positive', T('Temporary access would require confirmation.'))
@@ -3188,6 +3525,43 @@ function textareaField(label, value, hint) {
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
                 E('span', {}, label),
                 E('textarea', { 'class': 'cbi-input-textarea', 'rows': 4 }, value || ''),
+                hint ? E('small', {}, hint) : ''
+        ]);
+}
+
+function globalTextareaOptionField(label, option, defaultValue, savedMessage, errorMessage, hint) {
+        var textarea = E('textarea', {
+                'class': 'cbi-input-textarea',
+                'rows': 5
+        }, safeUciGet('sheepfold', 'global', option, defaultValue || ''));
+        var lastValue = textarea.value;
+
+        function saveIfChanged() {
+                var value = textarea.value.trim();
+
+                if (value === lastValue)
+                        return;
+
+                saveGlobalOption(option, value).then(function () {
+                        lastValue = value;
+                        notify(savedMessage, 'info');
+                }, function () {
+                        textarea.value = lastValue;
+                        notify(errorMessage, 'warning');
+                });
+        }
+
+        textarea.addEventListener('blur', saveIfChanged);
+        textarea.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+                        ev.preventDefault();
+                        saveIfChanged();
+                }
+        });
+
+        return E('label', { 'class': 'sf-field sf-field-wide' }, [
+                E('span', {}, label),
+                textarea,
                 hint ? E('small', {}, hint) : ''
         ]);
 }
@@ -3261,6 +3635,24 @@ function blocklistEmergencyAccessField() {
                 select,
                 E('small', {}, T('Allows blocklisted devices to access only sites added to the emergency-useful sites list. Router access remains blocked.'))
         ]);
+}
+
+function siteBlacklistModeField() {
+        return saveSelectGlobalField(T('Site blacklist'), 'site_blocklist_mode', 'except_allowlist_admins', [
+                ['disabled', T('Disabled')],
+                ['all', T('Enabled for everyone')],
+                ['except_allowlist_admins', T('Enabled for everyone except allowlist and administrators')]
+        ], T('Site blacklist mode saved.'), T('Could not save site blacklist mode.'));
+}
+
+function siteListsUpdateIntervalField() {
+        return saveSelectGlobalField(T('Site list update'), 'site_lists_update_interval', 'weekly', [
+                ['daily', T('Every day')],
+                ['3days', T('Every 3 days')],
+                ['weekly', T('Once a week')]
+        ], T('Site list update interval saved.'), T('Could not save site list update interval.'), null, function () {
+                return routerControl(['site-lists-cron-apply']);
+        });
 }
 
 function autoConfigureDevicesField() {
@@ -3518,7 +3910,7 @@ function timeAutomationField(label, modeOption, timeOption, defaultTime) {
         ]);
 }
 
-function saveSelectGlobalField(label, option, value, values, successMessage, errorMessage, hint) {
+function saveSelectGlobalField(label, option, value, values, successMessage, errorMessage, hint, afterSave) {
         var currentValue = safeUciGet('sheepfold', 'global', option, value);
         var select = E('select', {
                 'class': 'cbi-input-select',
@@ -3526,6 +3918,9 @@ function saveSelectGlobalField(label, option, value, values, successMessage, err
                         var nextValue = ev.currentTarget.value;
 
                         saveGlobalOption(option, nextValue).then(function () {
+                                if (afterSave)
+                                        return afterSave(nextValue);
+                        }).then(function () {
                                 currentValue = nextValue;
                                 notify(successMessage, 'info');
                         }, function () {
@@ -3546,39 +3941,44 @@ function saveSelectGlobalField(label, option, value, values, successMessage, err
 
 function messengerField(label, option, placeholder, hint, secret) {
         var input = E('input', {
-                'class': 'cbi-input-text',
+                'class': 'cbi-input-text' + (secret ? ' sf-secret-input' : ''),
                 'type': secret ? 'password' : 'text',
                 'value': safeUciGet('sheepfold', 'global', option, ''),
                 'placeholder': placeholder || ''
         });
-        var lastValue = input.value;
 
-        function saveIfChanged() {
-                var value = input.value.trim();
-
-                if (value === lastValue)
-                        return;
-
-                saveGlobalOption(option, value).then(function () {
-                        lastValue = value;
-                        notify(T('Messenger settings saved.'), 'info');
-                }, function () {
-                        input.value = lastValue;
-                        notify(T('Could not save messenger settings.'), 'warning');
-                });
-        }
-
-        input.addEventListener('blur', saveIfChanged);
         input.addEventListener('keydown', function (ev) {
                 if (ev.key === 'Enter') {
                         ev.preventDefault();
-                        saveIfChanged();
                 }
         });
 
+        var fieldControl = input;
+
+        if (secret) {
+                fieldControl = E('span', { 'class': 'sf-secret-row' }, [
+                        input,
+                        E('button', {
+                                'class': 'sf-icon-action sf-secret-toggle',
+                                'type': 'button',
+                                'title': T('Show secret'),
+                                'aria-label': T('Show secret'),
+                                'click': function (ev) {
+                                        var visible;
+
+                                        ev.preventDefault();
+                                        visible = input.type === 'password';
+                                        input.type = visible ? 'text' : 'password';
+                                        ev.currentTarget.setAttribute('title', visible ? T('Hide secret') : T('Show secret'));
+                                        ev.currentTarget.setAttribute('aria-label', visible ? T('Hide secret') : T('Show secret'));
+                                }
+                        }, iconSvg('eye'))
+                ]);
+        }
+
         var node = E('label', { 'class': 'sf-field sf-field-wide' }, [
                 E('span', {}, label),
-                input,
+                fieldControl,
                 hint ? E('small', {}, hint) : ''
         ]);
 
@@ -3661,18 +4061,120 @@ function messengerSettingsBox() {
         var telegramToken = messengerField(T('Telegram bot token'), 'telegram_bot_token', '123456:ABC...', T('Stored on the router.'), true);
         var telegramAdmin = messengerField(T('Telegram admin chat ID'), 'telegram_admin_chat_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false);
         var fields = [vkToken, vkCommunity, vkAdmin, telegramToken, telegramAdmin];
+        var select;
+
+        function collectOptions() {
+                var options = {
+                        active_messenger: select.value
+                };
+
+                fields.forEach(function (field) {
+                        options[field.sfOption] = field.sfInput.value.trim();
+                });
+
+                return options;
+        }
+
+        function restartSheepfoldService() {
+                return fs.exec('/etc/init.d/sheepfold', ['restart']).catch(function () {});
+        }
+
+        function readMessengerStatus() {
+                return routerControl(['messenger-status']).then(function (result) {
+                        return parseKeyValueOutput(result.stdout || '');
+                });
+        }
+
+        function saveMessengerOptions() {
+                var options = collectOptions();
+                var args;
+
+                if (options.active_messenger === 'telegram') {
+                        args = [
+                                'messenger-save-telegram',
+                                options.telegram_bot_token || '',
+                                options.telegram_admin_chat_id || ''
+                        ];
+                } else if (options.active_messenger === 'vk') {
+                        args = [
+                                'messenger-save-vk',
+                                options.vk_access_token || '',
+                                options.vk_community_id || '',
+                                options.vk_admin_user_id || ''
+                        ];
+                } else {
+                        args = ['messenger-disable'];
+                }
+
+                return routerControl(args).then(function () {
+                        return restartSheepfoldService();
+                }).then(function () {
+                        return readMessengerStatus();
+                }).then(function (status) {
+                        if ((status.active || 'none') !== options.active_messenger) {
+                                throw new Error(T('Messenger settings were sent to the router, but the router still reports another active messenger. Reinstall the latest Sheepfold package and check UCI config.') + ' ' + T('Router reports active messenger:') + ' ' + (status.active || 'none'));
+                        }
+
+                        activeValue = options.active_messenger;
+                        return status;
+                });
+        }
+
         var vkFields = E('div', { 'class': 'sf-messenger-fields' }, [
                 E('div', { 'class': 'sf-note' }, T('Create a VK community, enable messages, create an access token for community messages, then enter the community ID and the VK user ID of the parent whose commands are allowed.')),
                 vkToken,
                 vkCommunity,
                 vkAdmin
         ]);
-        var telegramFields = E('div', { 'class': 'sf-messenger-fields' }, [
-                E('div', { 'class': 'sf-note' }, T('Create a bot through BotFather, paste the bot token, send any message to the bot from the parent account, then enter that chat ID here.')),
-                telegramToken,
-                telegramAdmin
+        var telegramSetupSteps = E('details', { 'class': 'sf-note' }, [
+                E('summary', {}, T('Step-by-step Telegram setup')),
+                E('ol', {}, [
+                        E('li', {}, T('Open Telegram and find the official @BotFather account. Check the username carefully: @BotFather.')),
+                        E('li', {}, T('Press Start or send /start.')),
+                        E('li', {}, T('Send /newbot and follow BotFather questions.')),
+                        E('li', {}, T('Enter a visible bot name, for example Sheepfold Home. This name is shown in Telegram.')),
+                        E('li', {}, T('Enter a unique bot username. It must end with bot, for example my_sheepfold_home_bot.')),
+                        E('li', {}, T('BotFather will send a token that looks like 123456:ABC-DEF... Copy it into the Telegram bot token field. Treat this token like a password.')),
+                        E('li', {}, T('Select Telegram as the active messenger and save settings in Sheepfold.')),
+                        E('li', {}, T('Open the created bot from the parent Telegram account and send any message to it. If the chat ID field is empty, Sheepfold will reply with your chat ID.')),
+                        E('li', {}, T('Copy that chat ID into the Telegram admin chat ID field and save settings again.')),
+                        E('li', {}, T('Press the test message button. If everything is correct, the bot will send a message from the router.'))
+                ]),
+                E('p', {}, T('Keep the bot private. Do not publish its token, do not add it to public groups, and do not give the token to children.')),
+                E('p', {}, [
+                        E('a', {
+                                'href': 'https://core.telegram.org/bots/tutorial',
+                                'target': '_blank',
+                                'rel': 'noopener noreferrer'
+                        }, T('Official Telegram guide'))
+                ])
         ]);
-        var select = E('select', {
+        var telegramFields = E('div', { 'class': 'sf-messenger-fields' }, [
+                E('div', { 'class': 'sf-note' }, T('Telegram setup short note')),
+                telegramSetupSteps,
+                telegramToken,
+                telegramAdmin,
+                E('div', { 'class': 'sf-note' }, [
+                        E('strong', {}, T('Available commands')),
+                        E('p', {}, T('Telegram commands: /start, /help, /status, /devices, /internet_on, /internet_off, /wifi_on, /wifi_off, /support, /grant_time, /block_device, /unblock_device, /allowlist_add, /blocklist_add, /logs, /clear_logs, /update, /reboot, /emergency_sites, /wifi_status. Russian phrases like "помощь", "статус", "показать все устройства", "отключить интернет", and "саппорт" also work. Dangerous commands require confirmation. Commands are accepted only from the entered chat ID.'))
+                ]),
+                E('button', {
+                        'class': 'sf-action sf-action-positive sf-action-nowrap',
+                        'click': function (ev) {
+                                ev.preventDefault();
+                                select.value = 'telegram';
+                                setMessengerFieldsVisibility('telegram');
+                                saveMessengerOptions().then(function () {
+                                        return fs.exec('/usr/libexec/sheepfold/sheepfold-telegram-bot', ['send-test']);
+                                }).then(function () {
+                                        notify(T('Test Telegram message sent.'), 'info');
+                                }, function (error) {
+                                        notify(T('Could not send test Telegram message. Check bot token, chat ID, internet access on the router, and that Telegram is selected as the active messenger.') + ' ' + commandErrorText(error, ''), 'warning');
+                                });
+                        }
+                }, T('Send test Telegram message'))
+        ]);
+        select = E('select', {
                 'class': 'cbi-input-select',
                 'change': function (ev) {
                         var nextValue = ev.currentTarget.value;
@@ -3712,19 +4214,12 @@ function messengerSettingsBox() {
                 E('button', {
                         'class': 'sf-action sf-action-positive sf-action-nowrap',
                         'click': function (ev) {
-                                var options = {
-                                        active_messenger: select.value
-                                };
-
                                 ev.preventDefault();
-                                fields.forEach(function (field) {
-                                        options[field.sfOption] = field.sfInput.value.trim();
-                                });
 
-                                saveGlobalOptions(options).then(function () {
+                                saveMessengerOptions().then(function () {
                                         notify(T('Messenger settings saved.'), 'info');
-                                }, function () {
-                                        notify(T('Could not save messenger settings.'), 'warning');
+                                }, function (error) {
+                                        notify(T('Could not save messenger settings.') + ' ' + commandErrorText(error, ''), 'warning');
                                 });
                         }
                 }, T('Save'))
@@ -4016,6 +4511,10 @@ function safeUciSections(config, type) {
         }
 }
 
+function reservedSheepfoldListSection(name) {
+        return ['allowlist', 'blocklist', 'domain_allowlist'].indexOf(String(name || '')) !== -1;
+}
+
 function normalizeMac(mac) {
         var value = String(mac || '').trim().toUpperCase().replace(/-/g, ':');
         var compact = value.replace(/:/g, '');
@@ -4121,6 +4620,9 @@ function sheepfoldDeviceConfigByMac() {
         safeUciSections('sheepfold', 'device').forEach(function (section) {
                 var mac = normalizeMac(section.mac);
 
+                if (reservedSheepfoldListSection(section['.name']))
+                        return;
+
                 if (!mac)
                         return;
 
@@ -4206,6 +4708,29 @@ function updateMacList(listName, mac, enabled) {
                 });
 
         uci.set('sheepfold', sectionName, 'mac', values.join(' '));
+}
+
+function removeDeviceFromAccessList(device, listName) {
+        var isAllowlist = listName === 'allowlist';
+        var confirmText = isAllowlist ? T('Remove device from allowlist?') : T('Remove device from blocklist?');
+        var successText = isAllowlist ? T('Device removed from allowlist.') : T('Device removed from blocklist.');
+        var sectionName;
+
+        if (!window.confirm(confirmText + ' ' + formattedDeviceDisplayId(device) + ' ' + (device.name || device.mac)))
+                return;
+
+        sectionName = ensureSheepfoldDeviceSection(device);
+        updateMacList(listName, device.mac, false);
+        uci.set('sheepfold', sectionName, 'status', 'new');
+
+        saveUciChanges(['sheepfold']).then(function () {
+                notify(successText, 'info');
+                window.setTimeout(function () {
+                        window.location.reload();
+                }, 500);
+        }, function () {
+                notify(T('Could not remove device from list.'), 'warning');
+        });
 }
 
 function applyAdminDeviceBindings(admin, selectedDevices, previousIds) {
@@ -4328,6 +4853,8 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                 var configured = configuredByMac[mac];
                 var status = configured && configured.status ? configured.status : 'new';
                 var adminDevice = configured && configured.admin_device === '1';
+                var groupName = configured && configured.group ? normalizeGroupName(configured.group) : T('Not configured');
+                var groupSection = groupSectionByName(groupName);
                 var deviceType = configured && configured.device_type ?
                         configured.device_type :
                         configured && configured.detected_type ?
@@ -4341,7 +4868,7 @@ function buildRouterDevices(dhcpLeases, arpTable) {
 
                 return {
                         id: 'D-' + String(index + 1).padStart(4, '0'),
-                        name: configured && configured.name ?
+                        name: configured && configured.name && !reservedSheepfoldListSection(configured.name) ?
                                 configured.name :
                                 (item.staticName || item.hostname || T('Unknown device')),
                         ip: configured && configured.ip ? configured.ip : (item.ip || item.staticIp || ''),
@@ -4356,8 +4883,9 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                                         source === 'arp' ? T('ARP/neighbor entry') :
                                                 T('Static DHCP lease');
                         }).join(', '),
-                        group: configured && configured.group ? normalizeGroupName(configured.group) : T('Not configured'),
+                        group: groupName,
                         deviceType: deviceType,
+                        manualDeviceType: configured && configured.manual_device_type === '1',
                         detectionConfidence: configured && configured.detection_confidence,
                         detectionReason: configured && configured.detection_reason,
                         autoGroupAssigned: configured && configured.auto_group_assigned === '1',
@@ -4365,7 +4893,12 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                         note: routerDeviceNote(item, configured),
                         adminDevice: adminDevice,
                         adminOwner: configured && configured.admin_owner,
-                        adminLogin: configured && configured.admin_login
+                        adminLogin: configured && configured.admin_login,
+                        groupAllowlistOnly: groupSection && groupSection.allowlist_only === '1',
+                        activityLogEnabled: !adminDevice && status !== 'allow' && status !== 'blocked' && (
+                                configured && configured.activity_log_enabled === '1' ||
+                                groupSection && groupSection.activity_log_enabled === '1'
+                        )
                 };
         });
 }
@@ -4799,7 +5332,7 @@ return view.extend({
                                         manualListDeviceButton('allow')
                                 ])
                         ]),
-                        deviceTable(devices.filter(function (device) { return device.status === 'allow'; }), { compact: true })
+                        deviceTable(devices.filter(function (device) { return device.status === 'allow'; }), { compact: true, removeFromList: 'allowlist' })
                 ]);
         },
 
@@ -4816,7 +5349,7 @@ return view.extend({
                         E('div', { 'class': 'sf-note ' + (emergencyAccessEnabled ? 'sf-note-ok' : 'sf-note-warning') }, emergencyAccessEnabled ?
                                 T('Emergency-useful sites for blocklisted devices are enabled and still do not open router access.') :
                                 T('Emergency-useful sites for blocklisted devices are disabled and still do not open router access.')),
-                        deviceTable(devices.filter(function (device) { return device.status === 'blocked'; }), { compact: true })
+                        deviceTable(devices.filter(function (device) { return device.status === 'blocked'; }), { compact: true, removeFromList: 'blocklist' })
                 ]);
         },
 
@@ -5139,16 +5672,31 @@ return view.extend({
                                 E('div', { 'class': 'sf-box' }, [
                                         E('h4', {}, T('Commands')),
                                         E('div', { 'class': 'sf-command-list' }, [
-                                                T('show all devices'),
-                                                T('block internet'),
-                                                T('unblock internet'),
-                                                T('grant +30 minutes'),
-                                                T('show Wi-Fi status'),
-                                                T('enable Wi-Fi'),
-                                                T('disable Wi-Fi'),
-                                                T('status')
+                                                [T('show all devices'), T('Shows all detected devices with Sheepfold IDs.')],
+                                                [T('block internet'), T('Turns on global blocking for everyone except the allowlist.')],
+                                                [T('unblock internet'), T('Turns global blocking off.')],
+                                                [T('disable internet'), T('Turns on global blocking for everyone except the allowlist.')],
+                                                [T('grant +30 minutes'), T('Grants temporary access to the selected device.')],
+                                                [T('show Wi-Fi status'), T('Shows whether Wi-Fi is enabled.')],
+                                                [T('enable Wi-Fi'), T('Turns router Wi-Fi on.')],
+                                                [T('disable Wi-Fi'), T('Turns router Wi-Fi off; use carefully.')],
+                                                [T('block device #3'), T('Blocks the selected device.')],
+                                                [T('unblock device #3'), T('Removes blocking from the selected device.')],
+                                                [T('add #3 to allowlist'), T('Adds the selected device to the allowlist.')],
+                                                [T('add #3 to blocklist'), T('Adds the selected device to the blocklist.')],
+                                                [T('show log'), T('Shows recent administrative log entries.')],
+                                                [T('clear log'), T('Clears the administrative log after confirmation.')],
+                                                [T('update app'), T('Checks and installs an update after confirmation.')],
+                                                [T('reboot router'), T('Reboots the router after confirmation.')],
+                                                [T('emergency-useful sites'), T('Shows configured emergency-useful sites.')],
+                                                [T('help'), T('Shows available commands.')],
+                                                [T('support'), T('Shows what to prepare before asking for support.')],
+                                                [T('status'), T('Shows Sheepfold and router status.')]
                                         ].map(function (command) {
-                                                return E('code', {}, command);
+                                                return E('div', { 'class': 'sf-command-item' }, [
+                                                        E('code', {}, command[0]),
+                                                        E('span', {}, command[1])
+                                                ]);
                                         }))
                                 ])
                         ])
@@ -5210,11 +5758,8 @@ return view.extend({
                                         E('button', {
                                                 'class': 'sf-action sf-action-neutral',
                                                 'click': function (ev) {
-                                                        var stamp = new Date().toISOString().replace(/[:.]/g, '-');
-
                                                         ev.preventDefault();
-                                                        downloadTextFile('sheepfold-log-masked-' + stamp + '.txt', maskedLogExportText());
-                                                        notify(T('Masked log export has been saved.'), 'info');
+                                                        showLogExportModal();
                                                 }
                                         }, T('Export masked'))
                                 ])
@@ -5257,6 +5802,25 @@ return view.extend({
                         wpsActionField(T('WPS long button press'), 'wps_long_press_action'),
                         settingsDivider(T('Router LEDs')),
                         ledControlField(),
+                        settingsDivider(T('Site list sources')),
+                        siteListsUpdateIntervalField(),
+                        globalTextareaOptionField(
+                                T('Whitelist sources'),
+                                'site_allowlist_sources',
+                                defaultSiteAllowlistSources,
+                                T('Whitelist sources saved.'),
+                                T('Could not save whitelist sources.'),
+                                T('One source per line: name | URL. Use updateable external sources instead of manually maintaining a huge list.')
+                        ),
+                        siteBlacklistModeField(),
+                        globalTextareaOptionField(
+                                T('Site blacklist sources'),
+                                'site_blocklist_sources',
+                                defaultSiteBlocklistSources,
+                                T('Site blacklist sources saved.'),
+                                T('Could not save site blacklist sources.'),
+                                T('One source per line: name | URL. Use updateable external sources instead of manually maintaining a huge list.')
+                        ),
                         settingsDivider(T('Other actions')),
                         selectField(T('Export mode'), 'safe', [
                                 ['safe', T('Readable JSON without secrets')],
@@ -5277,7 +5841,7 @@ return view.extend({
                                                 exportSettingsAndUsers();
                                         }
                                 }, T('Export all settings and user list')),
-                                updateAppButton(),
+                                updateAppRow(),
                                 rebootRouterButton()
                         ])
                 ]);

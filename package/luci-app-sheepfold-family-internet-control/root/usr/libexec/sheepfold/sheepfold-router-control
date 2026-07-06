@@ -33,6 +33,46 @@ global_get() {
         uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "$2"
 }
 
+repair_sheepfold_uci_sections() {
+        mkdir -p /etc/config
+        [ -e /etc/config/sheepfold ] || : > /etc/config/sheepfold
+        chmod 600 /etc/config/sheepfold 2>/dev/null || true
+
+        for pair in messenger:messenger_global export:export_global wifi_control:wifi_control_global pairing:pairing_global; do
+                type="${pair%%:*}"
+                name="${pair#*:}"
+
+                if [ "$(uci -q get sheepfold.global 2>/dev/null || true)" = "$type" ]; then
+                        uci -q rename sheepfold.global="$name" 2>/dev/null || {
+                                uci -q delete sheepfold.global 2>/dev/null || true
+                                uci -q set "sheepfold.$name=$type"
+                        }
+                fi
+
+                uci -q rename "sheepfold.@$type[0]=$name" 2>/dev/null || true
+        done
+
+        if [ "$(uci -q get sheepfold.global 2>/dev/null || true)" != "sheepfold" ]; then
+                uci -q rename sheepfold.global=legacy_global 2>/dev/null ||
+                        uci -q delete sheepfold.global 2>/dev/null || true
+                uci -q rename sheepfold.@sheepfold[0]=global 2>/dev/null ||
+                        uci -q set sheepfold.global='sheepfold'
+        fi
+
+        uci -q commit sheepfold 2>/dev/null || true
+}
+
+require_active_messenger() {
+        expected="$1"
+        actual="$(global_get active_messenger none)"
+
+        if [ "$actual" != "$expected" ]; then
+                echo "UCI active_messenger is '$actual', expected '$expected'" >&2
+                echo "Run: uci show sheepfold | grep active_messenger" >&2
+                exit 1
+        fi
+}
+
 valid_port() {
         case "$1" in
                 ''|*[!0-9]*) return 1 ;;
@@ -50,7 +90,23 @@ valid_mac() {
 
 ensure_list_section() {
         name="$1"
-        uci -q get "sheepfold.$name" >/dev/null 2>&1 || uci -q set "sheepfold.$name=list"
+        if [ "$(uci -q get "sheepfold.$name" 2>/dev/null || true)" != "list" ]; then
+                uci -q delete "sheepfold.$name" 2>/dev/null || true
+                uci -q set "sheepfold.$name=list"
+        fi
+}
+
+list_has_mac() {
+        list_name="$1"
+        mac="$(normalize_mac "$2")"
+
+        valid_mac "$mac" || return 1
+
+        for existing in $(uci -q get "sheepfold.$list_name.mac" 2>/dev/null || true); do
+                [ "$(normalize_mac "$existing")" = "$mac" ] && return 0
+        done
+
+        return 1
 }
 
 add_mac_to_allowlist() {
@@ -133,11 +189,24 @@ set_device_status() {
                         ;;
         esac
 
+        repair_sheepfold_uci_sections
+        ensure_list_section allowlist
+        ensure_list_section blocklist
         section="$(device_section_for_mac "$mac")"
 
         if [ "$status" = "blocked" ] &&
                 [ "$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)" = "1" ]; then
                 echo "Administrator device cannot be added to blocklist" >&2
+                return 3
+        fi
+
+        if [ "$status" = "allow" ] && list_has_mac blocklist "$mac"; then
+                echo "Device is already in blocklist. Remove it from blocklist first." >&2
+                return 3
+        fi
+
+        if [ "$status" = "blocked" ] && list_has_mac allowlist "$mac"; then
+                echo "Device is already in allowlist. Remove it from allowlist first." >&2
                 return 3
         fi
 
@@ -154,11 +223,9 @@ set_device_status() {
 
         if [ "$status" = "allow" ]; then
                 add_mac_to_list allowlist "$mac"
-                remove_mac_from_list blocklist "$mac"
                 log_event "Устройство добавлено в белый список: $mac, IP ${ip:-неизвестен}"
         elif [ "$status" = "blocked" ]; then
                 add_mac_to_list blocklist "$mac"
-                remove_mac_from_list allowlist "$mac"
                 log_event "Устройство добавлено в чёрный список: $mac, IP ${ip:-неизвестен}"
         else
                 remove_mac_from_list allowlist "$mac"
@@ -167,6 +234,21 @@ set_device_status() {
         fi
 
         uci -q commit sheepfold
+
+        actual_status="$(uci -q get "sheepfold.$section.status" 2>/dev/null || printf '')"
+        if [ "$actual_status" != "$status" ]; then
+                echo "UCI device status is '$actual_status', expected '$status'" >&2
+                exit 1
+        fi
+        if [ "$status" = "allow" ] && ! list_has_mac allowlist "$mac"; then
+                echo "MAC was not saved to allowlist: $mac" >&2
+                exit 1
+        fi
+        if [ "$status" = "blocked" ] && ! list_has_mac blocklist "$mac"; then
+                echo "MAC was not saved to blocklist: $mac" >&2
+                exit 1
+        fi
+
         printf 'OK\n'
 }
 
@@ -198,6 +280,81 @@ wifi_disable() {
         wifi_set_all 1
         log_event "Wi-Fi отключён Sheepfold"
         log "All Wi-Fi radios disabled"
+}
+
+global_internet_enable() {
+        uci -q set sheepfold.global.block_on_boot='0'
+        uci -q commit sheepfold
+        log_event "Глобальная блокировка интернета выключена через Sheepfold"
+        printf 'OK\n'
+}
+
+global_internet_disable() {
+        uci -q set sheepfold.global.block_on_boot='1'
+        uci -q commit sheepfold
+        log_event "Глобальная блокировка интернета включена через Sheepfold"
+        printf 'OK\n'
+}
+
+global_internet_status() {
+        if [ "$(global_get block_on_boot 0)" = "1" ]; then
+                printf 'disabled\n'
+        else
+                printf 'enabled\n'
+        fi
+}
+
+messenger_disable() {
+        repair_sheepfold_uci_sections
+        uci -q set sheepfold.global.active_messenger='none'
+        uci -q commit sheepfold
+        require_active_messenger none
+        log_event "Мессенджер Sheepfold выключен"
+        printf 'OK\n'
+}
+
+messenger_save_telegram() {
+        telegram_bot_token="${1:-}"
+        telegram_admin_chat_id="${2:-}"
+
+        repair_sheepfold_uci_sections
+        uci -q set sheepfold.global.active_messenger='telegram'
+        uci -q set sheepfold.global.telegram_bot_token="$telegram_bot_token"
+        uci -q set sheepfold.global.telegram_admin_chat_id="$telegram_admin_chat_id"
+        uci -q commit sheepfold
+        require_active_messenger telegram
+
+        log_event "Настройки Telegram-мессенджера сохранены"
+        printf 'OK\n'
+}
+
+messenger_save_vk() {
+        vk_access_token="${1:-}"
+        vk_community_id="${2:-}"
+        vk_admin_user_id="${3:-}"
+
+        repair_sheepfold_uci_sections
+        uci -q set sheepfold.global.active_messenger='vk'
+        uci -q set sheepfold.global.vk_access_token="$vk_access_token"
+        uci -q set sheepfold.global.vk_community_id="$vk_community_id"
+        uci -q set sheepfold.global.vk_admin_user_id="$vk_admin_user_id"
+        uci -q commit sheepfold
+        require_active_messenger vk
+
+        log_event "Настройки VK-мессенджера сохранены"
+        printf 'OK\n'
+}
+
+messenger_status() {
+        repair_sheepfold_uci_sections
+        active="$(global_get active_messenger none)"
+
+        printf 'active=%s\n' "$active"
+        printf 'telegram_token_configured=%s\n' "$([ -n "$(global_get telegram_bot_token '')" ] && printf 1 || printf 0)"
+        printf 'telegram_admin_chat_id_configured=%s\n' "$([ -n "$(global_get telegram_admin_chat_id '')" ] && printf 1 || printf 0)"
+        printf 'vk_token_configured=%s\n' "$([ -n "$(global_get vk_access_token '')" ] && printf 1 || printf 0)"
+        printf 'vk_community_id_configured=%s\n' "$([ -n "$(global_get vk_community_id '')" ] && printf 1 || printf 0)"
+        printf 'vk_admin_user_id_configured=%s\n' "$([ -n "$(global_get vk_admin_user_id '')" ] && printf 1 || printf 0)"
 }
 
 ubus_wan_status() {
@@ -561,6 +718,36 @@ case "$COMMAND" in
         wifi-disable)
                 wifi_disable
                 ;;
+        internet-enable)
+                global_internet_enable
+                ;;
+        internet-disable)
+                global_internet_disable
+                ;;
+        internet-status)
+                global_internet_status
+                ;;
+        messenger-disable)
+                messenger_disable
+                ;;
+        messenger-save-telegram)
+                messenger_save_telegram "${2:-}" "${3:-}"
+                ;;
+        messenger-save-vk)
+                messenger_save_vk "${2:-}" "${3:-}" "${4:-}"
+                ;;
+        messenger-status)
+                messenger_status
+                ;;
+        site-lists-update)
+                /usr/libexec/sheepfold/sheepfold-site-lists update
+                ;;
+        site-lists-cron-apply)
+                /usr/libexec/sheepfold/sheepfold-site-lists cron-apply
+                ;;
+        site-lists-status)
+                /usr/libexec/sheepfold/sheepfold-site-lists status
+                ;;
         wifi-automation-tick)
                 wifi_automation_tick
                 ;;
@@ -611,7 +798,7 @@ case "$COMMAND" in
                 printf 'wan_state=%s\n' "$(cat "$WAN_STATE_FILE" 2>/dev/null || true)"
                 ;;
         *)
-                echo "Usage: sheepfold-router-control [wifi-enable|wifi-disable|wifi-automation-tick|set-device-status|wps-button|led-apply|led-alert-ack|blocked-page-apply|status]" >&2
+                echo "Usage: sheepfold-router-control [wifi-enable|wifi-disable|internet-enable|internet-disable|internet-status|messenger-disable|messenger-save-telegram|messenger-save-vk|messenger-status|site-lists-update|site-lists-cron-apply|site-lists-status|wifi-automation-tick|set-device-status|wps-button|led-apply|led-alert-ack|blocked-page-apply|status]" >&2
                 exit 1
                 ;;
 esac

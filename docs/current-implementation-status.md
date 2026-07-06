@@ -5,7 +5,7 @@ Last checked: 2026-07-05.
 Current OpenWRT package version in the repository:
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-79_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-93_all.ipk
 ```
 
 The package uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries.
@@ -34,6 +34,7 @@ The package uses `Architecture: all` because it contains LuCI assets, shell scri
 - Router LED behavior settings.
 - WAN connectivity event logging.
 - Device detection helper with heuristic device types and optional `No restrictions` auto-assignment.
+- Minimal Telegram adapter through outgoing long polling: configured from LuCI, test message button, chat ID discovery when empty, bot command menu sync, commands for status, device list, internet on/off, Wi-Fi on/off, and support.
 - Uninstall script that removes the OpenWRT package while preserving Sheepfold settings/client lists and printing a remaining-settings report.
 
 ## Still Target / Incomplete
@@ -44,7 +45,8 @@ The package uses `Architecture: all` because it contains LuCI assets, shell scri
 - Full Android pairing backend is not complete. Current QR/manual data is UI-side scaffolding; real one-time token generation and consumption must be enforced by the router backend.
 - `/cgi-bin/sheepfold-api` POST pairing is still a placeholder.
 - Full Android authenticated API `/api/v1/*` is a target contract, not the current complete backend.
-- Messenger bots for VK/Telegram/MAX are documented but not complete production adapters.
+- VK and MAX messenger adapters are documented but not implemented.
+- Telegram adapter is not a complete production adapter yet: dangerous actions still need confirmation flows, richer admin binding, better command parsing, and stronger backend enforcement.
 - AdGuard Home and Podkop status checks/integration preparation are documented and partially represented in LuCI, but automatic integration changes are not implemented.
 - Import currently validates the Sheepfold export file shape in LuCI but does not apply settings through a backend confirmation flow yet.
 - Install script still asks the correct first-run questions and detects integrations, but does not yet download and install the latest `.ipk` from GitHub Releases by itself.
@@ -52,4 +54,3 @@ The package uses `Architecture: all` because it contains LuCI assets, shell scri
 ## Documentation Reading Rule
 
 Documents under `docs/` mix current implementation notes and target product requirements. When a document describes an API, schedule engine, messenger bot, AI assistant, or complete enforcement behavior, treat it as the intended contract unless this status file says the feature is already implemented.
-

@@ -6,7 +6,7 @@
 - OpenWRT package: `luci-app-sheepfold-family-internet-control`
 - LuCI EN: `Sheepfold Family Internet Control`
 - LuCI RU: `Sheepfold : контроль доступа в интернет для семьи`
-- Android app: `Овчарня`
+- Android app: `Sheepfold`
 - Android package: `app.sheepfold.android`
 
 ## Core Features
@@ -40,6 +40,8 @@
 - Administrator devices and Android pairing by QR/manual setup.
 - Single parent-facing save action in LuCI instead of separate Save/Apply semantics.
 - First-open router root password gate.
+- Contextual help for non-obvious settings and risky actions, opened by a visible `?` help control.
+- Optional per-device site activity history as a separate opt-in feature, not part of the default administrative log, excluded for administrator devices and allowlisted devices.
 
 ## Current Implementation Status
 
@@ -58,7 +60,7 @@ Requirements:
 - planned generated languages: Spanish, German, French, Portuguese (Brazil), Italian, Polish, Turkish, Ukrainian, Chinese Simplified, Japanese, Korean, Arabic, Hindi, Indonesian, and Vietnamese;
 - keep terminology consistent:
   - `Sheepfold` as the project name;
-  - `Овчарня` only for the Android app name; LuCI Russian UI keeps the product word as `Sheepfold`;
+  - `Sheepfold` as the public Android app name; do not use `Овчарня` in public product text unless the owner explicitly asks to discuss the old/internal name;
   - `Доступ к аварийно-полезным сайтам` / `Access to emergency-useful sites` for the restricted-domain feature.
 
 ## Country Profiles
@@ -92,7 +94,7 @@ Requirements:
 
 ## Android Scope
 
-The Android companion app **Овчарня** should support Android 9.0 Pie / API 28 and newer.
+The Android companion app **Sheepfold** should support Android 9.0 Pie / API 28 and newer.
 
 Older Android versions are intentionally out of scope.
 
@@ -217,11 +219,15 @@ This group must not override the blocklist. Priority is:
 
 Strong device detection should use router-side signals such as DHCP/static lease data, hostname, vendor/OUI, open ports, service banners, mDNS/SSDP/UPnP names, and a previously confirmed device fingerprint. Detection by MAC, hostname, or open ports alone is not a cryptographic guarantee, so the UI must show why a device was trusted and allow the parent to correct it.
 
+Sheepfold must assume that a child can use an unregistered or borrowed phone. APK is only for parent-admin devices. Enforcement and detection for child devices must rely on router-visible data, not on child-device software or self-reported Android data.
+
 Device types should include a separate `Smart home` / `Умный дом` type for household endpoints such as floor-heating controllers, kettles, irons, light relays/switches, smart sockets, automatic curtains, sensors, and similar devices. These are different from smart-home hubs and servers such as Home Assistant or Zigbee gateways.
 
 Strong detection should be implemented as an optional backend component/package, for example `sheepfold-device-detector`, while the LuCI package stays lightweight and calls Sheepfold backend APIs. The full detector may use existing OpenWRT tools when installed, such as `nmap`/`nmap-ssl` for ports and banners, `avahi-utils` or equivalent mDNS clients, and SSDP/UPnP probes. These must be optional full-mode dependencies, not mandatory dependencies for reduced installations.
 
 The detector must avoid continuous heavy scanning. It should run bounded local-network checks, cache results, expose confidence/explanation to LuCI/Android, and let the parent override the detected type or group.
+
+If a parent manually sets a device type, automatic type detection must stop for that device. If automatic detection already produced a clear type with confidence `>= 80`, further automatic type detection may be skipped. Below `80`, the UI must show `Unknown device type` until a better router-side signal appears or the parent chooses the type manually.
 
 Operational behavior:
 
@@ -320,6 +326,15 @@ Default retention: `3d`.
 Default maximum log size: `1024 KB`.
 
 Logs must support a clear-log action and masked export. Masked export is enabled by default.
+
+Administrative log export must open a period selector:
+
+- last hour;
+- last week;
+- custom range from-to;
+- all time.
+
+Internet activity history is a separate sensitive feature, not part of this administrative log.
 
 ## Wi-Fi Settings
 

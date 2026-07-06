@@ -47,8 +47,10 @@ chmod 0755 "$BUILD_DIR/data/etc/hotplug.d/button/90-sheepfold-wps"
 chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-service"
 chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-device-detector"
 chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-log"
+chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-telegram-bot"
 chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-updater"
 chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-router-control"
+chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-site-lists"
 chmod 0755 "$BUILD_DIR/data/www/cgi-bin/sheepfold-blocked"
 
 cat > "$BUILD_DIR/control/control" <<CONTROL
@@ -70,6 +72,28 @@ CONFFILES
 cat > "$BUILD_DIR/control/postinst" <<POSTINST
 #!/bin/sh
 [ -n "\${IPKG_INSTROOT}" ] && exit 0
+repair_sheepfold_uci_sections() {
+        mkdir -p /etc/config
+        [ -e /etc/config/sheepfold ] || : > /etc/config/sheepfold
+        chmod 600 /etc/config/sheepfold 2>/dev/null || true
+        for pair in messenger:messenger_global export:export_global wifi_control:wifi_control_global pairing:pairing_global; do
+                type="\${pair%%:*}"
+                name="\${pair#*:}"
+                if [ "\$(uci -q get sheepfold.global 2>/dev/null)" = "\$type" ]; then
+                        uci -q rename sheepfold.global="\$name" 2>/dev/null || {
+                                uci -q delete sheepfold.global 2>/dev/null || true
+                                uci -q set "sheepfold.\$name=\$type"
+                        }
+                fi
+                uci -q rename "sheepfold.@\$type[0]=\$name" 2>/dev/null || true
+        done
+        if [ "\$(uci -q get sheepfold.global 2>/dev/null)" != "sheepfold" ]; then
+                uci -q rename sheepfold.global=legacy_global 2>/dev/null || uci -q delete sheepfold.global 2>/dev/null || true
+                uci -q rename sheepfold.@sheepfold[0]=global 2>/dev/null || uci -q set sheepfold.global='sheepfold'
+        fi
+        uci -q commit sheepfold 2>/dev/null || true
+}
+repair_sheepfold_uci_sections
 uci -q get sheepfold.global >/dev/null || uci -q set sheepfold.global='sheepfold'
 ensure_global_option() {
         option="\$1"
@@ -86,6 +110,7 @@ ensure_global_option no_restrictions_auto_assign '1'
 ensure_global_option detector_watch_interval_seconds '10'
 ensure_global_option detector_interval_seconds '900'
 ensure_global_option detector_max_hosts_per_scan '16'
+ensure_global_option detector_min_device_type_confidence '70'
 ensure_global_option detector_min_no_restrictions_confidence '80'
 ensure_global_option detector_nmap_host_timeout_seconds '20'
 ensure_global_option update_check_install_mode 'weekly'
@@ -106,6 +131,10 @@ ensure_global_option blocked_page_enabled '1'
 ensure_global_option blocked_page_text 'Интернет временно недоступен по семейным правилам. Если это ошибка, обратитесь к родителю.'
 ensure_global_option blocked_page_port '5202'
 ensure_global_option domain_allowlist_for_blocklist '1'
+ensure_global_option site_allowlist_sources 'UT1 child | https://dsi.ut-capitole.fr/blacklists/index_en.php#child'
+ensure_global_option site_blocklist_mode 'except_allowlist_admins'
+ensure_global_option site_blocklist_sources 'UT1 adult, malware, phishing, gambling, games, vpn | https://dsi.ut-capitole.fr/blacklists/index_en.php; StevenBlack hosts gambling-porn | https://github.com/StevenBlack/hosts; HaGeZi Threat Intelligence Feeds | https://github.com/hagezi/dns-blocklists; URLhaus malware URLs | https://urlhaus.abuse.ch/api/'
+ensure_global_option site_lists_update_interval 'weekly'
 ensure_global_option log_retention '3d'
 ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
@@ -150,6 +179,7 @@ if [ "\$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null)" != 
 fi
 uci -q set sheepfold.global.ui_asset_version='${PKG_VERSION}-${PKG_RELEASE}'
 uci -q commit sheepfold
+chmod 0755 /usr/libexec/sheepfold/sheepfold-site-lists 2>/dev/null || true
 rm -f /var/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-modulecache/* 2>/dev/null || true

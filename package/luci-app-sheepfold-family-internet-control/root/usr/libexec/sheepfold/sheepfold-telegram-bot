@@ -1,0 +1,815 @@
+#!/bin/sh
+set -u
+
+COMMAND="${1:-run}"
+RUNTIME_DIR="/tmp/sheepfold"
+OFFSET_FILE="$RUNTIME_DIR/telegram-update-offset"
+LOG_LINE_FILE="$RUNTIME_DIR/telegram-log-line"
+LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
+ROUTER_CONTROL="/usr/libexec/sheepfold/sheepfold-router-control"
+UPDATER="/usr/libexec/sheepfold/sheepfold-updater"
+DEFAULT_RAM_LOG="/tmp/sheepfold/events.log"
+
+mkdir -p "$RUNTIME_DIR"
+
+log() {
+        logger -t sheepfold-telegram "$*"
+}
+
+log_event() {
+        if [ -x "$LOG_HELPER" ]; then
+                "$LOG_HELPER" "$*"
+        else
+                log "$*"
+        fi
+}
+
+global_get() {
+        uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "$2"
+}
+
+router_name() {
+        uci -q get system.@system[0].hostname 2>/dev/null || printf 'OpenWRT'
+}
+
+log_cache_path() {
+        path="$(global_get log_cache_path "$DEFAULT_RAM_LOG")"
+        case "$path" in
+                /tmp/sheepfold/*) printf '%s\n' "$path" ;;
+                *) printf '%s\n' "$DEFAULT_RAM_LOG" ;;
+        esac
+}
+
+telegram_active() {
+        [ "$(global_get active_messenger none)" = "telegram" ]
+}
+
+telegram_token() {
+        global_get telegram_bot_token ''
+}
+
+telegram_admin_chat_id() {
+        global_get telegram_admin_chat_id ''
+}
+
+fetch() {
+        url="$1"
+        data="${2:-}"
+
+        if [ -n "$data" ]; then
+                uclient-fetch -qO- --post-data="$data" "$url" 2>/dev/null || true
+        else
+                uclient-fetch -qO- "$url" 2>/dev/null || true
+        fi
+}
+
+form_escape() {
+        sed ':a;N;$!ba;s/%/%25/g;s/&/%26/g;s/+/%2B/g;s/#/%23/g;s/=/%3D/g;s/ /%20/g;s/"/%22/g;s/{/%7B/g;s/}/%7D/g;s/\[/%5B/g;s/\]/%5D/g;s/:/%3A/g;s/,/%2C/g;s/\r//g;s/\n/%0A/g'
+}
+
+json_text_unescape() {
+        sed 's#\\/#/#g; s#\\"#"#g; s#\\n# #g; s#\\r# #g; s#\\t# #g; s#\\u0023#\##g; s#\\u002b#+#g; s#\\u002B#+#g;
+s#\\u0410#А#g; s#\\u0411#Б#g; s#\\u0412#В#g; s#\\u0413#Г#g; s#\\u0414#Д#g; s#\\u0415#Е#g; s#\\u0401#Ё#g; s#\\u0416#Ж#g; s#\\u0417#З#g; s#\\u0418#И#g; s#\\u0419#Й#g; s#\\u041a#К#g; s#\\u041A#К#g; s#\\u041b#Л#g; s#\\u041B#Л#g; s#\\u041c#М#g; s#\\u041C#М#g; s#\\u041d#Н#g; s#\\u041D#Н#g; s#\\u041e#О#g; s#\\u041E#О#g; s#\\u041f#П#g; s#\\u041F#П#g; s#\\u0420#Р#g; s#\\u0421#С#g; s#\\u0422#Т#g; s#\\u0423#У#g; s#\\u0424#Ф#g; s#\\u0425#Х#g; s#\\u0426#Ц#g; s#\\u0427#Ч#g; s#\\u0428#Ш#g; s#\\u0429#Щ#g; s#\\u042a#Ъ#g; s#\\u042A#Ъ#g; s#\\u042b#Ы#g; s#\\u042B#Ы#g; s#\\u042c#Ь#g; s#\\u042C#Ь#g; s#\\u042d#Э#g; s#\\u042D#Э#g; s#\\u042e#Ю#g; s#\\u042E#Ю#g; s#\\u042f#Я#g; s#\\u042F#Я#g;
+s#\\u0430#а#g; s#\\u0431#б#g; s#\\u0432#в#g; s#\\u0433#г#g; s#\\u0434#д#g; s#\\u0435#е#g; s#\\u0451#ё#g; s#\\u0436#ж#g; s#\\u0437#з#g; s#\\u0438#и#g; s#\\u0439#й#g; s#\\u043a#к#g; s#\\u043A#к#g; s#\\u043b#л#g; s#\\u043B#л#g; s#\\u043c#м#g; s#\\u043C#м#g; s#\\u043d#н#g; s#\\u043D#н#g; s#\\u043e#о#g; s#\\u043E#о#g; s#\\u043f#п#g; s#\\u043F#п#g; s#\\u0440#р#g; s#\\u0441#с#g; s#\\u0442#т#g; s#\\u0443#у#g; s#\\u0444#ф#g; s#\\u0445#х#g; s#\\u0446#ц#g; s#\\u0447#ч#g; s#\\u0448#ш#g; s#\\u0449#щ#g; s#\\u044a#ъ#g; s#\\u044A#ъ#g; s#\\u044b#ы#g; s#\\u044B#ы#g; s#\\u044c#ь#g; s#\\u044C#ь#g; s#\\u044d#э#g; s#\\u044D#э#g; s#\\u044e#ю#g; s#\\u044E#ю#g; s#\\u044f#я#g; s#\\u044F#я#g;
+s#\\\\#\\#g'
+}
+
+normalize_command_text() {
+        printf '%s' "$1" |
+                json_text_unescape |
+                sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/[[:space:]][[:space:]]*/ /g;s/@[A-Za-z0-9_][A-Za-z0-9_]*//g'
+}
+
+telegram_commands_json() {
+        cat <<'EOF'
+[
+{"command":"start","description":"Начать работу"},
+{"command":"help","description":"Показать доступные команды"},
+{"command":"status","description":"Показать состояние интернета и Wi-Fi"},
+{"command":"devices","description":"Показать все устройства"},
+{"command":"internet_on","description":"Включить интернет"},
+{"command":"internet_off","description":"Отключить интернет"},
+{"command":"wifi_on","description":"Включить Wi-Fi"},
+{"command":"wifi_off","description":"Выключить Wi-Fi"},
+{"command":"support","description":"Поддержка и диагностика"},
+{"command":"grant_time","description":"Дать устройству время"},
+{"command":"block_device","description":"Заблокировать устройство"},
+{"command":"unblock_device","description":"Разблокировать устройство"},
+{"command":"allowlist_add","description":"Добавить в белый список"},
+{"command":"blocklist_add","description":"Добавить в чёрный список"},
+{"command":"logs","description":"Показать журнал"},
+{"command":"clear_logs","description":"Очистить журнал"},
+{"command":"update","description":"Обновить Sheepfold"},
+{"command":"reboot","description":"Перезагрузить роутер"},
+{"command":"emergency_sites","description":"Аварийно-полезные сайты"},
+{"command":"wifi_status","description":"Статус Wi-Fi"}
+]
+EOF
+}
+
+sync_telegram_commands() {
+        token="$(telegram_token)"
+        [ -n "$token" ] || return 1
+
+        encoded_commands="$(telegram_commands_json | tr -d '\n' | form_escape)"
+        response="$(fetch "https://api.telegram.org/bot${token}/setMyCommands" "commands=${encoded_commands}")"
+
+        if printf '%s' "$response" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+                log "Telegram bot command menu synchronized"
+                return 0
+        fi
+
+        [ -n "$response" ] && printf '%s\n' "$response" >&2 || printf 'Telegram setMyCommands did not return a response\n' >&2
+        return 1
+}
+
+send_message_to() {
+        chat_id="$1"
+        text="$2"
+        token="$(telegram_token)"
+        response=""
+
+        [ -n "$token" ] || return 1
+        [ -n "$chat_id" ] || return 1
+
+        encoded_text="$(printf '%s' "$text" | form_escape)"
+        response="$(fetch "https://api.telegram.org/bot${token}/sendMessage" "chat_id=${chat_id}&text=${encoded_text}")"
+
+        if printf '%s' "$response" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+                return 0
+        fi
+
+        [ -n "$response" ] && printf '%s\n' "$response" >&2 || printf 'Telegram API did not return a response\n' >&2
+        return 1
+}
+
+send_admin_message() {
+        send_message_to "$(telegram_admin_chat_id)" "$1"
+}
+
+status_text() {
+        if [ -x "$ROUTER_CONTROL" ]; then
+                internet="$("$ROUTER_CONTROL" internet-status 2>/dev/null || printf unknown)"
+        else
+                if [ "$(global_get block_on_boot 0)" = "1" ]; then
+                        internet="disabled"
+                else
+                        internet="enabled"
+                fi
+        fi
+
+        case "$internet" in
+                disabled) internet_text="Интернет отключен" ;;
+                enabled) internet_text="Интернет включен" ;;
+                *) internet_text="Статус интернета неизвестен" ;;
+        esac
+
+        wifi_disabled_count="$(uci -q show wireless 2>/dev/null | sed -n "s/.*\.disabled='\{0,1\}\([01]\)'\{0,1\}$/\1/p" | awk '$1 == 1 { count++ } END { print count + 0 }')"
+        wifi_total_count="$(uci -q show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p" | wc -l | awk '{ print $1 + 0 }')"
+
+        if [ "$wifi_total_count" -eq 0 ]; then
+                wifi_text="Wi-Fi: не найден"
+        elif [ "$wifi_disabled_count" -ge "$wifi_total_count" ]; then
+                wifi_text="Wi-Fi: выключен"
+        else
+                wifi_text="Wi-Fi: включен"
+        fi
+
+        printf 'Sheepfold на роутере %s\n%s\n%s\nАктивный мессенджер: Telegram' "$(router_name)" "$internet_text" "$wifi_text"
+}
+
+device_status_text() {
+        case "$1" in
+                allow) printf 'Белый список' ;;
+                blocked) printf 'Чёрный список' ;;
+                scheduled) printf 'По расписанию' ;;
+                restricted) printf 'Ограничено' ;;
+                new) printf 'Новое' ;;
+                *) printf '%s' "${1:-Не настроено}" ;;
+        esac
+}
+
+wifi_status_text() {
+        wifi_disabled_count="$(uci -q show wireless 2>/dev/null | sed -n "s/.*\.disabled='\{0,1\}\([01]\)'\{0,1\}$/\1/p" | awk '$1 == 1 { count++ } END { print count + 0 }')"
+        wifi_total_count="$(uci -q show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p" | wc -l | awk '{ print $1 + 0 }')"
+
+        if [ "$wifi_total_count" -eq 0 ]; then
+                printf 'Wi-Fi на роутере не найден.'
+        elif [ "$wifi_disabled_count" -ge "$wifi_total_count" ]; then
+                printf 'Wi-Fi выключен.'
+        else
+                printf 'Wi-Fi включен.'
+        fi
+}
+
+devices_text_from_uci() {
+        count=0
+        output=""
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=device$/\1/p"); do
+                count=$((count + 1))
+                name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+                mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+                ip="$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)"
+                group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+                status="$(device_status_text "$(uci -q get "sheepfold.$section.status" 2>/dev/null || true)")"
+                [ -n "$name" ] || name="$mac"
+                [ -n "$ip" ] || ip="IP неизвестен"
+                [ -n "$group" ] || group="Без группы"
+                output="${output}#${count} ${name}
+IP: ${ip}
+MAC: ${mac}
+Группа: ${group}
+Статус: ${status}
+
+"
+                [ "$count" -ge 30 ] && break
+        done
+
+        if [ "$count" -gt 0 ]; then
+                printf 'Устройства Sheepfold:\n\n%s' "$output"
+                [ "$count" -ge 30 ] && printf 'Показаны первые 30 устройств.\n'
+                return 0
+        fi
+
+        return 1
+}
+
+devices_text_from_leases() {
+        leases="/tmp/dhcp.leases"
+        [ -r "$leases" ] || return 1
+
+        count=0
+        output=""
+        while read -r _ mac ip name _rest; do
+                [ -n "$mac" ] || continue
+                count=$((count + 1))
+                [ -n "$name" ] && [ "$name" != "*" ] || name="Без имени"
+                output="${output}#${count} ${name}
+IP: ${ip:-IP неизвестен}
+MAC: ${mac}
+
+"
+                [ "$count" -ge 30 ] && break
+        done < "$leases"
+
+        [ "$count" -gt 0 ] || return 1
+        printf 'Устройства из DHCP-аренд роутера:\n\n%s' "$output"
+        [ "$count" -ge 30 ] && printf 'Показаны первые 30 устройств.\n'
+}
+
+devices_text() {
+        devices_text_from_uci || devices_text_from_leases || printf 'Пока не найдено ни одного устройства.'
+}
+
+device_section_by_query() {
+        query="$(printf '%s' "${1:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^#//')"
+        [ -n "$query" ] || return 1
+
+        case "$query" in
+                *:*)
+                        mac="$(printf '%s' "$query" | tr '[:lower:]' '[:upper:]')"
+                        for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=device$/\1/p"); do
+                                existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+                                [ "$(printf '%s' "$existing" | tr '[:lower:]' '[:upper:]')" = "$mac" ] && {
+                                        printf '%s\n' "$section"
+                                        return 0
+                                }
+                        done
+                        ;;
+                ''|*[!0-9]*)
+                        return 1
+                        ;;
+                *)
+                        count=0
+                        for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=device$/\1/p"); do
+                                count=$((count + 1))
+                                [ "$count" = "$query" ] && {
+                                        printf '%s\n' "$section"
+                                        return 0
+                                }
+                        done
+                        ;;
+        esac
+
+        return 1
+}
+
+device_label() {
+        section="$1"
+        name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+        mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+        ip="$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)"
+        [ -n "$name" ] || name="$mac"
+        [ -n "$ip" ] && printf '%s (%s, %s)' "$name" "$ip" "$mac" || printf '%s (%s)' "$name" "$mac"
+}
+
+set_device_status_by_query() {
+        query="$1"
+        status="$2"
+        action_text="$3"
+        section="$(device_section_by_query "$query")" || {
+                printf 'Не нашёл устройство. Используйте номер из списка, например #3, или MAC-адрес.'
+                return 1
+        }
+
+        mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+        name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+        ip="$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)"
+        group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+        device_type="$(uci -q get "sheepfold.$section.device_type" 2>/dev/null || true)"
+
+        if [ -x "$ROUTER_CONTROL" ] &&
+                "$ROUTER_CONTROL" set-device-status "$mac" "$status" "$name" "$ip" "$group" "$device_type" >/dev/null 2>&1; then
+                log_event "Telegram: $action_text $(device_label "$section")"
+                printf 'Готово: %s %s.' "$action_text" "$(device_label "$section")"
+                return 0
+        fi
+
+        printf 'Не удалось изменить устройство. Проверьте, что устройство существует и не конфликтует с правилами администраторов.'
+        return 1
+}
+
+grant_time_by_query() {
+        query="$1"
+        minutes="$2"
+        section="$(device_section_by_query "$query")" || {
+                printf 'Не нашёл устройство. Напишите, например: #3 +30 минут.'
+                return 1
+        }
+
+        case "$minutes" in
+                ''|*[!0-9]*) minutes=30 ;;
+        esac
+
+        [ "$minutes" -gt 0 ] || minutes=30
+        [ "$minutes" -le 720 ] || minutes=720
+
+        until_ts="$(($(date +%s) + minutes * 60))"
+        uci -q set "sheepfold.$section.temporary_access_until=$until_ts"
+        uci -q set "sheepfold.$section.temporary_access_minutes=$minutes"
+        uci -q commit sheepfold
+        log_event "Telegram: администратор дал +$minutes минут устройству $(device_label "$section")"
+
+        printf 'Готово: устройству %s дано +%s минут.' "$(device_label "$section")" "$minutes"
+}
+
+extract_device_query() {
+        printf '%s' "$1" | sed -n 's/.*\(([0-9A-Fa-f][0-9A-Fa-f]:\)\{5\}[0-9A-Fa-f][0-9A-Fa-f]\).*/\1/p; s/.*\(#\{0,1\}[0-9][0-9]*\).*/\1/p' | sed -n '1p'
+}
+
+extract_minutes() {
+        text="$1"
+        value="$(printf '%s' "$text" | sed -n 's/.*+\{0,1\}\([0-9][0-9]*\)[[:space:]]*\(мин\|минут\|minutes\).*/\1/p' | sed -n '1p')"
+        [ -n "$value" ] || value="$(printf '%s' "$text" | sed -n 's/.*+\{0,1\}\([0-9][0-9]*\)[[:space:]]*\(ч\|час\|hour\|hours\).*/\1/p' | sed -n '1p')"
+        if printf '%s' "$text" | grep -qiE '([0-9][0-9]*)[[:space:]]*(ч|час|hour|hours)' && [ -n "$value" ]; then
+                value=$((value * 60))
+        fi
+        [ -n "$value" ] || value=30
+        printf '%s' "$value"
+}
+
+logs_text() {
+        log_file="$(log_cache_path)"
+        if [ ! -r "$log_file" ]; then
+                printf 'Журнал пока пуст.'
+                return 0
+        fi
+
+        printf 'Последние записи журнала Sheepfold:\n\n'
+        tail -n 20 "$log_file"
+}
+
+clear_logs() {
+        log_file="$(log_cache_path)"
+        mkdir -p "${log_file%/*}"
+        : > "$log_file"
+        chmod 600 "$log_file" 2>/dev/null || true
+        log_event "Telegram: администратор очистил журнал"
+        printf 'Журнал очищен.'
+}
+
+emergency_sites_text() {
+        count=0
+        output=""
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=site$/\1/p"); do
+                count=$((count + 1))
+                url="$(uci -q get "sheepfold.$section.url" 2>/dev/null || uci -q get "sheepfold.$section.domain" 2>/dev/null || true)"
+                name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+                description="$(uci -q get "sheepfold.$section.description" 2>/dev/null || true)"
+                [ -n "$url" ] || continue
+                output="${output}${count}. ${url}"
+                [ -n "$name" ] && output="${output} — ${name}"
+                [ -n "$description" ] && output="${output}
+   ${description}"
+                output="${output}
+"
+        done
+
+        for domain in $(uci -q get sheepfold.domain_allowlist.domain 2>/dev/null || true); do
+                count=$((count + 1))
+                output="${output}${count}. ${domain}
+"
+        done
+
+        [ "$count" -gt 0 ] && {
+                printf 'Аварийно-полезные сайты:\n\n%s' "$output"
+                return 0
+        }
+
+        printf 'Список аварийно-полезных сайтов пока не сохранён на роутере.'
+}
+
+help_text() {
+        cat <<'EOF'
+Доступные команды Sheepfold:
+
+/start
+/help — помощь
+/status — статус
+/devices — показать все устройства
+/internet_on — включить интернет
+/internet_off — отключить интернет
+/wifi_on — включить Wi-Fi
+/wifi_off — выключить Wi-Fi
+/support — поддержка
+/grant_time #3 30 — дать устройству время
+/block_device #3 — заблокировать устройство
+/unblock_device #3 — убрать ручную блокировку
+/allowlist_add #3 — добавить в белый список
+/blocklist_add #3 — добавить в чёрный список
+/logs — показать журнал
+/clear_logs — очистить журнал с подтверждением
+/update — обновить Sheepfold с подтверждением
+/reboot — перезагрузить роутер с подтверждением
+/emergency_sites — показать аварийно-полезные сайты
+/wifi_status — статус Wi-Fi
+
+По-русски тоже можно писать:
+помощь
+статус
+показать все устройства
+включить интернет
+отключить интернет
+выключить интернет
+включить вайфай
+выключить вайфай
+дать #3 30 минут
+заблокировать #3
+разблокировать #3
+добавить #3 в белый список
+добавить #3 в чёрный список
+журнал
+очистить журнал
+обновить приложение
+перезагрузить роутер
+аварийно-полезные сайты
+саппорт
+
+Команды принимаются только от разрешённого ID пользователя, указанного в настройках роутера.
+EOF
+}
+
+support_text() {
+        printf 'Поддержка Sheepfold\n\n'
+        printf 'Перед обращением подготовьте:\n'
+        printf '- версию Sheepfold: %s\n' "$(global_get ui_asset_version unknown)"
+        printf '- имя роутера: %s\n' "$(router_name)"
+        printf '- версию OpenWRT/LuCI, если она видна внизу страницы LuCI\n'
+        printf '- что нажимали и какой текст ошибки увидели\n'
+        printf '- последние строки журнала Sheepfold без токенов и паролей\n\n'
+        printf 'GitHub проекта: https://github.com/kva4991/luci-app-sheepfold-family-internet-control\n'
+        printf 'Если проблема срочная: откройте LuCI локально и временно выключите спорное правило.'
+}
+
+confirmation_file() {
+        chat_id="$(printf '%s' "$1" | tr -cd '0-9-')"
+        printf '%s/telegram-confirm-%s' "$RUNTIME_DIR" "$chat_id"
+}
+
+confirmation_code() {
+        if command -v od >/dev/null 2>&1; then
+                raw="$(od -An -N2 -tu2 /dev/urandom 2>/dev/null | tr -d ' ' || true)"
+        else
+                raw=""
+        fi
+        case "$raw" in
+                ''|*[!0-9]*) raw="$(date +%s)" ;;
+        esac
+        printf '%04d' "$((raw % 9000 + 1000))"
+}
+
+request_confirmation() {
+        chat_id="$1"
+        action="$2"
+        title="$3"
+        file="$(confirmation_file "$chat_id")"
+        code="$(confirmation_code)"
+        expires="$(($(date +%s) + 300))"
+
+        printf '%s\t%s\t%s\n' "$action" "$code" "$expires" > "$file"
+        chmod 600 "$file" 2>/dev/null || true
+        send_message_to "$chat_id" "Нужно подтверждение: ${title}.
+
+Для подтверждения напишите:
+подтверждаю ${code}
+
+Код действует 5 минут."
+}
+
+run_confirmed_action() {
+        chat_id="$1"
+        action="$2"
+
+        case "$action" in
+                clear_logs)
+                        send_message_to "$chat_id" "$(clear_logs)"
+                        ;;
+                update)
+                        if [ -x "$UPDATER" ]; then
+                                output="$("$UPDATER" start 2>&1 || true)"
+                                log_event "Telegram: администратор запустил обновление Sheepfold"
+                                send_message_to "$chat_id" "${output:-Обновление запущено.}"
+                        else
+                                send_message_to "$chat_id" "Не найден модуль обновления Sheepfold."
+                        fi
+                        ;;
+                reboot)
+                        log_event "Telegram: администратор подтвердил перезагрузку роутера"
+                        send_message_to "$chat_id" "Перезагрузка роутера запущена."
+                        (sleep 2; reboot) >/dev/null 2>&1 &
+                        ;;
+                *)
+                        send_message_to "$chat_id" "Неизвестное подтверждаемое действие."
+                        return 1
+                        ;;
+        esac
+}
+
+handle_confirmation() {
+        chat_id="$1"
+        text="$2"
+        file="$(confirmation_file "$chat_id")"
+        code="$(printf '%s' "$text" | sed -n 's/^\(подтверждаю\|Подтверждаю\|confirm\|Confirm\)[[:space:]]\+\([0-9][0-9][0-9][0-9]\)$/\2/p')"
+
+        [ -n "$code" ] || return 1
+        [ -r "$file" ] || {
+                send_message_to "$chat_id" "Нет команды, ожидающей подтверждения."
+                return 0
+        }
+
+        IFS="$(printf '\t')" read -r action expected expires < "$file" || true
+        now="$(date +%s)"
+        rm -f "$file"
+
+        if [ "$now" -gt "${expires:-0}" ]; then
+                send_message_to "$chat_id" "Код подтверждения устарел. Повторите команду заново."
+                return 0
+        fi
+
+        if [ "$code" != "$expected" ]; then
+                send_message_to "$chat_id" "Код подтверждения не совпал. Команда отменена."
+                return 0
+        fi
+
+        run_confirmed_action "$chat_id" "$action"
+        return 0
+}
+
+handle_command() {
+        chat_id="$1"
+        text="$(normalize_command_text "$2")"
+        admin_chat_id="$(telegram_admin_chat_id)"
+        device_query=""
+        minutes=""
+
+        if [ -z "$admin_chat_id" ]; then
+                send_message_to "$chat_id" "Ваш Telegram chat ID: $chat_id
+
+Введите этот ID в настройках Sheepfold на роутере, чтобы разрешить управление через Telegram."
+                log "Telegram command replied with chat ID because admin chat ID is empty"
+                return 0
+        fi
+
+        if [ "$chat_id" != "$admin_chat_id" ]; then
+                log "Telegram command ignored from unauthorized chat $chat_id"
+                return 0
+        fi
+
+        handle_confirmation "$chat_id" "$text" && return 0
+
+        case "$text" in
+                /start*|/help*|help|Help|HELP|помощь|Помощь|ПОМОЩЬ)
+                        send_message_to "$chat_id" "$(help_text)"
+                        ;;
+                /status*|status|Status|STATUS|статус|Статус|СТАТУС)
+                        send_message_to "$chat_id" "$(status_text)"
+                        ;;
+                /devices*|devices|Devices|DEVICES|устройства|Устройства|ПОКАЗАТЬ\ ВСЕ\ УСТРОЙСТВА|Показать\ все\ устройства|показать\ все\ устройства)
+                        send_message_to "$chat_id" "$(devices_text)"
+                        ;;
+                /internet_on*|internet\ on|Internet\ on|интернет\ включен|Интернет\ включен|ИНТЕРНЕТ\ ВКЛЮЧЕН|включить\ интернет|Включить\ интернет|ВКЛЮЧИТЬ\ ИНТЕРНЕТ)
+                        if [ -x "$ROUTER_CONTROL" ] && "$ROUTER_CONTROL" internet-enable >/dev/null 2>&1; then
+                                send_message_to "$chat_id" "Интернет включен."
+                                log_event "Telegram: администратор включил интернет"
+                        else
+                                send_message_to "$chat_id" "Не удалось включить интернет."
+                        fi
+                        ;;
+                /internet_off*|internet\ off|Internet\ off|интернет\ отключен|Интернет\ отключен|ИНТЕРНЕТ\ ОТКЛЮЧЕН|отключить\ интернет|Отключить\ интернет|ОТКЛЮЧИТЬ\ ИНТЕРНЕТ|выключить\ интернет|Выключить\ интернет|ВЫКЛЮЧИТЬ\ ИНТЕРНЕТ)
+                        if [ -x "$ROUTER_CONTROL" ] && "$ROUTER_CONTROL" internet-disable >/dev/null 2>&1; then
+                                send_message_to "$chat_id" "Интернет отключен."
+                                log_event "Telegram: администратор отключил интернет"
+                        else
+                                send_message_to "$chat_id" "Не удалось отключить интернет."
+                        fi
+                        ;;
+                /wifi_status*|wifi\ status|Wi-Fi\ status|WiFi\ status|статус\ wifi|статус\ wi-fi|статус\ вайфай)
+                        send_message_to "$chat_id" "$(wifi_status_text)"
+                        ;;
+                /wifi_on*|wifi\ on|Wi-Fi\ on|WiFi\ on|включить\ wifi|включить\ wi-fi|включить\ вайфай)
+                        if [ -x "$ROUTER_CONTROL" ] && "$ROUTER_CONTROL" wifi-enable >/dev/null 2>&1; then
+                                send_message_to "$chat_id" "Wi-Fi включен."
+                                log_event "Telegram: администратор включил Wi-Fi"
+                        else
+                                send_message_to "$chat_id" "Не удалось включить Wi-Fi."
+                        fi
+                        ;;
+                /wifi_off*|wifi\ off|Wi-Fi\ off|WiFi\ off|выключить\ wifi|выключить\ wi-fi|выключить\ вайфай)
+                        if [ -x "$ROUTER_CONTROL" ] && "$ROUTER_CONTROL" wifi-disable >/dev/null 2>&1; then
+                                send_message_to "$chat_id" "Wi-Fi выключен."
+                                log_event "Telegram: администратор выключил Wi-Fi"
+                        else
+                                send_message_to "$chat_id" "Не удалось выключить Wi-Fi."
+                        fi
+                        ;;
+                /support*|support|Support|SUPPORT|саппорт|Саппорт|САППОРТ|сапорт|Сапорт|САПОРТ|поддержка|Поддержка|ПОДДЕРЖКА)
+                        send_message_to "$chat_id" "$(support_text)"
+                        ;;
+                /logs*|logs|Logs|LOGS|журнал|Журнал|ЖУРНАЛ|показать\ журнал|Показать\ журнал|ПОКАЗАТЬ\ ЖУРНАЛ)
+                        send_message_to "$chat_id" "$(logs_text)"
+                        ;;
+                /clear_logs*|clear\ logs|Clear\ logs|очистить\ журнал|Очистить\ журнал|ОЧИСТИТЬ\ ЖУРНАЛ)
+                        request_confirmation "$chat_id" clear_logs "очистить журнал Sheepfold"
+                        ;;
+                /update*|update|Update|UPDATE|обновить\ приложение|Обновить\ приложение|ОБНОВИТЬ\ ПРИЛОЖЕНИЕ|обновить\ sheepfold|Обновить\ Sheepfold)
+                        request_confirmation "$chat_id" update "обновить Sheepfold"
+                        ;;
+                /reboot*|reboot|Reboot|REBOOT|перезагрузить\ роутер|Перезагрузить\ роутер|ПЕРЕЗАГРУЗИТЬ\ РОУТЕР)
+                        request_confirmation "$chat_id" reboot "перезагрузить роутер"
+                        ;;
+                /emergency_sites*|emergency\ sites|Emergency\ sites|аварийно-полезные\ сайты|Аварийно-полезные\ сайты|аварийные\ сайты|Аварийные\ сайты)
+                        send_message_to "$chat_id" "$(emergency_sites_text)"
+                        ;;
+                /grant_time*|+*|дать\ *|Дать\ *)
+                        device_query="$(extract_device_query "$text")"
+                        minutes="$(extract_minutes "$text")"
+                        send_message_to "$chat_id" "$(grant_time_by_query "$device_query" "$minutes")"
+                        ;;
+                /block_device*|заблокировать\ *|Заблокировать\ *|отключить\ устройство\ *|Отключить\ устройство\ *)
+                        device_query="$(extract_device_query "$text")"
+                        send_message_to "$chat_id" "$(set_device_status_by_query "$device_query" blocked "заблокировал устройство")"
+                        ;;
+                /unblock_device*|разблокировать\ *|Разблокировать\ *|вернуть\ интернет\ *|Вернуть\ интернет\ *)
+                        device_query="$(extract_device_query "$text")"
+                        send_message_to "$chat_id" "$(set_device_status_by_query "$device_query" new "убрал ручную блокировку устройства")"
+                        ;;
+                /allowlist_add*|добавить\ *\ в\ белый\ список|Добавить\ *\ в\ белый\ список)
+                        device_query="$(extract_device_query "$text")"
+                        send_message_to "$chat_id" "$(set_device_status_by_query "$device_query" allow "добавил устройство в белый список")"
+                        ;;
+                /blocklist_add*|добавить\ *\ в\ чёрный\ список|Добавить\ *\ в\ чёрный\ список|добавить\ *\ в\ черный\ список|Добавить\ *\ в\ черный\ список)
+                        device_query="$(extract_device_query "$text")"
+                        send_message_to "$chat_id" "$(set_device_status_by_query "$device_query" blocked "добавил устройство в чёрный список")"
+                        ;;
+                *)
+                        send_message_to "$chat_id" "Не понял команду. Напишите «помощь», чтобы увидеть доступные команды."
+                        ;;
+        esac
+}
+
+parse_first_update_id() {
+        sed -n 's/.*"update_id"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1
+}
+
+parse_first_chat_id() {
+        sed -n 's/.*"chat"[[:space:]]*:[[:space:]]*{[^}]*"id"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p' | head -n 1
+}
+
+parse_first_text() {
+        sed -n 's/.*"text"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1 |
+                json_text_unescape
+}
+
+poll_once() {
+        token="$(telegram_token)"
+        [ -n "$token" ] || return 0
+
+        offset="$(cat "$OFFSET_FILE" 2>/dev/null || printf 0)"
+        case "$offset" in
+                ''|*[!0-9]*) offset=0 ;;
+        esac
+
+        response="$(fetch "https://api.telegram.org/bot${token}/getUpdates?timeout=25&limit=1&offset=${offset}")"
+        [ -n "$response" ] || return 0
+
+        update_id="$(printf '%s' "$response" | parse_first_update_id)"
+        [ -n "$update_id" ] || return 0
+
+        next_offset=$((update_id + 1))
+        printf '%s\n' "$next_offset" > "$OFFSET_FILE"
+
+        chat_id="$(printf '%s' "$response" | parse_first_chat_id)"
+        text="$(printf '%s' "$response" | parse_first_text)"
+
+        [ -n "$chat_id" ] || return 0
+        [ -n "$text" ] || return 0
+
+        handle_command "$chat_id" "$text"
+}
+
+notify_new_log_lines() {
+        telegram_active || return 0
+        [ -n "$(telegram_token)" ] || return 0
+        [ -n "$(telegram_admin_chat_id)" ] || return 0
+
+        log_file="$(log_cache_path)"
+        [ -r "$log_file" ] || return 0
+
+        current_count="$(wc -l "$log_file" 2>/dev/null | awk '{ print $1 + 0 }')"
+        last_count="$(cat "$LOG_LINE_FILE" 2>/dev/null || true)"
+        case "$last_count" in
+                ''|*[!0-9]*)
+                        printf '%s\n' "$current_count" > "$LOG_LINE_FILE"
+                        return 0
+                        ;;
+        esac
+
+        if [ "$current_count" -lt "$last_count" ]; then
+                last_count=0
+        fi
+
+        [ "$current_count" -gt "$last_count" ] || return 0
+
+        awk -v start="$last_count" 'NR > start { print }' "$log_file" | tail -n 10 |
+                while IFS= read -r line; do
+                        [ -n "$line" ] || continue
+                        send_admin_message "Sheepfold: $line"
+                done
+
+        printf '%s\n' "$current_count" > "$LOG_LINE_FILE"
+}
+
+run_loop() {
+        log "Telegram adapter loop started"
+        if telegram_active && [ -n "$(telegram_token)" ]; then
+                sync_telegram_commands >/dev/null 2>&1 || true
+        fi
+        while :; do
+                if telegram_active && [ -n "$(telegram_token)" ]; then
+                        notify_new_log_lines
+                        poll_once
+                else
+                        sleep 15
+                fi
+        done
+}
+
+case "$COMMAND" in
+        run)
+                run_loop
+                ;;
+        once)
+                telegram_active && poll_once
+                ;;
+        send-test)
+                if ! telegram_active; then
+                        echo "Telegram is not the active messenger" >&2
+                        exit 2
+                fi
+                if [ -z "$(telegram_token)" ] || [ -z "$(telegram_admin_chat_id)" ]; then
+                        echo "Telegram bot token or admin chat ID is empty" >&2
+                        exit 2
+                fi
+                sync_telegram_commands >/dev/null 2>&1 || true
+                send_admin_message "Sheepfold Telegram подключен к роутеру $(router_name)." || exit 1
+                ;;
+        sync-commands)
+                telegram_active || {
+                        echo "Telegram is not the active messenger" >&2
+                        exit 2
+                }
+                sync_telegram_commands
+                ;;
+        status)
+                printf 'active=%s\n' "$(global_get active_messenger none)"
+                printf 'token_configured=%s\n' "$([ -n "$(telegram_token)" ] && printf 1 || printf 0)"
+                printf 'admin_chat_id=%s\n' "$(telegram_admin_chat_id)"
+                printf 'offset=%s\n' "$(cat "$OFFSET_FILE" 2>/dev/null || printf 0)"
+                ;;
+        *)
+                echo "Usage: sheepfold-telegram-bot [run|once|send-test|sync-commands|status]" >&2
+                exit 1
+                ;;
+esac

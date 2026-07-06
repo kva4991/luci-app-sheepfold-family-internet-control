@@ -6,9 +6,11 @@
 
 [Русский](README.ru.md) | English
 
+[Project presentation in Russian](docs/project-presentation.ru.md)
+
 Sheepfold is a family internet access control system for an OpenWRT router.
 
-It is being built as an OpenWRT router application with a LuCI web interface, backend service, Android companion app named **Ovcharnya** / **Овчарня**, and messenger bot integration for managing household internet access.
+It is being built as an OpenWRT router application with a LuCI web interface, backend service, Android companion app named **Sheepfold**, and messenger bot integration for managing household internet access.
 
 ## Installation
 
@@ -44,7 +46,7 @@ sh /tmp/sheepfold-uninstall.sh
 - OpenWRT package: `luci-app-sheepfold-family-internet-control`
 - LuCI EN: `Sheepfold Family Internet Control`
 - LuCI RU: `Sheepfold : контроль доступа в интернет для семьи`
-- Android app: `Овчарня`
+- Android app: `Sheepfold`
 - Android package: `app.sheepfold.android`
 
 ## Goals
