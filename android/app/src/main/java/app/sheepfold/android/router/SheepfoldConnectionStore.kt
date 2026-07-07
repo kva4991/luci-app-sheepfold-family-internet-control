@@ -7,16 +7,18 @@ object SheepfoldConnectionStore {
     private const val apiUrlKey = "routerApiUrl"
     private const val routerNameKey = "routerName"
     private const val adminLoginKey = "administratorLogin"
+    private const val bearerTokenKey = "administratorBearerToken"
     private const val googleAccountKey = "googleAccount"
 
     fun save(context: Context, request: RouterConnectionRequest) {
-        // Храним только рабочие параметры подключения. Одноразовый пароль/QR-токен сюда
-        // не попадает: backend роутера должен "сжечь" его сразу после успешной привязки.
+        // Одноразовый QR-код никогда не сохраняется. После успешного /pair
+        // сохраняется только выданный роутером Bearer-токен администратора.
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
             .edit()
             .putString(apiUrlKey, request.apiUrl)
             .putString(routerNameKey, request.routerName)
             .putString(adminLoginKey, request.administratorLogin.orEmpty())
+            .putString(bearerTokenKey, request.bearerToken.orEmpty())
             .apply()
     }
 
@@ -31,7 +33,11 @@ object SheepfoldConnectionStore {
             apiUrl = apiUrl,
             routerName = prefs.getString(routerNameKey, "").orEmpty().ifBlank { "router" },
             administratorLogin = prefs.getString(adminLoginKey, "").orEmpty().ifBlank { null }
-        )
+        ).also { request ->
+            request.bearerToken = prefs.getString(bearerTokenKey, "")
+                .orEmpty()
+                .ifBlank { null }
+        }
     }
 
     fun hasConnection(context: Context): Boolean = read(context) != null
