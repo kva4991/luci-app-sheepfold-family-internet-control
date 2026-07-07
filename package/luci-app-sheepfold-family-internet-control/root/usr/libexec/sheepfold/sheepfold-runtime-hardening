@@ -148,6 +148,17 @@ patch_cgi
 patch_router_control
 patch_acl
 
+for helper in \
+    /usr/libexec/sheepfold/sheepfold-api-client-status \
+    /usr/libexec/sheepfold/sheepfold-api-pair \
+    /usr/libexec/sheepfold/sheepfold-ai-gate \
+    /usr/libexec/sheepfold/sheepfold-key-derive \
+    /usr/libexec/sheepfold/sheepfold-openssl-ensure \
+    /usr/libexec/sheepfold/sheepfold-runtime-hardening \
+    /usr/libexec/sheepfold/sheepfold-usb-storage; do
+    [ ! -f "$ROOT$helper" ] || chmod 0755 "$ROOT$helper"
+done
+
 if grep -q '/pair-token)' "$CGI" 2>/dev/null; then
     echo "Failed to remove public /pair-token route." >&2
     exit 1
