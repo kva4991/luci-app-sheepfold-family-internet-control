@@ -31,6 +31,7 @@ patch_cgi() {
             print "}"
         }
         BEGIN { skip=""; skip_case=0; in_ai=0 }
+        /Access-Control-Allow-Origin: \*/ { next }
         skip_case > 0 { skip_case--; next }
         /^[[:space:]]*\/pair-token\)/ { skip_case=2; next }
         /^client_status_json\(\) \{$/ { print_client(); skip="client"; next }
@@ -46,7 +47,7 @@ patch_cgi() {
             if (!has_gate) {
                 print "\t# SHEEPFOLD_AI_GATE_V1: ordinary LAN clients are rate-limited by resolved MAC;"
                 print "\t# diagnostics, logs and provider overrides require an administrator token."
-                print "\t/usr/libexec/sheepfold/sheepfold-ai-gate \"$body\" || return 0"
+                print "\tprintf \047%s\047 \"$body\" | /usr/libexec/sheepfold/sheepfold-ai-gate || return 0"
             }
             next
         }
