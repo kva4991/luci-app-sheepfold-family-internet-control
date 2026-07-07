@@ -51,6 +51,10 @@ patch_cgi() {
             }
             next
         }
+        in_ai && /sheepfold-ai-gate[[:space:]]+"\$body"/ {
+            print "\tprintf \047%s\047 \"$body\" | /usr/libexec/sheepfold/sheepfold-ai-gate || return 0"
+            next
+        }
         in_ai && $0 == "}" { in_ai=0; print; next }
         { print }
     ' "$CGI" > "$tmp"
@@ -144,7 +148,6 @@ patch_cgi
 patch_router_control
 patch_acl
 
-# Public code creation must not survive as an addressable CGI action.
 if grep -q '/pair-token)' "$CGI" 2>/dev/null; then
     echo "Failed to remove public /pair-token route." >&2
     exit 1
