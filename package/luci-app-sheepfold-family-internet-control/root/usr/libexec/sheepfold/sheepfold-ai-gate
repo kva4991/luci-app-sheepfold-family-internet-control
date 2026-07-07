@@ -13,7 +13,6 @@ header_json() {
     printf 'Status: %s\r\n' "$1"
     printf 'Content-Type: application/json; charset=utf-8\r\n'
     printf 'Cache-Control: no-store\r\n'
-    printf 'Access-Control-Allow-Origin: *\r\n'
     [ -z "${2:-}" ] || printf 'Retry-After: %s\r\n' "$2"
     printf '\r\n'
 }
@@ -110,7 +109,7 @@ consume_quota() {
     return 0
 }
 
-body="${1:-}"
+body="$(cat)"
 [ ${#body} -le 16384 ] || reject "413 Payload Too Large" request_too_large "AI request is too large."
 [ "$(uci -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)" = 1 ] || \
     reject "503 Service Unavailable" ai_disabled "AI assistant is disabled on the router."
