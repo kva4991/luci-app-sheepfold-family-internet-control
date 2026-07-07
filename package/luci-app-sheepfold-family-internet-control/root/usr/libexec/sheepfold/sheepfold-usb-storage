@@ -19,14 +19,22 @@
 #   enabled       — 0/1
 #   role          — logs_only | swap_logs | extroot_logs
 #   encrypt       — 0/1 (AES-256-CBC, по умолчанию 1)
+#
+# Ключ шифрования:
+#   Хранится в /etc/sheepfold/.usb_key
+#   /etc в OpenWRT — это /overlay (постоянная память, не RAM).
+#   Ключ сохраняется при перезагрузках.
+#   Теряется только при сбросе к заводским настройкам — предупредить в UI!
 
 set -eu
 
 MOUNT_POINT="/mnt/sheepfold-usb"
-USB_LOG_DIR="${MOUNT_POINT}/sheepfold-logs"
+# Папка на флешке: sheepfold/logs/ (чтобы видно, что это единая папка приложения)
+USB_LOG_DIR="${MOUNT_POINT}/sheepfold/logs"
 RAM_ARCHIVE_DIR="/tmp/sheepfold/.private/archive"
+# /etc — overlay (флэш), переживает перезагрузку, не сброс к заводским
 KEY_FILE="/etc/sheepfold/.usb_key"
-SWAP_FILE="${MOUNT_POINT}/.sheepfold_swap"
+SWAP_FILE="${MOUNT_POINT}/sheepfold/.swap"
 SWAP_SIZE_MB=128
 
 uci_get() { uci -q get "sheepfold.usb.$1" 2>/dev/null || echo "${2:-}"; }
@@ -71,6 +79,7 @@ encrypt_archive() {
         openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
             -pass "file:${KEY_FILE}" -in "$SRC" -out "$DST" 2>/dev/null
     else
+        # openssl нет — копируем без шифрования (UI должен предупредить)
         cp "$SRC" "$DST"
     fi
     echo "$DST"
@@ -149,7 +158,7 @@ cmd_mount() {
     mkdir -p "$MOUNT_POINT"
     mount "$DEV" "$MOUNT_POINT" 2>/dev/null || { printf '{"error":"mount_failed","dev":"%s"}\n' "$DEV"; return 1; }
     mkdir -p "$USB_LOG_DIR" && chmod 700 "$USB_LOG_DIR"
-    printf '{"ok":true,"mount_point":"%s"}\n' "$MOUNT_POINT"
+    printf '{"ok":true,"mount_point":"%s","log_dir":"%s"}\n' "$MOUNT_POINT" "$USB_LOG_DIR"
 }
 
 # -- umount ---------------------------------------------------------------
@@ -165,6 +174,7 @@ cmd_status() {
     DEV=$(uci_get device '')
     ROLE=$(uci_get role logs_only)
     ENCRYPT=$(uci_get encrypt 1)
+    KEY_OK=0; [ -f "$KEY_FILE" ] && KEY_OK=1
     MOUNTED=0; is_mounted && MOUNTED=1
     FREE_PCT=0; USED_KB=0; TOTAL_KB=0; ARCHIVES=0
     if [ "$MOUNTED" = 1 ]; then
@@ -173,8 +183,8 @@ cmd_status() {
         TOTAL_KB=$(df -k "$MOUNT_POINT" 2>/dev/null | awk 'NR==2{print $2}' || echo 0)
         ARCHIVES=$(find "$USB_LOG_DIR" -name '*.tar.gz' -o -name '*.tar' -o -name '*.enc' 2>/dev/null | wc -l | tr -d ' ')
     fi
-    printf '{"enabled":%s,"dev":"%s","role":"%s","encrypt":%s,"mounted":%d,"free_pct":%s,"used_kb":%s,"total_kb":%s,"archives":%s,"max_log_pct":%s}\n' \
-        "$ENABLED" "$DEV" "$ROLE" "$ENCRYPT" "$MOUNTED" "$FREE_PCT" "$USED_KB" "$TOTAL_KB" "$ARCHIVES" "$(max_log_pct)"
+    printf '{"enabled":%s,"dev":"%s","role":"%s","encrypt":%s,"key_ok":%d,"mounted":%d,"free_pct":%s,"used_kb":%s,"total_kb":%s,"archives":%s,"max_log_pct":%s,"log_dir":"%s"}\n' \
+        "$ENABLED" "$DEV" "$ROLE" "$ENCRYPT" "$KEY_OK" "$MOUNTED" "$FREE_PCT" "$USED_KB" "$TOTAL_KB" "$ARCHIVES" "$(max_log_pct)" "$USB_LOG_DIR"
 }
 
 # -- archive-push ---------------------------------------------------------
@@ -209,6 +219,7 @@ cmd_archive_push() {
 # -- setup-swap -----------------------------------------------------------
 cmd_setup_swap() {
     is_mounted || cmd_mount >/dev/null || { printf '{"error":"not_mounted"}\n'; return 1; }
+    mkdir -p "$(dirname "$SWAP_FILE")"
     [ -f "$SWAP_FILE" ] && swapoff "$SWAP_FILE" 2>/dev/null || true
     dd if=/dev/zero of="$SWAP_FILE" bs=1M count="$SWAP_SIZE_MB" 2>/dev/null
     chmod 600 "$SWAP_FILE" && mkswap "$SWAP_FILE" >/dev/null 2>&1 && swapon "$SWAP_FILE"
