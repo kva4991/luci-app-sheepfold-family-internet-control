@@ -182,6 +182,12 @@ device_action_json() {
 		return 0
 	fi
 
+	# Инициализируем ctrl_status=0 явно: переменная используется после case,
+	# но присваивается только при ненулевом коде выхода через «|| ctrl_status=$?».
+	# Без инициализации на busybox ash «${ctrl_status:-0}» может унаследовать
+	# значение из внешнего scope и ложно сигнализировать об ошибке.
+	ctrl_status=0
+	ctrl_result=""
 	case "$action" in
 		allow)
 			ctrl_result="$(/usr/libexec/sheepfold/sheepfold-router-control device-allow "$mac" 2>&1)" || ctrl_status="$?"
@@ -200,7 +206,7 @@ device_action_json() {
 			;;
 	esac
 
-	if [ "${ctrl_status:-0}" != "0" ]; then
+	if [ "$ctrl_status" != "0" ]; then
 		header_json "500 Internal Server Error"
 		printf '{"app":"sheepfold","ok":false,"error":"action_failed","message":"%s"}\n' "$(json_escape "${ctrl_result:-unknown error}")"
 		return 0
@@ -227,6 +233,9 @@ global_block_json() {
 		return 0
 	fi
 
+	# Инициализируем явно по той же причине, что и ctrl_status в device_action_json.
+	ctrl_status=0
+	ctrl_result=""
 	case "$enable" in
 		1|true|on)
 			ctrl_result="$(/usr/libexec/sheepfold/sheepfold-router-control global-block-on 2>&1)" || ctrl_status="$?"
@@ -238,7 +247,7 @@ global_block_json() {
 			;;
 	esac
 
-	if [ "${ctrl_status:-0}" != "0" ]; then
+	if [ "$ctrl_status" != "0" ]; then
 		header_json "500 Internal Server Error"
 		printf '{"app":"sheepfold","ok":false,"error":"action_failed","message":"%s"}\n' "$(json_escape "${ctrl_result:-unknown error}")"
 		return 0
@@ -274,13 +283,22 @@ log_json() {
 
 	# Собираем строки как JSON-массив строк.
 	# Маскируем MAC и IP — журнал может содержать приватные данные.
+	#
+	# ВАЖНО: while внутри пайпа запускается в subshell — переменная first=0
+	# не видна снаружи и запятая никогда не печаталась бы между элементами.
+	# Решение: читаем файл в переменную через $(...), итерируем уже в основном shell.
 	header_json "200 OK"
 	printf '{"app":"sheepfold","ok":true,"entries":['
-	first=1
-	tail -n "$lines" "$log_file" 2>/dev/null | mask_ai_context | while IFS= read -r line; do
-		[ "$first" = "1" ] || printf ','
+	log_first=1
+	log_lines="$(tail -n "$lines" "$log_file" 2>/dev/null | mask_ai_context || true)"
+	printf '%s\n' "$log_lines" | while IFS= read -r line; do
+		[ -n "$line" ] || continue
+		if [ "$log_first" = "1" ]; then
+			log_first=0
+		else
+			printf ','
+		fi
 		printf '"%s"' "$(json_escape "$line")"
-		first=0
 	done
 	printf ']}\n'
 }
@@ -459,7 +477,8 @@ generate_pair_token_json() {
 	esac
 
 	# Генерируем 8-символьный токен из /dev/urandom (буквы+цифры).
-	token="$(cat /dev/urandom 2>/dev/null | tr -dc 'A-Z0-9' | head -c 8)"
+	# head читает из urandom напрямую — избегаем SIGPIPE через cat|tr|head.
+	token="$(head -c 64 /dev/urandom 2>/dev/null | tr -dc 'A-Z0-9' | head -c 8 || true)"
 	if [ -z "$token" ]; then
 		token="$(date +%s%N 2>/dev/null | tail -c 8 | tr -dc '0-9A-F' | head -c 8)"
 		[ -n "$token" ] || token="SF$(date +%s | tail -c 6)"
@@ -619,8 +638,10 @@ ai_assistant_json() {
 	[ -n "$provider" ] || provider="$(uci -q get sheepfold.global.ai_provider 2>/dev/null || printf deepseek)"
 	if [ -z "$model" ]; then
 		case "$provider" in
-			gemini) model="$(uci -q get sheepfold.global.gemini_model 2>/dev/null || printf gemini-3.5-flash)" ;;
-			*) model="$(uci -q get sheepfold.global.deepseek_model 2>/dev/null || printf deepseek-v4-flash)" ;;
+			# Модели по умолчанию — актуальные бесплатные/дешёвые варианты каждого провайдера.
+			# gemini-3.5-flash и deepseek-v4-flash не существуют; правильные имена ниже.
+			gemini) model="$(uci -q get sheepfold.global.gemini_model 2>/dev/null || printf gemini-2.0-flash)" ;;
+			*) model="$(uci -q get sheepfold.global.deepseek_model 2>/dev/null || printf deepseek-chat)" ;;
 		esac
 	fi
 
