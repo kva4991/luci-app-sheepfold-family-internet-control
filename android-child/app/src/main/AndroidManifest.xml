@@ -25,7 +25,7 @@
         </activity>
 
         <receiver
-            android:name=".notification.BootReceiver"
+            android:name=".notification.SafeBootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
