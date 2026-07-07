@@ -337,6 +337,103 @@ pair_admin_device_json() {
         printf '}\n'
 }
 
+# generate_pair_token_json — вызывается из LuCI при нажатии «Добавить телефон».
+# Генерирует одноразовый код сопряжения и возвращает данные для QR-кода.
+# Параметры запроса (query string или POST-body): login, display_name, lifetime (сек, по умолчанию 600).
+# Токен хранится в UCI и удаляется после первого успешного паринга в pair_admin_device.
+generate_pair_token_json() {
+        # Принимаем параметры как из GET query string, так и из POST body
+        if [ "$method" = "POST" ]; then
+                body="$(read_request_body)"
+                login="$(form_get login "$body")"
+                display_name="$(form_get display_name "$body")"
+                lifetime="$(form_get lifetime "$body")"
+        else
+                login="$(form_get login "$query_string")"
+                display_name="$(form_get display_name "$query_string")"
+                lifetime="$(form_get lifetime "$query_string")"
+        fi
+
+        if [ -z "$login" ]; then
+                header_json "400 Bad Request"
+                printf '{"app":"sheepfold","ok":false,"error":"login_required","message":"Administrator login is required."}\n'
+                return 0
+        fi
+
+        case "$lifetime" in
+                ''|*[!0-9]*) lifetime=600 ;;
+        esac
+
+        # Генерируем случайный 8-символьный токен из /dev/urandom.
+        # tr фильтрует только буквы и цифры, head обрезает до нужной длины.
+        token="$(cat /dev/urandom 2>/dev/null | tr -dc 'A-Z0-9' | head -c 8)"
+        if [ -z "$token" ]; then
+                # Запасной вариант на случай если /dev/urandom недоступен
+                token="$(date +%s%N 2>/dev/null | tail -c 8 | tr -dc '0-9A-F' | head -c 8)"
+                [ -n "$token" ] || token="SF$(date +%s | tail -c 6)"
+        fi
+
+        output=""
+        status=0
+        output="$(/usr/libexec/sheepfold/sheepfold-router-control activate-admin-pairing-code \
+                "$login" "$token" "$display_name" "$lifetime" 2>&1)" || status="$?"
+
+        if [ "$status" != "0" ]; then
+                header_json "500 Internal Server Error"
+                printf '{"app":"sheepfold","ok":false,"error":"token_generation_failed","message":"%s"}\n' \
+                        "$(json_escape "$output")"
+                return 0
+        fi
+
+        expires_at="$(kv_get expires_at "$output")"
+
+        # QR-код в APK формируется из полей: routerName, apiUrl, login, token.
+        # APK сканирует QR, извлекает эти поля и отправляет POST /pair с login+code.
+        header_json "200 OK"
+        printf '{"app":"sheepfold","ok":true,"routerName":"%s","apiUrl":"http://%s%s",' \
+                "$(json_escape "$router_name")" "$(json_escape "$http_host")" "$(json_escape "$api_path")"
+        json_pair login "$login" ,
+        json_pair token "$token" ,
+        json_pair expiresAt "$expires_at" ,
+        json_pair lifetimeSec "$lifetime" ''
+        printf '}\n'
+}
+
+# pair_status_json — вызывается из LuCI для polling-а после показа QR-кода.
+# Возвращает paired=true как только Android-приложение успешно отсканировало QR и завершило паринг.
+# Параметры: login, since (unix timestamp — смотрим только паринги после этого момента).
+pair_status_json() {
+        login="$(form_get login "$query_string")"
+        since="$(form_get since "$query_string")"
+
+        if [ -z "$login" ]; then
+                header_json "400 Bad Request"
+                printf '{"app":"sheepfold","ok":false,"error":"login_required","message":"Administrator login is required."}\n'
+                return 0
+        fi
+
+        case "$since" in
+                ''|*[!0-9]*) since=0 ;;
+        esac
+
+        output="$(/usr/libexec/sheepfold/sheepfold-router-control admin-pairing-status "$login" "$since" 2>/dev/null || true)"
+        paired="$(kv_get paired "$output")"
+
+        header_json "200 OK"
+        if [ "$paired" = "1" ]; then
+                printf '{"app":"sheepfold","ok":true,"paired":true,"routerName":"%s",' "$(json_escape "$router_name")"
+                json_pair adminName "$(kv_get admin_name "$output")" ,
+                json_pair adminLogin "$(kv_get admin_login "$output")" ,
+                json_pair deviceName "$(kv_get device_name "$output")" ,
+                json_pair mac "$(kv_get mac "$output")" ,
+                json_pair pairedAt "$(kv_get paired_at "$output")" ''
+                printf '}\n'
+        else
+                printf '{"app":"sheepfold","ok":true,"paired":false,"routerName":"%s"}\n' \
+                        "$(json_escape "$router_name")"
+        fi
+}
+
 case "$method" in
         OPTIONS)
                 header_json "204 No Content"
@@ -346,6 +443,18 @@ case "$method" in
                 case "$path_info:$query_string" in
                         /router-info:*|*:action=router-info|*:action=diagnostics)
                                 router_info_json
+                                exit 0
+                                ;;
+                        /pair-token:*|*:action=pair-token)
+                                # GET /pair-token?login=SuperParent&lifetime=600
+                                # Генерирует одноразовый токен для QR-кода паринга в LuCI.
+                                generate_pair_token_json
+                                exit 0
+                                ;;
+                        /pair-status:*|*:action=pair-status)
+                                # GET /pair-status?login=SuperParent&since=1720000000
+                                # Polling из LuCI: проверяет завершён ли паринг Android-приложения.
+                                pair_status_json
                                 exit 0
                                 ;;
                 esac
@@ -364,6 +473,12 @@ case "$method" in
                                 ;;
                         /ai-assistant:*|*:action=ai-assistant)
                                 ai_assistant_json
+                                exit 0
+                                ;;
+                        /pair-token:*|*:action=pair-token)
+                                # POST /pair-token с body login=...&display_name=...&lifetime=...
+                                # Альтернативный вызов generate_pair_token через POST (для LuCI rpcd).
+                                generate_pair_token_json
                                 exit 0
                                 ;;
                 esac
