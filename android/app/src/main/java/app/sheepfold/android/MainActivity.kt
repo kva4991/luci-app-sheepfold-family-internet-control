@@ -17,36 +17,55 @@ import app.sheepfold.android.router.SheepfoldConnectionStore
 import app.sheepfold.android.ui.main.SheepfoldMainScreen
 import app.sheepfold.android.ui.setup.RouterSetupScreen
 import app.sheepfold.android.ui.theme.OvcharnyaTheme
+import app.sheepfold.android.ui.theme.ThemeMode
+import app.sheepfold.android.ui.theme.ThemePreferenceStore
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         SheepfoldNotifications.ensureChannels(this)
         setContent {
-            OvcharnyaTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    SheepfoldApp()
-                }
-            }
+            // SheepfoldRoot управляет темой на уровне Activity.
+            // themeMode — hoisted state: меняется в SettingsScreen,
+            // сразу применяется ко всему дереву без перезапуска Activity.
+            SheepfoldRoot()
         }
     }
 }
 
 @Composable
-private fun SheepfoldApp() {
+private fun SheepfoldRoot() {
     val context = LocalContext.current
+
+    // Читаем сохранённую тему при старте.
+    // Используем remember чтобы не перечитывать при каждой рекомпозиции.
+    var themeMode by remember { mutableStateOf(ThemePreferenceStore.read(context)) }
     var setupComplete by remember { mutableStateOf(SheepfoldConnectionStore.hasConnection(context)) }
     var connection by remember { mutableStateOf(SheepfoldConnectionStore.read(context)) }
 
-    if (setupComplete) {
-        SheepfoldMainScreen(connection = connection)
-    } else {
-        RouterSetupScreen(onSetupComplete = { request ->
-            if (request != null) {
-                SheepfoldConnectionStore.save(context, request)
-                connection = request
+    // OvcharnyaTheme — единственная обёртка темы.
+    // Передаём themeMode снаружи, чтобы тема обновлялась реактивно.
+    OvcharnyaTheme(themeMode = themeMode) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            if (setupComplete) {
+                SheepfoldMainScreen(
+                    connection = connection,
+                    themeMode  = themeMode,
+                    onThemeModeChange = { newMode ->
+                        // Сохраняем и применяем сразу — перезапуск Activity не нужен
+                        themeMode = newMode
+                        ThemePreferenceStore.save(context, newMode)
+                    }
+                )
+            } else {
+                RouterSetupScreen(onSetupComplete = { request ->
+                    if (request != null) {
+                        SheepfoldConnectionStore.save(context, request)
+                        connection = request
+                    }
+                    setupComplete = true
+                })
             }
-            setupComplete = true
-        })
+        }
     }
 }
