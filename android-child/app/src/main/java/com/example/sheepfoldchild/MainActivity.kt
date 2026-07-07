@@ -8,13 +8,13 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.remember
+import com.example.sheepfoldchild.data.ClientStatusRepository
 import com.example.sheepfoldchild.notification.AccessEndingScheduler
 import com.example.sheepfoldchild.polling.PollingScheduler
 import com.example.sheepfoldchild.ui.MainNavigation
 import com.example.sheepfoldchild.ui.SetupScreen
 import com.example.sheepfoldchild.viewmodel.ChildStatusViewModel
-import com.example.sheepfoldchild.viewmodel.ChildStatusViewModelFactory
 
 class MainActivity : ComponentActivity() {
 
@@ -25,13 +25,17 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(
                 colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
             ) {
-                val vm: ChildStatusViewModel = viewModel(
-                    factory = ChildStatusViewModelFactory(applicationContext)
-                )
-                if (vm.routerBaseUrl.isNullOrBlank()) {
-                    SetupScreen(onSave = { url -> vm.saveRouterUrl(url) })
+                val appContext = applicationContext
+                val viewModel = remember(appContext) {
+                    ChildStatusViewModel(
+                        ClientStatusRepository(appContext),
+                        appContext
+                    )
+                }
+                if (viewModel.routerBaseUrl.isNullOrBlank()) {
+                    SetupScreen(onSave = { url -> viewModel.saveRouterUrl(url) })
                 } else {
-                    MainNavigation(statusViewModel = vm, appContext = applicationContext)
+                    MainNavigation(statusViewModel = viewModel, appContext = appContext)
                 }
             }
         }
@@ -39,14 +43,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Приложение активно: уведомления выключаем, поллинг чаще
         AccessEndingScheduler.isAppInForeground = true
         PollingScheduler.schedule(applicationContext, PollingScheduler.Mode.ACTIVE)
     }
 
     override fun onPause() {
         super.onPause()
-        // Приложение в фоне: уведомления разрешаем, поллинг реже
         AccessEndingScheduler.isAppInForeground = false
         PollingScheduler.schedule(applicationContext, PollingScheduler.Mode.IDLE)
     }
