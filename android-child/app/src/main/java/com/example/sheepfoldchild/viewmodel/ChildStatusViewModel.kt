@@ -33,6 +33,10 @@ class ChildStatusViewModel(
     var lastUpdated: String? by mutableStateOf(null)
         private set
 
+    /** Последний полученный статус (нужен для AI-экрана). */
+    var latestStatus: ClientStatusData? by mutableStateOf(null)
+        private set
+
     init {
         viewModelScope.launch {
             routerBaseUrl = repository.getRouterBaseUrl()
@@ -52,13 +56,17 @@ class ChildStatusViewModel(
         val url = routerBaseUrl ?: return
         uiState = ChildUiState.Loading
         viewModelScope.launch {
-            val result = repository.fetchClientStatus(url)
-            result.onSuccess { response ->
+            repository.fetchClientStatus(url).onSuccess { response ->
                 if (response.ok && response.data != null) {
+                    latestStatus = response.data
                     uiState = ChildUiState.Success(response.data)
                     lastUpdated = response.serverTime?.let { formatTime(it) }
-                    // Планируем уведомление за 5 минут до конца доступа
-                    AccessEndingScheduler.schedule(context, response.data.accessEndsAt, response.serverTime)
+                    AccessEndingScheduler.schedule(
+                        context,
+                        response.data.accessEndsAt,
+                        response.serverTime,
+                        response.data.minutesRemaining
+                    )
                 } else {
                     val msg = response.error?.message
                         ?: context.getString(com.example.sheepfoldchild.R.string.error_generic)
@@ -77,10 +85,8 @@ class ChildStatusViewModel(
         }
     }
 
-    private fun formatTime(iso: String): String {
-        // Возвращает ЧЧ:ММ из ISO-8601 строки, например "2026-07-07T21:00:00+03:00" → "21:00"
-        return try { iso.substring(11, 16) } catch (e: Exception) { iso }
-    }
+    private fun formatTime(iso: String): String =
+        try { iso.substring(11, 16) } catch (_: Exception) { iso }
 }
 
 class ChildStatusViewModelFactory(

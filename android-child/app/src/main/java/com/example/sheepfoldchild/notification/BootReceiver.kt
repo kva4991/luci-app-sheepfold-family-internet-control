@@ -8,24 +8,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-/**
- * После перезагрузки устройства заново запрашивает статус
- * и перепланирует уведомление, если нужно.
- */
 class BootReceiver : BroadcastReceiver() {
-
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         val repo = ClientStatusRepository(context.applicationContext)
         CoroutineScope(Dispatchers.IO).launch {
             val url = repo.getRouterBaseUrl() ?: return@launch
-            val result = repo.fetchClientStatus(url)
-            result.onSuccess { response ->
+            repo.fetchClientStatus(url).onSuccess { response ->
                 if (response.ok && response.data != null) {
                     AccessEndingScheduler.schedule(
                         context,
                         response.data.accessEndsAt,
-                        response.serverTime
+                        response.serverTime,
+                        response.data.minutesRemaining
                     )
                 }
             }

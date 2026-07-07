@@ -9,7 +9,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.sheepfoldchild.ui.ChildStatusScreen
+import com.example.sheepfoldchild.notification.AccessEndingScheduler
+import com.example.sheepfoldchild.ui.MainNavigation
 import com.example.sheepfoldchild.ui.SetupScreen
 import com.example.sheepfoldchild.viewmodel.ChildStatusViewModel
 import com.example.sheepfoldchild.viewmodel.ChildStatusViewModelFactory
@@ -20,10 +21,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            // Тема по умолчанию — системная (ThemeMode.SYSTEM)
-            val darkTheme = isSystemInDarkTheme()
             MaterialTheme(
-                colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
+                colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
             ) {
                 val vm: ChildStatusViewModel = viewModel(
                     factory = ChildStatusViewModelFactory(applicationContext)
@@ -32,9 +31,21 @@ class MainActivity : ComponentActivity() {
                 if (routerUrl.isNullOrBlank()) {
                     SetupScreen(onSave = { url -> vm.saveRouterUrl(url) })
                 } else {
-                    ChildStatusScreen(viewModel = vm)
+                    MainNavigation(statusViewModel = vm, appContext = applicationContext)
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Приложение на переднем плане — уведомление не нужно
+        AccessEndingScheduler.isAppInForeground = true
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Приложение ушло в фон — уведомление разрешено
+        AccessEndingScheduler.isAppInForeground = false
     }
 }

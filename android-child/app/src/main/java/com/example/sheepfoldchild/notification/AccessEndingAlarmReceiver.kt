@@ -13,6 +13,11 @@ import com.example.sheepfoldchild.SheepfoldChildApp
 class AccessEndingAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Если приложение сейчас открыто — не показываем уведомление
+        if (AccessEndingScheduler.isAppInForeground) return
+
+        val minsLeft = intent.getIntExtra("minutes_remaining", -1)
+
         val tapIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -21,10 +26,16 @@ class AccessEndingAlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val text = if (minsLeft > 0)
+            context.getString(R.string.notif_text_with_time, minsLeft)
+        else
+            context.getString(R.string.notif_text)
+
         val notification = NotificationCompat.Builder(context, SheepfoldChildApp.NOTIF_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(context.getString(R.string.notif_title))
-            .setContentText(context.getString(R.string.notif_text))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(tapPi)
