@@ -1,0 +1,101 @@
+#!/bin/sh
+set -eu
+
+json_escape() {
+    printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+kv_get() {
+    key="$1"
+    printf '%s\n' "$2" | sed -n "s/^$key=//p" | sed -n '1p'
+}
+
+header_json() {
+    printf 'Status: %s\r\n' "$1"
+    printf 'Content-Type: application/json; charset=utf-8\r\n'
+    printf 'Cache-Control: no-store\r\n'
+    printf 'Access-Control-Allow-Origin: *\r\n\r\n'
+}
+
+remote_ip="${REMOTE_ADDR:-${1:-}}"
+output="$(/usr/libexec/sheepfold/sheepfold-router-control client-status "$remote_ip" 2>/dev/null || true)"
+status="$(kv_get status "$output")"
+reason="$(kv_get reason "$output")"
+schedule="$(kv_get schedule_name "$output")"
+access_ends_at="$(kv_get next_change_at "$output")"
+[ -n "$status" ] || status=unknown
+
+case "$status" in
+    allow|allowed|enabled|online)
+        internet_state=enabled
+        access_mode=allowlist
+        message="Интернет доступен."
+        ;;
+    block|blocked|deny|denied|disabled|offline)
+        internet_state=disabled
+        access_mode=blocked
+        message="Интернет ограничен правилами Sheepfold."
+        ;;
+    temporary|temp-access|temporary_access)
+        internet_state=enabled
+        access_mode=temporary
+        message="Действует временный доступ."
+        ;;
+    scheduled)
+        internet_state=enabled
+        access_mode=scheduled
+        message="Доступ определяется расписанием."
+        ;;
+    restricted)
+        internet_state=enabled
+        access_mode=restricted
+        message="Доступ ограничен отдельными правилами."
+        ;;
+    *)
+        internet_state=unknown
+        access_mode=unknown
+        case "$reason" in
+            mac_not_found) message="Роутер пока не определил это устройство." ;;
+            device_not_registered) message="Устройство ещё не зарегистрировано в Sheepfold." ;;
+            *) message="Статус доступа пока неизвестен." ;;
+        esac
+        ;;
+esac
+
+# Имя устройства ищем сначала в UCI по IP, затем в DHCP-аренде.
+device_name=""
+for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+    [ "$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)" = "$remote_ip" ] || continue
+    device_name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+    break
+done
+if [ -z "$device_name" ] && [ -r /tmp/dhcp.leases ]; then
+    device_name="$(awk -v ip="$remote_ip" '$3 == ip { print $4; exit }' /tmp/dhcp.leases)"
+    [ "$device_name" != "*" ] || device_name=""
+fi
+
+minutes_remaining=null
+case "$access_ends_at" in
+    ''|*[!0-9]*) ;;
+    *)
+        now="$(date +%s)"
+        if [ "$access_ends_at" -gt "$now" ]; then
+            minutes_remaining=$(( (access_ends_at - now + 59) / 60 ))
+        else
+            minutes_remaining=0
+        fi
+        ;;
+esac
+
+header_json "200 OK"
+printf '{"ok":true,"apiVersion":"1","serverTime":"%s","data":{' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf '"deviceName":"%s",' "$(json_escape "$device_name")"
+printf '"internetState":"%s",' "$(json_escape "$internet_state")"
+printf '"accessMode":"%s",' "$(json_escape "$access_mode")"
+if [ -n "$access_ends_at" ]; then
+    printf '"accessEndsAt":"%s",' "$(json_escape "$access_ends_at")"
+else
+    printf '"accessEndsAt":null,'
+fi
+printf '"minutesRemaining":%s,' "$minutes_remaining"
+printf '"message":"%s"},"error":null}\n' "$(json_escape "$message")"
