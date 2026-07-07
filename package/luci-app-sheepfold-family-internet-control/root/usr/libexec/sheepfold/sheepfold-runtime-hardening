@@ -113,7 +113,10 @@ patch_router_control() {
             next
         }
         skip_activation {
-            if ($0 == "}") skip_activation=0
+            if ($0 ~ /^# -----------------------------------------------------------------------------$/) {
+                skip_activation=0
+                print
+            }
             next
         }
         { print }
