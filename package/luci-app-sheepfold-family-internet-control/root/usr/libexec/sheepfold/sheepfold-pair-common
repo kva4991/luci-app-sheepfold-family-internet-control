@@ -1,0 +1,133 @@
+#!/bin/sh
+
+PAIR_RUNTIME_DIR="/tmp/sheepfold"
+PAIR_TOKEN_DIR="$PAIR_RUNTIME_DIR/tokens"
+PAIR_LOCK_DIR="$PAIR_RUNTIME_DIR/pairing-locks"
+PAIR_LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
+
+umask 077
+mkdir -p "$PAIR_TOKEN_DIR" "$PAIR_LOCK_DIR"
+chmod 700 "$PAIR_TOKEN_DIR" "$PAIR_LOCK_DIR" 2>/dev/null || true
+
+pair_normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+pair_valid_mac() { printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
+pair_print_kv() { printf '%s=%s\n' "$1" "$(printf '%s' "$2" | tr '\r\n\t' '   ')"; }
+
+pair_log_event() {
+    if [ -x "$PAIR_LOG_HELPER" ]; then
+        "$PAIR_LOG_HELPER" "$*"
+    else
+        logger -t sheepfold-router-pairing "$*"
+    fi
+}
+
+pair_admin_section_for_login() {
+    login="$1"
+    [ -n "$login" ] || return 1
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$/\1/p'); do
+        [ "$(uci -q get "sheepfold.$section.login" 2>/dev/null || true)" = "$login" ] || continue
+        printf '%s\n' "$section"
+        return 0
+    done
+    return 1
+}
+
+pair_acquire_admin_lock() {
+    section="$1"
+    lock="$PAIR_LOCK_DIR/$(printf '%s' "$section" | tr -cd 'A-Za-z0-9_.-').lock"
+    tries=0
+    while ! mkdir "$lock" 2>/dev/null; do
+        tries=$((tries + 1))
+        [ "$tries" -lt 10 ] || {
+            echo "Pairing operation is already in progress." >&2
+            return 1
+        }
+        sleep 1
+    done
+    PAIR_LOCK="$lock"
+    trap 'rmdir "${PAIR_LOCK:-}" 2>/dev/null || true' EXIT HUP INT TERM
+}
+
+pair_validate_login_code() {
+    login="$1"
+    code="$2"
+    case "$login" in ''|*[!A-Za-z0-9_.@+-]*) echo "Invalid administrator login." >&2; return 2 ;; esac
+    case "$code" in ''|*[!A-Za-z0-9]*) echo "Invalid pairing code." >&2; return 2 ;; esac
+    [ ${#code} -ge 4 ] && [ ${#code} -le 64 ] || {
+        echo "Invalid pairing code length." >&2
+        return 2
+    }
+}
+
+pair_mac_for_ip() {
+    ip="$1"
+    [ -n "$ip" ] || return 1
+    mac=""
+    [ ! -r /tmp/dhcp.leases ] || mac="$(awk -v ip="$ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases)"
+    [ -n "$mac" ] || [ ! -r /proc/net/arp ] || mac="$(awk -v ip="$ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp)"
+    printf '%s' "$mac"
+}
+
+pair_name_for_ip() {
+    [ -r /tmp/dhcp.leases ] || return 0
+    awk -v ip="$1" '$3 == ip { print $4; exit }' /tmp/dhcp.leases
+}
+
+pair_list_has_mac() {
+    list_name="$1"
+    wanted="$(pair_normalize_mac "$2")"
+    pair_valid_mac "$wanted" || return 1
+    for existing in $(uci -q get "sheepfold.$list_name.mac" 2>/dev/null || true); do
+        [ "$(pair_normalize_mac "$existing")" = "$wanted" ] && return 0
+    done
+    return 1
+}
+
+pair_add_allowlist() {
+    mac="$(pair_normalize_mac "$1")"
+    if [ "$(uci -q get sheepfold.allowlist 2>/dev/null || true)" != "list" ]; then
+        uci -q delete sheepfold.allowlist 2>/dev/null || true
+        uci -q set sheepfold.allowlist=list
+    fi
+    pair_list_has_mac allowlist "$mac" || uci -q add_list "sheepfold.allowlist.mac=$mac"
+}
+
+pair_device_section_for_mac() {
+    wanted="$(pair_normalize_mac "$1")"
+    pair_valid_mac "$wanted" || return 1
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+        existing="$(pair_normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
+        [ "$existing" = "$wanted" ] || continue
+        printf '%s\n' "$section"
+        return 0
+    done
+    section="device_$(printf '%s' "$wanted" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+    [ "$(uci -q get "sheepfold.$section" 2>/dev/null || true)" = device ] || uci -q set "sheepfold.$section=device"
+    printf '%s\n' "$section"
+}
+
+pair_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$1" | sha256sum | cut -d' ' -f1
+    elif command -v openssl >/dev/null 2>&1; then
+        printf '%s' "$1" | openssl dgst -sha256 | awk '{print $NF}'
+    else
+        echo "SHA-256 implementation is unavailable." >&2
+        return 1
+    fi
+}
+
+pair_prepare_token() {
+    token="$(dd if=/dev/urandom bs=20 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+    [ ${#token} -eq 40 ] || return 1
+    hash="$(pair_sha256 "$1:$token")" || return 1
+    PAIR_TOKEN="$token"
+    PAIR_TOKEN_HASH="$hash"
+}
+
+pair_store_token() {
+    tmp="$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH.tmp.$$"
+    : > "$tmp"
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH"
+}
