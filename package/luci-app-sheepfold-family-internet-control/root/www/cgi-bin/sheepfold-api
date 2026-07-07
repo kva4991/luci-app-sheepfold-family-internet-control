@@ -1,18 +1,47 @@
 #!/bin/sh
 
 json_escape() {
-        # JSON здесь собирается POSIX shell-ом без jq, чтобы endpoint жил даже на лёгких роутерах.
-        # Поэтому обязательно убираем переносы/табы и экранируем кавычки, иначе один лог сломает ответ API.
-        printf '%s' "$1" | tr '\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g; s/\r/ /g; s/\t/ /g'
+	# JSON здесь собирается POSIX shell-ом без jq, чтобы endpoint жил даже на лёгких роутерах.
+	# Поэтому обязательно убираем переносы/табы и экранируем кавычки, иначе один лог сломает ответ API.
+	printf '%s' "$1" | tr '\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g; s/\r/ /g; s/\t/ /g'
 }
 
 header_json() {
-        printf 'Status: %s\r\n' "$1"
-        printf 'Content-Type: application/json; charset=utf-8\r\n'
-        printf 'Access-Control-Allow-Origin: *\r\n'
-        printf 'Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n'
-        printf 'Access-Control-Allow-Headers: Content-Type\r\n'
-        printf '\r\n'
+	printf 'Status: %s\r\n' "$1"
+	printf 'Content-Type: application/json; charset=utf-8\r\n'
+	printf 'Access-Control-Allow-Origin: *\r\n'
+	printf 'Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n'
+	printf 'Access-Control-Allow-Headers: Content-Type, Authorization\r\n'
+	printf '\r\n'
+}
+
+# ---------------------------------------------------------------------------
+# auth_check — проверка Bearer-токена администратора.
+# Токен приходит в заголовке «Authorization: Bearer <token>» или query-param «token=».
+# Хранится на роутере как HMAC-хэш; plaintext никогда не пишется в UCI.
+# Возвращает 0 (ok) или вызывает header_json 401 и exit.
+# ---------------------------------------------------------------------------
+auth_check() {
+	bearer=""
+	# Сначала пробуем HTTP_AUTHORIZATION, потом query string.
+	if [ -n "${HTTP_AUTHORIZATION:-}" ]; then
+		bearer="$(printf '%s' "$HTTP_AUTHORIZATION" | sed 's/^[Bb]earer[[:space:]]*//')"
+	fi
+	[ -n "$bearer" ] || bearer="$(form_get token "$QUERY_STRING")"
+
+	if [ -z "$bearer" ]; then
+		header_json "401 Unauthorized"
+		printf '{"app":"sheepfold","ok":false,"error":"auth_required","message":"Bearer token required."}\n'
+		exit 0
+	fi
+
+	# Делегируем проверку в sheepfold-router-control, который знает хэши.
+	result="$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" 2>/dev/null || printf 'fail')"
+	if [ "$result" != "ok" ]; then
+		header_json "401 Unauthorized"
+		printf '{"app":"sheepfold","ok":false,"error":"invalid_token","message":"Invalid or expired token."}\n'
+		exit 0
+	fi
 }
 
 router_name="$(uci -q get system.@system[0].hostname 2>/dev/null || printf OpenWrt)"
@@ -24,470 +53,697 @@ http_host="${HTTP_HOST:-}"
 method="${REQUEST_METHOD:-GET}"
 path_info="${PATH_INFO:-}"
 query_string="${QUERY_STRING:-}"
+remote_ip="${REMOTE_ADDR:-}"
 
 kv_get() {
-        key="$1"
-        printf '%s\n' "$2" | sed -n "s/^$key=//p" | sed -n '1p'
+	key="$1"
+	printf '%s\n' "$2" | sed -n "s/^$key=//p" | sed -n '1p'
 }
 
 json_pair() {
-        key="$1"
-        value="$2"
-        comma="$3"
-        printf '"%s":"%s"%s' "$(json_escape "$key")" "$(json_escape "$value")" "$comma"
+	key="$1"
+	value="$2"
+	comma="$3"
+	printf '"%s":"%s"%s' "$(json_escape "$key")" "$(json_escape "$value")" "$comma"
 }
 
 url_decode() {
-        value="$(printf '%s' "$1" | sed 's/+/ /g; s/%/\\x/g')"
-        printf '%b' "$value"
+	value="$(printf '%s' "$1" | sed 's/+/ /g; s/%/\\x/g')"
+	printf '%b' "$value"
 }
 
 read_request_body() {
-        length="${CONTENT_LENGTH:-0}"
-
-        case "$length" in
-                ''|*[!0-9]*) length=0 ;;
-        esac
-
-        [ "$length" -gt 0 ] || return 0
-        dd bs=1 count="$length" 2>/dev/null || true
+	length="${CONTENT_LENGTH:-0}"
+	case "$length" in
+		''|*[!0-9]*) length=0 ;;
+	esac
+	[ "$length" -gt 0 ] || return 0
+	dd bs=1 count="$length" 2>/dev/null || true
 }
 
 form_get() {
-        key="$1"
-        body="$2"
-
-        printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
-                [ "$item_key" = "$key" ] || continue
-                url_decode "$item_value"
-                break
-        done
+	key="$1"
+	body="$2"
+	printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
+		[ "$item_key" = "$key" ] || continue
+		url_decode "$item_value"
+		break
+	done
 }
 
 router_control_pair() {
-        key="$1"
-        printf '%s\n' "$2" | sed -n "s/^$key=//p" | sed -n '1p'
+	key="$1"
+	printf '%s\n' "$2" | sed -n "s/^$key=//p" | sed -n '1p'
 }
 
 mask_ai_context() {
-        # Этот текст может уйти внешнему AI-провайдеру. Оставляем смысл событий,
-        # но скрываем MAC/IP и секреты, чтобы родитель мог получить совет без лишней утечки данных.
-        sed -E \
-                -e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/[mac]/g' \
-                -e 's/([0-9]{1,3}\.){3}[0-9]{1,3}/[ip]/g' \
-                -e 's/([Tt]oken|[Kk]ey|[Pp]assword|[Pp]ass|[Ss]ecret)=?[^[:space:],;]*/\1=[secret]/g'
+	# Этот текст может уйти внешнему AI-провайдеру. Оставляем смысл событий,
+	# но скрываем MAC/IP и секреты, чтобы родитель мог получить совет без лишней утечки данных.
+	sed -E \
+		-e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/[mac]/g' \
+		-e 's/([0-9]{1,3}\.){3}[0-9]{1,3}/[ip]/g' \
+		-e 's/([Tt]oken|[Kk]ey|[Pp]assword|[Pp]ass|[Ss]ecret)=?[^[:space:],;]*/\1=[secret]/g'
 }
 
 program_log_context() {
-        log_file="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf /tmp/sheepfold/events.log)"
-        # Путь к журналу берётся из UCI, но для AI-контекста читаем только ожидаемую область /tmp/sheepfold.
-        # Это не даёт превратить endpoint в произвольное чтение файлов через подменённый log_cache_path.
-        case "$log_file" in
-                /tmp/sheepfold/*) ;;
-                *) log_file="/tmp/sheepfold/events.log" ;;
-        esac
-
-        if [ ! -r "$log_file" ]; then
-                printf '%s' "Журнал Sheepfold недоступен или пуст."
-                return 0
-        fi
-
-        tail -n 80 "$log_file" 2>/dev/null | mask_ai_context
+	log_file="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf /tmp/sheepfold/events.log)"
+	# Путь к журналу берётся из UCI, но для AI-контекста читаем только ожидаемую область /tmp/sheepfold.
+	# Это не даёт превратить endpoint в произвольное чтение файлов через подменённый log_cache_path.
+	case "$log_file" in
+		/tmp/sheepfold/*) ;;
+		*) log_file="/tmp/sheepfold/events.log" ;;
+	esac
+	if [ ! -r "$log_file" ]; then
+		printf '%s' "Журнал Sheepfold недоступен или пуст."
+		return 0
+	fi
+	tail -n 80 "$log_file" 2>/dev/null | mask_ai_context
 }
 
 router_info_context() {
-        /usr/libexec/sheepfold/sheepfold-router-control router-info 2>/dev/null | mask_ai_context || true
+	/usr/libexec/sheepfold/sheepfold-router-control router-info 2>/dev/null | mask_ai_context || true
 }
 
+# ---------------------------------------------------------------------------
+# client_status_json — GET /client-status
+# Для детского APK. Не требует токена администратора.
+# Идентифицирует устройство по IP из DHCP-аренды (REMOTE_ADDR).
+# ---------------------------------------------------------------------------
+client_status_json() {
+	output="$(/usr/libexec/sheepfold/sheepfold-router-control client-status "$remote_ip" 2>/dev/null || true)"
+	status_val="$(kv_get status "$output")"
+	[ -n "$status_val" ] || status_val="unknown"
+	schedule_name="$(kv_get schedule_name "$output")"
+	next_change_at="$(kv_get next_change_at "$output")"
+	warning_minutes="$(kv_get warning_before_minutes "$output")"
+	[ -n "$warning_minutes" ] || warning_minutes="5"
+
+	header_json "200 OK"
+	printf '{"app":"sheepfold","ok":true,'
+	json_pair status "$status_val" ,
+	json_pair scheduleName "$schedule_name" ,
+	json_pair nextChangeAt "$next_change_at" ,
+	json_pair warningBeforeMinutes "$warning_minutes" ''
+	printf '}\n'
+}
+
+# ---------------------------------------------------------------------------
+# devices_json — GET /devices
+# Список всех устройств с их UCI-статусом. Требует авторизации.
+# ---------------------------------------------------------------------------
+devices_json() {
+	auth_check
+	output="$(/usr/libexec/sheepfold/sheepfold-router-control list-devices 2>/dev/null || true)"
+	header_json "200 OK"
+	printf '{"app":"sheepfold","ok":true,"devices":%s}\n' "${output:-[]}"
+}
+
+# ---------------------------------------------------------------------------
+# device_action_json — POST /device/allow | /device/block | /device/temp-access
+# Управление отдельным устройством. Требует авторизации.
+# ---------------------------------------------------------------------------
+device_action_json() {
+	action="$1" # allow | block | temp-access
+	auth_check
+	body="$(read_request_body)"
+	mac="$(form_get mac "$body")"
+
+	if [ -z "$mac" ]; then
+		header_json "400 Bad Request"
+		printf '{"app":"sheepfold","ok":false,"error":"mac_required","message":"Device MAC address is required."}\n'
+		return 0
+	fi
+
+	# Валидация MAC — только стандартный формат XX:XX:XX:XX:XX:XX.
+	# Без этой проверки mac мог бы стать shell-инъекцией в sheepfold-router-control.
+	if ! printf '%s' "$mac" | grep -qE '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'; then
+		header_json "400 Bad Request"
+		printf '{"app":"sheepfold","ok":false,"error":"invalid_mac","message":"Invalid MAC address format."}\n'
+		return 0
+	fi
+
+	case "$action" in
+		allow)
+			ctrl_result="$(/usr/libexec/sheepfold/sheepfold-router-control device-allow "$mac" 2>&1)" || ctrl_status="$?"
+			;;
+		block)
+			ctrl_result="$(/usr/libexec/sheepfold/sheepfold-router-control device-block "$mac" 2>&1)" || ctrl_status="$?"
+			;;
+		temp-access)
+			minutes="$(form_get minutes "$body")"
+			case "$minutes" in
+				''|*[!0-9]*) minutes=30 ;;
+			esac
+			# Ограничиваем максимум — 24 часа (1440 минут).
+			[ "$minutes" -le 1440 ] || minutes=1440
+			ctrl_result="$(/usr/libexec/sheepfold/sheepfold-router-control device-temp-access "$mac" "$minutes" 2>&1)" || ctrl_status="$?"
+			;;
+	esac
+
+	if [ "${ctrl_status:-0}" != "0" ]; then
+		header_json "500 Internal Server Error"
+		printf '{"app":"sheepfold","ok":false,"error":"action_failed","message":"%s"}\n' "$(json_escape "${ctrl_result:-unknown error}")"
+		return 0
+	fi
+
+	header_json "200 OK"
+	printf '{"app":"sheepfold","ok":true,"action":"%s","mac":"%s"}\n' \
+		"$(json_escape "$action")" "$(json_escape "$mac")"
+}
+
+# ---------------------------------------------------------------------------
+# global_block_json — POST /global-block
+# Включить / выключить глобальную блокировку. Требует авторизации + confirm.
+# ---------------------------------------------------------------------------
+global_block_json() {
+	auth_check
+	body="$(read_request_body)"
+	enable="$(form_get enable "$body")"
+	confirm="$(form_get confirm "$body")"
+
+	if [ "$confirm" != "1" ]; then
+		header_json "403 Forbidden"
+		printf '{"app":"sheepfold","ok":false,"error":"confirmation_required","message":"Send confirm=1 to apply global block."}\n'
+		return 0
+	fi
+
+	case "$enable" in
+		1|true|on)
+			ctrl_result="$(/usr/libexec/sheepfold/sheepfold-router-control global-block-on 2>&1)" || ctrl_status="$?"
+			action_label="on"
+			;;
+		*)
+			ctrl_result="$(/usr/libexec/sheepfold/sheepfold-router-control global-block-off 2>&1)" || ctrl_status="$?"
+			action_label="off"
+			;;
+	esac
+
+	if [ "${ctrl_status:-0}" != "0" ]; then
+		header_json "500 Internal Server Error"
+		printf '{"app":"sheepfold","ok":false,"error":"action_failed","message":"%s"}\n' "$(json_escape "${ctrl_result:-unknown error}")"
+		return 0
+	fi
+
+	header_json "200 OK"
+	printf '{"app":"sheepfold","ok":true,"globalBlock":"%s"}\n' "$(json_escape "$action_label")"
+}
+
+# ---------------------------------------------------------------------------
+# log_json — GET /log
+# Возвращает административный журнал. Требует авторизации.
+# ---------------------------------------------------------------------------
+log_json() {
+	auth_check
+	lines="$(form_get lines "$query_string")"
+	case "$lines" in
+		''|*[!0-9]*) lines=100 ;;
+	esac
+	[ "$lines" -le 1000 ] || lines=1000
+
+	log_file="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf /tmp/sheepfold/events.log)"
+	case "$log_file" in
+		/tmp/sheepfold/*) ;;
+		*) log_file="/tmp/sheepfold/events.log" ;;
+	esac
+
+	if [ ! -r "$log_file" ]; then
+		header_json "200 OK"
+		printf '{"app":"sheepfold","ok":true,"entries":[]}\n'
+		return 0
+	fi
+
+	# Собираем строки как JSON-массив строк.
+	# Маскируем MAC и IP — журнал может содержать приватные данные.
+	header_json "200 OK"
+	printf '{"app":"sheepfold","ok":true,"entries":['
+	first=1
+	tail -n "$lines" "$log_file" 2>/dev/null | mask_ai_context | while IFS= read -r line; do
+		[ "$first" = "1" ] || printf ','
+		printf '"%s"' "$(json_escape "$line")"
+		first=0
+	done
+	printf ']}\n'
+}
+
+# ---------------------------------------------------------------------------
+# log_clear_json — POST /log/clear
+# Очищает журнал после подтверждения. Требует авторизации + confirm.
+# ---------------------------------------------------------------------------
+log_clear_json() {
+	auth_check
+	body="$(read_request_body)"
+	confirm="$(form_get confirm "$body")"
+
+	if [ "$confirm" != "1" ]; then
+		header_json "403 Forbidden"
+		printf '{"app":"sheepfold","ok":false,"error":"confirmation_required","message":"Send confirm=1 to clear the log."}\n'
+		return 0
+	fi
+
+	log_file="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf /tmp/sheepfold/events.log)"
+	case "$log_file" in
+		/tmp/sheepfold/*) ;;
+		*) log_file="/tmp/sheepfold/events.log" ;;
+	esac
+
+	: > "$log_file" 2>/dev/null || true
+
+	header_json "200 OK"
+	printf '{"app":"sheepfold","ok":true,"message":"Log cleared."}\n'
+}
+
+# ---------------------------------------------------------------------------
+# settings_save_json — POST /settings/save
+# Сохраняет UCI-настройки Sheepfold. Требует авторизации.
+# Разрешены только безопасные поля — никаких exec-путей и токенов напрямую.
+# ---------------------------------------------------------------------------
+SAFE_SETTINGS="app_port ui_asset_version site_lists_update_interval new_device_behavior \
+	auto_configure detection_mode wifi_auto_disable_mode wifi_auto_disable_time \
+	router_led_control bedtime ai_provider"
+
+settings_save_json() {
+	auth_check
+	body="$(read_request_body)"
+	changed=0
+	errors=""
+
+	for field in $SAFE_SETTINGS; do
+		val="$(form_get "$field" "$body")"
+		[ -n "$val" ] || continue
+		# Базовая санитизация: не разрешаем спецсимволы shell в значениях UCI.
+		safe_val="$(printf '%s' "$val" | tr -d "';\$\`\\")"
+		uci set "sheepfold.global.$field=$safe_val" 2>/dev/null && changed=$((changed + 1)) || errors="$errors $field"
+	done
+
+	if [ "$changed" -gt 0 ]; then
+		# uci commit + принудительное применение изменений LuCI (убираем баннер "Не принятые изменения").
+		uci commit sheepfold 2>/dev/null || true
+		ubus call uci apply 2>/dev/null || true
+		# Перегенерируем .well-known/sheepfold.json если изменился порт.
+		if printf '%s' "$body" | grep -q 'app_port'; then
+			/www/.well-known/sheepfold.json.sh 2>/dev/null || true
+		fi
+	fi
+
+	if [ -n "$errors" ]; then
+		header_json "207 Multi-Status"
+		printf '{"app":"sheepfold","ok":true,"changed":%d,"errors":"%s"}\n' \
+			"$changed" "$(json_escape "${errors# }")"
+	else
+		header_json "200 OK"
+		printf '{"app":"sheepfold","ok":true,"changed":%d}\n' "$changed"
+	fi
+}
+
+# ---------------------------------------------------------------------------
+# router_info_json — GET /router-info
+# Диагностический снимок. Без секретов.
+# ---------------------------------------------------------------------------
+router_info_json() {
+	info="$(/usr/libexec/sheepfold/sheepfold-router-control router-info 2>/dev/null || true)"
+	wifi_count="$(kv_get wifi_count "$info")"
+	[ -n "$wifi_count" ] || wifi_count=0
+	ai_summary="Router model: $(kv_get router_model "$info"); firmware: $(kv_get firmware_version "$info"); Sheepfold: $(kv_get sheepfold_version "$info"); internet: $(kv_get internet_status "$info") ($(kv_get internet_reason "$info")); ping to ya.ru: $(kv_get ping_yandex_ms "$info") ms; Wi-Fi modules: $wifi_count; LAN ports: $(kv_get lan_ports_count "$info"); Podkop: $(kv_get podkop_installed "$info") $(kv_get podkop_version "$info"); AdGuard Home: $(kv_get adguard_installed "$info") $(kv_get adguard_version "$info"); uptime: $(kv_get uptime "$info"); load: $(kv_get load_average "$info"); memory: $(kv_get memory "$info")."
+
+	header_json "200 OK"
+	printf '{"app":"sheepfold","ok":true,"routerName":"%s","diagnostics":{' "$(json_escape "$router_name")"
+	json_pair currentTime "$(kv_get current_time "$info")" ,
+	json_pair sheepfoldVersion "$(kv_get sheepfold_version "$info")" ,
+	json_pair internetStatus "$(kv_get internet_status "$info")" ,
+	json_pair internetReason "$(kv_get internet_reason "$info")" ,
+	json_pair pingYandexMs "$(kv_get ping_yandex_ms "$info")" ,
+	json_pair firmwareVersion "$(kv_get firmware_version "$info")" ,
+	json_pair openwrtRelease "$(kv_get openwrt_release "$info")" ,
+	json_pair kernelVersion "$(kv_get kernel_version "$info")" ,
+	json_pair routerModel "$(kv_get router_model "$info")" ,
+	json_pair uptime "$(kv_get uptime "$info")" ,
+	json_pair loadAverage "$(kv_get load_average "$info")" ,
+	json_pair memory "$(kv_get memory "$info")" ,
+	json_pair lanPortsCount "$(kv_get lan_ports_count "$info")" ,
+	json_pair lanPorts "$(kv_get lan_ports "$info")" ,
+	json_pair podkopInstalled "$(kv_get podkop_installed "$info")" ,
+	json_pair podkopVersion "$(kv_get podkop_version "$info")" ,
+	json_pair adguardInstalled "$(kv_get adguard_installed "$info")" ,
+	json_pair adguardVersion "$(kv_get adguard_version "$info")" ''
+	printf '},"wifiModules":['
+	i=1
+	while [ "$i" -le "$wifi_count" ]; do
+		[ "$i" = "1" ] || printf ','
+		printf '{'
+		json_pair name "$(kv_get "wifi_${i}_name" "$info")" ,
+		json_pair status "$(kv_get "wifi_${i}_status" "$info")" ,
+		json_pair type "$(kv_get "wifi_${i}_type" "$info")" ,
+		json_pair path "$(kv_get "wifi_${i}_path" "$info")" ,
+		json_pair band "$(kv_get "wifi_${i}_band" "$info")" ,
+		json_pair channel "$(kv_get "wifi_${i}_channel" "$info")" ,
+		json_pair country "$(kv_get "wifi_${i}_country" "$info")" ,
+		json_pair mode "$(kv_get "wifi_${i}_mode" "$info")" ''
+		printf '}'
+		i=$((i + 1))
+	done
+	printf '],"aiContextPreview":"%s"}\n' "$(json_escape "$ai_summary")"
+}
+
+# ---------------------------------------------------------------------------
+# pair_admin_device_json — POST /pair
+# ---------------------------------------------------------------------------
+pair_admin_device_json() {
+	body="$(read_request_body)"
+	login="$(form_get login "$body")"
+	code="$(form_get code "$body")"
+	user_agent="${HTTP_USER_AGENT:-Android Sheepfold}"
+	output=""
+	status=0
+
+	output="$(/usr/libexec/sheepfold/sheepfold-router-control pair-admin-device "$login" "$code" "$remote_ip" "$user_agent" 2>&1)" || status="$?"
+
+	if [ "$status" != "0" ]; then
+		header_json "403 Forbidden"
+		printf '{"app":"sheepfold","ok":false,"paired":false,"error":"%s"}\n' "$(json_escape "$output")"
+		return 0
+	fi
+
+	header_json "200 OK"
+	printf '{"app":"sheepfold","ok":true,"paired":true,"routerName":"%s",' "$(json_escape "$router_name")"
+	json_pair adminName "$(router_control_pair admin_name "$output")" ,
+	json_pair adminLogin "$(router_control_pair admin_login "$output")" ,
+	json_pair deviceName "$(router_control_pair device_name "$output")" ,
+	json_pair mac "$(router_control_pair mac "$output")" ,
+	json_pair ip "$(router_control_pair ip "$output")" ''
+	printf '}\n'
+}
+
+# ---------------------------------------------------------------------------
+# generate_pair_token_json — GET|POST /pair-token
+# ---------------------------------------------------------------------------
+generate_pair_token_json() {
+	if [ "$method" = "POST" ]; then
+		body="$(read_request_body)"
+		login="$(form_get login "$body")"
+		display_name="$(form_get display_name "$body")"
+		lifetime="$(form_get lifetime "$body")"
+	else
+		login="$(form_get login "$query_string")"
+		display_name="$(form_get display_name "$query_string")"
+		lifetime="$(form_get lifetime "$query_string")"
+	fi
+
+	if [ -z "$login" ]; then
+		header_json "400 Bad Request"
+		printf '{"app":"sheepfold","ok":false,"error":"login_required","message":"Administrator login is required."}\n'
+		return 0
+	fi
+
+	case "$lifetime" in
+		''|*[!0-9]*) lifetime=600 ;;
+	esac
+
+	# Генерируем 8-символьный токен из /dev/urandom (буквы+цифры).
+	token="$(cat /dev/urandom 2>/dev/null | tr -dc 'A-Z0-9' | head -c 8)"
+	if [ -z "$token" ]; then
+		token="$(date +%s%N 2>/dev/null | tail -c 8 | tr -dc '0-9A-F' | head -c 8)"
+		[ -n "$token" ] || token="SF$(date +%s | tail -c 6)"
+	fi
+
+	output=""
+	status=0
+	output="$(/usr/libexec/sheepfold/sheepfold-router-control activate-admin-pairing-code \
+		"$login" "$token" "$display_name" "$lifetime" 2>&1)" || status="$?"
+
+	if [ "$status" != "0" ]; then
+		header_json "500 Internal Server Error"
+		printf '{"app":"sheepfold","ok":false,"error":"token_generation_failed","message":"%s"}\n' \
+			"$(json_escape "$output")"
+		return 0
+	fi
+
+	expires_at="$(kv_get expires_at "$output")"
+
+	# QR payload формат: SF1|h=<host>|p=<port>|u=<login>|c=<code>
+	# APK декодирует его и отправляет POST /pair с login+code.
+	header_json "200 OK"
+	printf '{"app":"sheepfold","ok":true,"routerName":"%s","apiUrl":"http://%s%s",' \
+		"$(json_escape "$router_name")" "$(json_escape "$http_host")" "$(json_escape "$api_path")"
+	json_pair login "$login" ,
+	json_pair token "$token" ,
+	json_pair qrPayload "SF1|h=$(printf '%s' "$http_host" | cut -d: -f1)|p=$app_port|u=$login|c=$token" ,
+	json_pair expiresAt "$expires_at" ,
+	json_pair lifetimeSec "$lifetime" ''
+	printf '}\n'
+}
+
+# ---------------------------------------------------------------------------
+# pair_status_json — GET /pair-status
+# ---------------------------------------------------------------------------
+pair_status_json() {
+	login="$(form_get login "$query_string")"
+	since="$(form_get since "$query_string")"
+
+	if [ -z "$login" ]; then
+		header_json "400 Bad Request"
+		printf '{"app":"sheepfold","ok":false,"error":"login_required","message":"Administrator login is required."}\n'
+		return 0
+	fi
+
+	case "$since" in
+		''|*[!0-9]*) since=0 ;;
+	esac
+
+	output="$(/usr/libexec/sheepfold/sheepfold-router-control admin-pairing-status "$login" "$since" 2>/dev/null || true)"
+	paired="$(kv_get paired "$output")"
+
+	header_json "200 OK"
+	if [ "$paired" = "1" ]; then
+		printf '{"app":"sheepfold","ok":true,"paired":true,"routerName":"%s",' "$(json_escape "$router_name")"
+		json_pair adminName "$(kv_get admin_name "$output")" ,
+		json_pair adminLogin "$(kv_get admin_login "$output")" ,
+		json_pair deviceName "$(kv_get device_name "$output")" ,
+		json_pair mac "$(kv_get mac "$output")" ,
+		json_pair pairedAt "$(kv_get paired_at "$output")" ''
+		printf '}\n'
+	else
+		printf '{"app":"sheepfold","ok":true,"paired":false,"routerName":"%s"}\n' \
+			"$(json_escape "$router_name")"
+	fi
+}
+
+# ---------------------------------------------------------------------------
+# ai_assistant_json — POST /ai-assistant
+# ---------------------------------------------------------------------------
 deepseek_request() {
-        payload="$1"
-        api_key="$(uci -q get sheepfold.global.deepseek_api_key 2>/dev/null || true)"
-        api_url="$(uci -q get sheepfold.global.deepseek_api_url 2>/dev/null || printf 'https://api.deepseek.com/chat/completions')"
+	payload="$1"
+	api_key="$(uci -q get sheepfold.global.deepseek_api_key 2>/dev/null || true)"
+	api_url="$(uci -q get sheepfold.global.deepseek_api_url 2>/dev/null || printf 'https://api.deepseek.com/chat/completions')"
 
-        # Android-приложение обращается к роутеру, а не напрямую к DeepSeek:
-        # API-ключ остаётся в UCI на домашнем роутере и не попадает в APK/телефон.
-        if [ -z "$api_key" ]; then
-                header_json "400 Bad Request"
-                printf '{"app":"sheepfold","ok":false,"error":"deepseek_api_key_missing","message":"DeepSeek API key is not configured on the router."}\n'
-                return 0
-        fi
+	if [ -z "$api_key" ]; then
+		header_json "400 Bad Request"
+		printf '{"app":"sheepfold","ok":false,"error":"deepseek_api_key_missing","message":"DeepSeek API key is not configured on the router."}\n'
+		return 0
+	fi
 
-        if command -v uclient-fetch >/dev/null 2>&1; then
-                response="$(uclient-fetch -qO- \
-                        --header="Content-Type: application/json" \
-                        --header="Authorization: Bearer $api_key" \
-                        --post-data="$payload" \
-                        "$api_url" 2>&1)" || status="$?"
-        elif command -v wget >/dev/null 2>&1; then
-                response="$(wget -q -O - \
-                        --header="Content-Type: application/json" \
-                        --header="Authorization: Bearer $api_key" \
-                        --post-data="$payload" \
-                        "$api_url" 2>&1)" || status="$?"
-        elif command -v curl >/dev/null 2>&1; then
-                response="$(curl -fsS \
-                        -H "Content-Type: application/json" \
-                        -H "Authorization: Bearer $api_key" \
-                        --data "$payload" \
-                        "$api_url" 2>&1)" || status="$?"
-        else
-                header_json "500 Internal Server Error"
-                printf '{"app":"sheepfold","ok":false,"error":"http_client_missing","message":"Install uclient-fetch, wget, or curl on the router."}\n'
-                return 0
-        fi
+	status=0
+	if command -v uclient-fetch >/dev/null 2>&1; then
+		response="$(uclient-fetch -qO- --header="Content-Type: application/json" --header="Authorization: Bearer $api_key" --post-data="$payload" "$api_url" 2>&1)" || status="$?"
+	elif command -v wget >/dev/null 2>&1; then
+		response="$(wget -q -O - --header="Content-Type: application/json" --header="Authorization: Bearer $api_key" --post-data="$payload" "$api_url" 2>&1)" || status="$?"
+	elif command -v curl >/dev/null 2>&1; then
+		response="$(curl -fsS -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" --data "$payload" "$api_url" 2>&1)" || status="$?"
+	else
+		header_json "500 Internal Server Error"
+		printf '{"app":"sheepfold","ok":false,"error":"http_client_missing","message":"Install uclient-fetch, wget, or curl on the router."}\n'
+		return 0
+	fi
 
-        if [ "${status:-0}" != "0" ]; then
-                header_json "502 Bad Gateway"
-                printf '{"app":"sheepfold","ok":false,"error":"deepseek_request_failed","message":"%s"}\n' "$(json_escape "$response")"
-                return 0
-        fi
+	if [ "${status:-0}" != "0" ]; then
+		header_json "502 Bad Gateway"
+		printf '{"app":"sheepfold","ok":false,"error":"deepseek_request_failed","message":"%s"}\n' "$(json_escape "$response")"
+		return 0
+	fi
 
-        header_json "200 OK"
-        printf '%s\n' "$response"
+	header_json "200 OK"
+	printf '%s\n' "$response"
 }
 
 gemini_request() {
-        payload="$1"
-        model="$2"
-        api_key="$(uci -q get sheepfold.global.gemini_api_key 2>/dev/null || true)"
-        api_url="$(uci -q get sheepfold.global.gemini_api_url 2>/dev/null || printf 'https://generativelanguage.googleapis.com/v1beta/models')"
-        status=0
+	payload="$1"
+	model="$2"
+	api_key="$(uci -q get sheepfold.global.gemini_api_key 2>/dev/null || true)"
+	api_url="$(uci -q get sheepfold.global.gemini_api_url 2>/dev/null || printf 'https://generativelanguage.googleapis.com/v1beta/models')"
+	status=0
 
-        if [ -z "$api_key" ]; then
-                header_json "400 Bad Request"
-                printf '{"app":"sheepfold","ok":false,"error":"gemini_api_key_missing","message":"Gemini API key is not configured on the router."}\n'
-                return 0
-        fi
+	if [ -z "$api_key" ]; then
+		header_json "400 Bad Request"
+		printf '{"app":"sheepfold","ok":false,"error":"gemini_api_key_missing","message":"Gemini API key is not configured on the router."}\n'
+		return 0
+	fi
 
-        # В настройке храним обычно базовый URL Gemini models, а конкретная модель является частью пути.
-        # Если пользователь задал полный endpoint generateContent, второй раз модель не добавляем.
-        case "$api_url" in
-                *:generateContent*) ;;
-                *) api_url="${api_url%/}/$model:generateContent" ;;
-        esac
+	case "$api_url" in
+		*:generateContent*) ;;
+		*) api_url="${api_url%/}/$model:generateContent" ;;
+	esac
 
-        if command -v uclient-fetch >/dev/null 2>&1; then
-                response="$(uclient-fetch -qO- \
-                        --header="Content-Type: application/json" \
-                        --header="x-goog-api-key: $api_key" \
-                        --post-data="$payload" \
-                        "$api_url" 2>&1)" || status="$?"
-        elif command -v wget >/dev/null 2>&1; then
-                response="$(wget -q -O - \
-                        --header="Content-Type: application/json" \
-                        --header="x-goog-api-key: $api_key" \
-                        --post-data="$payload" \
-                        "$api_url" 2>&1)" || status="$?"
-        elif command -v curl >/dev/null 2>&1; then
-                response="$(curl -fsS \
-                        -H "Content-Type: application/json" \
-                        -H "x-goog-api-key: $api_key" \
-                        --data "$payload" \
-                        "$api_url" 2>&1)" || status="$?"
-        else
-                header_json "500 Internal Server Error"
-                printf '{"app":"sheepfold","ok":false,"error":"http_client_missing","message":"Install uclient-fetch, wget, or curl on the router."}\n'
-                return 0
-        fi
+	if command -v uclient-fetch >/dev/null 2>&1; then
+		response="$(uclient-fetch -qO- --header="Content-Type: application/json" --header="x-goog-api-key: $api_key" --post-data="$payload" "$api_url" 2>&1)" || status="$?"
+	elif command -v wget >/dev/null 2>&1; then
+		response="$(wget -q -O - --header="Content-Type: application/json" --header="x-goog-api-key: $api_key" --post-data="$payload" "$api_url" 2>&1)" || status="$?"
+	elif command -v curl >/dev/null 2>&1; then
+		response="$(curl -fsS -H "Content-Type: application/json" -H "x-goog-api-key: $api_key" --data "$payload" "$api_url" 2>&1)" || status="$?"
+	else
+		header_json "500 Internal Server Error"
+		printf '{"app":"sheepfold","ok":false,"error":"http_client_missing","message":"Install uclient-fetch, wget, or curl on the router."}\n'
+		return 0
+	fi
 
-        if [ "${status:-0}" != "0" ]; then
-                header_json "502 Bad Gateway"
-                printf '{"app":"sheepfold","ok":false,"error":"gemini_request_failed","message":"%s"}\n' "$(json_escape "$response")"
-                return 0
-        fi
+	if [ "${status:-0}" != "0" ]; then
+		header_json "502 Bad Gateway"
+		printf '{"app":"sheepfold","ok":false,"error":"gemini_request_failed","message":"%s"}\n' "$(json_escape "$response")"
+		return 0
+	fi
 
-        header_json "200 OK"
-        printf '%s\n' "$response"
+	header_json "200 OK"
+	printf '%s\n' "$response"
 }
 
 ai_assistant_json() {
-        body="$(read_request_body)"
-        provider="$(form_get provider "$body")"
-        model="$(form_get model "$body")"
-        parent_text="$(form_get message "$body")"
-        include_info="$(form_get includeInfo "$body")"
-        include_logs="$(form_get includeLogs "$body")"
-        google_account="$(form_get googleAccount "$body")"
-        context_text=""
-        user_text=""
-        system_prompt="Ты ИИ-помощник Sheepfold для родителя. Помогай спокойно разбирать семейные правила интернета, не ставь диагнозы, не изображай психотерапевта, не провоцируй наказания и скандалы. Если видно, что родитель не понимает тревоги и личность ребёнка, мягко направь разговор к причинам конфликта, страхам ребёнка и постепенной передаче самоконтроля. Если вопрос связан с риском для жизни, насилием, суицидом, наркотиками, экстремизмом или тяжёлым состоянием ребёнка, советуй обратиться к очному специалисту или экстренным службам. Не раскрывай технические данные ради любопытства; используй журнал и диагностику только для практического совета родителю."
+	body="$(read_request_body)"
+	provider="$(form_get provider "$body")"
+	model="$(form_get model "$body")"
+	parent_text="$(form_get message "$body")"
+	include_info="$(form_get includeInfo "$body")"
+	include_logs="$(form_get includeLogs "$body")"
+	google_account="$(form_get googleAccount "$body")"
+	context_text=""
+	user_text=""
+	system_prompt="Ты ИИ-помощник Sheepfold для родителя. Помогай спокойно разбирать семейные правила интернета, не ставь диагнозы, не изображай психотерапевта, не провоцируй наказания и скандалы. Если видно, что родитель не понимает тревоги и личность ребёнка, мягко направь разговор к причинам конфликта, страхам ребёнка и постепенной передаче самоконтроля. Если вопрос связан с риском для жизни, насилием, суицидом, наркотиками, экстремизмом или тяжёлым состоянием ребёнка, советуй обратиться к очному специалисту или экстренным службам. Не раскрывай технические данные ради любопытства; используй журнал и диагностику только для практического совета родителю."
 
-        [ -n "$provider" ] || provider="$(uci -q get sheepfold.global.ai_provider 2>/dev/null || printf deepseek)"
-        if [ -z "$model" ]; then
-                case "$provider" in
-                        gemini) model="$(uci -q get sheepfold.global.gemini_model 2>/dev/null || printf gemini-3.5-flash)" ;;
-                        *) model="$(uci -q get sheepfold.global.deepseek_model 2>/dev/null || printf deepseek-v4-flash)" ;;
-                esac
-        fi
+	[ -n "$provider" ] || provider="$(uci -q get sheepfold.global.ai_provider 2>/dev/null || printf deepseek)"
+	if [ -z "$model" ]; then
+		case "$provider" in
+			gemini) model="$(uci -q get sheepfold.global.gemini_model 2>/dev/null || printf gemini-3.5-flash)" ;;
+			*) model="$(uci -q get sheepfold.global.deepseek_model 2>/dev/null || printf deepseek-v4-flash)" ;;
+		esac
+	fi
 
-        if [ -z "$parent_text" ]; then
-                header_json "400 Bad Request"
-                printf '{"app":"sheepfold","ok":false,"error":"empty_message","message":"Question text is required."}\n'
-                return 0
-        fi
+	if [ -z "$parent_text" ]; then
+		header_json "400 Bad Request"
+		printf '{"app":"sheepfold","ok":false,"error":"empty_message","message":"Question text is required."}\n'
+		return 0
+	fi
 
-        if [ "$include_info" = "1" ]; then
-                # Дополнительный контекст отправляется только после явной галочки в APK.
-                # Даже после этого router_info_context проходит через mask_ai_context.
-                context_text="$context_text\n\n[Информация со страницы Sheepfold]\n$(router_info_context)"
-        fi
+	if [ "$include_info" = "1" ]; then
+		# Дополнительный контекст отправляется только после явной галочки в APK.
+		# Даже после этого router_info_context проходит через mask_ai_context.
+		context_text="$context_text\n\n[Информация со страницы Sheepfold]\n$(router_info_context)"
+	fi
 
-        if [ "$include_logs" = "1" ]; then
-                # Журнал нужен ИИ только как материал для спокойного совета родителю,
-                # поэтому backend отдаёт ограниченный хвост и скрывает чувствительные поля.
-                context_text="$context_text\n\n[Журнал программы Sheepfold, последние записи, чувствительные поля скрыты]\n$(program_log_context)"
-        fi
+	if [ "$include_logs" = "1" ]; then
+		# Журнал нужен ИИ только как материал для спокойного совета родителю.
+		context_text="$context_text\n\n[Журнал программы Sheepfold, последние записи, чувствительные поля скрыты]\n$(program_log_context)"
+	fi
 
-        if [ -n "$google_account" ]; then
-                context_text="$context_text\n\n[Аккаунт родителя в Android]\n$google_account"
-        fi
+	if [ -n "$google_account" ]; then
+		context_text="$context_text\n\n[Аккаунт родителя в Android]\n$google_account"
+	fi
 
-        user_text="$parent_text$context_text"
+	user_text="$parent_text$context_text"
 
-        case "$provider" in
-                deepseek)
-                        payload="$(printf '{"model":"%s","messages":[{"role":"system","content":"%s"},{"role":"user","content":"%s"}],"temperature":0.4}' \
-                                "$(json_escape "$model")" \
-                                "$(json_escape "$system_prompt")" \
-                                "$(json_escape "$user_text")")"
-                        deepseek_request "$payload"
-                        ;;
-                gemini)
-                        payload="$(printf '{"systemInstruction":{"parts":[{"text":"%s"}]},"contents":[{"role":"user","parts":[{"text":"%s"}]}],"generationConfig":{"temperature":0.4}}' \
-                                "$(json_escape "$system_prompt")" \
-                                "$(json_escape "$user_text")")"
-                        gemini_request "$payload" "$(json_escape "$model")"
-                        ;;
-                *)
-                        header_json "400 Bad Request"
-                        printf '{"app":"sheepfold","ok":false,"error":"provider_not_supported","message":"AI provider is not supported yet."}\n'
-                        ;;
-        esac
+	case "$provider" in
+		deepseek)
+			payload="$(printf '{"model":"%s","messages":[{"role":"system","content":"%s"},{"role":"user","content":"%s"}],"temperature":0.4}' \
+				"$(json_escape "$model")" \
+				"$(json_escape "$system_prompt")" \
+				"$(json_escape "$user_text")")"
+			deepseek_request "$payload"
+			;;
+		gemini)
+			payload="$(printf '{"systemInstruction":{"parts":[{"text":"%s"}]},"contents":[{"role":"user","parts":[{"text":"%s"}]}],"generationConfig":{"temperature":0.4}}' \
+				"$(json_escape "$system_prompt")" \
+				"$(json_escape "$user_text")")"
+			gemini_request "$payload" "$(json_escape "$model")"
+			;;
+		*)
+			header_json "400 Bad Request"
+			printf '{"app":"sheepfold","ok":false,"error":"provider_not_supported","message":"AI provider is not supported yet."}\n'
+			;;
+	esac
 }
 
-router_info_json() {
-        info="$(/usr/libexec/sheepfold/sheepfold-router-control router-info 2>/dev/null || true)"
-        wifi_count="$(kv_get wifi_count "$info")"
-        [ -n "$wifi_count" ] || wifi_count=0
-        ai_summary="Router model: $(kv_get router_model "$info"); firmware: $(kv_get firmware_version "$info"); Sheepfold: $(kv_get sheepfold_version "$info"); internet: $(kv_get internet_status "$info") ($(kv_get internet_reason "$info")); ping to ya.ru: $(kv_get ping_yandex_ms "$info") ms; Wi-Fi modules: $wifi_count; LAN ports: $(kv_get lan_ports_count "$info"); Podkop: $(kv_get podkop_installed "$info") $(kv_get podkop_version "$info"); AdGuard Home: $(kv_get adguard_installed "$info") $(kv_get adguard_version "$info"); uptime: $(kv_get uptime "$info"); load: $(kv_get load_average "$info"); memory: $(kv_get memory "$info")."
-
-        header_json "200 OK"
-        printf '{"app":"sheepfold","ok":true,"routerName":"%s","diagnostics":{' "$(json_escape "$router_name")"
-        json_pair currentTime "$(kv_get current_time "$info")" ,
-        json_pair sheepfoldVersion "$(kv_get sheepfold_version "$info")" ,
-        json_pair internetStatus "$(kv_get internet_status "$info")" ,
-        json_pair internetReason "$(kv_get internet_reason "$info")" ,
-        json_pair pingYandexMs "$(kv_get ping_yandex_ms "$info")" ,
-        json_pair firmwareVersion "$(kv_get firmware_version "$info")" ,
-        json_pair openwrtRelease "$(kv_get openwrt_release "$info")" ,
-        json_pair kernelVersion "$(kv_get kernel_version "$info")" ,
-        json_pair routerModel "$(kv_get router_model "$info")" ,
-        json_pair uptime "$(kv_get uptime "$info")" ,
-        json_pair loadAverage "$(kv_get load_average "$info")" ,
-        json_pair memory "$(kv_get memory "$info")" ,
-        json_pair lanPortsCount "$(kv_get lan_ports_count "$info")" ,
-        json_pair lanPorts "$(kv_get lan_ports "$info")" ,
-        json_pair podkopInstalled "$(kv_get podkop_installed "$info")" ,
-        json_pair podkopVersion "$(kv_get podkop_version "$info")" ,
-        json_pair adguardInstalled "$(kv_get adguard_installed "$info")" ,
-        json_pair adguardVersion "$(kv_get adguard_version "$info")" ''
-        printf '},"wifiModules":['
-        i=1
-        while [ "$i" -le "$wifi_count" ]; do
-                [ "$i" = "1" ] || printf ','
-                printf '{'
-                json_pair name "$(kv_get "wifi_${i}_name" "$info")" ,
-                json_pair status "$(kv_get "wifi_${i}_status" "$info")" ,
-                json_pair type "$(kv_get "wifi_${i}_type" "$info")" ,
-                json_pair path "$(kv_get "wifi_${i}_path" "$info")" ,
-                json_pair band "$(kv_get "wifi_${i}_band" "$info")" ,
-                json_pair channel "$(kv_get "wifi_${i}_channel" "$info")" ,
-                json_pair country "$(kv_get "wifi_${i}_country" "$info")" ,
-                json_pair mode "$(kv_get "wifi_${i}_mode" "$info")" ''
-                printf '}'
-                i=$((i + 1))
-        done
-        printf '],"aiContextPreview":"%s"}\n' "$(json_escape "$ai_summary")"
-}
-
-pair_admin_device_json() {
-        body="$(read_request_body)"
-        login="$(form_get login "$body")"
-        code="$(form_get code "$body")"
-        remote_ip="${REMOTE_ADDR:-}"
-        user_agent="${HTTP_USER_AGENT:-Android Sheepfold}"
-        output=""
-        status=0
-
-        output="$(/usr/libexec/sheepfold/sheepfold-router-control pair-admin-device "$login" "$code" "$remote_ip" "$user_agent" 2>&1)" || status="$?"
-
-        if [ "$status" != "0" ]; then
-                header_json "403 Forbidden"
-                printf '{"app":"sheepfold","ok":false,"paired":false,"error":"%s"}\n' "$(json_escape "$output")"
-                return 0
-        fi
-
-        header_json "200 OK"
-        printf '{"app":"sheepfold","ok":true,"paired":true,"routerName":"%s",' "$(json_escape "$router_name")"
-        json_pair adminName "$(router_control_pair admin_name "$output")" ,
-        json_pair adminLogin "$(router_control_pair admin_login "$output")" ,
-        json_pair deviceName "$(router_control_pair device_name "$output")" ,
-        json_pair mac "$(router_control_pair mac "$output")" ,
-        json_pair ip "$(router_control_pair ip "$output")" ''
-        printf '}\n'
-}
-
-# generate_pair_token_json — вызывается из LuCI при нажатии «Добавить телефон».
-# Генерирует одноразовый код сопряжения и возвращает данные для QR-кода.
-# Параметры запроса (query string или POST-body): login, display_name, lifetime (сек, по умолчанию 600).
-# Токен хранится в UCI и удаляется после первого успешного паринга в pair_admin_device.
-generate_pair_token_json() {
-        # Принимаем параметры как из GET query string, так и из POST body
-        if [ "$method" = "POST" ]; then
-                body="$(read_request_body)"
-                login="$(form_get login "$body")"
-                display_name="$(form_get display_name "$body")"
-                lifetime="$(form_get lifetime "$body")"
-        else
-                login="$(form_get login "$query_string")"
-                display_name="$(form_get display_name "$query_string")"
-                lifetime="$(form_get lifetime "$query_string")"
-        fi
-
-        if [ -z "$login" ]; then
-                header_json "400 Bad Request"
-                printf '{"app":"sheepfold","ok":false,"error":"login_required","message":"Administrator login is required."}\n'
-                return 0
-        fi
-
-        case "$lifetime" in
-                ''|*[!0-9]*) lifetime=600 ;;
-        esac
-
-        # Генерируем случайный 8-символьный токен из /dev/urandom.
-        # tr фильтрует только буквы и цифры, head обрезает до нужной длины.
-        token="$(cat /dev/urandom 2>/dev/null | tr -dc 'A-Z0-9' | head -c 8)"
-        if [ -z "$token" ]; then
-                # Запасной вариант на случай если /dev/urandom недоступен
-                token="$(date +%s%N 2>/dev/null | tail -c 8 | tr -dc '0-9A-F' | head -c 8)"
-                [ -n "$token" ] || token="SF$(date +%s | tail -c 6)"
-        fi
-
-        output=""
-        status=0
-        output="$(/usr/libexec/sheepfold/sheepfold-router-control activate-admin-pairing-code \
-                "$login" "$token" "$display_name" "$lifetime" 2>&1)" || status="$?"
-
-        if [ "$status" != "0" ]; then
-                header_json "500 Internal Server Error"
-                printf '{"app":"sheepfold","ok":false,"error":"token_generation_failed","message":"%s"}\n' \
-                        "$(json_escape "$output")"
-                return 0
-        fi
-
-        expires_at="$(kv_get expires_at "$output")"
-
-        # QR-код в APK формируется из полей: routerName, apiUrl, login, token.
-        # APK сканирует QR, извлекает эти поля и отправляет POST /pair с login+code.
-        header_json "200 OK"
-        printf '{"app":"sheepfold","ok":true,"routerName":"%s","apiUrl":"http://%s%s",' \
-                "$(json_escape "$router_name")" "$(json_escape "$http_host")" "$(json_escape "$api_path")"
-        json_pair login "$login" ,
-        json_pair token "$token" ,
-        json_pair expiresAt "$expires_at" ,
-        json_pair lifetimeSec "$lifetime" ''
-        printf '}\n'
-}
-
-# pair_status_json — вызывается из LuCI для polling-а после показа QR-кода.
-# Возвращает paired=true как только Android-приложение успешно отсканировало QR и завершило паринг.
-# Параметры: login, since (unix timestamp — смотрим только паринги после этого момента).
-pair_status_json() {
-        login="$(form_get login "$query_string")"
-        since="$(form_get since "$query_string")"
-
-        if [ -z "$login" ]; then
-                header_json "400 Bad Request"
-                printf '{"app":"sheepfold","ok":false,"error":"login_required","message":"Administrator login is required."}\n'
-                return 0
-        fi
-
-        case "$since" in
-                ''|*[!0-9]*) since=0 ;;
-        esac
-
-        output="$(/usr/libexec/sheepfold/sheepfold-router-control admin-pairing-status "$login" "$since" 2>/dev/null || true)"
-        paired="$(kv_get paired "$output")"
-
-        header_json "200 OK"
-        if [ "$paired" = "1" ]; then
-                printf '{"app":"sheepfold","ok":true,"paired":true,"routerName":"%s",' "$(json_escape "$router_name")"
-                json_pair adminName "$(kv_get admin_name "$output")" ,
-                json_pair adminLogin "$(kv_get admin_login "$output")" ,
-                json_pair deviceName "$(kv_get device_name "$output")" ,
-                json_pair mac "$(kv_get mac "$output")" ,
-                json_pair pairedAt "$(kv_get paired_at "$output")" ''
-                printf '}\n'
-        else
-                printf '{"app":"sheepfold","ok":true,"paired":false,"routerName":"%s"}\n' \
-                        "$(json_escape "$router_name")"
-        fi
-}
-
+# ===========================================================================
+# Маршрутизация запросов
+# ===========================================================================
 case "$method" in
-        OPTIONS)
-                header_json "204 No Content"
-                exit 0
-                ;;
-        GET)
-                case "$path_info:$query_string" in
-                        /router-info:*|*:action=router-info|*:action=diagnostics)
-                                router_info_json
-                                exit 0
-                                ;;
-                        /pair-token:*|*:action=pair-token)
-                                # GET /pair-token?login=SuperParent&lifetime=600
-                                # Генерирует одноразовый токен для QR-кода паринга в LuCI.
-                                generate_pair_token_json
-                                exit 0
-                                ;;
-                        /pair-status:*|*:action=pair-status)
-                                # GET /pair-status?login=SuperParent&since=1720000000
-                                # Polling из LuCI: проверяет завершён ли паринг Android-приложения.
-                                pair_status_json
-                                exit 0
-                                ;;
-                esac
-
-                header_json "200 OK"
-                printf '{"app":"sheepfold","ok":true,"routerName":"%s","version":"%s","appPort":"%s","apiPath":"%s","apiUrl":"http://%s%s"}\n' \
-                        "$(json_escape "$router_name")" "$(json_escape "$version")" \
-                        "$(json_escape "$app_port")" "$(json_escape "$api_path")" \
-                        "$(json_escape "$http_host")" "$(json_escape "$api_path")"
-                ;;
-        POST)
-                case "$path_info:$query_string" in
-                        /pair:*|*:action=pair)
-                                pair_admin_device_json
-                                exit 0
-                                ;;
-                        /ai-assistant:*|*:action=ai-assistant)
-                                ai_assistant_json
-                                exit 0
-                                ;;
-                        /pair-token:*|*:action=pair-token)
-                                # POST /pair-token с body login=...&display_name=...&lifetime=...
-                                # Альтернативный вызов generate_pair_token через POST (для LuCI rpcd).
-                                generate_pair_token_json
-                                exit 0
-                                ;;
-                esac
-
-                header_json "404 Not Found"
-                printf '{"app":"sheepfold","ok":false,"error":"unknown_post_action"}\n'
-                ;;
-        *)
-                header_json "405 Method Not Allowed"
-                printf '{"app":"sheepfold","ok":false,"error":"method_not_allowed"}\n'
-                ;;
+	OPTIONS)
+		header_json "204 No Content"
+		exit 0
+		;;
+	GET)
+		case "$path_info" in
+			/router-info)
+				router_info_json
+				;;
+			/client-status)
+				# Детский APK — без авторизации, идентификация по IP.
+				client_status_json
+				;;
+			/devices)
+				devices_json
+				;;
+			/pair-token)
+				generate_pair_token_json
+				;;
+			/pair-status)
+				pair_status_json
+				;;
+			/log)
+				log_json
+				;;
+			*)
+				# Корневой GET — discovery endpoint.
+				header_json "200 OK"
+				printf '{"app":"sheepfold","ok":true,"service":"sheepfold","routerName":"%s","version":"%s","appPort":"%s","apiPath":"%s","apiUrl":"http://%s%s"}\n' \
+					"$(json_escape "$router_name")" "$(json_escape "$version")" \
+					"$(json_escape "$app_port")" "$(json_escape "$api_path")" \
+					"$(json_escape "$http_host")" "$(json_escape "$api_path")"
+				;;
+		esac
+		;;
+	POST)
+		case "$path_info" in
+			/pair)
+				pair_admin_device_json
+				;;
+			/pair-token)
+				generate_pair_token_json
+				;;
+			/device/allow)
+				device_action_json allow
+				;;
+			/device/block)
+				device_action_json block
+				;;
+			/device/temp-access)
+				device_action_json temp-access
+				;;
+			/global-block)
+				global_block_json
+				;;
+			/log/clear)
+				log_clear_json
+				;;
+			/settings/save)
+				settings_save_json
+				;;
+			/ai-assistant)
+				ai_assistant_json
+				;;
+			*)
+				header_json "404 Not Found"
+				printf '{"app":"sheepfold","ok":false,"error":"unknown_action","path":"%s"}\n' "$(json_escape "$path_info")"
+				;;
+		esac
+		;;
+	*)
+		header_json "405 Method Not Allowed"
+		printf '{"app":"sheepfold","ok":false,"error":"method_not_allowed"}\n'
+		;;
 esac
