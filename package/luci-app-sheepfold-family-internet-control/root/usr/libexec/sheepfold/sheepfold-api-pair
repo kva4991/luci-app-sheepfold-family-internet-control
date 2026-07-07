@@ -124,6 +124,14 @@ if [ "${REQUEST_METHOD:-POST}" != "POST" ]; then
     exit 0
 fi
 
+# HTML-форма с чужого сайта не умеет установить этот заголовок. Fetch с ним
+# требует CORS preflight, а публичный CGI не выдаёт разрешающих CORS-заголовков.
+if [ "${HTTP_X_SHEEPFOLD_CLIENT:-}" != "android-admin-v1" ]; then
+    header_json "403 Forbidden"
+    printf '{"app":"sheepfold","ok":false,"paired":false,"error":"client_header_required"}\n'
+    exit 0
+fi
+
 consume_attempt || {
     header_json "429 Too Many Requests" "${retry_after:-600}"
     printf '{"app":"sheepfold","ok":false,"paired":false,"error":"rate_limited","message":"Too many pairing attempts. Try again later."}\n'
@@ -161,6 +169,7 @@ if [ "$status" != "0" ]; then
     case "$status" in
         4) http_status="409 Conflict"; error_code="device_not_resolved" ;;
         5) http_status="403 Forbidden"; error_code="device_blocklisted" ;;
+        6) http_status="500 Internal Server Error"; error_code="token_generation_failed" ;;
         *) http_status="403 Forbidden"; error_code="pairing_rejected" ;;
     esac
     header_json "$http_status"
