@@ -20,9 +20,9 @@ data class AiAssistantRequest(
 object AiAssistantClient {
     suspend fun ask(request: AiAssistantRequest): String = withContext(Dispatchers.IO) {
         val apiUrl = "${request.connection.apiUrl.trimEnd('/')}/ai-assistant"
+        // Провайдер и модель являются настройками роутера. Android не переопределяет
+        // их значениями из старого UI и тем самым следует backend-контракту.
         val body = listOf(
-            "provider" to request.provider,
-            "model" to request.model,
             "message" to request.message,
             "includeInfo" to if (request.includeRouterInfo) "1" else "0",
             "includeLogs" to if (request.includeProgramLog) "1" else "0",
