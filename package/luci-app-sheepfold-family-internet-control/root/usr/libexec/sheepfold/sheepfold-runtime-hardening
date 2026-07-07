@@ -24,8 +24,6 @@ for required in \
     [ -f "$required" ] || die "missing file $required"
 done
 
-# GitHub Contents API does not preserve executable mode for newly created files,
-# therefore package/image installation normalizes modes before any service starts.
 for executable in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" \
     "$(path /usr/libexec/sheepfold/sheepfold-api-client-status)" \
@@ -39,48 +37,39 @@ for executable in \
 done
 chmod 0644 "$PAIR_COMMON" "$ACL"
 
-# Public CGI must be a dispatcher. The code-issuing implementation may exist
-# only outside the web root as legacy provider/action support.
 grep -q 'sheepfold-api-legacy' "$CGI" || die "public CGI does not delegate through the hardened dispatcher"
 grep -q '\[ "\$path_info" = "/pair-token" \]' "$CGI" || die "public CGI does not return 404 for pair-token"
 ! grep -q '^generate_pair_token_json()' "$CGI" || die "pair-token generator is present in public CGI"
 ! grep -q '^[[:space:]]*/pair-token)' "$CGI" || die "pair-token route is present in public CGI"
 grep -q 'sheepfold-ai-gate' "$CGI" || die "AI gate is not connected"
 
-# Privilege-producing commands must be intercepted before the legacy controller.
 grep -q 'PAIR_DEVICE=.*/sheepfold-pair-device' "$CONTROL" || die "pair-admin-device is not intercepted"
 grep -q 'PAIR_ACTIVATE=.*/sheepfold-pair-activate' "$CONTROL" || die "pairing-code activation is not intercepted"
 grep -q 'exec "\$PAIR_DEVICE"' "$CONTROL" || die "pair device helper is not executed"
 grep -q 'exec "\$PAIR_ACTIVATE"' "$CONTROL" || die "pair activation helper is not executed"
 
-# Pairing code activation requires an existing administrator and never creates one.
 grep -q 'pair_admin_section_for_login' "$PAIR_ACTIVATE" || die "existing administrator lookup is missing"
 grep -q 'Create the account in LuCI first' "$PAIR_ACTIVATE" || die "missing-admin failure is not explicit"
 ! grep -q '=administrator' "$PAIR_ACTIVATE" || die "pair activation can create an administrator"
 
-# Device pairing checks blocklist twice and never removes the device from it.
 block_checks="$(grep -c 'pair_list_has_mac blocklist' "$PAIR_DEVICE" || true)"
 [ "$block_checks" -ge 2 ] || die "pairing does not recheck blocklist"
 ! grep -q 'remove.*blocklist\|delete.*blocklist' "$PAIR_DEVICE" || die "pairing can mutate blocklist"
 grep -q 'pair_store_token' "$PAIR_DEVICE" || die "successful pairing does not store a token hash"
 
-# Ordinary AI access requires a native marker before per-MAC quota accounting.
 grep -q 'client_header_required' "$AI_GATE" || die "AI native-client check is missing"
 grep -q 'ai_rate_limit_requests' "$AI_GATE" || die "AI per-device request limit is missing"
 grep -q 'ai_rate_limit_window_seconds' "$AI_GATE" || die "AI rate-limit window is missing"
 grep -q 'privileged_context_forbidden' "$AI_GATE" || die "AI privileged context guard is missing"
 
-# LuCI may invoke only the helper which verifies OpenSSL and disables the flag
-# on failure; the ACL is part of the packaged source rather than patched later.
 grep -q 'sheepfold-openssl-ensure' "$ACL" || die "OpenSSL verification helper is absent from LuCI ACL"
 grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable individual logs"
 
-# Parse all security-sensitive shell entry points before finishing install.
 for script in \
-    "$CGI" "$CONTROL" \
+    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" \
     "$(path /usr/libexec/sheepfold/sheepfold-api-client-status)" \
     "$(path /usr/libexec/sheepfold/sheepfold-api-pair)" \
-    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" \
+    "$PAIR_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" \
     "$(path /usr/libexec/sheepfold/sheepfold-key-derive)" \
     "$OPENSSL_ENSURE" \
     "$(path /usr/libexec/sheepfold/sheepfold-usb-storage)"; do
