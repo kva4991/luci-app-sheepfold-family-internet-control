@@ -1,232 +1,243 @@
-# Backend-дизайн Sheepfold API
+# Архитектура бэкенда Sheepfold (OpenWRT)
 
-## Принципы
-
-1. **Android-клиенты используют Sheepfold Product API** — собственные endpoint'ы поверх `uhttpd`, а не прямой LuCI JSON-RPC.
-2. **LuCI и Android-приложения опираются на одно backend-ядро** — бизнес-логика не дублируется.
-3. **MAC определяется на роутере по IP** — клиентскому устройству не доверяем никогда.
-4. **Единый формат ответов** для всех endpoint'ов.
+> Для AI-агентов: этот файл описывает бэкенд-слой роутера. Читать вместе с `docs/developer-task.ru.md`, `docs/android-openwrt-api.ru.md` и `AGENTS.md`.
 
 ---
 
-## Формат ответа
+## Уровни системы
 
-Все endpoint'ы возвращают JSON в едином конверте:
-
-```json
-{
-  "ok": true,
-  "apiVersion": "1",
-  "serverTime": "2026-07-07T15:30:00+03:00",
-  "data": { ... },
-  "error": null
-}
 ```
-
-При ошибке:
-
-```json
-{
-  "ok": false,
-  "apiVersion": "1",
-  "serverTime": "2026-07-07T15:30:00+03:00",
-  "data": null,
-  "error": {
-    "code": "device_unknown",
-    "message": "Роутер не смог однозначно определить это устройство."
-  }
-}
+┌─────────────────────────────────────────────┐
+│              Android-приложение              │  родительский интерфейс
+│              LuCI (overview.js)              │  веб-интерфейс
+│              Мессенджер (Telegram/VK)        │  удалённые команды
+└────────────────────┬────────────────────────┘
+                     │ HTTP(S)
+┌────────────────────▼────────────────────────┐
+│   /cgi-bin/sheepfold-api/*  (CGI-шлюз)      │  API-слой
+└────────────────────┬────────────────────────┘
+                     │ exec
+┌────────────────────▼────────────────────────┐
+│   /usr/libexec/sheepfold/sheepfold-router-   │  бизнес-логика
+│   control  (shell/Lua/Python)                │
+└────────┬────────────────────┬───────────────┘
+         │ uci                │ nftables/iptables
+┌────────▼────┐    ┌──────────▼──────────────┐
+│ /etc/config │    │ firewall4 / nftables     │
+│ /sheepfold  │    │ dnsmasq                  │
+└─────────────┘    └─────────────────────────┘
 ```
 
 ---
 
-## Endpoint'ы
+## CGI-эндпоинты (`/cgi-bin/sheepfold-api/`)
 
-### GET /cgi-bin/sheepfold-api/ping
+### Обязательные эндпоинты MVP
 
-Проверка связности. Не требует авторизации.
+| Метод | Путь | Описание |
+|---|---|---|
+| GET | `/router-info` | Диагностический снимок (без секретов) |
+| GET | `/client-status` | Статус текущего клиента (детский APK) |
+| POST | `/device/allow` | Разрешить устройство |
+| POST | `/device/block` | Заблокировать устройство |
+| POST | `/device/temp-access` | Временный доступ (+N минут) |
+| GET | `/devices` | Список всех устройств |
+| POST | `/global-block` | Включить/выключить глобальную блокировку |
+| POST | `/admin/pairing/activate` | Активировать одноразовый код сопряжения |
+| GET | `/admin/pairing/status` | Проверить статус сопряжения |
+| POST | `/settings/save` | Сохранить UCI-настройки |
+| GET | `/log` | Административный журнал |
+| POST | `/log/clear` | Очистить журнал (с подтверждением) |
 
-```json
-{ "ok": true, "apiVersion": "1", "serverTime": "...", "data": { "status": "ok" }, "error": null }
-```
+### Правила безопасности API
 
-### GET /cgi-bin/sheepfold-api/router-info
-
-Безопасный снэпшот состояния роутера. **Не содержит** паролей, токенов, MAC-адресов, сырых логов.
-
-Поля `data`: `uptime`, `wanState`, `localTime`, `countryProfile`, `sheepfoldVersion`.
-
-### GET /cgi-bin/sheepfold-api/devices
-
-Нормализованный список устройств для родительского APK.
-
-Каждый элемент массива `data.devices`:
-
-```json
-{
-  "mac": "AA:BB:CC:DD:EE:FF",
-  "ip": "192.168.1.43",
-  "displayName": "Телефон Маши",
-  "group": "children",
-  "note": "",
-  "status": "Scheduled",
-  "currentAccessState": "enabled",
-  "accessEndsAt": "2026-07-07T21:00:00+03:00",
-  "minutesRemaining": 89
-}
-```
-
-Возможные значения `status`: `Allow`, `Blocked`, `Scheduled`, `Restricted`, `New`.
-
-### GET /cgi-bin/sheepfold-api/schedules
-
-Список расписаний. Каждый элемент:
-
-```json
-{
-  "id": "sched_001",
-  "deviceMac": "AA:BB:CC:DD:EE:FF",
-  "days": [1,2,3,4,5],
-  "allowFrom": "07:00",
-  "allowUntil": "21:00"
-}
-```
-
-### POST /cgi-bin/sheepfold-api/device/action
-
-Единый endpoint для действий с устройствами.
-
-Тело запроса:
-
-```json
-{
-  "mac": "AA:BB:CC:DD:EE:FF",
-  "actionType": "temporary_grant",
-  "payload": { "duration": "30m" }
-}
-```
-
-Возможные `actionType`: `allow`, `block`, `temporary_grant`, `set_group`, `set_name`, `set_note`, `mark_reviewed`.
-
-Возможные `duration` для `temporary_grant`: `15m`, `30m`, `60m`, `end_of_day`, `until_bedtime`.
-
-### POST /cgi-bin/sheepfold-api/internet/state
-
-Глобальное управление интернетом.
-
-```json
-{ "state": "disabled" }
-```
-
-Ответ `data`: `{ "internetState": "disabled", "appliedAt": "..." }`.
-
-### POST /cgi-bin/sheepfold-api/ai/ask
-
-Серверный прокси к AI-провайдеру.
-
-```json
-{ "question": "Как правильно выставить расписание для подростка?", "contextFlags": ["devices", "schedules"] }
-```
-
-Backend добавляет системный промпт и контекст (устройства, расписания), отправляет к провайдеру и возвращает текст ответа.
-
-### GET /cgi-bin/sheepfold-api/client-status
-
-Для детского APK. **Без параметров. MAC определяется на роутере по IP.**
-
-Ответ `data`:
-
-```json
-{
-  "deviceName": "Телефон ребёнка",
-  "internetState": "enabled",
-  "accessMode": "scheduled",
-  "accessEndsAt": "2026-07-07T21:00:00+03:00",
-  "minutesRemaining": 27,
-  "message": "Интернет доступен до 21:00 по расписанию."
-}
-```
-
-Если MAC не удалось определить — `ok: false`, код ошибки `device_unknown`.
+- Каждый запрос проверяет Bearer-токен администратора.
+- Токены хранятся на роутере как HMAC-хэши; plaintext не хранится.
+- Опасные действия (reboot, update, global-block, clear-log) требуют повторного подтверждения через отдельный `confirm`-токен.
+- Ответы всегда JSON; ошибки — `{"error": "...", "code": N}`.
 
 ---
 
-## Логика определения MAC по IP
+## `/cgi-bin/sheepfold-api/router-info`
 
-> **Правило:** endpoint `client-status` никогда не доверяет MAC или другому идентификатору, приходящему с клиентского устройства. MAC определяется строго на роутере по IP и таблицам клиентов.
+Возвращает структуру без секретов:
 
-Алгоритм функции `resolve_mac_from_ip(ip)`:
+```json
+{
+  "current_time": "07.07.2026 17:00:00",
+  "sheepfold_version": "0.1.0-1",
+  "internet_status": "online",
+  "internet_reason": "WAN link up, DNS ok",
+  "ping_yandex_ms": 12,
+  "firmware_version": "OpenWrt 23.05.3",
+  "openwrt_release": "23.05.3",
+  "kernel_version": "5.15.150",
+  "router_model": "Xiaomi AX3000T",
+  "uptime": "3d 12h 05m",
+  "load_average": "0.12 0.10 0.08",
+  "memory": "128 MB / 512 MB",
+  "lan_ports_count": 3,
+  "lan_ports": "eth0, eth1, eth2",
+  "podkop_installed": "yes",
+  "podkop_version": "1.2.3",
+  "adguard_installed": "yes",
+  "adguard_version": "0.107.x",
+  "wifi_count": 2,
+  "wifi_1_name": "radio0",
+  "wifi_1_status": "enabled",
+  "wifi_1_band": "2.4 GHz",
+  "wifi_1_channel": "6",
+  "wifi_1_type": "mac80211",
+  "wifi_1_path": "platform/soc/...",
+  "wifi_1_country": "RU",
+  "wifi_1_mode": "Master"
+}
+```
 
-1. Получить IP клиента: `os.getenv("REMOTE_ADDR")` в CGI/Lua-обработчике.
-2. Попробовать через neighbor-таблицу:
-   ```sh
-   ip neigh show <IP> | awk '/lladdr/ {print $5}'
-   ```
-3. Если не найдено — попробовать через hostapd/Wi-Fi:
-   ```sh
-   ubus call hostapd.wlan0 get_clients
-   ```
-   Сопоставить IP/станцию и MAC.
-4. Нормализовать MAC: верхний регистр, формат `AA:BB:CC:DD:EE:FF`.
-5. Если MAC не найден — вернуть `nil` и ответить ошибкой `device_unknown`.
-
----
-
-## Нормализованная модель Device
-
-Источники данных (собираются и объединяются backend-ядром):
-
-- DHCP-аренды (`/var/dhcp.leases` или ubus)
-- Статические DHCP-записи (UCI)
-- ARP/neighbor (`ip neigh show`)
-- Wi-Fi клиенты (hostapd, iwinfo)
-- Внутренние списки Sheepfold (allowlist, blocklist, расписания, временные разрешения)
-
-## Расчёт статуса и приоритет правил
-
-Функция `compute_device_access(device, global_state, schedules, temporary_grants)`:
-
-Приоритет (от высшего к низшему):
-
-1. `Blocked` — всегда отключён, игнорирует всё остальное
-2. Активное временное разрешение (`temporary_grant`) — включает доступ до `accessEndsAt`
-3. `Allow` — всегда включён (если нет блокировки)
-4. Активное расписание (`Scheduled`) — включён в разрешённое окно
-5. `Restricted` — ограниченный доступ (только белый список доменов)
-6. Глобальное состояние интернета (`internetState`)
-7. `New` — устройство ещё не классифицировано
-
-## Временные окна и accessEndsAt
-
-| Тип | Расчёт accessEndsAt |
-|-----|--------------------|
-| `15m` / `30m` / `60m` | `startTime + duration` |
-| `end_of_day` | Сегодня 23:59:59 по локальному времени роутера |
-| `until_bedtime` | Время отбоя из семейной настройки |
-| Расписание | Конец ближайшего активного окна для текущего дня недели |
-| Постоянный Allow/Block | `null` |
+> **Запрещено** включать в ответ: пароли Wi-Fi, токены ботов/AI, имена детей, MAC-адреса устройств, списки клиентов.
 
 ---
 
-## Аутентификация
+## `/cgi-bin/sheepfold-api/client-status`
 
-### Родительский APK
+Endpoint для детского APK. Не требует токена администратора — идентифицирует устройство по IP из DHCP.
 
-- При первичной настройке — pairing через QR или одноразовый код.
-- Роутер выдаёт `deviceId` и `pairingToken`.
-- Все запросы идут с заголовком `X-Sheepfold-Token: <token>`.
-- Административные endpoint'ы (`/device/action`, `/internet/state`, `/ai/ask`) требуют валидный токен.
+Запрос: `GET /cgi-bin/sheepfold-api/client-status`
 
-### Детский APK
+Ответ:
+```json
+{
+  "status": "allowed",
+  "schedule_name": "Учебные дни",
+  "next_change_at": "20:30",
+  "warning_before_minutes": 5
+}
+```
 
-- Без авторизации пользователя.
-- Endpoint `/client-status` доступен только из локальной сети.
-- Никаких паролей, токенов и MAC не передаётся.
+Возможные значения `status`: `allowed`, `restricted`, `scheduled`, `blocked`.
+
+---
+
+## sheepfold-router-control
+
+Скрипт `/usr/libexec/sheepfold/sheepfold-router-control` — центральный исполнитель бэкенд-команд.
+
+### Вызов
+
+```sh
+/usr/libexec/sheepfold/sheepfold-router-control <команда> [аргументы...]
+```
+
+### Команды
+
+| Команда | Аргументы | Действие |
+|---|---|---|
+| `router-info` | — | Вывод диагностики key=value |
+| `led-apply` | — | Применить LED-настройки |
+| `site-lists-cron-apply` | — | Перепланировать cron обновления списков |
+| `activate-admin-pairing-code` | login code name ttl | Активировать одноразовый код |
+| `admin-pairing-status` | login since | Проверить статус сопряжения |
+| `device-allow` | mac | Добавить в allowlist |
+| `device-block` | mac | Добавить в blocklist |
+| `device-temp-access` | mac minutes | Временный доступ |
+| `global-block-on` | — | Включить глобальную блокировку |
+| `global-block-off` | — | Выключить глобальную блокировку |
+| `wifi-on` | — | Включить все Wi-Fi радио |
+| `wifi-off` | — | Выключить все Wi-Fi радио |
+| `reboot` | — | Перезагрузка (записывает запрос в файл) |
+| `update-check` | — | Проверить обновление |
+| `update-install` | — | Установить обновление |
+
+Вывод — построчные пары `key=value` или JSON (зависит от команды).
+
+---
+
+## UCI-конфиг `/etc/config/sheepfold`
+
+### Структура секций
+
+```uci
+config sheepfold 'global'
+  option app_port '5201'
+  option ui_asset_version '0.1.0-1'
+  option log_cache_path '/tmp/sheepfold/events.log'
+  option site_lists_update_interval 'daily'
+  option new_device_behavior 'allow'
+  option auto_configure '1'
+  option detection_mode 'full'
+  option wifi_auto_disable_mode 'never'
+  option wifi_auto_disable_time '23:00'
+  option router_led_control 'router_default'
+  option bedtime '22:00'
+  option active_messenger 'disabled'
+  option ai_provider 'gemini_free'
+
+config administrator 'owner'
+  option login 'SuperParent'
+  option name 'Родитель'
+  option role 'owner'
+
+config messenger_global 'messenger_global'
+  option telegram_token ''
+  option telegram_chat_id ''
+  option vk_token ''
+  option vk_community_id ''
+  option vk_admin_user_id ''
+
+config pairing_global 'pairing_global'
+  option discovery_file '/www/.well-known/sheepfold.json'
+```
+
+> Правило: в одном UCI-файле не должно быть двух секций с одним именем (например, двух `'global'`).
+> Используйте уникальные имена: `messenger_global`, `pairing_global`, `export_global`.
+
+---
+
+## Приоритеты правил доступа
+
+Порядок от наивысшего к низшему:
+
+1. **Blocklist** — блокирует всегда, ничто не переопределяет.
+2. **Allowlist** — обходит расписания, временный доступ, глобальную блокировку.
+3. **No restrictions** (группа) — обходит расписания и глобальную блокировку, но не blocklist.
+4. **Глобальная блокировка** — блокирует всех, кроме allowlist и No restrictions.
+5. **Временный доступ** — переопределяет расписания, но не blocklist.
+6. **Расписание** — применяется к устройствам, не охваченным выше.
+7. **По умолчанию** (`new_device_behavior`) — для новых устройств.
+
+---
+
+## Диагностическая цепочка интернет-соединения
+
+Проверяется последовательно:
+
+1. WAN link state через `ubus call network.interface.wan status`
+2. Default route / gateway (`ip route`)
+3. DNS — разрешение `ya.ru`, `gosuslugi.ru` (для России)
+4. HTTP(S) — лёгкий запрос к `ya.ru` (HEAD/GET)
+
+Если шаг 1–2 провален — статус `offline`.
+Если 3 провален — `limited` (интернет есть, DNS сломан).
+Если 4 провален — `limited` (HTTP заблокирован).
+
+> Не используйте `1.1.1.1`, `8.8.8.8`, `google.com` как единственные цели диагностики.
+
+---
+
+## Безопасность и ограничения
+
+- LuCI вызывает только `/usr/libexec/sheepfold/sheepfold-router-control` — не строит shell-команды динамически.
+- rpcd ACL явно перечисляет разрешённые файлы, UCI-конфиги и exec-пути.
+- Секреты (токены, ключи AI) никогда не попадают в `router-info`, журнал или QR-коды.
+- Ожидание в бэкенде (long poll, cron, update) не отображается в UI-комментариях как требование — оно закреплено здесь.
+- Журнал хранится в RAM (`/tmp/sheepfold/events.log`). При экспорте маскируются MAC-адреса и IP.
 
 ---
 
 ## Связанные документы
 
-- [`docs/android-config.ru.md`](./android-config.ru.md) — конфигурация Android-клиентов
-- [`docs/testing-cases.ru.md`](./testing-cases.ru.md) — тест-кейсы
-- [`docs/developer-task.ru.md`](./developer-task.ru.md) — задача разработчика
+- [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник эндпоинтов
+- [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента
+- [`docs/developer-task.ru.md`](developer-task.ru.md) — точка входа
+- [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) — плейбук для AI-агентов
+- [`docs/live-router-testing.ru.md`](live-router-testing.ru.md) — тестирование на живом роутере
