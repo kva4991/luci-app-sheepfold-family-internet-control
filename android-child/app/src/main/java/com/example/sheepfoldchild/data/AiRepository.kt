@@ -2,7 +2,6 @@ package com.example.sheepfoldchild.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -11,8 +10,6 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-
-private val Context.aiDataStore by preferencesDataStore(name = "child_ai_prefs")
 
 /**
  * Отправляет вопрос на фактический backend Sheepfold:
@@ -31,6 +28,7 @@ class AiRepository(private val context: Context) {
 
     suspend fun getRouterBaseUrl(): String? =
         context.aiDataStore.data.first()[KEY_ROUTER_URL]
+            ?: context.clientDataStore.data.first()[KEY_ROUTER_URL]
 
     suspend fun ask(
         baseUrl: String,
