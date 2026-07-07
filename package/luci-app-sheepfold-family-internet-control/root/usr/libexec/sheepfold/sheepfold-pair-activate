@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+. /usr/libexec/sheepfold/sheepfold-pair-common
+
+login="${1:-}"
+code="${2:-}"
+lifetime="${4:-600}"
+
+pair_validate_login_code "$login" "$code"
+case "$lifetime" in ''|*[!0-9]*) lifetime=600 ;; esac
+[ "$lifetime" -ge 60 ] || lifetime=60
+[ "$lifetime" -le 1800 ] || lifetime=1800
+
+admin_section="$(pair_admin_section_for_login "$login")" || {
+    echo "Administrator login was not found. Create the account in LuCI first." >&2
+    exit 2
+}
+pair_acquire_admin_lock "$admin_section"
+
+expires_at=$(( $(date +%s) + lifetime ))
+uci -q set "sheepfold.$admin_section.pairing_code=$code"
+uci -q set "sheepfold.$admin_section.pairing_code_expires=$expires_at"
+uci -q commit sheepfold
+
+pair_print_kv activated 1
+pair_print_kv admin_section "$admin_section"
+pair_print_kv expires_at "$expires_at"
