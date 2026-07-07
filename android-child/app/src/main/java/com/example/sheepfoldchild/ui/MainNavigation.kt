@@ -1,28 +1,31 @@
 package com.example.sheepfoldchild.ui
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sheepfoldchild.R
+import com.example.sheepfoldchild.data.AiRepository
 import com.example.sheepfoldchild.viewmodel.AiChatViewModel
-import com.example.sheepfoldchild.viewmodel.AiChatViewModelFactory
 import com.example.sheepfoldchild.viewmodel.ChildStatusViewModel
 
-/**
- * Bottom navigation: Статус / Мой доступ / ИИ-помощник
- */
+/** Bottom navigation: Статус / Мой доступ / ИИ-помощник. */
 @Composable
 fun MainNavigation(statusViewModel: ChildStatusViewModel, appContext: android.content.Context) {
-    val aiVm: AiChatViewModel = viewModel(factory = AiChatViewModelFactory(appContext))
+    val applicationContext = appContext.applicationContext
+    val aiViewModel = remember(applicationContext) {
+        AiChatViewModel(AiRepository(applicationContext), applicationContext)
+    }
 
-    // Синхронизируем статус в AiViewModel при каждом обновлении
     val latestStatus = statusViewModel.latestStatus
-    LaunchedEffect(latestStatus) { aiVm.currentStatus = latestStatus }
+    LaunchedEffect(latestStatus) { aiViewModel.currentStatus = latestStatus }
 
     var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -32,28 +35,28 @@ fun MainNavigation(statusViewModel: ChildStatusViewModel, appContext: android.co
                 NavigationBarItem(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    icon = { Icon(Icons.Default.Home, null) },
+                    icon = { Text("●") },
                     label = { Text(stringResource(R.string.tab_status)) }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    icon = { Icon(Icons.Default.Lock, null) },
+                    icon = { Text("◷") },
                     label = { Text(stringResource(R.string.tab_access)) }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    icon = { Icon(Icons.Default.ChatBubble, null) },
+                    icon = { Text("AI") },
                     label = { Text(stringResource(R.string.tab_ai)) }
                 )
             }
         }
-    ) { padding ->
+    ) { _ ->
         when (selectedTab) {
             0 -> ChildStatusScreen(viewModel = statusViewModel)
             1 -> AccessInfoScreen(status = latestStatus)
-            2 -> AiChatScreen(viewModel = aiVm)
+            2 -> AiChatScreen(viewModel = aiViewModel)
         }
     }
 }
