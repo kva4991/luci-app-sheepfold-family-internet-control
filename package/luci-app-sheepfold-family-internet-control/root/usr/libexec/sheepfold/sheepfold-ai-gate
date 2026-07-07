@@ -114,6 +114,13 @@ body="$(cat)"
 [ "$(uci -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)" = 1 ] || \
     reject "503 Service Unavailable" ai_disabled "AI assistant is disabled on the router."
 
+admin_request=0
+is_admin_request && admin_request=1
+client_marker="${HTTP_X_SHEEPFOLD_CLIENT:-}"
+if [ "$admin_request" != 1 ] && [ "$client_marker" != "android-child-v1" ]; then
+    reject "403 Forbidden" client_header_required "A trusted Sheepfold client header is required."
+fi
+
 remote_ip="${REMOTE_ADDR:-}"
 mac="$(mac_for_ip "$remote_ip")"
 valid_mac "$mac" || reject "403 Forbidden" device_not_resolved "The router could not identify this LAN device."
@@ -127,7 +134,7 @@ provider="$(form_get provider "$body")"
 model="$(form_get model "$body")"
 
 if [ "$include_info" = 1 ] || [ "$include_logs" = 1 ] || [ -n "$google_account" ] || [ -n "$provider" ] || [ -n "$model" ]; then
-    is_admin_request || reject "403 Forbidden" privileged_context_forbidden "Diagnostics, logs, account data, and provider overrides require an administrator token."
+    [ "$admin_request" = 1 ] || reject "403 Forbidden" privileged_context_forbidden "Diagnostics, logs, account data, and provider overrides require an administrator token."
 fi
 
 if [ "$include_logs" = 1 ] && [ "$(uci -q get sheepfold.global.ai_individual_logs 2>/dev/null || printf 0)" != 1 ]; then
