@@ -1,0 +1,47 @@
+#!/bin/sh
+set -eu
+
+uci_disable_logs() {
+    uci -q set sheepfold.global.ai_individual_logs='0' 2>/dev/null || true
+    uci -q commit sheepfold 2>/dev/null || true
+}
+
+openssl_works() {
+    command -v openssl >/dev/null 2>&1 || return 1
+    openssl version >/dev/null 2>&1 || return 1
+    probe="/tmp/sheepfold-openssl-probe.$$"
+    umask 077
+    if ! printf 'sheepfold' | openssl enc -aes-256-cbc -pbkdf2 -salt \
+        -pass pass:sheepfold-probe -out "$probe" >/dev/null 2>&1; then
+        rm -f "$probe"
+        return 1
+    fi
+    rm -f "$probe"
+    return 0
+}
+
+if ! openssl_works; then
+    if ! command -v opkg >/dev/null 2>&1; then
+        uci_disable_logs
+        echo "opkg is unavailable; OpenSSL could not be installed." >&2
+        exit 1
+    fi
+
+    opkg update >/dev/null 2>&1 || true
+    opkg install openssl-util >/dev/null 2>&1 || \
+        opkg install openssl >/dev/null 2>&1 || true
+fi
+
+if ! openssl_works; then
+    uci_disable_logs
+    echo "OpenSSL installation or verification failed; individual AI logs were disabled." >&2
+    exit 1
+fi
+
+if ! /usr/libexec/sheepfold/sheepfold-key-derive >/dev/null 2>&1; then
+    uci_disable_logs
+    echo "Archive key initialization failed; individual AI logs were disabled." >&2
+    exit 1
+fi
+
+printf 'ok\n'
