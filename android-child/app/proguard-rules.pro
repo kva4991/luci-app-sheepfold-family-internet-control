@@ -1,0 +1,1 @@
+# SheepfoldChild proguard rules

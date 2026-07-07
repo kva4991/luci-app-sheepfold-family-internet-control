@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sheepfold — статус</string>
+    <string name="status_enabled">Интернет включён</string>
+    <string name="status_disabled">Интернет отключён</string>
+    <string name="status_unknown">Статус неизвестен</string>
+    <string name="status_no_connection">Нет связи с роутером</string>
+    <string name="access_mode_allowlist">Белый список</string>
+    <string name="access_mode_blocked">Родительский контроль</string>
+    <string name="access_mode_scheduled">По расписанию</string>
+    <string name="access_mode_temporary">Временный доступ</string>
+    <string name="access_mode_restricted">Ограниченный доступ</string>
+    <string name="access_mode_unknown">Режим неизвестен</string>
+    <string name="time_remaining">Осталось %1$d мин</string>
+    <string name="ends_at">Доступ до %1$s</string>
+    <string name="btn_refresh">Обновить</string>
+    <string name="setup_title">Настройка</string>
+    <string name="setup_hint">Введите адрес роутера (например: http://192.168.1.1)</string>
+    <string name="setup_save">Сохранить</string>
+    <string name="notif_channel_name">Окончание доступа</string>
+    <string name="notif_channel_desc">Уведомление за 5 минут до отключения интернета</string>
+    <string name="notif_title">Интернет скоро отключится</string>
+    <string name="notif_text">Осталось около 5 минут. Сохрани всё важное.</string>
+    <string name="error_device_unknown">Роутер не смог определить ваше устройство. Проверьте подключение к домашнему Wi-Fi.</string>
+    <string name="error_network">Нет подключения к сети.</string>
+    <string name="error_generic">Не удалось получить статус. Попробуйте обновить.</string>
+    <string name="last_updated">Обновлено: %1$s</string>
+</resources>
