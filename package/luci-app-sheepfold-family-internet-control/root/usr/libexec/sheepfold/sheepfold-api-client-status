@@ -13,8 +13,7 @@ kv_get() {
 header_json() {
     printf 'Status: %s\r\n' "$1"
     printf 'Content-Type: application/json; charset=utf-8\r\n'
-    printf 'Cache-Control: no-store\r\n'
-    printf 'Access-Control-Allow-Origin: *\r\n\r\n'
+    printf 'Cache-Control: no-store\r\n\r\n'
 }
 
 remote_ip="${REMOTE_ADDR:-${1:-}}"
@@ -62,7 +61,6 @@ case "$status" in
         ;;
 esac
 
-# Имя устройства ищем сначала в UCI по IP, затем в DHCP-аренде.
 device_name=""
 for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
     [ "$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)" = "$remote_ip" ] || continue
