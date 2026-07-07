@@ -72,17 +72,20 @@ return view.extend({
 
 		var renderAdvanced = s.render;
 		var parseAdvanced = s.parse;
+		var advancedWasRendered = false;
 		s.render = function() {
 			if (!hasConfiguredProvider()) {
+				advancedWasRendered = false;
 				return E('div', { 'class': 'cbi-section' }, [
 					E('p', { 'class': 'alert-message notice' },
 						_('Сохраните API-ключ выбранного провайдера. После сохранения эта форма автоматически покажет включение помощника, лимиты запросов и настройку индивидуальных журналов.'))
 				]);
 			}
+			advancedWasRendered = true;
 			return renderAdvanced.apply(this, arguments);
 		};
 		s.parse = function() {
-			if (!hasConfiguredProvider())
+			if (!advancedWasRendered)
 				return Promise.resolve();
 			return parseAdvanced.apply(this, arguments);
 		};
