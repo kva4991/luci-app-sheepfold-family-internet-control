@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=115
+PKG_RELEASE:=116
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -13,6 +13,10 @@ LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +uclient-fetch +ca-bundle +uhttpd
 
 define Package/$(PKG_NAME)/postinst
 #!/bin/sh
+hardener="$${IPKG_INSTROOT}/usr/libexec/sheepfold/sheepfold-runtime-hardening"
+if [ -f "$$hardener" ]; then
+	/bin/sh "$$hardener" "$${IPKG_INSTROOT}" || exit 1
+fi
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 repair_sheepfold_uci_sections() {
 	mkdir -p /etc/config
@@ -57,8 +61,12 @@ ensure_global_option detector_min_no_restrictions_confidence '80'
 ensure_global_option detector_nmap_host_timeout_seconds '20'
 ensure_global_option update_check_install_mode 'weekly'
 ensure_global_option active_messenger 'none'
+ensure_global_option ai_enabled '0'
 ensure_global_option ai_provider 'deepseek'
-ensure_global_option deepseek_model 'deepseek-v4-flash'
+ensure_global_option ai_rate_limit_requests '20'
+ensure_global_option ai_rate_limit_window_seconds '3600'
+ensure_global_option ai_individual_logs '0'
+ensure_global_option deepseek_model 'deepseek-chat'
 ensure_global_option deepseek_api_url 'https://api.deepseek.com/chat/completions'
 ensure_global_option deepseek_api_key ''
 ensure_global_option gemini_model 'gemini-2.5-flash'
@@ -99,6 +107,14 @@ ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
 ensure_global_option log_storage 'ram'
 ensure_global_option log_cache_path '/tmp/sheepfold/events.log'
+uci -q get sheepfold.pairing_global >/dev/null || uci -q set sheepfold.pairing_global='pairing'
+ensure_pairing_option() {
+	option="$$1"
+	value="$$2"
+	[ -n "$$(uci -q get sheepfold.pairing_global.$$option 2>/dev/null)" ] || uci -q set sheepfold.pairing_global.$$option="$$value"
+}
+ensure_pairing_option max_attempts '10'
+ensure_pairing_option attempt_window_seconds '600'
 uci -q get sheepfold.no_restrictions >/dev/null || uci -q set sheepfold.no_restrictions='group'
 uci -q set sheepfold.no_restrictions.name='Без ограничений'
 uci -q set sheepfold.no_restrictions.protected='1'
@@ -150,7 +166,19 @@ if [ "$$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null)" != 
 fi
 uci -q set sheepfold.global.ui_asset_version='$(SHEEPFOLD_UI_ASSET_VERSION)'
 uci -q commit sheepfold
-chmod 0755 /usr/libexec/sheepfold/sheepfold-site-lists 2>/dev/null || true
+for helper in \
+	/usr/libexec/sheepfold/sheepfold-site-lists \
+	/usr/libexec/sheepfold/sheepfold-api-client-status \
+	/usr/libexec/sheepfold/sheepfold-api-pair \
+	/usr/libexec/sheepfold/sheepfold-ai-gate \
+	/usr/libexec/sheepfold/sheepfold-key-derive \
+	/usr/libexec/sheepfold/sheepfold-openssl-ensure \
+	/usr/libexec/sheepfold/sheepfold-runtime-hardening; do
+	chmod 0755 "$$helper" 2>/dev/null || true
+done
+if [ "$$(uci -q get sheepfold.global.ai_individual_logs 2>/dev/null)" = "1" ]; then
+	/usr/libexec/sheepfold/sheepfold-openssl-ensure >/dev/null 2>&1 || true
+fi
 app_port="$$(uci -q get sheepfold.global.app_port 2>/dev/null || printf 5201)"
 mkdir -p /www/.well-known
 cat > /www/.well-known/sheepfold.json <<EOF
