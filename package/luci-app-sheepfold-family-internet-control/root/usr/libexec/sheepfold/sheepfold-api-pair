@@ -124,9 +124,11 @@ if [ "${REQUEST_METHOD:-POST}" != "POST" ]; then
     exit 0
 fi
 
-# HTML-форма с чужого сайта не умеет установить этот заголовок. Fetch с ним
-# требует CORS preflight, а публичный CGI не выдаёт разрешающих CORS-заголовков.
-if [ "${HTTP_X_SHEEPFOLD_CLIENT:-}" != "android-admin-v1" ]; then
+# HTML-форма с чужого сайта не умеет установить произвольный X-заголовок,
+# а браузерный JavaScript не может подменить User-Agent. Новый клиент использует
+# X-Sheepfold-Client, предыдущая Android-версия совместима по своему User-Agent.
+if [ "${HTTP_X_SHEEPFOLD_CLIENT:-}" != "android-admin-v1" ] && \
+   [ "${HTTP_USER_AGENT:-}" != "Sheepfold Android" ]; then
     header_json "403 Forbidden"
     printf '{"app":"sheepfold","ok":false,"paired":false,"error":"client_header_required"}\n'
     exit 0
