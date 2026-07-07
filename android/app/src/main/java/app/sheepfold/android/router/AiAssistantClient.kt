@@ -41,6 +41,7 @@ object AiAssistantClient {
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("User-Agent", "Sheepfold Android")
+            connection.setRequestProperty("X-Sheepfold-Client", "android-admin-v1")
             request.connection.bearerToken?.takeIf { it.isNotBlank() }?.let { token ->
                 connection.setRequestProperty("Authorization", "Bearer $token")
             }
