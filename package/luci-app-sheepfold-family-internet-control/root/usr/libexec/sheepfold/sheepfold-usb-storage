@@ -5,12 +5,13 @@
 #
 # Схема ключа шифрования:
 #
-#   /etc/sheepfold/.kp        — частьный ключ (флэш, chmod 600)
-#   APP_SALT                  — соль внутри sheepfold-key-derive (chmod 700)
-#   FINAL_KEY                 = sha256(.kp + ":" + APP_SALT)
+#   /etc/sheepfold/.kp        — случайная часть ключа (chmod 600)
+#   /etc/sheepfold/.app_salt  — отдельная случайная соль (chmod 600)
+#   FINAL_KEY                 = sha256(.kp + ":" + .app_salt)
 #
-#   /etc/sheepfold/.usb_key   — ПРИМАНКА. Читается root по SSH,
-#                               но для расшифровки бесполезен.
+# Оба файла создаются атомарно sheepfold-key-derive и сохраняются при
+# обновлении пакета. Если OpenSSL недоступен, шифрование завершается ошибкой:
+# незашифрованный архив никогда не маскируется расширением .enc.
 #
 # UCI (sheepfold.usb.*):
 #   device        — /dev/sda1
@@ -50,30 +51,69 @@ max_log_pct() {
     esac
 }
 
-# Получить итоговый ключ через key-derive и кэшировать в /tmp
+valid_key() {
+    [ ${#1} -eq 64 ] && printf '%s' "$1" | grep -Eq '^[0-9a-fA-F]{64}$'
+}
+
+# Получить итоговый ключ через key-derive и кэшировать только в tmpfs.
 get_key() {
-    if [ ! -f "$RUNTIME_KEY" ]; then
-        mkdir -p "$(dirname "$RUNTIME_KEY")"
-        chmod 700 "$(dirname "$RUNTIME_KEY")"
-        "$KEY_DERIVE" > "$RUNTIME_KEY" 2>/dev/null
-        chmod 600 "$RUNTIME_KEY"
+    if [ -s "$RUNTIME_KEY" ]; then
+        CACHED_KEY="$(cat "$RUNTIME_KEY" 2>/dev/null || true)"
+        if valid_key "$CACHED_KEY"; then
+            printf '%s' "$CACHED_KEY"
+            return 0
+        fi
+        rm -f "$RUNTIME_KEY"
     fi
-    cat "$RUNTIME_KEY"
+
+    [ -x "$KEY_DERIVE" ] || {
+        echo "Sheepfold key derivation helper is unavailable." >&2
+        return 1
+    }
+    KEY_HEX="$($KEY_DERIVE)" || return 1
+    valid_key "$KEY_HEX" || {
+        echo "Sheepfold key derivation returned invalid data." >&2
+        return 1
+    }
+
+    mkdir -p "$(dirname "$RUNTIME_KEY")"
+    chmod 700 "$(dirname "$RUNTIME_KEY")"
+    umask 077
+    TMP_KEY="$RUNTIME_KEY.tmp.$$"
+    printf '%s' "$KEY_HEX" > "$TMP_KEY"
+    chmod 600 "$TMP_KEY"
+    mv -f "$TMP_KEY" "$RUNTIME_KEY"
+    printf '%s' "$KEY_HEX"
 }
 
 encrypt_archive() {
-    SRC="$1"; DST="${SRC}.enc"
-    if command -v openssl >/dev/null 2>&1; then
-        # Передаём ключ через stdin, не через файл — в ps не видно
-        KEY_HEX=$(get_key)
-        printf '%s' "$KEY_HEX" | \
-            openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
-                -pass stdin -in "$SRC" -out "$DST" 2>/dev/null
-    else
-        # openssl нет — копируем без шифрования (UI должен предупредить)
-        cp "$SRC" "$DST"
+    SRC="$1"
+    DST="${SRC}.enc"
+    TMP_DST="${DST}.tmp.$$"
+
+    command -v openssl >/dev/null 2>&1 || {
+        echo "OpenSSL is required; refusing to write an unencrypted .enc archive." >&2
+        return 1
+    }
+    KEY_HEX="$(get_key)" || return 1
+    rm -f "$TMP_DST"
+
+    if ! printf '%s' "$KEY_HEX" | \
+        openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
+            -pass stdin -in "$SRC" -out "$TMP_DST" 2>/dev/null; then
+        rm -f "$TMP_DST"
+        echo "Archive encryption failed." >&2
+        return 1
     fi
-    echo "$DST"
+
+    [ -s "$TMP_DST" ] || {
+        rm -f "$TMP_DST"
+        echo "Archive encryption produced an empty file." >&2
+        return 1
+    }
+    chmod 600 "$TMP_DST"
+    mv -f "$TMP_DST" "$DST"
+    printf '%s\n' "$DST"
 }
 
 # -- scan -----------------------------------------------------------------
@@ -153,7 +193,7 @@ cmd_mount() {
 cmd_umount() {
     is_mounted || { printf '{"ok":true,"already":true}\n'; return 0; }
     [ -f "$SWAP_FILE" ] && swapoff "$SWAP_FILE" 2>/dev/null || true
-    rm -f "$RUNTIME_KEY" 2>/dev/null || true  # сбрасываем кэш ключа при отключении
+    rm -f "$RUNTIME_KEY" 2>/dev/null || true
     umount "$MOUNT_POINT" 2>/dev/null && printf '{"ok":true}\n' || printf '{"error":"umount_failed"}\n'
 }
 
@@ -163,14 +203,17 @@ cmd_status() {
     DEV=$(uci_get device '')
     ROLE=$(uci_get role logs_only)
     ENCRYPT=$(uci_get encrypt 1)
-    KEY_READY=0; [ -x "$KEY_DERIVE" ] && KEY_READY=1
+    KEY_READY=0
+    if command -v openssl >/dev/null 2>&1 && [ -x "$KEY_DERIVE" ] && "$KEY_DERIVE" >/dev/null 2>&1; then
+        KEY_READY=1
+    fi
     MOUNTED=0; is_mounted && MOUNTED=1
     FREE_PCT=0; USED_KB=0; TOTAL_KB=0; ARCHIVES=0
     if [ "$MOUNTED" = 1 ]; then
         FREE_PCT=$(get_free_pct "$MOUNT_POINT")
         USED_KB=$(du -sk "$USB_LOG_DIR" 2>/dev/null | awk '{print $1}' || echo 0)
         TOTAL_KB=$(df -k "$MOUNT_POINT" 2>/dev/null | awk 'NR==2{print $2}' || echo 0)
-        ARCHIVES=$(find "$USB_LOG_DIR" -name '*.enc' -o -name '*.tar.gz' -o -name '*.tar' 2>/dev/null | wc -l | tr -d ' ')
+        ARCHIVES=$(find "$USB_LOG_DIR" \( -name '*.enc' -o -name '*.tar.gz' -o -name '*.tar' \) -type f 2>/dev/null | wc -l | tr -d ' ')
     fi
     printf '{"enabled":%s,"dev":"%s","role":"%s","encrypt":%s,"key_ready":%d,"mounted":%d,"free_pct":%s,"used_kb":%s,"total_kb":%s,"archives":%s,"max_log_pct":%s}\n' \
         "$ENABLED" "$DEV" "$ROLE" "$ENCRYPT" "$KEY_READY" "$MOUNTED" "$FREE_PCT" "$USED_KB" "$TOTAL_KB" "$ARCHIVES" "$(max_log_pct)"
@@ -200,7 +243,11 @@ cmd_archive_push() {
         fi
         PUSHED=$((PUSHED+1))
     done
-    printf '{"ok":true,"pushed":%d,"errors":%d}\n' "$PUSHED" "$ERRORS"
+    if [ "$ERRORS" -gt 0 ]; then
+        printf '{"ok":false,"pushed":%d,"errors":%d,"error":"encryption_failed"}\n' "$PUSHED" "$ERRORS"
+        return 1
+    fi
+    printf '{"ok":true,"pushed":%d,"errors":0}\n' "$PUSHED"
 }
 
 # -- setup-swap -----------------------------------------------------------
