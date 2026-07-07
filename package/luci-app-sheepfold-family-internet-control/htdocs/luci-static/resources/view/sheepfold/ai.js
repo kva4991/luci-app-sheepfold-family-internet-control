@@ -11,11 +11,14 @@ return view.extend({
 	},
 
 	render: function() {
-		var provider = uci.get('sheepfold', 'global', 'ai_provider') || 'deepseek';
-		var configured = !!(
-			(provider === 'gemini' && uci.get('sheepfold', 'global', 'gemini_api_key')) ||
-			(provider !== 'gemini' && uci.get('sheepfold', 'global', 'deepseek_api_key'))
-		);
+		var hasConfiguredProvider = function() {
+			var provider = uci.get('sheepfold', 'global', 'ai_provider') || 'deepseek';
+			var key = provider === 'gemini'
+				? uci.get('sheepfold', 'global', 'gemini_api_key')
+				: uci.get('sheepfold', 'global', 'deepseek_api_key');
+			return !!String(key || '').trim();
+		};
+
 		var m = new form.Map('sheepfold', _('ИИ помощник'),
 			_('Ключ провайдера хранится только на роутере. Обычные LAN-устройства могут задавать вопросы, но их запросы ограничиваются по MAC-адресу. Диагностика и журналы доступны только с токеном администратора.'));
 		var s = m.section(form.NamedSection, 'global', 'sheepfold', _('Подключение к провайдеру'));
@@ -64,20 +67,25 @@ return view.extend({
 				uci.set('sheepfold', sectionId, 'ai_enabled', '1');
 		};
 
-		if (!configured) {
-			s = m.section(form.TypedSection, '_ai_hint');
-			s.anonymous = true;
-			s.render = function() {
-				return E('div', { 'class': 'cbi-section' }, [
-					E('p', { 'class': 'alert-message notice' },
-						_('Сохраните API-ключ выбранного провайдера. После сохранения появятся включение помощника, лимиты запросов и настройка индивидуальных журналов.'))
-				]);
-			};
-			return m.render();
-		}
-
 		s = m.section(form.NamedSection, 'global', 'sheepfold', _('Доступ и ограничения'));
 		s.anonymous = true;
+
+		var renderAdvanced = s.render;
+		var parseAdvanced = s.parse;
+		s.render = function() {
+			if (!hasConfiguredProvider()) {
+				return E('div', { 'class': 'cbi-section' }, [
+					E('p', { 'class': 'alert-message notice' },
+						_('Сохраните API-ключ выбранного провайдера. После сохранения эта форма автоматически покажет включение помощника, лимиты запросов и настройку индивидуальных журналов.'))
+				]);
+			}
+			return renderAdvanced.apply(this, arguments);
+		};
+		s.parse = function() {
+			if (!hasConfiguredProvider())
+				return Promise.resolve();
+			return parseAdvanced.apply(this, arguments);
+		};
 
 		o = s.option(form.Flag, 'ai_enabled', _('Включить ИИ помощника'));
 		o.default = '1';
