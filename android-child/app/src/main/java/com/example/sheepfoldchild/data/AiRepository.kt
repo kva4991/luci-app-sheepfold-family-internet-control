@@ -36,15 +36,17 @@ class AiRepository(private val context: Context) {
         status: ClientStatusData?,
         history: List<ChatMessage>
     ): Result<String> = withContext(Dispatchers.IO) {
+        var conn: HttpURLConnection? = null
         try {
             val url = URL("${baseUrl.trimEnd('/')}$AI_ENDPOINT")
-            val conn = url.openConnection() as HttpURLConnection
+            conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.doOutput = true
             conn.connectTimeout = TIMEOUT_MS
             conn.readTimeout = TIMEOUT_MS
             conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("X-Sheepfold-Client", "android-child-v1")
 
             val prompt = buildPrompt(question, status, history)
             val body = "message=${URLEncoder.encode(prompt, Charsets.UTF_8.name())}"
@@ -55,7 +57,6 @@ class AiRepository(private val context: Context) {
                 ?.bufferedReader(Charsets.UTF_8)
                 ?.use { it.readText() }
                 .orEmpty()
-            conn.disconnect()
 
             if (code !in 200..299) {
                 return@withContext Result.failure(Exception(extractError(responseBody, code)))
@@ -66,6 +67,8 @@ class AiRepository(private val context: Context) {
             Result.success(answer)
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            conn?.disconnect()
         }
     }
 
