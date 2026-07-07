@@ -29,11 +29,14 @@ if [ "$method" = "OPTIONS" ]; then
     exit 0
 fi
 
+# Выпуск pairing-кода не является частью публичного HTTP API.
+if [ "$path_info" = "/pair-token" ]; then
+    header_json "404 Not Found"
+    printf '{"app":"sheepfold","ok":false,"error":"unknown_action"}\n'
+    exit 0
+fi
+
 case "$path_info" in
-    /pair-token)
-        header_json "404 Not Found"
-        printf '{"app":"sheepfold","ok":false,"error":"unknown_action"}\n'
-        ;;
     /pair)
         [ "$method" = "POST" ] || method_not_allowed
         exec "$PAIR"
