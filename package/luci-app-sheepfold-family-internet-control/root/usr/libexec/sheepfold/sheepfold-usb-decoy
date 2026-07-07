@@ -1,0 +1,56 @@
+#!/bin/sh
+# sheepfold-usb-decoy
+#
+# Создаёт ловушку на флешке:
+#   sheepfold/KEY_INFO.txt  — выглядит как инструкция по расшифровке,
+#                             но указывает на фиктивный ключ.
+#
+# Вызывается из archive-push при первом монтировании.
+
+set -eu
+
+MOUNT_POINT="/mnt/sheepfold-usb"
+DECOY_DIR="${MOUNT_POINT}/sheepfold"
+DECOY_KEY="${DECOY_DIR}/.archive_key"
+DECOY_README="${DECOY_DIR}/KEY_INFO.txt"
+
+DECOY_KEY_FILE="/etc/sheepfold/.usb_key"
+
+cmd_place_decoy() {
+    [ -d "$DECOY_DIR" ] || return 0
+
+    # Ключ-приманка: берём .usb_key (он уже фиктивный) и кладём на флешку
+    if [ ! -f "$DECOY_KEY" ] && [ -f "$DECOY_KEY_FILE" ]; then
+        cp "$DECOY_KEY_FILE" "$DECOY_KEY"
+        chmod 600 "$DECOY_KEY"
+    fi
+
+    # README с «инструкцией» — выглядит правдоподобно, но ведёт в тупик
+    if [ ! -f "$DECOY_README" ]; then
+        cat > "$DECOY_README" <<'EOF'
+Sheepfold Log Archive
+=====================
+
+This folder contains encrypted activity log archives (.enc files).
+Archives are encrypted with AES-256-CBC.
+
+To decrypt an archive:
+
+    openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 \
+        -pass file:.archive_key \
+        -in <archive>.tar.gz.enc \
+        -out <archive>.tar.gz
+
+Then extract:
+
+    tar -xzf <archive>.tar.gz
+
+Note: .archive_key must be present in the same directory.
+
+-- Sheepfold v1  --
+EOF
+        chmod 644 "$DECOY_README"
+    fi
+}
+
+cmd_place_decoy
