@@ -6,41 +6,32 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
-private val Context.aiDataStore by preferencesDataStore(name = "child_prefs")
+private val Context.aiDataStore by preferencesDataStore(name = "child_ai_prefs")
 
 /**
- * Отправляет вопрос ребёнка на backend роутера (POST /cgi-bin/sheepfold-api/ai/ask).
+ * Отправляет вопрос на фактический backend Sheepfold:
+ * POST /cgi-bin/sheepfold-api/ai-assistant, application/x-www-form-urlencoded.
  *
- * Все запросы ребёнка автоматически дополняются системным контекстом:
- *   «Клиент [deviceName], IP: [ip], MAC: [mac], режим: [accessMode],
- *    интернет: [internetState], доступ до: [accessEndsAt]»
- *
- * MAC и IP определяются на роутере по REMOTE_ADDR — клиент не передаёт их явно.
- * Чтобы backend получил эти данные, ViewModel передаёт поля из /client-status
- * в поле contextData, а backend подставляет их в системный промпт.
+ * Провайдер и модель выбираются только на роутере. Детское приложение не
+ * запрашивает диагностику или журналы и поэтому не нуждается в токене админа.
  */
 class AiRepository(private val context: Context) {
 
     companion object {
         private val KEY_ROUTER_URL = stringPreferencesKey("router_base_url")
-        private const val AI_ENDPOINT = "/cgi-bin/sheepfold-api/ai/ask"
+        private const val AI_ENDPOINT = "/cgi-bin/sheepfold-api/ai-assistant"
         private const val TIMEOUT_MS = 30_000
     }
 
     suspend fun getRouterBaseUrl(): String? =
         context.aiDataStore.data.first()[KEY_ROUTER_URL]
 
-    /**
-     * @param question  Вопрос от ребёнка
-     * @param status    Последний полученный статус устройства (из /client-status)
-     * @param history   Предыдущие сообщения [{ "role": "user/assistant", "content": "..." }]
-     */
     suspend fun ask(
         baseUrl: String,
         question: String,
@@ -54,69 +45,101 @@ class AiRepository(private val context: Context) {
             conn.doOutput = true
             conn.connectTimeout = TIMEOUT_MS
             conn.readTimeout = TIMEOUT_MS
-            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             conn.setRequestProperty("Accept", "application/json")
 
-            // Системный контекст о клиенте — добавляется автоматически к каждому запросу
-            val clientContext = buildClientContext(status)
-
-            val historyArray = JSONArray().apply {
-                history.forEach { msg ->
-                    put(JSONObject().apply {
-                        put("role", msg.role)
-                        put("content", msg.content)
-                    })
-                }
-            }
-
-            val body = JSONObject().apply {
-                put("question", question)
-                put("clientContext", clientContext) // backend добавляет это в системный промпт
-                put("contextFlags", JSONArray().apply { put("client_status") })
-                put("history", historyArray)
-            }.toString()
-
-            OutputStreamWriter(conn.outputStream).use { it.write(body) }
+            val prompt = buildPrompt(question, status, history)
+            val body = "message=${URLEncoder.encode(prompt, Charsets.UTF_8.name())}"
+            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body) }
 
             val code = conn.responseCode
-            val responseBody = conn.inputStream.bufferedReader().readText()
+            val responseBody = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader(Charsets.UTF_8)
+                ?.use { it.readText() }
+                .orEmpty()
             conn.disconnect()
 
-            if (code != 200) return@withContext Result.failure(Exception("HTTP $code"))
-
-            val root = JSONObject(responseBody)
-            if (!root.optBoolean("ok", false)) {
-                val msg = root.optJSONObject("error")?.optString("message") ?: "Ошибка AI"
-                return@withContext Result.failure(Exception(msg))
+            if (code !in 200..299) {
+                return@withContext Result.failure(Exception(extractError(responseBody, code)))
             }
-            val answer = root.optJSONObject("data")?.optString("answer")
-                ?: return@withContext Result.failure(Exception("Пустой ответ"))
 
+            val answer = extractAnswer(responseBody)
+                ?: return@withContext Result.failure(Exception("Провайдер вернул пустой ответ"))
             Result.success(answer)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    /**
-     * Строит строку-контекст, которую backend вставляет в системный промпт AI.
-     * Пример: «Клиент Телефон Маши, режим: scheduled, интернет: enabled,
-     *           осталось 27 мин, доступ до 21:00»
-     * MAC и IP добавляются backend-ом из REMOTE_ADDR — не передаются клиентом.
-     */
-    private fun buildClientContext(status: ClientStatusData?): String {
-        if (status == null) return "Статус устройства неизвестен."
-        val sb = StringBuilder()
-        status.deviceName?.let { sb.append("Клиент: $it. ") }
-        sb.append("Интернет: ${status.internetState}. ")
-        status.accessMode?.let { sb.append("Режим доступа: $it. ") }
-        status.minutesRemaining?.let { sb.append("Осталось: $it мин. ") }
-        status.accessEndsAt?.let {
-            try { sb.append("Доступ до: ${it.substring(11, 16)}. ") } catch (_: Exception) {}
+    private fun buildPrompt(
+        question: String,
+        status: ClientStatusData?,
+        history: List<ChatMessage>
+    ): String {
+        val result = StringBuilder()
+        val recentHistory = history.takeLast(8)
+        if (recentHistory.isNotEmpty()) {
+            result.append("Предыдущий разговор:\n")
+            recentHistory.forEach { message ->
+                val role = if (message.role == "assistant") "Помощник" else "Пользователь"
+                result.append(role).append(": ").append(message.content.take(800)).append('\n')
+            }
+            result.append('\n')
         }
-        status.message?.let { sb.append("Сообщение роутера: $it") }
-        return sb.toString().trim()
+        result.append("Контекст устройства: ").append(buildClientContext(status)).append("\n\n")
+        result.append("Вопрос: ").append(question.trim())
+        return result.toString().take(12_000)
+    }
+
+    private fun extractAnswer(json: String): String? {
+        val root = JSONObject(json)
+
+        root.optJSONObject("data")?.optString("answer")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        root.optJSONArray("choices")
+            ?.optJSONObject(0)
+            ?.optJSONObject("message")
+            ?.optString("content")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        root.optJSONArray("candidates")
+            ?.optJSONObject(0)
+            ?.optJSONObject("content")
+            ?.optJSONArray("parts")
+            ?.optJSONObject(0)
+            ?.optString("text")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        return null
+    }
+
+    private fun extractError(json: String, code: Int): String {
+        return try {
+            val root = JSONObject(json)
+            root.optJSONObject("error")?.optString("message")
+                ?.takeIf { it.isNotBlank() }
+                ?: root.optString("message").takeIf { it.isNotBlank() }
+                ?: "HTTP $code"
+        } catch (_: Exception) {
+            json.takeIf { it.isNotBlank() } ?: "HTTP $code"
+        }
+    }
+
+    private fun buildClientContext(status: ClientStatusData?): String {
+        if (status == null) return "статус неизвестен"
+        return buildString {
+            status.deviceName?.let { append("устройство $it; ") }
+            append("интернет ${status.internetState}; ")
+            status.accessMode?.let { append("режим $it; ") }
+            status.minutesRemaining?.let { append("осталось $it мин.; ") }
+            status.accessEndsAt?.let { append("изменение доступа $it; ") }
+            status.message?.let { append(it) }
+        }.trim().trimEnd(';')
     }
 }
 
-data class ChatMessage(val role: String, val content: String) // role: "user" | "assistant"
+data class ChatMessage(val role: String, val content: String)
