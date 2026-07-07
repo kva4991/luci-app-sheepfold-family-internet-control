@@ -20,8 +20,6 @@ data class AiAssistantRequest(
 object AiAssistantClient {
     suspend fun ask(request: AiAssistantRequest): String = withContext(Dispatchers.IO) {
         val apiUrl = "${request.connection.apiUrl.trimEnd('/')}/ai-assistant"
-        // Телефон не ходит напрямую к DeepSeek/Gemini и не хранит их API-ключи.
-        // Он отправляет вопрос на роутер, а роутер уже добавляет ключ из UCI и маскирует контекст.
         val body = listOf(
             "provider" to request.provider,
             "model" to request.model,
@@ -41,11 +39,14 @@ object AiAssistantClient {
             connection.doOutput = true
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("User-Agent", "Sheepfold Android")
+            request.connection.bearerToken?.takeIf { it.isNotBlank() }?.let { token ->
+                connection.setRequestProperty("Authorization", "Bearer $token")
+            }
             connection.outputStream.use { output ->
                 output.write(body.toByteArray(Charsets.UTF_8))
             }
-            connection.connect()
 
             val responseBody = readBody(connection)
             if (connection.responseCode !in 200..299) {
@@ -62,21 +63,23 @@ object AiAssistantClient {
 
     private fun extractAnswer(body: String): String {
         val json = JSONObject(body)
-        if (json.optBoolean("ok") == false && json.has("error")) {
-            throw IllegalStateException(json.optString("message").ifBlank { json.optString("error") })
+        if (!json.optBoolean("ok", true) && json.has("error")) {
+            throw IllegalStateException(apiError(body))
         }
 
-        // DeepSeek отдаёт OpenAI-compatible choices[].message.content,
-        // а Gemini - candidates[].content.parts[].text. Поддерживаем оба формата,
-        // чтобы Android-экран не зависел от конкретного провайдера, выбранного на роутере.
-        val choices = json.optJSONArray("choices")
-        val content = choices
+        json.optJSONObject("data")
+            ?.optString("answer")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        val deepSeek = json.optJSONArray("choices")
             ?.optJSONObject(0)
             ?.optJSONObject("message")
             ?.optString("content")
             .orEmpty()
             .trim()
-        val geminiContent = json.optJSONArray("candidates")
+        val gemini = json.optJSONArray("candidates")
             ?.optJSONObject(0)
             ?.optJSONObject("content")
             ?.optJSONArray("parts")
@@ -85,7 +88,7 @@ object AiAssistantClient {
             .orEmpty()
             .trim()
 
-        return content.ifBlank { geminiContent }.ifBlank {
+        return deepSeek.ifBlank { gemini }.ifBlank {
             json.optString("output_text")
                 .ifBlank { json.optString("answer") }
                 .ifBlank { "ИИ вернул пустой ответ." }
@@ -94,8 +97,12 @@ object AiAssistantClient {
 
     private fun apiError(body: String): String {
         val json = runCatching { JSONObject(body) }.getOrNull()
-        return json?.optString("message").orEmpty()
-            .ifBlank { json?.optString("error").orEmpty() }
+        return json?.optJSONObject("error")?.optString("message").orEmpty()
+            .ifBlank { json?.optString("message").orEmpty() }
+            .ifBlank {
+                val value = json?.opt("error")
+                if (value is String) value else ""
+            }
             .ifBlank { body.trim() }
     }
 
@@ -105,8 +112,7 @@ object AiAssistantClient {
         } else {
             connection.errorStream ?: connection.inputStream
         }
-
-        return stream.bufferedReader().use { reader -> reader.readText() }
+        return stream.bufferedReader(Charsets.UTF_8).use { reader -> reader.readText() }
     }
 
     private fun urlEncode(value: String): String =
