@@ -52,14 +52,15 @@ device_name="$(pair_name_for_ip "$remote_ip" | sed -n '1p')"
 [ -n "$device_name" ] && [ "$device_name" != "*" ] || device_name="Телефон администратора"
 device_section="$(pair_device_section_for_mac "$device_mac")"
 
-pair_list_has_mac blocklist "$device_mac" && {
-    echo "Blocklisted device cannot become an administrator device." >&2
-    exit 5
-}
-
 pair_prepare_token "$login" || {
     echo "Could not generate administrator token." >&2
     exit 6
+}
+
+# Повторная проверка выполняется непосредственно перед первой записью прав.
+pair_list_has_mac blocklist "$device_mac" && {
+    echo "Blocklisted device cannot become an administrator device." >&2
+    exit 5
 }
 
 uci -q set "sheepfold.$device_section.mac=$device_mac"
@@ -78,12 +79,13 @@ uci -q set "sheepfold.$device_section.paired_at=$now"
 uci -q set "sheepfold.$device_section.pairing_user_agent=$user_agent"
 pair_add_allowlist "$device_mac"
 
+# Чёрный список никогда не очищается автоматически. Код одноразовый.
 uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
 uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
 uci -q commit sheepfold
 pair_store_token
 
-pair_log_event "Android-приложение привязало телефон администратора: $device_name, $device_mac, IP ${remote_ip:-?}, администратор $admin_name"
+pair_log_event "Android-приложение привязало телефон администратора: $device_name, $device_mac, IP ${remote_ip:-?}, администратор $admin_name" || true
 
 pair_print_kv paired 1
 pair_print_kv admin_name "$admin_name"
