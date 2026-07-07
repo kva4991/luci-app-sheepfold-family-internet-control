@@ -50,7 +50,7 @@ admin_name="$(uci -q get "sheepfold.$admin_section.display_name" 2>/dev/null || 
 [ -n "$admin_name" ] || admin_name="$login"
 device_name="$(pair_name_for_ip "$remote_ip" | sed -n '1p')"
 [ -n "$device_name" ] && [ "$device_name" != "*" ] || device_name="Телефон администратора"
-device_section="$(pair_device_section_for_mac "$device_mac")"
+device_section="$(pair_device_section_for_mac "$device_mac")" || exit 6
 
 pair_prepare_token "$login" || {
     echo "Could not generate administrator token." >&2
@@ -63,6 +63,8 @@ pair_list_has_mac blocklist "$device_mac" && {
     exit 5
 }
 
+[ "$(uci -q get "sheepfold.$device_section" 2>/dev/null || true)" = device ] || \
+    uci -q set "sheepfold.$device_section=device"
 uci -q set "sheepfold.$device_section.mac=$device_mac"
 uci -q set "sheepfold.$device_section.name=$device_name"
 uci -q set "sheepfold.$device_section.ip=$remote_ip"
