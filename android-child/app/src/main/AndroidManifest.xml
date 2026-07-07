@@ -24,7 +24,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Восстановление уведомления после перезагрузки -->
         <receiver
             android:name=".notification.BootReceiver"
             android:exported="true">
@@ -33,9 +32,12 @@
             </intent-filter>
         </receiver>
 
-        <!-- Срабатывание уведомления за 5 мин до конца доступа -->
         <receiver
             android:name=".notification.AccessEndingAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".polling.StatusPollReceiver"
             android:exported="false" />
 
     </application>
