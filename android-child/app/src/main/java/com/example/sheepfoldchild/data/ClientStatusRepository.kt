@@ -3,15 +3,12 @@ package com.example.sheepfoldchild.data
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-
-private val Context.dataStore by preferencesDataStore(name = "child_prefs")
 
 class ClientStatusRepository(private val context: Context) {
 
@@ -22,13 +19,13 @@ class ClientStatusRepository(private val context: Context) {
     }
 
     suspend fun getRouterBaseUrl(): String? {
-        return context.dataStore.data.first()[KEY_ROUTER_URL]
+        return context.clientDataStore.data.first()[KEY_ROUTER_URL]
     }
 
     suspend fun saveRouterBaseUrl(url: String) {
-        context.dataStore.edit { prefs ->
-            prefs[KEY_ROUTER_URL] = url.trimEnd('/')
-        }
+        val normalized = url.trimEnd('/')
+        context.clientDataStore.edit { prefs -> prefs[KEY_ROUTER_URL] = normalized }
+        context.aiDataStore.edit { prefs -> prefs[KEY_ROUTER_URL] = normalized }
     }
 
     /**
@@ -46,47 +43,64 @@ class ClientStatusRepository(private val context: Context) {
                 conn.setRequestProperty("Accept", "application/json")
 
                 val code = conn.responseCode
-                val body = conn.inputStream.bufferedReader().readText()
+                val body = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader(Charsets.UTF_8)
+                    ?.use { it.readText() }
+                    .orEmpty()
                 conn.disconnect()
 
-                if (code != 200) {
-                    return@withContext Result.failure(
-                        Exception("HTTP $code")
-                    )
+                if (code !in 200..299) {
+                    return@withContext Result.failure(Exception(extractError(body, code)))
                 }
 
-                Result.success(parseResponse(body))
+                val parsed = parseResponse(body)
+                if (!parsed.ok) {
+                    return@withContext Result.failure(
+                        Exception(parsed.error?.message ?: "Роутер не вернул статус устройства")
+                    )
+                }
+                Result.success(parsed)
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
 
+    private fun extractError(json: String, code: Int): String {
+        return try {
+            val root = JSONObject(json)
+            root.optJSONObject("error")?.optString("message")
+                ?.takeIf { it.isNotBlank() }
+                ?: root.optString("message").takeIf { it.isNotBlank() }
+                ?: "HTTP $code"
+        } catch (_: Exception) {
+            json.takeIf { it.isNotBlank() } ?: "HTTP $code"
+        }
+    }
+
     private fun parseResponse(json: String): ClientStatusResponse {
         val root = JSONObject(json)
         val ok = root.optBoolean("ok", false)
-        val apiVersion = root.optString("apiVersion", null)
-        val serverTime = root.optString("serverTime", null)
+        val apiVersion = root.optString("apiVersion").takeIf { it.isNotBlank() }
+        val serverTime = root.optString("serverTime").takeIf { it.isNotBlank() }
 
-        val data = if (root.has("data") && !root.isNull("data")) {
-            val d = root.getJSONObject("data")
+        val data = root.optJSONObject("data")?.let { d ->
             ClientStatusData(
-                deviceName = d.optString("deviceName", null),
+                deviceName = d.optString("deviceName").takeIf { it.isNotBlank() },
                 internetState = d.optString("internetState", "unknown"),
-                accessMode = d.optString("accessMode", null),
-                accessEndsAt = d.optString("accessEndsAt", null),
+                accessMode = d.optString("accessMode").takeIf { it.isNotBlank() },
+                accessEndsAt = d.optString("accessEndsAt").takeIf { it.isNotBlank() },
                 minutesRemaining = if (d.has("minutesRemaining") && !d.isNull("minutesRemaining"))
-                    d.getInt("minutesRemaining") else null,
-                message = d.optString("message", null)
+                    d.optInt("minutesRemaining") else null,
+                message = d.optString("message").takeIf { it.isNotBlank() }
             )
-        } else null
+        }
 
-        val error = if (root.has("error") && !root.isNull("error")) {
-            val e = root.getJSONObject("error")
+        val error = root.optJSONObject("error")?.let { e ->
             ApiError(
                 code = e.optString("code", "unknown"),
                 message = e.optString("message", "Неизвестная ошибка")
             )
-        } else null
+        }
 
         return ClientStatusResponse(ok, apiVersion, serverTime, data, error)
     }
