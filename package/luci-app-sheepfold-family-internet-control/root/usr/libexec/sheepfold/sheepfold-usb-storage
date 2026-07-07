@@ -3,45 +3,34 @@
 #
 # Управление USB-хранилищем для приватных логов Sheepfold.
 #
-# Команды:
-#   scan          -> JSON список найденных USB/SD-устройств
-#   info <dev>    -> JSON с деталями одного устройства
-#   format <dev>  -> быстрое форматирование в ext4/f2fs/vfat
-#   mount [dev]   -> подключить в /mnt/sheepfold-usb
-#   umount        -> отключить
-#   status        -> JSON статус
-#   archive-push  -> переместить архивы из RAM на USB
-#   setup-swap    -> создать файл подкачки 128 МБ
-#   setup-extroot -> настроить extroot (/overlay на USB)
+# Схема ключа шифрования:
+#
+#   /etc/sheepfold/.kp        — частьный ключ (флэш, chmod 600)
+#   APP_SALT                  — соль внутри sheepfold-key-derive (chmod 700)
+#   FINAL_KEY                 = sha256(.kp + ":" + APP_SALT)
+#
+#   /etc/sheepfold/.usb_key   — ПРИМАНКА. Читается root по SSH,
+#                               но для расшифровки бесполезен.
 #
 # UCI (sheepfold.usb.*):
 #   device        — /dev/sda1
 #   enabled       — 0/1
 #   role          — logs_only | swap_logs | extroot_logs
-#   encrypt       — 0/1 (AES-256-CBC, по умолчанию 1)
-#
-# Ключ шифрования:
-#   Хранится в /etc/sheepfold/.usb_key
-#   /etc в OpenWRT — это /overlay (постоянная память, не RAM).
-#   Ключ сохраняется при перезагрузках.
-#   Теряется только при сбросе к заводским настройкам — предупредить в UI!
+#   encrypt       — 0/1 (по умолчанию 1)
 
 set -eu
 
 MOUNT_POINT="/mnt/sheepfold-usb"
-# Папка на флешке: sheepfold/logs/ (чтобы видно, что это единая папка приложения)
 USB_LOG_DIR="${MOUNT_POINT}/sheepfold/logs"
 RAM_ARCHIVE_DIR="/tmp/sheepfold/.private/archive"
-# /etc — overlay (флэш), переживает перезагрузку, не сброс к заводским
-KEY_FILE="/etc/sheepfold/.usb_key"
 SWAP_FILE="${MOUNT_POINT}/sheepfold/.swap"
 SWAP_SIZE_MB=128
+KEY_DERIVE="/usr/libexec/sheepfold/sheepfold-key-derive"
+RUNTIME_KEY="/tmp/sheepfold/.runtime_key"
 
 uci_get() { uci -q get "sheepfold.usb.$1" 2>/dev/null || echo "${2:-}"; }
 
-is_mounted() {
-    grep -q " ${MOUNT_POINT} " /proc/mounts 2>/dev/null
-}
+is_mounted() { grep -q " ${MOUNT_POINT} " /proc/mounts 2>/dev/null; }
 
 get_disk_usage_role() {
     DEV="$1"; ROLE="logs_only"
@@ -55,29 +44,31 @@ get_free_pct() {
 }
 
 max_log_pct() {
-    ROLE=$(uci_get role logs_only)
-    case "$ROLE" in
+    case "$(uci_get role logs_only)" in
         extroot_logs|swap_logs) echo 70 ;;
         *) echo 100 ;;
     esac
 }
 
-ensure_key() {
-    KEY_DIR=$(dirname "$KEY_FILE")
-    mkdir -p "$KEY_DIR" && chmod 700 "$KEY_DIR"
-    if [ ! -f "$KEY_FILE" ]; then
-        dd if=/dev/urandom bs=32 count=1 2>/dev/null | \
-            od -An -tx1 | tr -d ' \n' > "$KEY_FILE"
-        chmod 600 "$KEY_FILE"
+# Получить итоговый ключ через key-derive и кэшировать в /tmp
+get_key() {
+    if [ ! -f "$RUNTIME_KEY" ]; then
+        mkdir -p "$(dirname "$RUNTIME_KEY")"
+        chmod 700 "$(dirname "$RUNTIME_KEY")"
+        "$KEY_DERIVE" > "$RUNTIME_KEY" 2>/dev/null
+        chmod 600 "$RUNTIME_KEY"
     fi
+    cat "$RUNTIME_KEY"
 }
 
 encrypt_archive() {
     SRC="$1"; DST="${SRC}.enc"
-    ensure_key
     if command -v openssl >/dev/null 2>&1; then
-        openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
-            -pass "file:${KEY_FILE}" -in "$SRC" -out "$DST" 2>/dev/null
+        # Передаём ключ через stdin, не через файл — в ps не видно
+        KEY_HEX=$(get_key)
+        printf '%s' "$KEY_HEX" | \
+            openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
+                -pass stdin -in "$SRC" -out "$DST" 2>/dev/null
     else
         # openssl нет — копируем без шифрования (UI должен предупредить)
         cp "$SRC" "$DST"
@@ -94,18 +85,15 @@ cmd_scan() {
         BASE=$(basename "$BLK")
         DEV="/dev/${BASE}"
         [ -b "$DEV" ] || continue
-        case "$BASE" in mmcblk0) continue ;; esac  # встроенный eMMC
-
+        case "$BASE" in mmcblk0) continue ;; esac
         SIZE_B=$(cat "${BLK}/size" 2>/dev/null || echo 0)
         SIZE_GB=$(awk "BEGIN{printf \"%.1f\", $SIZE_B * 512 / 1073741824}")
         VENDOR=$(cat "${BLK}/device/vendor" 2>/dev/null | tr -d '\n ' || echo '')
         MODEL=$(cat  "${BLK}/device/model"  2>/dev/null | sed 's/  */ /g;s/^ //;s/ $//' || echo "$BASE")
-        IS_USB=0
-        readlink -f "$BLK" 2>/dev/null | grep -qi 'usb' && IS_USB=1
+        IS_USB=0; readlink -f "$BLK" 2>/dev/null | grep -qi 'usb' && IS_USB=1
         ROLE=$(get_disk_usage_role "$DEV")
         CURRENT=0
         [ "$(uci_get device)" = "$DEV" ] && [ "$(uci_get enabled 0)" = "1" ] && CURRENT=1
-
         [ "$FIRST" = "1" ] || printf ','
         FIRST=0
         printf '{"dev":"%s","vendor":"%s","model":"%s","size_gb":%s,"is_usb":%d,"role":"%s","current":%d}' \
@@ -165,6 +153,7 @@ cmd_mount() {
 cmd_umount() {
     is_mounted || { printf '{"ok":true,"already":true}\n'; return 0; }
     [ -f "$SWAP_FILE" ] && swapoff "$SWAP_FILE" 2>/dev/null || true
+    rm -f "$RUNTIME_KEY" 2>/dev/null || true  # сбрасываем кэш ключа при отключении
     umount "$MOUNT_POINT" 2>/dev/null && printf '{"ok":true}\n' || printf '{"error":"umount_failed"}\n'
 }
 
@@ -174,17 +163,17 @@ cmd_status() {
     DEV=$(uci_get device '')
     ROLE=$(uci_get role logs_only)
     ENCRYPT=$(uci_get encrypt 1)
-    KEY_OK=0; [ -f "$KEY_FILE" ] && KEY_OK=1
+    KEY_READY=0; [ -x "$KEY_DERIVE" ] && KEY_READY=1
     MOUNTED=0; is_mounted && MOUNTED=1
     FREE_PCT=0; USED_KB=0; TOTAL_KB=0; ARCHIVES=0
     if [ "$MOUNTED" = 1 ]; then
         FREE_PCT=$(get_free_pct "$MOUNT_POINT")
         USED_KB=$(du -sk "$USB_LOG_DIR" 2>/dev/null | awk '{print $1}' || echo 0)
         TOTAL_KB=$(df -k "$MOUNT_POINT" 2>/dev/null | awk 'NR==2{print $2}' || echo 0)
-        ARCHIVES=$(find "$USB_LOG_DIR" -name '*.tar.gz' -o -name '*.tar' -o -name '*.enc' 2>/dev/null | wc -l | tr -d ' ')
+        ARCHIVES=$(find "$USB_LOG_DIR" -name '*.enc' -o -name '*.tar.gz' -o -name '*.tar' 2>/dev/null | wc -l | tr -d ' ')
     fi
-    printf '{"enabled":%s,"dev":"%s","role":"%s","encrypt":%s,"key_ok":%d,"mounted":%d,"free_pct":%s,"used_kb":%s,"total_kb":%s,"archives":%s,"max_log_pct":%s,"log_dir":"%s"}\n' \
-        "$ENABLED" "$DEV" "$ROLE" "$ENCRYPT" "$KEY_OK" "$MOUNTED" "$FREE_PCT" "$USED_KB" "$TOTAL_KB" "$ARCHIVES" "$(max_log_pct)" "$USB_LOG_DIR"
+    printf '{"enabled":%s,"dev":"%s","role":"%s","encrypt":%s,"key_ready":%d,"mounted":%d,"free_pct":%s,"used_kb":%s,"total_kb":%s,"archives":%s,"max_log_pct":%s}\n' \
+        "$ENABLED" "$DEV" "$ROLE" "$ENCRYPT" "$KEY_READY" "$MOUNTED" "$FREE_PCT" "$USED_KB" "$TOTAL_KB" "$ARCHIVES" "$(max_log_pct)"
 }
 
 # -- archive-push ---------------------------------------------------------
@@ -192,14 +181,12 @@ cmd_archive_push() {
     [ "$(uci_get enabled 0)" = "1" ] || return 0
     is_mounted || cmd_mount >/dev/null || return 1
     mkdir -p "$USB_LOG_DIR"
-
     MAX_PCT=$(max_log_pct)
     USED_PCT=$(df -k "$MOUNT_POINT" 2>/dev/null | awk 'NR==2{if($2>0) printf "%d", int(($3/$2)*100); else print 100}')
     if [ "$USED_PCT" -ge "$MAX_PCT" ]; then
         OLDEST=$(find "$USB_LOG_DIR" -type f | sort | head -1)
         [ -n "$OLDEST" ] && rm -f "$OLDEST" || true
     fi
-
     ENCRYPT=$(uci_get encrypt 1)
     PUSHED=0; ERRORS=0
     for ARC in "${RAM_ARCHIVE_DIR}"/*.tar.gz "${RAM_ARCHIVE_DIR}"/*.tar; do
