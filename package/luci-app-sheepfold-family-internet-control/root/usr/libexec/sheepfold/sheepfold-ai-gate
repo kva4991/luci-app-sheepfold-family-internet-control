@@ -1,0 +1,138 @@
+#!/bin/sh
+set -eu
+
+RATE_DIR="/tmp/sheepfold/ai-rate"
+mkdir -p "$RATE_DIR"
+chmod 700 "$RATE_DIR" 2>/dev/null || true
+
+json_escape() {
+    printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+header_json() {
+    printf 'Status: %s\r\n' "$1"
+    printf 'Content-Type: application/json; charset=utf-8\r\n'
+    printf 'Cache-Control: no-store\r\n'
+    printf 'Access-Control-Allow-Origin: *\r\n'
+    [ -z "${2:-}" ] || printf 'Retry-After: %s\r\n' "$2"
+    printf '\r\n'
+}
+
+reject() {
+    header_json "$1" "${4:-}"
+    printf '{"app":"sheepfold","ok":false,"error":"%s","message":"%s"}\n' \
+        "$(json_escape "$2")" "$(json_escape "$3")"
+    exit 1
+}
+
+url_decode() {
+    value="$(printf '%s' "$1" | sed 's/+/ /g; s/%/\\x/g')"
+    printf '%b' "$value"
+}
+
+form_get() {
+    key="$1"
+    body="$2"
+    printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
+        [ "$item_key" = "$key" ] || continue
+        url_decode "$item_value"
+        break
+    done
+}
+
+normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+valid_mac() { printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
+
+mac_for_ip() {
+    ip="$1"
+    mac=""
+    [ ! -r /tmp/dhcp.leases ] || mac="$(awk -v ip="$ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases)"
+    [ -n "$mac" ] || [ ! -r /proc/net/arp ] || mac="$(awk -v ip="$ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp)"
+    normalize_mac "$mac"
+}
+
+list_has_mac() {
+    wanted="$(normalize_mac "$2")"
+    for existing in $(uci -q get "sheepfold.$1.mac" 2>/dev/null || true); do
+        [ "$(normalize_mac "$existing")" = "$wanted" ] && return 0
+    done
+    return 1
+}
+
+is_admin_request() {
+    bearer=""
+    case "${HTTP_AUTHORIZATION:-}" in [Bb]earer\ *) bearer="${HTTP_AUTHORIZATION#* }" ;; esac
+    [ -n "$bearer" ] || return 1
+    [ "$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" 2>/dev/null || printf fail)" = ok ]
+}
+
+consume_quota() {
+    mac="$1"
+    limit="$(uci -q get sheepfold.global.ai_rate_limit_requests 2>/dev/null || printf 20)"
+    window="$(uci -q get sheepfold.global.ai_rate_limit_window_seconds 2>/dev/null || printf 3600)"
+    case "$limit" in ''|*[!0-9]*) limit=20 ;; esac
+    case "$window" in ''|*[!0-9]*) window=3600 ;; esac
+    [ "$limit" -ge 1 ] || limit=1
+    [ "$limit" -le 1000 ] || limit=1000
+    [ "$window" -ge 60 ] || window=60
+    [ "$window" -le 86400 ] || window=86400
+
+    id="$(printf '%s' "$mac" | tr -cd 'A-F0-9')"
+    file="$RATE_DIR/$id"
+    lock="$file.lock"
+    tries=0
+    while ! mkdir "$lock" 2>/dev/null; do
+        tries=$((tries + 1))
+        [ "$tries" -lt 10 ] || return 1
+        sleep 1
+    done
+
+    now="$(date +%s)"
+    started="$now"
+    count=0
+    [ ! -r "$file" ] || read -r started count < "$file" || true
+    case "$started" in ''|*[!0-9]*) started="$now" ;; esac
+    case "$count" in ''|*[!0-9]*) count=0 ;; esac
+    if [ "$now" -lt "$started" ] || [ $((now - started)) -ge "$window" ]; then
+        started="$now"
+        count=0
+    fi
+    if [ "$count" -ge "$limit" ]; then
+        retry_after=$((window - (now - started)))
+        [ "$retry_after" -gt 0 ] || retry_after=60
+        rmdir "$lock" 2>/dev/null || true
+        return 1
+    fi
+    count=$((count + 1))
+    printf '%s %s\n' "$started" "$count" > "$file"
+    chmod 600 "$file" 2>/dev/null || true
+    rmdir "$lock" 2>/dev/null || true
+    return 0
+}
+
+body="${1:-}"
+[ ${#body} -le 16384 ] || reject "413 Payload Too Large" request_too_large "AI request is too large."
+[ "$(uci -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)" = 1 ] || \
+    reject "503 Service Unavailable" ai_disabled "AI assistant is disabled on the router."
+
+remote_ip="${REMOTE_ADDR:-}"
+mac="$(mac_for_ip "$remote_ip")"
+valid_mac "$mac" || reject "403 Forbidden" device_not_resolved "The router could not identify this LAN device."
+list_has_mac blocklist "$mac" && reject "403 Forbidden" device_blocklisted "Blocked devices cannot use the AI assistant."
+consume_quota "$mac" || reject "429 Too Many Requests" rate_limited "AI request limit reached for this device." "${retry_after:-3600}"
+
+include_info="$(form_get includeInfo "$body")"
+include_logs="$(form_get includeLogs "$body")"
+google_account="$(form_get googleAccount "$body")"
+provider="$(form_get provider "$body")"
+model="$(form_get model "$body")"
+
+if [ "$include_info" = 1 ] || [ "$include_logs" = 1 ] || [ -n "$google_account" ] || [ -n "$provider" ] || [ -n "$model" ]; then
+    is_admin_request || reject "403 Forbidden" privileged_context_forbidden "Diagnostics, logs, account data, and provider overrides require an administrator token."
+fi
+
+if [ "$include_logs" = 1 ] && [ "$(uci -q get sheepfold.global.ai_individual_logs 2>/dev/null || printf 0)" != 1 ]; then
+    reject "403 Forbidden" individual_logs_disabled "Individual AI log context is disabled."
+fi
+
+exit 0
