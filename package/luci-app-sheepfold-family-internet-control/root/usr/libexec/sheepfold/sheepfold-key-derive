@@ -1,60 +1,70 @@
 #!/bin/sh
 # sheepfold-key-derive
 #
-# Сборка итогового ключа шифрования из двух компонентов:
+# Итоговый ключ приватных архивов собирается из двух случайных компонентов,
+# хранящихся отдельно в /etc/sheepfold с правами только для root:
 #
-#   KEY_PART  — /etc/sheepfold/.kp  (флэш, root r--------)
-#   APP_SALT  — зашита в этом скрипте (r-x------)
+#   KEY_PART  — /etc/sheepfold/.kp
+#   APP_SALT  — /etc/sheepfold/.app_salt
+#   FINAL_KEY = sha256(KEY_PART ":" APP_SALT)
 #
-#   FINAL_KEY = sha256( KEY_PART + ":" + APP_SALT )
-#
-# /etc/sheepfold/.usb_key — приманка (неверный ключ).
-# Даже если root прочитает .kp через SSH — для расшифровки
-# нужен ещё APP_SALT, который надо найти в этом скрипте и понять схему.
-#
-# Установка:
-#   chmod 700 /usr/libexec/sheepfold/sheepfold-key-derive
-#   chown root:root /usr/libexec/sheepfold/sheepfold-key-derive
-#
-# Вывод: hex-строка итогового ключа в stdout
+# Оба компонента создаются лениво и атомарно при первом обращении. В пакет
+# никогда не встраивается общая соль, поэтому обновление пакета не меняет ключ.
+# Вывод: hex-строка итогового ключа в stdout.
 
 set -eu
 
-KEY_PART_FILE="/etc/sheepfold/.kp"
-DECOY_FILE="/etc/sheepfold/.usb_key"
+STATE_DIR="/etc/sheepfold"
+KEY_PART_FILE="$STATE_DIR/.kp"
+SALT_FILE="$STATE_DIR/.app_salt"
 
-# Соль зашита в скрипте. Одна половина ключа без другой бесполезна.
-# Генерируется при сборке пакета (postinst) и записывается сюда.
-# SHEEPFOLD_APP_SALT_PLACEHOLDER
-APP_SALT="SHEEPFOLD_APP_SALT_PLACEHOLDER"
+random_hex_32() {
+    dd if=/dev/urandom bs=32 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n'
+}
 
-ensure_key_part() {
-    DIR=$(dirname "$KEY_PART_FILE")
-    mkdir -p "$DIR" && chmod 700 "$DIR"
-    if [ ! -f "$KEY_PART_FILE" ]; then
-        dd if=/dev/urandom bs=32 count=1 2>/dev/null | \
-            od -An -tx1 | tr -d ' \n' > "$KEY_PART_FILE"
-        chmod 600 "$KEY_PART_FILE"
-    fi
-    # Приманка: файл который видит root при cat/ls — неверный ключ
-    if [ ! -f "$DECOY_FILE" ]; then
-        dd if=/dev/urandom bs=32 count=1 2>/dev/null | \
-            od -An -tx1 | tr -d ' \n' > "$DECOY_FILE"
-        chmod 644 "$DECOY_FILE"  # специально читаемый, но бесполезный
-    fi
+ensure_secret_file() {
+    target="$1"
+    [ -s "$target" ] && return 0
+
+    umask 077
+    mkdir -p "$STATE_DIR"
+    chmod 700 "$STATE_DIR"
+
+    tmp="$target.tmp.$$"
+    trap 'rm -f "$tmp"' EXIT HUP INT TERM
+    random_hex_32 > "$tmp"
+    [ "$(wc -c < "$tmp" | tr -d ' ')" -eq 64 ] || {
+        echo "Failed to generate Sheepfold key material." >&2
+        exit 1
+    }
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$target"
+    trap - EXIT HUP INT TERM
+}
+
+ensure_key_material() {
+    ensure_secret_file "$KEY_PART_FILE"
+    ensure_secret_file "$SALT_FILE"
+    chmod 600 "$KEY_PART_FILE" "$SALT_FILE"
 }
 
 derive() {
-    ensure_key_part
-    KEY_PART=$(cat "$KEY_PART_FILE" 2>/dev/null)
-    # sha256( key_part : app_salt ) -> hex
-    if command -v openssl >/dev/null 2>&1; then
-        printf '%s:%s' "$KEY_PART" "$APP_SALT" | \
-            openssl dgst -sha256 -hex 2>/dev/null | awk '{print $NF}'
-    else
-        # запасной путь: md5 есть на любом OpenWRT
-        printf '%s:%s' "$KEY_PART" "$APP_SALT" | md5sum | awk '{print $1}'
-    fi
+    command -v openssl >/dev/null 2>&1 || {
+        echo "OpenSSL is required to derive the Sheepfold archive key." >&2
+        exit 1
+    }
+
+    ensure_key_material
+    key_part="$(cat "$KEY_PART_FILE")"
+    app_salt="$(cat "$SALT_FILE")"
+
+    [ ${#key_part} -eq 64 ] && [ ${#app_salt} -eq 64 ] || {
+        echo "Sheepfold key material is invalid." >&2
+        exit 1
+    }
+
+    printf '%s:%s' "$key_part" "$app_salt" | \
+        openssl dgst -sha256 -hex 2>/dev/null | awk '{print $NF}'
 }
 
 derive
