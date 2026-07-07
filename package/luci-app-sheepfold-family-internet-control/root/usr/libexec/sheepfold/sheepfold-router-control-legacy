@@ -1,0 +1,1734 @@
+#!/bin/sh
+set -eu
+
+# =============================================================================
+# sheepfold-router-control — центральный диспетчер команд Sheepfold на роутере.
+#
+# Принимает единственный аргумент COMMAND и вызывает соответствующую функцию.
+# Все функции пишут результат в stdout в формате key=value (по одному на строку),
+# либо JSON-массив для list-devices.
+#
+# Правила именования:
+#   - Функции — snake_case, отражают действие: device_allow, token_check.
+#   - Переменные — snake_case, отражают содержимое: admin_section, device_mac.
+#   - Константы (пути, флаги) — UPPER_SNAKE_CASE вверху файла.
+# =============================================================================
+
+COMMAND="${1:-status}"
+
+RUNTIME_DIR="/tmp/sheepfold"
+LED_DEFAULTS_FILE="$RUNTIME_DIR/led-defaults.tsv"
+LED_ALERT_FLAG="$RUNTIME_DIR/new-device-alert"
+LED_ALERT_ACK="$RUNTIME_DIR/new-device-alert.ack"
+LED_ALERT_PID="$RUNTIME_DIR/led-alert.pid"
+WPS_LEASES_SNAPSHOT="$RUNTIME_DIR/wps-leases-before.tsv"
+WPS_ALLOWLIST_FLAG="$RUNTIME_DIR/wps-allowlist-window"
+WIFI_LAST_ACTION_FILE="$RUNTIME_DIR/wifi-automation-last-action"
+BLOCKED_HTTPD_PID="$RUNTIME_DIR/blocked-httpd.pid"
+BLOCKED_HTTPD_ROOT="$RUNTIME_DIR/blocked-www"
+WAN_STATE_FILE="$RUNTIME_DIR/wan-state"
+TOKEN_DIR="$RUNTIME_DIR/tokens"
+LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
+
+mkdir -p "$RUNTIME_DIR"
+
+# -----------------------------------------------------------------------------
+# Вспомогательные: логирование
+# -----------------------------------------------------------------------------
+
+log() {
+        logger -t sheepfold-router-control "$*"
+}
+
+log_event() {
+        if [ -x "$LOG_HELPER" ]; then
+                "$LOG_HELPER" "$*"
+        else
+                log "$*"
+        fi
+}
+
+# -----------------------------------------------------------------------------
+# Вспомогательные: UCI
+# -----------------------------------------------------------------------------
+
+# Читает поле из sheepfold.global, возвращает значение по умолчанию если не задано.
+global_get() {
+        uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "$2"
+}
+
+# Создаёт секции UCI если их нет или они имеют неверный тип.
+# Вызывается перед любой записью в sheepfold UCI.
+repair_sheepfold_uci_sections() {
+        mkdir -p /etc/config
+        [ -e /etc/config/sheepfold ] || : > /etc/config/sheepfold
+        chmod 600 /etc/config/sheepfold 2>/dev/null || true
+
+        for pair in messenger:messenger_global export:export_global wifi_control:wifi_control_global pairing:pairing_global; do
+                section_type="${pair%%:*}"
+                section_name="${pair#*:}"
+
+                if [ "$(uci -q get sheepfold.global 2>/dev/null || true)" = "$section_type" ]; then
+                        uci -q rename "sheepfold.global=$section_name" 2>/dev/null || {
+                                uci -q delete sheepfold.global 2>/dev/null || true
+                                uci -q set "sheepfold.$section_name=$section_type"
+                        }
+                fi
+
+                uci -q rename "sheepfold.@${section_type}[0]=$section_name" 2>/dev/null || true
+        done
+
+        if [ "$(uci -q get sheepfold.global 2>/dev/null || true)" != "sheepfold" ]; then
+                uci -q rename sheepfold.global=legacy_global 2>/dev/null || \
+                        uci -q delete sheepfold.global 2>/dev/null || true
+                uci -q rename sheepfold.@sheepfold[0]=global 2>/dev/null || \
+                        uci -q set sheepfold.global='sheepfold'
+        fi
+
+        uci -q commit sheepfold 2>/dev/null || true
+}
+
+# Завершает скрипт с ошибкой если active_messenger не совпадает с ожидаемым.
+require_active_messenger() {
+        local expected="$1"
+        local actual
+        actual="$(global_get active_messenger none)"
+
+        if [ "$actual" != "$expected" ]; then
+                echo "UCI active_messenger is '$actual', expected '$expected'" >&2
+                exit 1
+        fi
+}
+
+# -----------------------------------------------------------------------------
+# Вспомогательные: валидация
+# -----------------------------------------------------------------------------
+
+valid_port() {
+        case "$1" in ''|*[!0-9]*) return 1 ;; esac
+        [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
+valid_hostname() {
+        printf '%s' "$1" | grep -Eq '^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)*[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$'
+}
+
+valid_timezone_name() {
+        printf '%s' "$1" | grep -Eq '^[A-Za-z0-9_+.-]+(/[A-Za-z0-9_+.-]+)?$'
+}
+
+valid_posix_timezone() {
+        printf '%s' "$1" | grep -Eq '^[A-Za-z0-9_+:-]+$'
+}
+
+# Нормализует MAC в верхний регистр и проверяет формат XX:XX:XX:XX:XX:XX.
+normalize_mac() {
+        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+valid_mac() {
+        printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'
+}
+
+# -----------------------------------------------------------------------------
+# Вспомогательные: UCI-списки устройств
+# -----------------------------------------------------------------------------
+
+ensure_list_section() {
+        local name="$1"
+        if [ "$(uci -q get "sheepfold.$name" 2>/dev/null || true)" != "list" ]; then
+                uci -q delete "sheepfold.$name" 2>/dev/null || true
+                uci -q set "sheepfold.$name=list"
+        fi
+}
+
+list_has_mac() {
+        local list_name="$1"
+        local mac
+        mac="$(normalize_mac "$2")"
+        valid_mac "$mac" || return 1
+
+        for existing in $(uci -q get "sheepfold.$list_name.mac" 2>/dev/null || true); do
+                [ "$(normalize_mac "$existing")" = "$mac" ] && return 0
+        done
+        return 1
+}
+
+add_mac_to_list() {
+        local list_name="$1"
+        local mac
+        mac="$(normalize_mac "$2")"
+        valid_mac "$mac" || return 1
+        ensure_list_section "$list_name"
+
+        # Не добавляем дубликаты.
+        for existing in $(uci -q get "sheepfold.$list_name.mac" 2>/dev/null || true); do
+                [ "$(normalize_mac "$existing")" = "$mac" ] && return 0
+        done
+
+        uci -q add_list "sheepfold.$list_name.mac=$mac"
+}
+
+add_mac_to_allowlist() {
+        add_mac_to_list allowlist "$1"
+}
+
+remove_mac_from_list() {
+        local list_name="$1"
+        local mac
+        mac="$(normalize_mac "$2")"
+        valid_mac "$mac" || return 0
+        ensure_list_section "$list_name"
+
+        local values
+        values="$(uci -q get "sheepfold.$list_name.mac" 2>/dev/null || true)"
+        uci -q delete "sheepfold.$list_name.mac" 2>/dev/null || true
+
+        for existing in $values; do
+                local normalized
+                normalized="$(normalize_mac "$existing")"
+                [ "$normalized" = "$mac" ] && continue
+                valid_mac "$normalized" || continue
+                uci -q add_list "sheepfold.$list_name.mac=$normalized"
+        done
+}
+
+# Возвращает имя UCI-секции для устройства по MAC.
+# Если секции ещё нет — создаёт пустую device-секцию.
+device_section_for_mac() {
+        local mac
+        mac="$(normalize_mac "$1")"
+        valid_mac "$mac" || return 1
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+                local existing
+                existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+                if [ "$(normalize_mac "$existing")" = "$mac" ]; then
+                        printf '%s\n' "$section"
+                        return 0
+                fi
+        done
+
+        # Генерируем имя секции из MAC без двоеточий.
+        local section
+        section="device_$(printf '%s' "$mac" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+        uci -q get "sheepfold.$section" >/dev/null 2>&1 || uci -q set "sheepfold.$section=device"
+        printf '%s\n' "$section"
+}
+
+# -----------------------------------------------------------------------------
+# Вспомогательные: UCI-секции администраторов
+# -----------------------------------------------------------------------------
+
+# Ищет секцию administrator по login, возвращает имя секции или код 1.
+admin_section_for_login() {
+        local login="$1"
+        [ -n "$login" ] || return 1
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$/\1/p'); do
+                local existing
+                existing="$(uci -q get "sheepfold.$section.login" 2>/dev/null || true)"
+                if [ "$existing" = "$login" ]; then
+                        printf '%s\n' "$section"
+                        return 0
+                fi
+        done
+        return 1
+}
+
+# Генерирует имя UCI-секции для нового администратора по login.
+admin_section_name_for_login() {
+        local login="$1"
+        case "$login" in
+                SuperParent)
+                        printf 'owner\n'
+                        ;;
+                *)
+                        local section
+                        section="admin_$(printf '%s' "$login" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_]/_/g; s/^_*//; s/_*$//')"
+                        [ "$section" != "admin_" ] || section="admin_manual"
+                        printf '%s\n' "$section"
+                        ;;
+        esac
+}
+
+# -----------------------------------------------------------------------------
+# Вспомогательные: вывод key=value
+# -----------------------------------------------------------------------------
+
+# Экранирует спецсимволы и переводы строк для безопасного вывода в key=value.
+kv_safe() {
+        printf '%s' "$1" | tr '\r\n\t' '   ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+}
+
+print_kv() {
+        printf '%s=%s\n' "$1" "$(kv_safe "$2")"
+}
+
+# -----------------------------------------------------------------------------
+# Вспомогательные: сеть
+# -----------------------------------------------------------------------------
+
+# Возвращает MAC-адрес устройства по его IP (из DHCP-аренд или ARP).
+mac_for_ip() {
+        local ip="$1"
+        [ -n "$ip" ] || return 1
+
+        if [ -r /tmp/dhcp.leases ]; then
+                awk -v ip="$ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases
+        fi
+
+        if [ -r /proc/net/arp ]; then
+                awk -v ip="$ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp
+        fi
+}
+
+# Возвращает hostname устройства по IP из DHCP-аренд.
+name_for_ip() {
+        local ip="$1"
+        [ -n "$ip" ] || return 1
+
+        if [ -r /tmp/dhcp.leases ]; then
+                awk -v ip="$ip" '$3 == ip { print $4; exit }' /tmp/dhcp.leases
+        fi
+}
+
+ubus_wan_status() {
+        local iface
+        iface="$(global_get wan_interface wan)"
+        ubus -S call "network.interface.$iface" status 2>/dev/null || true
+}
+
+wan_connectivity_ok() {
+        for host in ya.ru gosuslugi.ru ntp1.vniiftri.ru 1.1.1.1 8.8.8.8; do
+                ping -c 1 -W 2 "$host" >/dev/null 2>&1 && return 0
+        done
+        return 1
+}
+
+json_bool() {
+        sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p"
+}
+
+json_string() {
+        sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
+}
+
+# -----------------------------------------------------------------------------
+# Вспомогательные: версии пакетов
+# -----------------------------------------------------------------------------
+
+opkg_version() {
+        opkg status "$1" 2>/dev/null | sed -n 's/^Version: //p' | sed -n '1p'
+}
+
+# Возвращает первую найденную версию из списка альтернативных имён пакета.
+package_version_any() {
+        for pkg in "$@"; do
+                local version
+                version="$(opkg_version "$pkg")"
+                if [ -n "$version" ]; then
+                        printf '%s' "$version"
+                        return 0
+                fi
+        done
+        return 1
+}
+
+ping_average_ms() {
+        ping -c 3 -W 2 "$1" 2>/dev/null | \
+                awk -F'/' '/round-trip|rtt/ { print $5; found=1 } END { if (!found) exit 1 }'
+}
+
+lan_ports_text() {
+        local ports=""
+
+        for port_path in /sys/class/net/lan*; do
+                [ -e "$port_path" ] || continue
+                ports="$ports ${port_path##*/}"
+        done
+
+        if [ -z "$ports" ] && [ -d /sys/class/net/br-lan/brif ]; then
+                for port_path in /sys/class/net/br-lan/brif/*; do
+                        [ -e "$port_path" ] || continue
+                        ports="$ports ${port_path##*/}"
+                done
+        fi
+
+        printf '%s' "$ports" | sed 's/^ //'
+}
+
+# -----------------------------------------------------------------------------
+# Токены: check-token, issue-token, revoke-token
+#
+# Токены хранятся в $TOKEN_DIR/<sha256_хэш> как пустые файлы.
+# Имя файла = sha256 от "$login:$plaintext_token".
+# Plaintext никогда не записывается на диск.
+# Токен выдаётся командой pair-admin-device после успешного сопряжения.
+# -----------------------------------------------------------------------------
+
+mkdir -p "$TOKEN_DIR"
+
+# Хэширует строку через sha256sum (busybox) или openssl.
+sha256_of() {
+        if command -v sha256sum >/dev/null 2>&1; then
+                printf '%s' "$1" | sha256sum | cut -d' ' -f1
+        elif command -v openssl >/dev/null 2>&1; then
+                printf '%s' "$1" | openssl dgst -sha256 | sed 's/^.* //'
+        else
+                # Запасной вариант: используем md5 если sha256 недоступен.
+                # Это слабее, но лучше чем сломанный функционал на минимальных сборках.
+                printf '%s' "$1" | md5sum | cut -d' ' -f1
+        fi
+}
+
+# Выдаёт токен: создаёт файл-хэш и возвращает plaintext-токен в stdout.
+token_issue() {
+        local login="$1"
+        local plaintext
+        plaintext="$(cat /dev/urandom 2>/dev/null | tr -dc 'A-Za-z0-9' | head -c 40 || date +%s%N | sha256sum | cut -c1-40)"
+
+        local hash
+        hash="$(sha256_of "${login}:${plaintext}")"
+        touch "$TOKEN_DIR/$hash"
+
+        printf '%s\n' "$plaintext"
+}
+
+# Проверяет Bearer-токен. Выводит "ok" или "fail".
+token_check() {
+        local bearer="$1"
+        [ -n "$bearer" ] || { printf 'fail\n'; return 0; }
+
+        # Перебираем всех администраторов чтобы найти совпадение по хэшу.
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$/\1/p'); do
+                local login
+                login="$(uci -q get "sheepfold.$section.login" 2>/dev/null || true)"
+                [ -n "$login" ] || continue
+
+                local hash
+                hash="$(sha256_of "${login}:${bearer}")"
+
+                if [ -f "$TOKEN_DIR/$hash" ]; then
+                        printf 'ok\n'
+                        return 0
+                fi
+        done
+
+        printf 'fail\n'
+}
+
+# Отзывает все токены администратора (при смене пароля или явном выходе).
+token_revoke_for_login() {
+        local login="$1"
+        # Не можем перебирать токены обратно — просто удаляем все файлы в директории.
+        # Это безопасно: все сессии будут завершены.
+        rm -f "$TOKEN_DIR"/* 2>/dev/null || true
+        log "Все токены отозваны для администратора: $login"
+}
+
+# -----------------------------------------------------------------------------
+# client-status — статус клиентского устройства по IP
+#
+# Используется детским APK без авторизации.
+# Устройство идентифицируется по REMOTE_ADDR → MAC → UCI-секция.
+# Возвращает: status, schedule_name, next_change_at, warning_before_minutes.
+# -----------------------------------------------------------------------------
+
+client_status() {
+        local client_ip="$1"
+        [ -n "$client_ip" ] || { printf 'status=unknown\n'; return 0; }
+
+        local client_mac
+        client_mac="$(mac_for_ip "$client_ip" | sed -n '1p' || true)"
+        client_mac="$(normalize_mac "$client_mac")"
+
+        if ! valid_mac "$client_mac"; then
+                printf 'status=unknown\n'
+                printf 'reason=mac_not_found\n'
+                return 0
+        fi
+
+        local device_section
+        device_section="$(device_section_for_mac "$client_mac" 2>/dev/null || true)"
+
+        if [ -z "$device_section" ]; then
+                printf 'status=unknown\n'
+                printf 'reason=device_not_registered\n'
+                return 0
+        fi
+
+        local device_status schedule_name
+        device_status="$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || printf unknown)"
+        schedule_name="$(uci -q get "sheepfold.$device_section.active_schedule" 2>/dev/null || true)"
+
+        # Предупреждение выдаётся за 5 минут до смены статуса.
+        # Время следующей смены вычисляется расписанием; здесь только читаем поле.
+        local next_change_at
+        next_change_at="$(uci -q get "sheepfold.$device_section.next_change_at" 2>/dev/null || true)"
+
+        print_kv status "$device_status"
+        print_kv schedule_name "$schedule_name"
+        print_kv next_change_at "$next_change_at"
+        print_kv warning_before_minutes "5"
+}
+
+# -----------------------------------------------------------------------------
+# list-devices — список всех устройств
+#
+# Возвращает JSON-массив объектов. Используется GET /devices в CGI.
+# -----------------------------------------------------------------------------
+
+list_devices() {
+        local first=1
+        printf '['
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+                local mac name ip group device_type device_status admin_device
+                mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+                [ -n "$mac" ] || continue
+
+                name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || printf '%s' "$mac")"
+                ip="$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)"
+                group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+                device_type="$(uci -q get "sheepfold.$section.device_type" 2>/dev/null || printf smart)"
+                device_status="$(uci -q get "sheepfold.$section.status" 2>/dev/null || printf new)"
+                admin_device="$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)"
+
+                # Экранируем поля для безопасной вставки в JSON.
+                local safe_name safe_group
+                safe_name="$(printf '%s' "$name" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+                safe_group="$(printf '%s' "$group" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+
+                [ "$first" = "1" ] || printf ','
+                printf '{"mac":"%s","name":"%s","ip":"%s","group":"%s","deviceType":"%s","status":"%s","adminDevice":%s}' \
+                        "$mac" "$safe_name" "$ip" "$safe_group" "$device_type" "$device_status" \
+                        "$([ "$admin_device" = "1" ] && printf true || printf false)"
+                first=0
+        done
+
+        printf ']\n'
+}
+
+# -----------------------------------------------------------------------------
+# device-allow — добавить устройство в белый список
+# device-block — добавить устройство в чёрный список
+# device-temp-access — временно разрешить устройство на N минут
+# -----------------------------------------------------------------------------
+
+device_allow() {
+        local device_mac
+        device_mac="$(normalize_mac "${1:-}")"
+        valid_mac "$device_mac" || { echo "Invalid MAC: $device_mac" >&2; return 2; }
+
+        repair_sheepfold_uci_sections
+        ensure_list_section allowlist
+        ensure_list_section blocklist
+
+        local device_section
+        device_section="$(device_section_for_mac "$device_mac")"
+
+        # Администраторское устройство уже в белом списке — ничего не меняем.
+        if [ "$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || true)" = "allow" ]; then
+                printf 'OK\n'
+                return 0
+        fi
+
+        if list_has_mac blocklist "$device_mac"; then
+                echo "Device is in blocklist. Remove from blocklist first." >&2
+                return 3
+        fi
+
+        uci -q set "sheepfold.$device_section.status=allow"
+        add_mac_to_list allowlist "$device_mac"
+        uci -q commit sheepfold
+
+        log_event "Устройство добавлено в белый список через Android: $device_mac"
+        printf 'OK\n'
+}
+
+device_block() {
+        local device_mac
+        device_mac="$(normalize_mac "${1:-}")"
+        valid_mac "$device_mac" || { echo "Invalid MAC: $device_mac" >&2; return 2; }
+
+        repair_sheepfold_uci_sections
+        ensure_list_section allowlist
+        ensure_list_section blocklist
+
+        local device_section
+        device_section="$(device_section_for_mac "$device_mac")"
+
+        # Администраторское устройство нельзя заблокировать — иначе родитель потеряет доступ.
+        if [ "$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)" = "1" ]; then
+                echo "Administrator device cannot be blocked." >&2
+                return 3
+        fi
+
+        if list_has_mac allowlist "$device_mac"; then
+                echo "Device is in allowlist. Remove from allowlist first." >&2
+                return 3
+        fi
+
+        uci -q set "sheepfold.$device_section.status=blocked"
+        add_mac_to_list blocklist "$device_mac"
+        remove_mac_from_list allowlist "$device_mac"
+        uci -q commit sheepfold
+
+        log_event "Устройство заблокировано через Android: $device_mac"
+        printf 'OK\n'
+}
+
+device_temp_access() {
+        local device_mac minutes
+        device_mac="$(normalize_mac "${1:-}")"
+        minutes="${2:-30}"
+
+        valid_mac "$device_mac" || { echo "Invalid MAC: $device_mac" >&2; return 2; }
+
+        case "$minutes" in ''|*[!0-9]*) minutes=30 ;; esac
+        [ "$minutes" -le 1440 ] || minutes=1440
+
+        repair_sheepfold_uci_sections
+        local device_section
+        device_section="$(device_section_for_mac "$device_mac")"
+
+        local expires_at
+        expires_at=$(( $(date +%s) + minutes * 60 ))
+
+        # Временный доступ сохраняется как поле temp_access_until.
+        # sheepfold-device-detector проверяет это поле и снимает доступ по истечении.
+        uci -q set "sheepfold.$device_section.temp_access_until=$expires_at"
+        uci -q set "sheepfold.$device_section.status=temp_access"
+        add_mac_to_list allowlist "$device_mac"
+        uci -q commit sheepfold
+
+        log_event "Временный доступ выдан устройству $device_mac на $minutes мин."
+        print_kv expires_at "$expires_at"
+        print_kv minutes "$minutes"
+        printf 'OK\n'
+}
+
+# -----------------------------------------------------------------------------
+# global-block-on / global-block-off
+# Включает/выключает глобальную блокировку всего интернета на роутере.
+# -----------------------------------------------------------------------------
+
+global_block_on() {
+        uci -q set sheepfold.global.block_on_boot='1'
+        uci -q commit sheepfold
+        log_event "Глобальная блокировка интернета включена через Android"
+        printf 'OK\n'
+}
+
+global_block_off() {
+        uci -q set sheepfold.global.block_on_boot='0'
+        uci -q commit sheepfold
+        log_event "Глобальная блокировка интернета выключена через Android"
+        printf 'OK\n'
+}
+
+# -----------------------------------------------------------------------------
+# set-device-status — полное обновление UCI-полей устройства
+# Используется LuCI-страницей, не Android-приложением.
+# -----------------------------------------------------------------------------
+
+set_device_status() {
+        local device_mac device_status device_name device_ip device_group device_type
+        device_mac="$(normalize_mac "${1:-}")"
+        device_status="${2:-}"
+        device_name="${3:-}"
+        device_ip="${4:-}"
+        device_group="${5:-}"
+        device_type="${6:-}"
+
+        valid_mac "$device_mac" || { echo "Invalid MAC address" >&2; return 2; }
+
+        case "$device_status" in
+                allow|blocked|restricted|scheduled|new) ;;
+                *) echo "Unsupported device status: $device_status" >&2; return 2 ;;
+        esac
+
+        repair_sheepfold_uci_sections
+        ensure_list_section allowlist
+        ensure_list_section blocklist
+        local device_section
+        device_section="$(device_section_for_mac "$device_mac")"
+
+        if [ "$device_status" = "blocked" ] && \
+                [ "$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)" = "1" ]; then
+                echo "Administrator device cannot be added to blocklist" >&2
+                return 3
+        fi
+
+        # Не переносим MAC между белым и чёрным списком автоматически —
+        # это явное решение о доверии, которое пользователь должен принять осознанно.
+        if [ "$device_status" = "allow" ] && list_has_mac blocklist "$device_mac"; then
+                echo "Device is in blocklist. Remove from blocklist first." >&2
+                return 3
+        fi
+
+        if [ "$device_status" = "blocked" ] && list_has_mac allowlist "$device_mac"; then
+                echo "Device is in allowlist. Remove from allowlist first." >&2
+                return 3
+        fi
+
+        [ -n "$device_name" ]   || device_name="$device_mac"
+        [ -n "$device_group" ]  || device_group="Не настроено"
+        [ -n "$device_type" ]   || device_type="smart"
+
+        uci -q set "sheepfold.$device_section.mac=$device_mac"
+        uci -q set "sheepfold.$device_section.name=$device_name"
+        uci -q set "sheepfold.$device_section.ip=$device_ip"
+        uci -q set "sheepfold.$device_section.group=$device_group"
+        uci -q set "sheepfold.$device_section.device_type=$device_type"
+        uci -q set "sheepfold.$device_section.status=$device_status"
+
+        if [ "$device_status" = "allow" ]; then
+                add_mac_to_list allowlist "$device_mac"
+                log_event "Устройство добавлено в белый список: $device_mac, IP ${device_ip:-неизвестен}"
+        elif [ "$device_status" = "blocked" ]; then
+                add_mac_to_list blocklist "$device_mac"
+                log_event "Устройство добавлено в чёрный список: $device_mac, IP ${device_ip:-неизвестен}"
+        else
+                remove_mac_from_list allowlist "$device_mac"
+                remove_mac_from_list blocklist "$device_mac"
+                log_event "Устройство добавлено вручную: $device_mac, IP ${device_ip:-неизвестен}"
+        fi
+
+        uci -q commit sheepfold
+
+        # Проверяем что UCI действительно записался — выявляет гонки при параллельных вызовах.
+        local saved_status
+        saved_status="$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || printf '')"
+        [ "$saved_status" = "$device_status" ] || { echo "UCI write verification failed" >&2; exit 1; }
+
+        printf 'OK\n'
+}
+
+# -----------------------------------------------------------------------------
+# pair-admin-device — финальный шаг сопряжения Android-приложения
+#
+# Получает login + одноразовый code (из QR), проверяет срок действия,
+# определяет MAC телефона по IP, записывает device-секцию и выдаёт токен.
+# -----------------------------------------------------------------------------
+
+pair_admin_device() {
+        local login="${1:-}" code="${2:-}" remote_ip="${3:-}" user_agent="${4:-}"
+
+        repair_sheepfold_uci_sections
+        ensure_list_section allowlist
+        ensure_list_section blocklist
+
+        local admin_section
+        admin_section="$(admin_section_for_login "$login")" || {
+                echo "Administrator login was not found" >&2
+                return 2
+        }
+
+        local expected_code expires_at now
+        expected_code="$(uci -q get "sheepfold.$admin_section.pairing_code" 2>/dev/null || true)"
+        expires_at="$(uci -q get "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || printf 0)"
+        now="$(date +%s)"
+
+        [ -n "$expected_code" ] || {
+                echo "Pairing code is not active. Open LuCI → Администраторы." >&2
+                return 3
+        }
+
+        [ "$code" = "$expected_code" ] || { echo "Pairing code is invalid." >&2; return 3; }
+
+        case "$expires_at" in ''|*[!0-9]*) expires_at=0 ;; esac
+
+        if [ "$expires_at" -gt 0 ] && [ "$now" -gt "$expires_at" ]; then
+                uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
+                uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
+                uci -q commit sheepfold
+                echo "Pairing code has expired. Open LuCI → Администраторы." >&2
+                return 3
+        fi
+
+        local device_mac
+        device_mac="$(mac_for_ip "$remote_ip" | sed -n '1p')"
+        device_mac="$(normalize_mac "$device_mac")"
+        valid_mac "$device_mac" || {
+                echo "Could not determine phone MAC from DHCP leases or ARP table." >&2
+                return 4
+        }
+
+        list_has_mac blocklist "$device_mac" && {
+                echo "Blocklisted device cannot become an administrator device." >&2
+                return 5
+        }
+
+        local admin_name device_name device_section
+        admin_name="$(uci -q get "sheepfold.$admin_section.display_name" 2>/dev/null || printf '%s' "$login")"
+        device_name="$(name_for_ip "$remote_ip" | sed -n '1p')"
+        [ -n "$device_name" ] && [ "$device_name" != "*" ] || device_name="Телефон администратора"
+        device_section="$(device_section_for_mac "$device_mac")"
+
+        # Привязанный телефон администратора выводим из обычных правил:
+        # он не должен зависеть от детских расписаний и должен всегда оставаться
+        # в белом списке, иначе родитель потеряет управление в самый неудобный момент.
+        uci -q set "sheepfold.$device_section.mac=$device_mac"
+        uci -q set "sheepfold.$device_section.name=$device_name"
+        uci -q set "sheepfold.$device_section.ip=$remote_ip"
+        uci -q set "sheepfold.$device_section.device_type=phone"
+        uci -q set "sheepfold.$device_section.manual_device_type=1"
+        uci -q set "sheepfold.$device_section.group=Не настроено"
+        uci -q set "sheepfold.$device_section.schedules="
+        uci -q set "sheepfold.$device_section.status=allow"
+        uci -q set "sheepfold.$device_section.admin_device=1"
+        uci -q set "sheepfold.$device_section.admin_owner=$admin_name"
+        uci -q set "sheepfold.$device_section.admin_login=$login"
+        uci -q set "sheepfold.$device_section.paired_from=android"
+        uci -q set "sheepfold.$device_section.paired_at=$now"
+        uci -q set "sheepfold.$device_section.pairing_user_agent=$user_agent"
+        add_mac_to_list allowlist "$device_mac"
+        remove_mac_from_list blocklist "$device_mac"
+
+        # Код сопряжения одноразовый. Удаляем сразу после использования —
+        # фото QR или подсмотренный код не должны работать повторно.
+        uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
+        uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
+        uci -q commit sheepfold
+
+        # Выдаём долгоживущий Bearer-токен для последующих API-запросов.
+        local session_token
+        session_token="$(token_issue "$login")"
+
+        log_event "Android-приложение привязало телефон администратора: $device_name, $device_mac, IP ${remote_ip:-?}, администратор $admin_name"
+
+        printf 'paired=1\n'
+        printf 'admin_name=%s\n' "$admin_name"
+        printf 'admin_login=%s\n' "$login"
+        printf 'device_name=%s\n' "$device_name"
+        printf 'mac=%s\n' "$device_mac"
+        printf 'ip=%s\n' "$remote_ip"
+        printf 'token=%s\n' "$session_token"
+}
+
+# -----------------------------------------------------------------------------
+# activate-admin-pairing-code — генерирует одноразовый QR-код сопряжения
+# Вызывается из LuCI при нажатии «Добавить телефон».
+# -----------------------------------------------------------------------------
+
+activate_admin_pairing_code() {
+        local login="${1:-}" code="${2:-}" display_name="${3:-}" lifetime="${4:-600}"
+
+        [ -n "$login" ] || { echo "Administrator login is required." >&2; return 2; }
+        [ -n "$code" ]  || { echo "Pairing code is required." >&2; return 2; }
+
+        case "$lifetime" in ''|*[!0-9]*) lifetime=600 ;; esac
+
+        repair_sheepfold_uci_sections
+        local admin_section
+        admin_section="$(admin_section_for_login "$login" 2>/dev/null || true)"
+        [ -n "$admin_section" ] || admin_section="$(admin_section_name_for_login "$login")"
+
+        if [ "$(uci -q get "sheepfold.$admin_section" 2>/dev/null || true)" != "administrator" ]; then
+                uci -q delete "sheepfold.$admin_section" 2>/dev/null || true
+                uci -q set "sheepfold.$admin_section=administrator"
+        fi
+
+        [ -n "$display_name" ] || display_name="$login"
+        local expires_at
+        expires_at="$(( $(date +%s) + lifetime ))"
+
+        uci -q set "sheepfold.$admin_section.display_name=$display_name"
+        uci -q set "sheepfold.$admin_section.login=$login"
+        uci -q set "sheepfold.$admin_section.pairing_code=$code"
+        uci -q set "sheepfold.$admin_section.pairing_code_expires=$expires_at"
+        uci -q commit sheepfold
+
+        printf 'activated=1\n'
+        printf 'admin_section=%s\n' "$admin_section"
+        printf 'expires_at=%s\n' "$expires_at"
+}
+
+# -----------------------------------------------------------------------------
+# admin-pairing-status — polling из LuCI: завершено ли сопряжение
+# -----------------------------------------------------------------------------
+
+admin_pairing_status() {
+        local login="${1:-}" since="${2:-0}"
+
+        repair_sheepfold_uci_sections
+        case "$since" in ''|*[!0-9]*) since=0 ;; esac
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+                local admin_device admin_login paired_at
+                admin_device="$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)"
+                admin_login="$(uci -q get "sheepfold.$section.admin_login" 2>/dev/null || true)"
+                paired_at="$(uci -q get "sheepfold.$section.paired_at" 2>/dev/null || printf 0)"
+
+                [ "$admin_device" = "1" ] || continue
+                [ "$admin_login" = "$login" ] || continue
+                case "$paired_at" in ''|*[!0-9]*) paired_at=0 ;; esac
+                [ "$paired_at" -ge "$since" ] || continue
+
+                local device_name device_mac
+                device_mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+                device_name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+                [ -n "$device_name" ] || device_name="$device_mac"
+
+                printf 'paired=1\n'
+                printf 'admin_name=%s\n' "$(uci -q get "sheepfold.$section.admin_owner" 2>/dev/null || printf '%s' "$login")"
+                printf 'admin_login=%s\n' "$admin_login"
+                printf 'device_name=%s\n' "$device_name"
+                printf 'mac=%s\n' "$device_mac"
+                printf 'ip=%s\n' "$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)"
+                printf 'paired_at=%s\n' "$paired_at"
+                return 0
+        done
+
+        printf 'paired=0\n'
+}
+
+# -----------------------------------------------------------------------------
+# Wi-Fi управление
+# -----------------------------------------------------------------------------
+
+wifi_set_all() {
+        local disabled="$1" changed=0
+
+        for radio in $(uci -q show wireless 2>/dev/null | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\1/p'); do
+                uci -q set "wireless.$radio.disabled=$disabled"
+                changed=1
+        done
+
+        [ "$changed" = "1" ] || { log "No wireless radios found."; return 1; }
+
+        uci -q commit wireless
+        wifi reload >/dev/null 2>&1 || wifi >/dev/null 2>&1 || true
+}
+
+wifi_enable() {
+        wifi_set_all 0
+        log_event "Wi-Fi включён Sheepfold"
+}
+
+wifi_disable() {
+        wifi_set_all 1
+        log_event "Wi-Fi отключён Sheepfold"
+}
+
+# -----------------------------------------------------------------------------
+# Глобальная блокировка интернета (legacy-команды, используются LuCI)
+# -----------------------------------------------------------------------------
+
+global_internet_enable() {
+        uci -q set sheepfold.global.block_on_boot='0'
+        uci -q commit sheepfold
+        log_event "Глобальная блокировка интернета выключена"
+        printf 'OK\n'
+}
+
+global_internet_disable() {
+        uci -q set sheepfold.global.block_on_boot='1'
+        uci -q commit sheepfold
+        log_event "Глобальная блокировка интернета включена"
+        printf 'OK\n'
+}
+
+global_internet_status() {
+        if [ "$(global_get block_on_boot 0)" = "1" ]; then
+                printf 'disabled\n'
+        else
+                printf 'enabled\n'
+        fi
+}
+
+# -----------------------------------------------------------------------------
+# Мессенджеры
+# -----------------------------------------------------------------------------
+
+messenger_disable() {
+        repair_sheepfold_uci_sections
+        uci -q set sheepfold.global.active_messenger='none'
+        uci -q commit sheepfold
+        require_active_messenger none
+        log_event "Мессенджер Sheepfold выключен"
+        printf 'OK\n'
+}
+
+messenger_save_telegram() {
+        local bot_token="${1:-}" admin_chat_id="${2:-}"
+        repair_sheepfold_uci_sections
+        uci -q set sheepfold.global.active_messenger='telegram'
+        uci -q set sheepfold.global.telegram_bot_token="$bot_token"
+        uci -q set sheepfold.global.telegram_admin_chat_id="$admin_chat_id"
+        uci -q commit sheepfold
+        require_active_messenger telegram
+        log_event "Настройки Telegram-мессенджера сохранены"
+        printf 'OK\n'
+}
+
+messenger_save_vk() {
+        local access_token="${1:-}" community_id="${2:-}" admin_user_id="${3:-}"
+        repair_sheepfold_uci_sections
+        uci -q set sheepfold.global.active_messenger='vk'
+        uci -q set sheepfold.global.vk_access_token="$access_token"
+        uci -q set sheepfold.global.vk_community_id="$community_id"
+        uci -q set sheepfold.global.vk_admin_user_id="$admin_user_id"
+        uci -q commit sheepfold
+        require_active_messenger vk
+        log_event "Настройки VK-мессенджера сохранены"
+        printf 'OK\n'
+}
+
+messenger_status() {
+        repair_sheepfold_uci_sections
+        local active
+        active="$(global_get active_messenger none)"
+        printf 'active=%s\n' "$active"
+        printf 'telegram_token_configured=%s\n'       "$([ -n "$(global_get telegram_bot_token '')" ]     && printf 1 || printf 0)"
+        printf 'telegram_chat_id_configured=%s\n'     "$([ -n "$(global_get telegram_admin_chat_id '')" ] && printf 1 || printf 0)"
+        printf 'vk_token_configured=%s\n'             "$([ -n "$(global_get vk_access_token '')" ]        && printf 1 || printf 0)"
+        printf 'vk_community_id_configured=%s\n'      "$([ -n "$(global_get vk_community_id '')" ]        && printf 1 || printf 0)"
+        printf 'vk_admin_user_id_configured=%s\n'     "$([ -n "$(global_get vk_admin_user_id '')" ]       && printf 1 || printf 0)"
+}
+
+http_get() {
+        local url="$1"
+        if command -v uclient-fetch >/dev/null 2>&1; then
+                uclient-fetch -qO- "$url" 2>/dev/null || true
+        elif command -v wget >/dev/null 2>&1; then
+                wget -q -O - "$url" 2>/dev/null || true
+        elif command -v curl >/dev/null 2>&1; then
+                curl -fsSL "$url" 2>/dev/null || true
+        fi
+}
+
+messenger_check() {
+        repair_sheepfold_uci_sections
+        local active
+        active="$(global_get active_messenger none)"
+        printf 'active=%s\n' "$active"
+
+        case "$active" in
+                telegram)
+                        local token
+                        token="$(global_get telegram_bot_token '')"
+                        if [ -z "$token" ]; then
+                                printf 'status=error\nmessage=Токен Telegram-бота не заполнен\n'
+                                return 1
+                        fi
+                        local response
+                        response="$(http_get "https://api.telegram.org/bot${token}/getMe")"
+                        if printf '%s' "$response" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+                                printf 'status=connected\nmessage=Telegram подключён\n'
+                        else
+                                printf 'status=error\nmessage=От сервера Telegram нет ответа\n'
+                                return 1
+                        fi
+                        ;;
+                vk)
+                        local token community_id
+                        token="$(global_get vk_access_token '')"
+                        community_id="$(global_get vk_community_id '')"
+                        if [ -z "$token" ] || [ -z "$community_id" ]; then
+                                printf 'status=error\nmessage=Данные VK не заполнены\n'
+                                return 1
+                        fi
+                        local response
+                        response="$(http_get "https://api.vk.com/method/groups.getById?group_id=${community_id}&access_token=${token}&v=5.199")"
+                        if printf '%s' "$response" | grep -q '"response"[[:space:]]*:'; then
+                                printf 'status=connected\nmessage=VK подключён\n'
+                        else
+                                printf 'status=error\nmessage=От сервера VK нет ответа\n'
+                                return 1
+                        fi
+                        ;;
+                *)
+                        printf 'status=disabled\nmessage=Мессенджер выключен\n'
+                        ;;
+        esac
+}
+
+# -----------------------------------------------------------------------------
+# Время и NTP
+# -----------------------------------------------------------------------------
+
+ensure_system_time_sections() {
+        uci -q get system.@system[0] >/dev/null 2>&1 || uci -q add system system >/dev/null
+        if [ "$(uci -q get system.ntp 2>/dev/null || true)" != "timeserver" ]; then
+                uci -q delete system.ntp 2>/dev/null || true
+                uci -q set system.ntp='timeserver'
+        fi
+}
+
+time_save() {
+        local ntp_server_enabled="${1:-1}"
+        local ntp_client_enabled="${2:-1}"
+        local zonename="${3:-Europe/Moscow}"
+        local timezone="${4:-MSK-3}"
+        local servers="${5:-ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org}"
+        local normalized_servers=""
+
+        case "$ntp_server_enabled" in 0|1) ;; *) ntp_server_enabled=1 ;; esac
+        case "$ntp_client_enabled" in 0|1) ;; *) ntp_client_enabled=1 ;; esac
+        valid_timezone_name "$zonename" || zonename="Europe/Moscow"
+        valid_posix_timezone "$timezone" || timezone="MSK-3"
+
+        for server in $servers; do
+                valid_hostname "$server" || continue
+                normalized_servers="${normalized_servers}${normalized_servers:+ }$server"
+        done
+        [ -n "$normalized_servers" ] || normalized_servers="ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org"
+
+        repair_sheepfold_uci_sections
+        ensure_system_time_sections
+
+        uci -q set "system.@system[0].zonename=$zonename"
+        uci -q set "system.@system[0].timezone=$timezone"
+        uci -q set "system.ntp.enabled=$ntp_client_enabled"
+        uci -q set "system.ntp.enable_server=$ntp_server_enabled"
+        uci -q delete system.ntp.server 2>/dev/null || true
+        for server in $normalized_servers; do
+                uci -q add_list "system.ntp.server=$server"
+        done
+        uci -q commit system
+
+        uci -q set sheepfold.global.router_ntp_server_enabled="$ntp_server_enabled"
+        uci -q set sheepfold.global.router_ntp_client_auto_configure="$ntp_client_enabled"
+        uci -q set sheepfold.global.router_timezone_name="$zonename"
+        uci -q set sheepfold.global.router_timezone="$timezone"
+        uci -q set sheepfold.global.router_ntp_servers="$normalized_servers"
+        uci -q commit sheepfold
+
+        [ -x /etc/init.d/sysntpd ] && /etc/init.d/sysntpd restart >/dev/null 2>&1 || true
+        log_event "Настройки времени сохранены: timezone $zonename, NTP $normalized_servers"
+        printf 'OK\n'
+}
+
+# -----------------------------------------------------------------------------
+# router-info — диагностический снимок состояния роутера
+# -----------------------------------------------------------------------------
+
+router_info() {
+        local status_json wan_state wan_reason ping_ms
+        local firmware release model kernel
+        local sheepfold_version podkop_version adguard_version
+        local lan_ports lan_count uptime_text load_avg memory_text
+
+        status_json="$(ubus_wan_status)"
+        wan_state="unknown"
+        wan_reason="статус WAN неизвестен"
+        ping_ms="$(ping_average_ms ya.ru 2>/dev/null || true)"
+        firmware="unknown"
+        release="unknown"
+        model="$(cat /tmp/sysinfo/model 2>/dev/null || cat /tmp/sysinfo/board_name 2>/dev/null || printf unknown)"
+        kernel="$(uname -r 2>/dev/null || printf unknown)"
+        sheepfold_version="$(opkg_version luci-app-sheepfold-family-internet-control)"
+        podkop_version="$(package_version_any podkop luci-app-podkop || true)"
+        adguard_version="$(package_version_any AdGuardHome adguardhome luci-app-adguardhome || true)"
+        lan_ports="$(lan_ports_text)"
+        lan_count="0"
+        uptime_text="$(awk '{ s=int($1); printf "%sd %sh %sm", int(s/86400), int((s%86400)/3600), int((s%3600)/60) }' /proc/uptime 2>/dev/null || printf unknown)"
+        load_avg="$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || printf unknown)"
+        memory_text="$(awk '/MemTotal:/ { t=$2 } /MemAvailable:/ { a=$2 } END { if (t>0) printf "%.0f MB free / %.0f MB total", a/1024, t/1024; else print "unknown" }' /proc/meminfo 2>/dev/null || printf unknown)"
+
+        [ -n "$sheepfold_version" ] || sheepfold_version="$(global_get ui_asset_version unknown)"
+
+        if [ -r /etc/openwrt_release ]; then
+                # shellcheck disable=SC1091
+                . /etc/openwrt_release
+                release="${DISTRIB_RELEASE:-unknown}"
+                firmware="${DISTRIB_DESCRIPTION:-OpenWrt $release}"
+        elif [ -r /etc/openwrt_version ]; then
+                release="$(cat /etc/openwrt_version 2>/dev/null || printf unknown)"
+                firmware="OpenWrt $release"
+        fi
+
+        if [ -n "$status_json" ]; then
+                local up available device
+                up="$(printf '%s' "$status_json" | json_bool up | head -n 1)"
+                available="$(printf '%s' "$status_json" | json_bool available | head -n 1)"
+                device="$(printf '%s' "$status_json" | json_string l3_device | head -n 1)"
+
+                if [ -n "$device" ] && [ -r "/sys/class/net/$device/carrier" ] && \
+                        [ "$(cat "/sys/class/net/$device/carrier" 2>/dev/null || printf 1)" = "0" ]; then
+                        wan_state="offline"
+                        wan_reason="кабель WAN отключён или порт без линка"
+                elif [ "$up" != "true" ]; then
+                        wan_state="offline"
+                        wan_reason="$([ "$available" = "false" ] && printf 'WAN-интерфейс недоступен' || printf 'WAN-интерфейс не поднят')"
+                elif [ -n "$ping_ms" ]; then
+                        wan_state="online"
+                        wan_reason="ya.ru отвечает"
+                else
+                        wan_state="limited"
+                        wan_reason="WAN поднят, но ya.ru не ответил на ping"
+                fi
+        fi
+
+        [ -n "$lan_ports" ] && lan_count="$(printf '%s\n' "$lan_ports" | awk '{ print NF + 0 }')"
+
+        print_kv current_time        "$(date '+%d.%m.%Y %H:%M:%S %Z' 2>/dev/null || date)"
+        print_kv sheepfold_version   "$sheepfold_version"
+        print_kv internet_status     "$wan_state"
+        print_kv internet_reason     "$wan_reason"
+        print_kv ping_yandex_ms      "${ping_ms:-timeout}"
+        print_kv firmware_version    "$firmware"
+        print_kv openwrt_release     "$release"
+        print_kv kernel_version      "$kernel"
+        print_kv router_model        "$model"
+        print_kv uptime              "$uptime_text"
+        print_kv load_average        "$load_avg"
+        print_kv memory              "$memory_text"
+        print_kv lan_ports_count     "$lan_count"
+        print_kv lan_ports           "${lan_ports:-unknown}"
+        print_kv podkop_installed    "$([ -n "$podkop_version" ]  && printf yes || printf no)"
+        print_kv podkop_version      "${podkop_version:-not installed}"
+        print_kv adguard_installed   "$([ -n "$adguard_version" ] && printf yes || printf no)"
+        print_kv adguard_version     "${adguard_version:-not installed}"
+
+        local wifi_index=0
+        for radio in $(uci -q show wireless 2>/dev/null | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\1/p'); do
+                wifi_index=$((wifi_index + 1))
+                local disabled type path band channel country htmode
+                disabled="$(uci -q get "wireless.$radio.disabled" 2>/dev/null || printf 0)"
+                type="$(uci -q get "wireless.$radio.type" 2>/dev/null || printf unknown)"
+                path="$(uci -q get "wireless.$radio.path" 2>/dev/null || uci -q get "wireless.$radio.phy" 2>/dev/null || printf unknown)"
+                band="$(uci -q get "wireless.$radio.band" 2>/dev/null || uci -q get "wireless.$radio.hwmode" 2>/dev/null || printf unknown)"
+                channel="$(uci -q get "wireless.$radio.channel" 2>/dev/null || printf auto)"
+                country="$(uci -q get "wireless.$radio.country" 2>/dev/null || printf unknown)"
+                htmode="$(uci -q get "wireless.$radio.htmode" 2>/dev/null || printf unknown)"
+
+                print_kv "wifi_${wifi_index}_name"    "$radio"
+                print_kv "wifi_${wifi_index}_status"  "$([ "$disabled" = "1" ] && printf disabled || printf enabled)"
+                print_kv "wifi_${wifi_index}_type"    "$type"
+                print_kv "wifi_${wifi_index}_path"    "$path"
+                print_kv "wifi_${wifi_index}_band"    "$band"
+                print_kv "wifi_${wifi_index}_channel" "$channel"
+                print_kv "wifi_${wifi_index}_country" "$country"
+                print_kv "wifi_${wifi_index}_mode"    "$htmode"
+        done
+        print_kv wifi_count "$wifi_index"
+}
+
+# -----------------------------------------------------------------------------
+# wan-status-tick — периодическая проверка состояния WAN
+# Вызывается из sheepfold-service каждые N секунд.
+# -----------------------------------------------------------------------------
+
+wan_status_tick() {
+        local now last_line last_check
+        now="$(date +%s)"
+        last_line="$(cat "$WAN_STATE_FILE" 2>/dev/null || true)"
+        last_check="$(printf '%s' "$last_line" | awk -F '\t' '{ print $3 }')"
+        case "$last_check" in ''|*[!0-9]*) last_check=0 ;; esac
+
+        # Не чаще одного раза в минуту.
+        [ $((now - last_check)) -ge 60 ] || return 0
+
+        local status_json state reason
+        status_json="$(ubus_wan_status)"
+
+        if [ -z "$status_json" ]; then
+                state="offline"
+                reason="не удалось получить статус WAN через ubus"
+        else
+                local up available device
+                up="$(printf '%s' "$status_json" | json_bool up | head -n 1)"
+                available="$(printf '%s' "$status_json" | json_bool available | head -n 1)"
+                device="$(printf '%s' "$status_json" | json_string l3_device | head -n 1)"
+
+                if [ -n "$device" ] && [ -r "/sys/class/net/$device/carrier" ] && \
+                        [ "$(cat "/sys/class/net/$device/carrier" 2>/dev/null || printf 1)" = "0" ]; then
+                        state="offline"; reason="кабель WAN отключён или порт без линка"
+                elif [ "$up" != "true" ]; then
+                        state="offline"
+                        reason="$([ "$available" = "false" ] && printf 'WAN-интерфейс недоступен' || printf 'WAN-интерфейс не поднят')"
+                elif wan_connectivity_ok; then
+                        state="online"; reason="проверка связи прошла успешно"
+                else
+                        state="offline"; reason="таймаут проверки связи"
+                fi
+        fi
+
+        local previous_state previous_reason
+        previous_state="$(printf '%s' "$last_line" | awk -F '\t' '{ print $1 }')"
+        previous_reason="$(printf '%s' "$last_line" | awk -F '\t' '{ print $2 }')"
+
+        if [ -n "$previous_state" ] && \
+                { [ "$state" != "$previous_state" ] || { [ "$state" = "offline" ] && [ "$reason" != "$previous_reason" ]; }; }; then
+                if [ "$state" = "online" ]; then
+                        log_event "Интернет на роутере восстановлен: $reason"
+                else
+                        log_event "У роутера пропал интернет: $reason"
+                fi
+        fi
+
+        printf '%s\t%s\t%s\n' "$state" "$reason" "$now" > "$WAN_STATE_FILE"
+}
+
+# -----------------------------------------------------------------------------
+# Страница блокировки (uhttpd на отдельном порту)
+# -----------------------------------------------------------------------------
+
+blocked_httpd_running() {
+        [ -r "$BLOCKED_HTTPD_PID" ] || return 1
+        local pid
+        pid="$(cat "$BLOCKED_HTTPD_PID" 2>/dev/null || true)"
+        [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+blocked_httpd_stop() {
+        blocked_httpd_running && kill "$(cat "$BLOCKED_HTTPD_PID")" 2>/dev/null || true
+        rm -f "$BLOCKED_HTTPD_PID"
+}
+
+blocked_httpd_start() {
+        local port
+        port="$(global_get blocked_page_port 5202)"
+        valid_port "$port" || port=5202
+
+        mkdir -p "$BLOCKED_HTTPD_ROOT"
+        rm -f "$BLOCKED_HTTPD_ROOT/index.html"
+        blocked_httpd_running && return 0
+
+        if ! command -v uhttpd >/dev/null 2>&1; then
+                log "uhttpd is not available for blocked page responder."
+                return 0
+        fi
+
+        uhttpd -f -p "0.0.0.0:$port" -h "$BLOCKED_HTTPD_ROOT" -x /cgi-bin \
+                -E /cgi-bin/sheepfold-blocked >/dev/null 2>&1 &
+        printf '%s' "$!" > "$BLOCKED_HTTPD_PID"
+        log "Blocked page responder started on port $port."
+}
+
+blocked_page_apply() {
+        if [ "$(global_get blocked_page_enabled 1)" = "1" ]; then
+                blocked_httpd_start
+        else
+                blocked_httpd_stop
+        fi
+}
+
+# -----------------------------------------------------------------------------
+# LED-управление
+# -----------------------------------------------------------------------------
+
+save_led_defaults() {
+        [ -s "$LED_DEFAULTS_FILE" ] && return 0
+        : > "$LED_DEFAULTS_FILE"
+        for led in /sys/class/leds/*; do
+                [ -d "$led" ] || continue
+                local name trigger brightness
+                name="${led##*/}"
+                trigger="$(sed -n 's/.*\[\([^]]*\)\].*/\1/p' "$led/trigger" 2>/dev/null || true)"
+                brightness="$(cat "$led/brightness" 2>/dev/null || printf 0)"
+                printf '%s\t%s\t%s\n' "$name" "${trigger:-none}" "${brightness:-0}" >> "$LED_DEFAULTS_FILE"
+        done
+}
+
+led_set() {
+        local led="$1" brightness="$2"
+        [ -d "$led" ] || return 0
+        [ -w "$led/trigger" ]    && printf none        > "$led/trigger"    2>/dev/null || true
+        [ -w "$led/brightness" ] && printf '%s' "$brightness" > "$led/brightness" 2>/dev/null || true
+}
+
+led_all() {
+        save_led_defaults
+        for led in /sys/class/leds/*; do
+                led_set "$led" "$1"
+        done
+}
+
+led_restore_defaults() {
+        if [ -r "$LED_DEFAULTS_FILE" ]; then
+                while IFS="$(printf '\t')" read -r name trigger brightness; do
+                        local led="/sys/class/leds/$name"
+                        [ -d "$led" ] || continue
+                        [ -n "$trigger" ]    && [ -w "$led/trigger" ]    && printf '%s' "$trigger"    > "$led/trigger"    2>/dev/null || true
+                        [ -n "$brightness" ] && [ -w "$led/brightness" ] && printf '%s' "$brightness" > "$led/brightness" 2>/dev/null || true
+                done < "$LED_DEFAULTS_FILE"
+                rm -f "$LED_DEFAULTS_FILE"
+        else
+                for led in /sys/class/leds/*; do
+                        [ -d "$led" ] || continue
+                        [ -w "$led/trigger" ] && printf default-on > "$led/trigger" 2>/dev/null || true
+                done
+        fi
+}
+
+led_off_forever() {
+        led_all 0
+        log "All router LEDs turned off by Sheepfold."
+}
+
+led_blink_code() {
+        local seconds="${1:-30}" pattern="${2:-1010000}"
+        local end=$(( $(date +%s) + seconds ))
+
+        save_led_defaults
+        while [ "$(date +%s)" -lt "$end" ]; do
+                local i=1
+                while [ "$i" -le "${#pattern}" ] && [ "$(date +%s)" -lt "$end" ]; do
+                        local bit
+                        bit="$(printf '%s' "$pattern" | cut -c "$i")"
+                        [ "$bit" = "1" ] && led_all 1 || led_all 0
+                        sleep 0.5
+                        i=$((i + 1))
+                done
+        done
+        led_restore_defaults
+}
+
+led_alert_loop_running() {
+        [ -r "$LED_ALERT_PID" ] || return 1
+        local pid
+        pid="$(cat "$LED_ALERT_PID" 2>/dev/null || true)"
+        [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+led_alert_loop() {
+        printf '%s' "$$" > "$LED_ALERT_PID"
+        save_led_defaults
+
+        while [ -e "$LED_ALERT_FLAG" ] && \
+                [ "$(global_get router_led_control router_default)" = "new_device_alert_until_luci_login" ]; do
+
+                local count=0
+                for led in /sys/class/leds/*; do [ -d "$led" ] && count=$((count + 1)); done
+
+                if [ "$count" -le 0 ]; then
+                        sleep 5
+                elif [ "$count" -eq 1 ]; then
+                        for v in 1 0 1 0; do led_all "$v"; sleep 0.5; done
+                else
+                        for active in /sys/class/leds/*; do
+                                [ -d "$active" ] || continue
+                                for led in /sys/class/leds/*; do
+                                        [ -d "$led" ] || continue
+                                        [ "$led" = "$active" ] && led_set "$led" 1 || led_set "$led" 0
+                                done
+                                sleep 0.5
+                        done
+                fi
+        done
+
+        led_restore_defaults
+        rm -f "$LED_ALERT_PID"
+}
+
+led_alert_start() {
+        [ "$(global_get router_led_control router_default)" = "new_device_alert_until_luci_login" ] || return 0
+        [ -e "$LED_ALERT_FLAG" ] || return 0
+        led_alert_loop_running && return 0
+        "$0" led-alert-loop >/dev/null 2>&1 </dev/null &
+}
+
+led_alert_ack() {
+        rm -f "$LED_ALERT_FLAG" "$LED_ALERT_ACK"
+        led_restore_defaults
+        log "New-device LED alert acknowledged."
+}
+
+# -----------------------------------------------------------------------------
+# WPS
+# -----------------------------------------------------------------------------
+
+snapshot_leases() {
+        if [ -r /tmp/dhcp.leases ]; then
+                awk 'NF >= 4 { print toupper($2) }' /tmp/dhcp.leases | sort -u
+        fi
+}
+
+start_wps_pbc() {
+        local started=0
+
+        if command -v ubus >/dev/null 2>&1; then
+                for service in $(ubus list 'hostapd.*' 2>/dev/null || true); do
+                        ubus call "$service" wps_start '{}' >/dev/null 2>&1 && started=1 || true
+                done
+        fi
+
+        if command -v hostapd_cli >/dev/null 2>&1; then
+                for dir in /var/run/hostapd /var/run/hostapd-*; do
+                        [ -d "$dir" ] || continue
+                        for sock in "$dir"/*; do
+                                [ -S "$sock" ] || continue
+                                hostapd_cli -p "$dir" -i "${sock##*/}" wps_pbc >/dev/null 2>&1 && started=1 || true
+                        done
+                done
+        fi
+
+        if [ "$started" = "1" ]; then
+                log_event "WPS-подключение разрешено на 30 секунд"
+        else
+                log_event "Не удалось запустить WPS на роутере"
+        fi
+}
+
+wps_allowlist_window() {
+        snapshot_leases > "$WPS_LEASES_SNAPSHOT"
+        touch "$WPS_ALLOWLIST_FLAG"
+        start_wps_pbc
+        "$0" led-blink-code 30 1010000 >/dev/null 2>&1 </dev/null &
+        sleep 30
+
+        snapshot_leases | while read -r mac; do
+                [ -n "$mac" ] || continue
+                grep -qx "$mac" "$WPS_LEASES_SNAPSHOT" 2>/dev/null && continue
+                add_mac_to_allowlist "$mac"
+        done
+
+        uci -q commit sheepfold
+        rm -f "$WPS_ALLOWLIST_FLAG" "$WPS_LEASES_SNAPSHOT"
+        log_event "Окно WPS-добавления в белый список завершено"
+}
+
+wps_handle_action() {
+        case "${1:-router_default}" in
+                router_default|"")
+                        return 0
+                        ;;
+                allow_wifi_connection)
+                        start_wps_pbc
+                        "$0" led-blink-code 30 1010000 >/dev/null 2>&1 </dev/null &
+                        ;;
+                allow_wifi_and_allowlist)
+                        "$0" wps-allowlist-window >/dev/null 2>&1 </dev/null &
+                        ;;
+                disable_wifi)
+                        wifi_disable
+                        ;;
+        esac
+}
+
+wps_button() {
+        local press_kind="${1:-short}"
+        if [ "$press_kind" = "long" ]; then
+                wps_handle_action "$(global_get wps_long_press_action router_default)"
+        else
+                wps_handle_action "$(global_get wps_short_press_action router_default)"
+        fi
+}
+
+# -----------------------------------------------------------------------------
+# wifi-automation-tick — проверяет расписание автовключения/отключения Wi-Fi
+# -----------------------------------------------------------------------------
+
+wifi_automation_tick() {
+        local now_time today
+        now_time="$(date +%H:%M)"
+        today="$(date +%Y-%m-%d)"
+
+        local enable_mode enable_time disable_mode disable_time
+        enable_mode="$(global_get wifi_auto_enable_mode never)"
+        enable_time="$(global_get wifi_auto_enable_time 07:00)"
+        disable_mode="$(global_get wifi_auto_disable_mode never)"
+        disable_time="$(global_get wifi_auto_disable_time 23:00)"
+
+        local last_action
+        last_action="$(cat "$WIFI_LAST_ACTION_FILE" 2>/dev/null || true)"
+
+        if [ "$enable_mode" = "time" ] && [ "$now_time" = "$enable_time" ]; then
+                local key="$today enable $enable_time"
+                if [ "$last_action" != "$key" ]; then
+                        wifi_enable
+                        printf '%s' "$key" > "$WIFI_LAST_ACTION_FILE"
+                fi
+        fi
+
+        if [ "$disable_mode" = "time" ] && [ "$now_time" = "$disable_time" ]; then
+                local key="$today disable $disable_time"
+                if [ "$last_action" != "$key" ]; then
+                        wifi_disable
+                        printf '%s' "$key" > "$WIFI_LAST_ACTION_FILE"
+                fi
+        fi
+}
+
+# =============================================================================
+# Диспетчер команд
+# =============================================================================
+
+case "$COMMAND" in
+
+        # --- Токены ----------------------------------------------------------
+        check-token)
+                token_check "${2:-}"
+                ;;
+        revoke-tokens)
+                token_revoke_for_login "${2:-}"
+                ;;
+
+        # --- Клиентский статус (детский APK, без авторизации) ----------------
+        client-status)
+                client_status "${2:-}"
+                ;;
+
+        # --- Устройства (требуют авторизации через CGI) -----------------------
+        list-devices)
+                list_devices
+                ;;
+        device-allow)
+                device_allow "${2:-}"
+                ;;
+        device-block)
+                device_block "${2:-}"
+                ;;
+        device-temp-access)
+                device_temp_access "${2:-}" "${3:-30}"
+                ;;
+
+        # --- Глобальная блокировка интернета ---------------------------------
+        global-block-on)
+                global_block_on
+                ;;
+        global-block-off)
+                global_block_off
+                ;;
+
+        # --- Legacy-команды LuCI (internet-enable/disable для совместимости) -
+        internet-enable)
+                global_internet_enable
+                ;;
+        internet-disable)
+                global_internet_disable
+                ;;
+        internet-status)
+                global_internet_status
+                ;;
+
+        # --- Сопряжение Android-приложения -----------------------------------
+        pair-admin-device)
+                pair_admin_device "${2:-}" "${3:-}" "${4:-}" "${5:-}"
+                ;;
+        activate-admin-pairing-code)
+                activate_admin_pairing_code "${2:-}" "${3:-}" "${4:-}" "${5:-600}"
+                ;;
+        admin-pairing-status)
+                admin_pairing_status "${2:-}" "${3:-0}"
+                ;;
+
+        # --- Wi-Fi ------------------------------------------------------------
+        wifi-enable)
+                wifi_enable
+                ;;
+        wifi-disable)
+                wifi_disable
+                ;;
+        wifi-automation-tick)
+                wifi_automation_tick
+                ;;
+
+        # --- Мессенджеры -----------------------------------------------------
+        messenger-disable)
+                messenger_disable
+                ;;
+        messenger-save-telegram)
+                messenger_save_telegram "${2:-}" "${3:-}"
+                ;;
+        messenger-save-vk)
+                messenger_save_vk "${2:-}" "${3:-}" "${4:-}"
+                ;;
+        messenger-status)
+                messenger_status
+                ;;
+        messenger-check)
+                messenger_check
+                ;;
+
+        # --- Время и NTP -----------------------------------------------------
+        time-save)
+                time_save "${2:-1}" "${3:-1}" "${4:-Europe/Moscow}" "${5:-MSK-3}" "${6:-ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org}"
+                ;;
+
+        # --- Списки сайтов ---------------------------------------------------
+        site-lists-update)
+                /usr/libexec/sheepfold/sheepfold-site-lists update
+                ;;
+        site-lists-cron-apply)
+                /usr/libexec/sheepfold/sheepfold-site-lists cron-apply
+                ;;
+        site-lists-status)
+                /usr/libexec/sheepfold/sheepfold-site-lists status
+                ;;
+
+        # --- Диагностика -----------------------------------------------------
+        router-info)
+                router_info
+                ;;
+        wan-status-tick)
+                wan_status_tick
+                ;;
+
+        # --- Устройства (полное обновление, LuCI) ----------------------------
+        set-device-status)
+                set_device_status "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}"
+                ;;
+
+        # --- WPS -------------------------------------------------------------
+        wps-button)
+                wps_button "${2:-short}"
+                ;;
+        wps-allowlist-window)
+                wps_allowlist_window
+                ;;
+
+        # --- LED -------------------------------------------------------------
+        led-apply)
+                case "$(global_get router_led_control router_default)" in
+                        off_forever)                        led_off_forever   ;;
+                        new_device_alert_until_luci_login) led_alert_start   ;;
+                        *)                                 led_restore_defaults ;;
+                esac
+                ;;
+        led-blink-code)
+                led_blink_code "${2:-30}" "${3:-1010000}"
+                ;;
+        led-alert-start)
+                led_alert_start
+                ;;
+        led-alert-loop)
+                led_alert_loop
+                ;;
+        led-alert-ack)
+                led_alert_ack
+                ;;
+
+        # --- Страница блокировки ---------------------------------------------
+        blocked-page-apply)
+                blocked_page_apply
+                ;;
+        blocked-page-stop)
+                blocked_httpd_stop
+                ;;
+
+        # --- Общий статус ----------------------------------------------------
+        status)
+                printf 'wifi_auto_enable=%s %s\n'  "$(global_get wifi_auto_enable_mode never)"  "$(global_get wifi_auto_enable_time 07:00)"
+                printf 'wifi_auto_disable=%s %s\n' "$(global_get wifi_auto_disable_mode never)" "$(global_get wifi_auto_disable_time 23:00)"
+                printf 'wps_short=%s\n'             "$(global_get wps_short_press_action router_default)"
+                printf 'wps_long=%s\n'              "$(global_get wps_long_press_action router_default)"
+                printf 'router_led_control=%s\n'   "$(global_get router_led_control router_default)"
+                printf 'blocked_page=%s %s\n'       "$(global_get blocked_page_enabled 1)" "$(global_get blocked_page_port 5202)"
+                printf 'wan_state=%s\n'             "$(cat "$WAN_STATE_FILE" 2>/dev/null || true)"
+                ;;
+
+        *)
+                echo "Usage: sheepfold-router-control <command> [args]" >&2
+                echo "" >&2
+                echo "Токены:           check-token <bearer>  |  revoke-tokens <login>" >&2
+                echo "Клиент (APK):     client-status <ip>" >&2
+                echo "Устройства:       list-devices  |  device-allow <mac>  |  device-block <mac>  |  device-temp-access <mac> [min]" >&2
+                echo "Блокировка:       global-block-on  |  global-block-off  |  internet-enable  |  internet-disable  |  internet-status" >&2
+                echo "Сопряжение:       pair-admin-device  |  activate-admin-pairing-code  |  admin-pairing-status" >&2
+                echo "Wi-Fi:            wifi-enable  |  wifi-disable  |  wifi-automation-tick" >&2
+                echo "Мессенджеры:      messenger-disable  |  messenger-save-telegram  |  messenger-save-vk  |  messenger-status  |  messenger-check" >&2
+                echo "Время:            time-save" >&2
+                echo "Списки сайтов:    site-lists-update  |  site-lists-cron-apply  |  site-lists-status" >&2
+                echo "Диагностика:      router-info  |  wan-status-tick  |  status" >&2
+                echo "WPS:              wps-button  |  wps-allowlist-window" >&2
+                echo "LED:              led-apply  |  led-blink-code  |  led-alert-start  |  led-alert-loop  |  led-alert-ack" >&2
+                echo "Страница блок.:   blocked-page-apply  |  blocked-page-stop" >&2
+                exit 1
+                ;;
+esac

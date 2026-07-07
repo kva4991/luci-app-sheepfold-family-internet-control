@@ -1,0 +1,94 @@
+#!/bin/sh
+set -eu
+
+. /usr/libexec/sheepfold/sheepfold-pair-common
+
+login="${1:-}"
+code="${2:-}"
+remote_ip="${3:-}"
+user_agent="${4:-Android Sheepfold}"
+
+pair_validate_login_code "$login" "$code"
+admin_section="$(pair_admin_section_for_login "$login")" || {
+    echo "Administrator login was not found. Create the account in LuCI first." >&2
+    exit 2
+}
+pair_acquire_admin_lock "$admin_section"
+
+expected_code="$(uci -q get "sheepfold.$admin_section.pairing_code" 2>/dev/null || true)"
+expires_at="$(uci -q get "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || printf 0)"
+now="$(date +%s)"
+
+[ -n "$expected_code" ] || {
+    echo "Pairing code is not active. Open LuCI and generate a new code." >&2
+    exit 3
+}
+[ "$code" = "$expected_code" ] || {
+    echo "Pairing code is invalid." >&2
+    exit 3
+}
+case "$expires_at" in ''|*[!0-9]*) expires_at=0 ;; esac
+if [ "$expires_at" -le 0 ] || [ "$now" -gt "$expires_at" ]; then
+    uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
+    uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
+    uci -q commit sheepfold
+    echo "Pairing code has expired." >&2
+    exit 3
+fi
+
+device_mac="$(pair_normalize_mac "$(pair_mac_for_ip "$remote_ip" | sed -n '1p')")"
+pair_valid_mac "$device_mac" || {
+    echo "Could not determine phone MAC from DHCP leases or ARP table." >&2
+    exit 4
+}
+pair_list_has_mac blocklist "$device_mac" && {
+    echo "Blocklisted device cannot become an administrator device." >&2
+    exit 5
+}
+
+admin_name="$(uci -q get "sheepfold.$admin_section.display_name" 2>/dev/null || true)"
+[ -n "$admin_name" ] || admin_name="$login"
+device_name="$(pair_name_for_ip "$remote_ip" | sed -n '1p')"
+[ -n "$device_name" ] && [ "$device_name" != "*" ] || device_name="Телефон администратора"
+device_section="$(pair_device_section_for_mac "$device_mac")"
+
+pair_list_has_mac blocklist "$device_mac" && {
+    echo "Blocklisted device cannot become an administrator device." >&2
+    exit 5
+}
+
+pair_prepare_token "$login" || {
+    echo "Could not generate administrator token." >&2
+    exit 6
+}
+
+uci -q set "sheepfold.$device_section.mac=$device_mac"
+uci -q set "sheepfold.$device_section.name=$device_name"
+uci -q set "sheepfold.$device_section.ip=$remote_ip"
+uci -q set "sheepfold.$device_section.device_type=phone"
+uci -q set "sheepfold.$device_section.manual_device_type=1"
+uci -q set "sheepfold.$device_section.group=Не настроено"
+uci -q set "sheepfold.$device_section.schedules="
+uci -q set "sheepfold.$device_section.status=allow"
+uci -q set "sheepfold.$device_section.admin_device=1"
+uci -q set "sheepfold.$device_section.admin_owner=$admin_name"
+uci -q set "sheepfold.$device_section.admin_login=$login"
+uci -q set "sheepfold.$device_section.paired_from=android"
+uci -q set "sheepfold.$device_section.paired_at=$now"
+uci -q set "sheepfold.$device_section.pairing_user_agent=$user_agent"
+pair_add_allowlist "$device_mac"
+
+uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
+uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
+uci -q commit sheepfold
+pair_store_token
+
+pair_log_event "Android-приложение привязало телефон администратора: $device_name, $device_mac, IP ${remote_ip:-?}, администратор $admin_name"
+
+pair_print_kv paired 1
+pair_print_kv admin_name "$admin_name"
+pair_print_kv admin_login "$login"
+pair_print_kv device_name "$device_name"
+pair_print_kv mac "$device_mac"
+pair_print_kv ip "$remote_ip"
+pair_print_kv token "$PAIR_TOKEN"
