@@ -86,8 +86,38 @@
         color: #14532d;
 }
 
+.sf-action-muted {
+        opacity: 0.72;
+}
+
 .sf-action-neutral {
         border-color: #cbd5e1;
+}
+
+.sf-centered-toast {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 10000;
+        min-width: 260px;
+        max-width: min(420px, calc(100vw - 32px));
+        padding: 16px 22px;
+        border: 1px solid #8fc7a9;
+        border-radius: 8px;
+        background: #e8f6ef;
+        color: #14532d;
+        box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+        font-size: 17px;
+        font-weight: 700;
+        text-align: center;
+        opacity: 1;
+        transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.sf-centered-toast-hide {
+        opacity: 0;
+        transform: translate(-50%, -48%);
 }
 
 .sf-action-pairing {
@@ -187,9 +217,11 @@
         overflow-x: auto;
         margin-bottom: 12px;
         padding-bottom: 2px;
+        width: 100%;
 }
 
 .sf-tab {
+        flex: 1 1 0;
         border: 1px solid var(--sf-border);
         background: #fff;
         color: #263141;
@@ -197,6 +229,7 @@
         padding: 8px 10px;
         white-space: nowrap;
         cursor: pointer;
+        text-align: center;
 }
 
 .sf-tab.active {
@@ -333,6 +366,10 @@
         resize: vertical;
 }
 
+.sf-field textarea.sf-textarea-compact {
+        min-height: 52px;
+}
+
 .sf-settings-section .sf-field .cbi-input-select,
 .sf-settings-section .sf-field .cbi-input-text {
         width: min(100%, 520px);
@@ -360,7 +397,7 @@
 }
 
 .sf-inline-option span {
-        font-weight: 500;
+        font-weight: 400;
 }
 
 .sf-time-input {
@@ -917,13 +954,13 @@
 
 .sf-command-item {
         display: grid;
-        grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr);
+        grid-template-columns: minmax(130px, 0.7fr) minmax(160px, 1fr) minmax(0, 1.2fr);
         gap: 10px;
-        align-items: center;
+        align-items: start;
         padding: 8px 10px;
-        border: 1px solid #cbd5e1;
+        border: 1px solid #b8c6d8;
         border-radius: 6px;
-        background: #f8fbff;
+        background: #f4f8ff;
 }
 
 .sf-command-list code {
@@ -936,7 +973,7 @@
         border-radius: 5px;
         background: #1f2937;
         color: #ffffff;
-        font-weight: 700;
+        font-weight: 500;
         white-space: normal;
 }
 
@@ -944,6 +981,14 @@
         color: #334155;
         font-size: 13px;
         line-height: 1.35;
+}
+
+.sf-command-aliases {
+        color: #0f4c81 !important;
+}
+
+.sf-command-description {
+        color: #475569 !important;
 }
 
 @media (max-width: 720px) {
@@ -1127,6 +1172,7 @@
         grid-template-columns: minmax(220px, 1fr) auto;
         gap: 18px;
         align-items: start;
+        border-color: rgba(51, 65, 85, 0.18);
 }
 
 .sf-wifi-title {
@@ -1300,7 +1346,97 @@
 }
 
 .sf-settings-tabs {
+        flex: 1 1 auto;
         margin-bottom: 14px;
+}
+
+.sf-settings-tabs-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 14px;
+}
+
+.sf-settings-save-bar {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 12px;
+        margin-top: 16px;
+}
+
+.sf-settings-save-bar-top {
+        margin-top: 0;
+        margin-bottom: 0;
+        flex: 0 0 auto;
+}
+
+.sf-settings-dirty-note {
+        color: #7c2d12;
+        font-size: 13px;
+}
+
+.sf-info-body {
+        display: grid;
+        gap: 14px;
+}
+
+.sf-info-grid {
+        align-items: stretch;
+}
+
+.sf-info-row {
+        display: grid;
+        grid-template-columns: minmax(160px, 42%) minmax(0, 1fr);
+        gap: 12px;
+        padding: 7px 0;
+        border-bottom: 1px solid #e5e7eb;
+}
+
+.sf-info-row:last-child {
+        border-bottom: 0;
+}
+
+.sf-info-row span {
+        color: #4b5563;
+}
+
+.sf-info-row strong {
+        min-width: 0;
+        overflow-wrap: anywhere;
+}
+
+.sf-info-table {
+        display: grid;
+        border: 1px solid #d7dee8;
+        border-radius: 8px;
+        overflow: hidden;
+}
+
+.sf-info-table-row {
+        display: grid;
+        grid-template-columns: 0.9fr 0.8fr 0.7fr 0.7fr 0.8fr 1.3fr 0.7fr 0.8fr;
+        gap: 8px;
+        padding: 9px 10px;
+        border-bottom: 1px solid #e5e7eb;
+}
+
+.sf-info-table-row:last-child {
+        border-bottom: 0;
+}
+
+.sf-info-table-row > div {
+        min-width: 0;
+        overflow-wrap: anywhere;
+}
+
+.sf-info-table-head {
+        background: #f3f6f8;
+        font-weight: 700;
+}
+
+.sf-ai-preview {
+        width: 100%;
 }
 
 .sf-settings-panel[hidden] {
@@ -1319,6 +1455,58 @@
 
 .sf-messenger-fields[hidden] {
         display: none !important;
+}
+
+.sf-messenger-command-box {
+        margin-top: 6px;
+        padding-top: 12px;
+        border-top: 1px solid var(--sf-border);
+}
+
+.sf-messenger-command-box h4 {
+        margin: 0 0 10px;
+}
+
+.sf-messenger-status {
+        display: grid;
+        gap: 3px;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-left-width: 4px;
+        border-radius: 8px;
+        background: #f8fafc;
+}
+
+.sf-messenger-status-label {
+        color: var(--sf-muted);
+        font-size: 12px;
+}
+
+.sf-messenger-status-idle {
+        border-left-color: #64748b;
+}
+
+.sf-messenger-status-checking {
+        border-left-color: #2563eb;
+        background: #eff6ff;
+}
+
+.sf-messenger-status-ok {
+        border-left-color: #1d8a57;
+        background: #eefaf3;
+        color: #14532d;
+}
+
+.sf-messenger-status-warning {
+        border-left-color: #f0b429;
+        background: #fff8e6;
+        color: #7a4f01;
+}
+
+.sf-messenger-status-muted {
+        border-left-color: #94a3b8;
+        background: #f8fafc;
+        color: #475569;
 }
 
 .sf-status-card {
@@ -1537,6 +1725,19 @@
 
         .sf-wifi-network {
                 grid-template-columns: 1fr;
+        }
+
+        .sf-info-row {
+                grid-template-columns: 1fr;
+                gap: 4px;
+        }
+
+        .sf-info-table {
+                overflow-x: auto;
+        }
+
+        .sf-info-table-row {
+                min-width: 760px;
         }
 
         .sf-quick-table {

@@ -1,11 +1,11 @@
 # Current Implementation Status
 
-Last checked: 2026-07-05.
+Last checked: 2026-07-06.
 
 Current OpenWRT package version in the repository:
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-93_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-100_all.ipk
 ```
 
 The package uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries.
@@ -17,9 +17,9 @@ The package uses `Architecture: all` because it contains LuCI assets, shell scri
 - Asset cache busting through `ui_asset_version` and JS/CSS query suffixes.
 - Local Android discovery/API service on the configurable Sheepfold port, default `5201`.
 - Public discovery data through `/.well-known/sheepfold.json`.
-- CGI endpoint `/cgi-bin/sheepfold-api` with current router/app metadata.
+- CGI endpoint `/cgi-bin/sheepfold-api` with current router/app metadata and `/cgi-bin/sheepfold-api/router-info` diagnostics snapshot for Android/APK AI-preview flows.
 - Configurable blocked-page responder on port `5202`.
-- Router-control backend command for Wi-Fi enable/disable, Wi-Fi automation tick, WPS actions, LED actions, blocked-page service, WAN status tick, and device status changes.
+- Router-control backend command for Wi-Fi enable/disable, Wi-Fi automation tick, WPS actions, LED actions, blocked-page service, WAN status tick, router diagnostics, and device status changes.
 - Device add/status backend action: create or update a device by MAC, add to allowlist, add to blocklist, or add as a known restricted device.
 - Backend protection that prevents administrator devices from being added to the blocklist.
 - LuCI buttons for adding devices to allowlist/blocklist through the backend command.
@@ -33,6 +33,7 @@ The package uses `Architecture: all` because it contains LuCI assets, shell scri
 - WPS button behavior settings.
 - Router LED behavior settings.
 - WAN connectivity event logging.
+- LuCI settings tab `Information` showing router time, Sheepfold version, internet status, ping to `ya.ru`, OpenWRT/firmware/kernel/model, Wi-Fi radio status, LAN ports, Podkop/AdGuard Home installation/version, uptime/load/memory, and a safe AI context preview for APK.
 - Device detection helper with heuristic device types and optional `No restrictions` auto-assignment.
 - Minimal Telegram adapter through outgoing long polling: configured from LuCI, test message button, chat ID discovery when empty, bot command menu sync, commands for status, device list, internet on/off, Wi-Fi on/off, and support.
 - Uninstall script that removes the OpenWRT package while preserving Sheepfold settings/client lists and printing a remaining-settings report.
@@ -50,6 +51,8 @@ The package uses `Architecture: all` because it contains LuCI assets, shell scri
 - AdGuard Home and Podkop status checks/integration preparation are documented and partially represented in LuCI, but automatic integration changes are not implemented.
 - Import currently validates the Sheepfold export file shape in LuCI but does not apply settings through a backend confirmation flow yet.
 - Install script still asks the correct first-run questions and detects integrations, but does not yet download and install the latest `.ipk` from GitHub Releases by itself.
+- Country-aware connectivity diagnostics are partially implemented for router info/WAN checks with Russia-relevant defaults such as `ya.ru`, `gosuslugi.ru`, and `ntp1.vniiftri.ru`; full country-profile configuration is still target work.
+- Router time setup is partially implemented through LuCI/backend NTP/timezone controls; first-run country-aware automatic timezone selection still needs completion.
 
 ## Documentation Reading Rule
 

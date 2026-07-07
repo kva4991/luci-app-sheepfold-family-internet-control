@@ -71,8 +71,10 @@ mac_in_named_list() {
 }
 
 target_group_for_detected_type() {
+        # В "Без ограничений" отправляем только домашнюю инфраструктуру, а не детские гаджеты.
+        # Это удобная автонастройка для камер, серверов и умного дома, но не замена белому списку.
         case "$1" in
-                server|network|engineering)
+                server|network|engineering|camera|smart_home|vacuum)
                         printf '%s\n' "$NO_RESTRICTIONS_GROUP"
                         ;;
                 *)
@@ -92,6 +94,7 @@ assign_no_restrictions_if_allowed() {
         min_confidence="$(global_get detector_min_no_restrictions_confidence 80)"
         no_restrictions_auto_assign="$(global_get no_restrictions_auto_assign 1)"
         current_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+        auto_excluded="$(uci -q get "sheepfold.$section.no_restrictions_auto_excluded" 2>/dev/null || true)"
 
         case "$confidence" in
                 ''|*[!0-9]*) confidence=0 ;;
@@ -101,8 +104,11 @@ assign_no_restrictions_if_allowed() {
         esac
 
         [ "$no_restrictions_auto_assign" = "1" ] || return 0
+        [ "$auto_excluded" = "1" ] && return 0
         [ -n "$target_group" ] || return 0
         [ "$confidence" -ge "$min_confidence" ] || return 0
+        # Чёрный список всегда старше любой автоматики: если родитель явно запретил устройство,
+        # детектор не имеет права вернуть его в мягкую группу даже при похожести на сервер/камеру.
         mac_in_named_list blocklist "$mac" && return 0
 
         case "$current_group" in
@@ -192,15 +198,15 @@ classify_device() {
 
         if text_has "$lower" 'home[ -]?assistant|hassio|hass\.io|haos|openhab|adguard[ -]?home|adguardhome|samba|smb|cifs|file server|nas|proxmox|pve|truenas|freenas|openmediavault|omv|synology|diskstation|qnap|unraid|docker host|portainer|smlight|slzb|zigbee2mqtt|zha coordinator|zigbee coordinator|zigbee gateway|zigbee bridge|matter bridge|thread border router|homekit bridge|smart home hub|smarthome hub|philips hue bridge|hue bridge|ikea dirigera|dirigera|tradfri gateway|aqara hub|xiaomi gateway|mijia gateway|tuya gateway|sonoff zigbee bridge|hubitat|smartthings hub|aeotec hub|homey|fibaro home center|homematic|deconz|conbee|skyconnect|zwavejs|z-wave js|z-wave gateway|zwave gateway'; then
                 type="server"
-                confidence=76
+                confidence=86
                 reason="home infrastructure name marker"
         elif text_has "$lower" 'nvr|dvr|xvr|video recorder|videoregistrar|videonablyudenie|videonablydenie|videonabludenie|video-nablyudenie|video-nablydenie|cctv server|surveillance server|video server|ltv-rne|rvi-r|trassir|xmeye|ivms|hik-connect|smartpss|uniview|hikvision|hiwatch|hilook|dahua|beward|optimus|tantos|polyvision|hanwha|wisenet|axis|vivotek|tiandy'; then
                 type="server"
-                confidence=76
+                confidence=86
                 reason="video recorder or surveillance server name marker"
         elif text_has "$lower" 'zont|ectostroy|ectocontrol|myheat|teplocom|xital|telemetrika|owen|saures|boiler|kotel|кот[её]л|baxi|navien|vaillant|buderus|protherm|ariston|heating|thermostat|alarm'; then
                 type="engineering"
-                confidence=76
+                confidence=86
                 reason="engineering, heating, or safety controller name marker"
         elif text_has "$lower" 'router|gateway|repeater|extender|openwrt|access point|ap-|mesh'; then
                 type="network"
@@ -213,7 +219,7 @@ classify_device() {
                 reason="printer marker"
         elif text_has "$lower" '(^|[^a-z0-9])(ip[-_ ]?cam|webcam|camera|cam[0-9]+|cam[-_ ][0-9]+)([^a-z0-9]|$)'; then
                 type="camera"
-                confidence=72
+                confidence=82
                 reason="camera marker"
         elif text_has "$lower" 'iphone|android|galaxy|redmi|pixel|phone'; then
                 type="phone"
@@ -249,9 +255,11 @@ classify_device() {
                 reason="smart-home appliance, relay, sensor, or actuator marker"
         elif text_has "$lower" '(^|[^a-z0-9])(espressif|esp8266|esp32|esp32c3|esp32-c3|esp32s3|esp32-s3|tasmota|esphome)([^a-z0-9]|$)'; then
                 type="smart_home"
-                confidence=75
+                confidence=82
                 reason="ESP smart-home device marker"
         fi
+
+        [ -n "$target_group" ] || target_group="$(target_group_for_detected_type "$type")"
 
         case ",$ports," in
                 *,8123,*)
@@ -282,14 +290,14 @@ classify_device() {
                 type="camera"
                 [ "$confidence" -lt 88 ] && confidence=88
                 reason="camera streaming service is open"
-                target_group=""
+                target_group="$(target_group_for_detected_type "$type")"
         fi
 
         if printf '%s' "$ports" | grep -Eq '(^|,)(9100|631)(,|$)'; then
                 type="printer"
                 [ "$confidence" -lt 86 ] && confidence=86
                 reason="printer service is open"
-                target_group=""
+                target_group="$(target_group_for_detected_type "$type")"
         fi
 
         printf '%s\t%s\t%s\t%s\n' "$type" "$confidence" "$target_group" "$reason"
@@ -304,6 +312,8 @@ write_manual_device_observation() {
         section="$(ensure_device_section "$mac")"
         device_type="$(uci -q get "sheepfold.$section.device_type" 2>/dev/null || printf unknown)"
 
+        # Если родитель вручную выбрал тип устройства, больше не спорим с ним автоопределением.
+        # Меняем только живые поля вроде IP/источников, чтобы таблица оставалась актуальной.
         uci -q set "sheepfold.$section.ip=$ip"
         [ -n "$name" ] && [ -z "$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)" ] && uci -q set "sheepfold.$section.name=$name"
         uci -q set "sheepfold.$section.detection_sources=$sources"
@@ -411,6 +421,8 @@ scan_devices() {
                         case "$existing_confidence" in
                                 ''|*[!0-9]*) existing_confidence=0 ;;
                         esac
+                        # Уверенно определённый тип тоже фиксируем: иначе периодический скан может
+                        # прыгать между "сервер", "камера" и "умное устройство" из-за временно открытых портов.
                         if [ -n "$existing_type" ] && [ "$existing_confidence" -ge "$min_device_type_confidence" ]; then
                                 write_locked_device_observation "$mac" "$ip" "$name" "$sources" "$now"
                                 continue

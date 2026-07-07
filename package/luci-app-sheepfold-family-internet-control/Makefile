@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=98
+PKG_RELEASE:=115
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -57,6 +57,13 @@ ensure_global_option detector_min_no_restrictions_confidence '80'
 ensure_global_option detector_nmap_host_timeout_seconds '20'
 ensure_global_option update_check_install_mode 'weekly'
 ensure_global_option active_messenger 'none'
+ensure_global_option ai_provider 'deepseek'
+ensure_global_option deepseek_model 'deepseek-v4-flash'
+ensure_global_option deepseek_api_url 'https://api.deepseek.com/chat/completions'
+ensure_global_option deepseek_api_key ''
+ensure_global_option gemini_model 'gemini-2.5-flash'
+ensure_global_option gemini_api_url 'https://generativelanguage.googleapis.com/v1beta/models'
+ensure_global_option gemini_api_key ''
 ensure_global_option vk_access_token ''
 ensure_global_option vk_community_id ''
 ensure_global_option vk_admin_user_id ''
@@ -66,6 +73,11 @@ ensure_global_option wifi_auto_enable_mode 'never'
 ensure_global_option wifi_auto_enable_time '07:00'
 ensure_global_option wifi_auto_disable_mode 'never'
 ensure_global_option wifi_auto_disable_time '23:00'
+ensure_global_option router_ntp_server_enabled '1'
+ensure_global_option router_ntp_client_auto_configure '1'
+ensure_global_option router_timezone_name 'Europe/Moscow'
+ensure_global_option router_timezone 'MSK-3'
+ensure_global_option router_ntp_servers 'ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org'
 ensure_global_option wps_short_press_action 'router_default'
 ensure_global_option wps_long_press_action 'router_default'
 ensure_global_option router_led_control 'router_default'

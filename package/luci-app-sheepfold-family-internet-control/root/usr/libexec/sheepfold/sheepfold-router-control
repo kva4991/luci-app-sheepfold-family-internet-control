@@ -80,6 +80,18 @@ valid_port() {
         [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
 }
 
+valid_hostname() {
+        printf '%s' "$1" | grep -Eq '^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)*[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$'
+}
+
+valid_timezone_name() {
+        printf '%s' "$1" | grep -Eq '^[A-Za-z0-9_+.-]+(/[A-Za-z0-9_+.-]+)?$'
+}
+
+valid_posix_timezone() {
+        printf '%s' "$1" | grep -Eq '^[A-Za-z0-9_+:-]+$'
+}
+
 normalize_mac() {
         printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
 }
@@ -168,6 +180,233 @@ device_section_for_mac() {
         printf '%s\n' "$section"
 }
 
+admin_section_for_login() {
+        login="$1"
+        [ -n "$login" ] || return 1
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=administrator$/\1/p"); do
+                existing="$(uci -q get "sheepfold.$section.login" 2>/dev/null || true)"
+                [ "$existing" = "$login" ] && {
+                        printf '%s\n' "$section"
+                        return 0
+                }
+        done
+
+        return 1
+}
+
+admin_section_name_for_login() {
+        login="$1"
+
+        case "$login" in
+                SuperParent) printf '%s\n' owner ;;
+                *)
+                        section="admin_$(printf '%s' "$login" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_]/_/g; s/^_*//; s/_*$//')"
+                        [ "$section" != "admin_" ] || section="admin_manual"
+                        printf '%s\n' "$section"
+                        ;;
+        esac
+}
+
+activate_admin_pairing_code() {
+        login="${1:-}"
+        code="${2:-}"
+        display_name="${3:-}"
+        lifetime="${4:-600}"
+
+        [ -n "$login" ] || {
+                echo "Administrator login is required" >&2
+                return 2
+        }
+        [ -n "$code" ] || {
+                echo "Pairing code is required" >&2
+                return 2
+        }
+
+        case "$lifetime" in
+                ''|*[!0-9]*) lifetime=600 ;;
+        esac
+
+        repair_sheepfold_uci_sections
+        section="$(admin_section_for_login "$login" 2>/dev/null || true)"
+        [ -n "$section" ] || section="$(admin_section_name_for_login "$login")"
+
+        if [ "$(uci -q get "sheepfold.$section" 2>/dev/null || true)" != "administrator" ]; then
+                uci -q delete "sheepfold.$section" 2>/dev/null || true
+                uci -q set "sheepfold.$section=administrator"
+        fi
+
+        [ -n "$display_name" ] || display_name="$login"
+        expires_at="$(($(date +%s) + lifetime))"
+
+        uci -q set "sheepfold.$section.display_name=$display_name"
+        uci -q set "sheepfold.$section.login=$login"
+        uci -q set "sheepfold.$section.pairing_code=$code"
+        uci -q set "sheepfold.$section.pairing_code_expires=$expires_at"
+        uci -q commit sheepfold
+
+        printf 'activated=1\n'
+        printf 'admin_section=%s\n' "$section"
+        printf 'expires_at=%s\n' "$expires_at"
+}
+
+mac_for_ip() {
+        ip="$1"
+        [ -n "$ip" ] || return 1
+
+        if [ -r /tmp/dhcp.leases ]; then
+                awk -v ip="$ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases
+        fi
+
+        if [ -r /proc/net/arp ]; then
+                awk -v ip="$ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp
+        fi
+}
+
+name_for_ip() {
+        ip="$1"
+        [ -n "$ip" ] || return 1
+
+        if [ -r /tmp/dhcp.leases ]; then
+                awk -v ip="$ip" '$3 == ip { print $4; exit }' /tmp/dhcp.leases
+        fi
+}
+
+pair_admin_device() {
+        login="${1:-}"
+        code="${2:-}"
+        remote_ip="${3:-}"
+        user_agent="${4:-}"
+
+        repair_sheepfold_uci_sections
+        ensure_list_section allowlist
+        ensure_list_section blocklist
+
+        admin_section="$(admin_section_for_login "$login")" || {
+                echo "Administrator login was not found" >&2
+                return 2
+        }
+
+        expected_code="$(uci -q get "sheepfold.$admin_section.pairing_code" 2>/dev/null || true)"
+        expires_at="$(uci -q get "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || printf 0)"
+        now="$(date +%s)"
+
+        [ -n "$expected_code" ] || {
+                echo "Pairing code is not active. Open administrator settings in LuCI again." >&2
+                return 3
+        }
+
+        [ "$code" = "$expected_code" ] || {
+                echo "Pairing code is invalid" >&2
+                return 3
+        }
+
+        case "$expires_at" in
+                ''|*[!0-9]*) expires_at=0 ;;
+        esac
+
+        if [ "$expires_at" -gt 0 ] && [ "$now" -gt "$expires_at" ]; then
+                uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
+                uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
+                uci -q commit sheepfold
+                echo "Pairing code has expired. Open administrator settings in LuCI again." >&2
+                return 3
+        fi
+
+        mac="$(mac_for_ip "$remote_ip" | sed -n '1p')"
+        mac="$(normalize_mac "$mac")"
+        valid_mac "$mac" || {
+                echo "Could not determine phone MAC address from router leases or ARP table" >&2
+                return 4
+        }
+
+        if list_has_mac blocklist "$mac"; then
+                echo "Blocklisted device cannot become an administrator device" >&2
+                return 5
+        fi
+
+        admin_name="$(uci -q get "sheepfold.$admin_section.display_name" 2>/dev/null || printf '%s' "$login")"
+        device_name="$(name_for_ip "$remote_ip" | sed -n '1p')"
+        [ -n "$device_name" ] && [ "$device_name" != "*" ] || device_name="Телефон администратора"
+        section="$(device_section_for_mac "$mac")"
+
+        # Привязанный телефон администратора сразу выводим из обычных правил:
+        # он не должен зависеть от детских групп/расписаний и должен оставаться в белом списке,
+        # иначе родитель может потерять доступ к управлению в самый неудобный момент.
+        uci -q set "sheepfold.$section.mac=$mac"
+        uci -q set "sheepfold.$section.name=$device_name"
+        uci -q set "sheepfold.$section.ip=$remote_ip"
+        uci -q set "sheepfold.$section.device_type=phone"
+        uci -q set "sheepfold.$section.manual_device_type=1"
+        uci -q set "sheepfold.$section.group=Не настроено"
+        uci -q set "sheepfold.$section.schedules="
+        uci -q set "sheepfold.$section.status=allow"
+        uci -q set "sheepfold.$section.admin_device=1"
+        uci -q set "sheepfold.$section.admin_owner=$admin_name"
+        uci -q set "sheepfold.$section.admin_login=$login"
+        uci -q set "sheepfold.$section.paired_from=android"
+        uci -q set "sheepfold.$section.paired_at=$now"
+        uci -q set "sheepfold.$section.pairing_user_agent=$user_agent"
+        add_mac_to_list allowlist "$mac"
+        remove_mac_from_list blocklist "$mac"
+
+        # Код сопряжения одноразовый. Удаляем его на роутере сразу после успешного использования,
+        # чтобы фотография QR-кода или подсмотренный временный пароль не сработали повторно.
+        uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
+        uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
+        uci -q commit sheepfold
+
+        log_event "Android-приложение привязало админское устройство: $device_name, $mac, IP ${remote_ip:-неизвестен}, администратор $admin_name"
+
+        printf 'paired=1\n'
+        printf 'admin_name=%s\n' "$admin_name"
+        printf 'admin_login=%s\n' "$login"
+        printf 'device_name=%s\n' "$device_name"
+        printf 'mac=%s\n' "$mac"
+        printf 'ip=%s\n' "$remote_ip"
+}
+
+admin_pairing_status() {
+        login="${1:-}"
+        since="${2:-0}"
+
+        repair_sheepfold_uci_sections
+
+        case "$since" in
+                ''|*[!0-9]*) since=0 ;;
+        esac
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=device$/\1/p"); do
+                admin_login="$(uci -q get "sheepfold.$section.admin_login" 2>/dev/null || true)"
+                admin_device="$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)"
+                paired_at="$(uci -q get "sheepfold.$section.paired_at" 2>/dev/null || printf 0)"
+
+                [ "$admin_device" = "1" ] || continue
+                [ "$admin_login" = "$login" ] || continue
+
+                case "$paired_at" in
+                        ''|*[!0-9]*) paired_at=0 ;;
+                esac
+
+                [ "$paired_at" -ge "$since" ] || continue
+
+                mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+                device_name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+                [ -n "$device_name" ] || device_name="$mac"
+
+                printf 'paired=1\n'
+                printf 'admin_name=%s\n' "$(uci -q get "sheepfold.$section.admin_owner" 2>/dev/null || printf '%s' "$login")"
+                printf 'admin_login=%s\n' "$admin_login"
+                printf 'device_name=%s\n' "$device_name"
+                printf 'mac=%s\n' "$mac"
+                printf 'ip=%s\n' "$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)"
+                printf 'paired_at=%s\n' "$paired_at"
+                return 0
+        done
+
+        printf 'paired=0\n'
+}
+
 set_device_status() {
         mac="$(normalize_mac "${1:-}")"
         status="${2:-}"
@@ -200,6 +439,8 @@ set_device_status() {
                 return 3
         fi
 
+        # Не переносим MAC между белым и чёрным списком автоматически. Пользователь должен сам
+        # убрать конфликтующий статус, потому что это явное решение о доверии или запрете устройства.
         if [ "$status" = "allow" ] && list_has_mac blocklist "$mac"; then
                 echo "Device is already in blocklist. Remove it from blocklist first." >&2
                 return 3
@@ -357,6 +598,124 @@ messenger_status() {
         printf 'vk_admin_user_id_configured=%s\n' "$([ -n "$(global_get vk_admin_user_id '')" ] && printf 1 || printf 0)"
 }
 
+http_get() {
+        url="$1"
+
+        if command -v uclient-fetch >/dev/null 2>&1; then
+                uclient-fetch -qO- "$url" 2>/dev/null || true
+        elif command -v wget >/dev/null 2>&1; then
+                wget -q -O - "$url" 2>/dev/null || true
+        elif command -v curl >/dev/null 2>&1; then
+                curl -fsSL "$url" 2>/dev/null || true
+        fi
+}
+
+messenger_check() {
+        repair_sheepfold_uci_sections
+        active="$(global_get active_messenger none)"
+
+        printf 'active=%s\n' "$active"
+
+        case "$active" in
+                telegram)
+                        token="$(global_get telegram_bot_token '')"
+                        if [ -z "$token" ]; then
+                                printf 'status=error\n'
+                                printf 'message=%s\n' 'Токен Telegram-бота не заполнен'
+                                return 1
+                        fi
+
+                        response="$(http_get "https://api.telegram.org/bot${token}/getMe")"
+                        if printf '%s' "$response" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+                                printf 'status=connected\n'
+                                printf 'message=%s\n' 'Telegram подключён'
+                                return 0
+                        fi
+
+                        printf 'status=error\n'
+                        printf 'message=%s\n' 'От сервера Telegram нет ответа'
+                        return 1
+                        ;;
+                vk)
+                        token="$(global_get vk_access_token '')"
+                        community_id="$(global_get vk_community_id '')"
+                        if [ -z "$token" ] || [ -z "$community_id" ]; then
+                                printf 'status=error\n'
+                                printf 'message=%s\n' 'Данные VK не заполнены'
+                                return 1
+                        fi
+
+                        response="$(http_get "https://api.vk.com/method/groups.getById?group_id=${community_id}&access_token=${token}&v=5.199")"
+                        if printf '%s' "$response" | grep -q '"response"[[:space:]]*:'; then
+                                printf 'status=connected\n'
+                                printf 'message=%s\n' 'VK подключён'
+                                return 0
+                        fi
+
+                        printf 'status=error\n'
+                        printf 'message=%s\n' 'От сервера VK нет ответа'
+                        return 1
+                        ;;
+                *)
+                        printf 'status=disabled\n'
+                        printf 'message=%s\n' 'Мессенджер выключен'
+                        ;;
+        esac
+}
+
+ensure_system_time_sections() {
+        uci -q get system.@system[0] >/dev/null 2>&1 || uci -q add system system >/dev/null
+        if [ "$(uci -q get system.ntp 2>/dev/null || true)" != "timeserver" ]; then
+                uci -q delete system.ntp 2>/dev/null || true
+                uci -q set system.ntp='timeserver'
+        fi
+}
+
+time_save() {
+        ntp_server_enabled="${1:-1}"
+        ntp_client_enabled="${2:-1}"
+        zonename="${3:-Europe/Moscow}"
+        timezone="${4:-MSK-3}"
+        servers="${5:-ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org}"
+        normalized_servers=""
+
+        case "$ntp_server_enabled" in 0|1) ;; *) ntp_server_enabled=1 ;; esac
+        case "$ntp_client_enabled" in 0|1) ;; *) ntp_client_enabled=1 ;; esac
+        valid_timezone_name "$zonename" || zonename="Europe/Moscow"
+        valid_posix_timezone "$timezone" || timezone="MSK-3"
+
+        for server in $servers; do
+                valid_hostname "$server" || continue
+                normalized_servers="${normalized_servers}${normalized_servers:+ }$server"
+        done
+
+        [ -n "$normalized_servers" ] || normalized_servers="ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org"
+
+        repair_sheepfold_uci_sections
+        ensure_system_time_sections
+
+        uci -q set "system.@system[0].zonename=$zonename"
+        uci -q set "system.@system[0].timezone=$timezone"
+        uci -q set "system.ntp.enabled=$ntp_client_enabled"
+        uci -q set "system.ntp.enable_server=$ntp_server_enabled"
+        uci -q delete system.ntp.server 2>/dev/null || true
+        for server in $normalized_servers; do
+                uci -q add_list "system.ntp.server=$server"
+        done
+        uci -q commit system
+
+        uci -q set sheepfold.global.router_ntp_server_enabled="$ntp_server_enabled"
+        uci -q set sheepfold.global.router_ntp_client_auto_configure="$ntp_client_enabled"
+        uci -q set sheepfold.global.router_timezone_name="$zonename"
+        uci -q set sheepfold.global.router_timezone="$timezone"
+        uci -q set sheepfold.global.router_ntp_servers="$normalized_servers"
+        uci -q commit sheepfold
+
+        [ -x /etc/init.d/sysntpd ] && /etc/init.d/sysntpd restart >/dev/null 2>&1 || true
+        log_event "Настройки времени роутера сохранены Sheepfold: timezone $zonename, NTP $normalized_servers"
+        printf 'OK\n'
+}
+
 ubus_wan_status() {
         iface="$(global_get wan_interface wan)"
         ubus -S call "network.interface.$iface" status 2>/dev/null || true
@@ -373,9 +732,162 @@ json_string() {
 }
 
 wan_connectivity_ok() {
+        ping -c 1 -W 2 ya.ru >/dev/null 2>&1 && return 0
+        ping -c 1 -W 2 gosuslugi.ru >/dev/null 2>&1 && return 0
+        ping -c 1 -W 2 ntp1.vniiftri.ru >/dev/null 2>&1 && return 0
         ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1 && return 0
         ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 && return 0
         return 1
+}
+
+kv_safe() {
+        printf '%s' "$1" | tr '\r\n\t' '   ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+}
+
+print_kv() {
+        printf '%s=%s\n' "$1" "$(kv_safe "$2")"
+}
+
+opkg_version() {
+        pkg="$1"
+        opkg status "$pkg" 2>/dev/null | sed -n 's/^Version: //p' | sed -n '1p'
+}
+
+package_version_any() {
+        for pkg in "$@"; do
+                version="$(opkg_version "$pkg")"
+                if [ -n "$version" ]; then
+                        printf '%s' "$version"
+                        return 0
+                fi
+        done
+
+        return 1
+}
+
+ping_average_ms() {
+        host="$1"
+        ping -c 3 -W 2 "$host" 2>/dev/null |
+                awk -F'/' '/round-trip|rtt/ { print $5; found=1 } END { if (!found) exit 1 }'
+}
+
+lan_ports_text() {
+        ports=""
+
+        for port_path in /sys/class/net/lan*; do
+                [ -e "$port_path" ] || continue
+                ports="$ports ${port_path##*/}"
+        done
+
+        if [ -z "$ports" ] && [ -d /sys/class/net/br-lan/brif ]; then
+                for port_path in /sys/class/net/br-lan/brif/*; do
+                        [ -e "$port_path" ] || continue
+                        ports="$ports ${port_path##*/}"
+                done
+        fi
+
+        printf '%s' "$ports" | sed 's/^ //'
+}
+
+router_info() {
+        status_json="$(ubus_wan_status)"
+        wan_state="unknown"
+        wan_reason="статус WAN неизвестен"
+        ping_ms="$(ping_average_ms ya.ru 2>/dev/null || true)"
+        firmware="unknown"
+        release="unknown"
+        model="$(cat /tmp/sysinfo/model 2>/dev/null || cat /tmp/sysinfo/board_name 2>/dev/null || printf unknown)"
+        kernel="$(uname -r 2>/dev/null || printf unknown)"
+        sheepfold_version="$(opkg_version luci-app-sheepfold-family-internet-control)"
+        podkop_version="$(package_version_any podkop luci-app-podkop || true)"
+        adguard_version="$(package_version_any AdGuardHome adguardhome luci-app-adguardhome || true)"
+        lan_ports="$(lan_ports_text)"
+        lan_count="0"
+        uptime_text="$(awk '{ seconds=int($1); days=int(seconds/86400); hours=int((seconds%86400)/3600); minutes=int((seconds%3600)/60); printf "%sd %sh %sm", days, hours, minutes }' /proc/uptime 2>/dev/null || printf unknown)"
+        load_avg="$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || printf unknown)"
+        memory_text="$(awk '/MemTotal:/ { total=$2 } /MemAvailable:/ { available=$2 } END { if (total > 0) printf "%.0f MB free / %.0f MB total", available/1024, total/1024; else print "unknown" }' /proc/meminfo 2>/dev/null || printf unknown)"
+
+        [ -n "$sheepfold_version" ] || sheepfold_version="$(global_get ui_asset_version unknown)"
+
+        if [ -r /etc/openwrt_release ]; then
+                # shellcheck disable=SC1091
+                . /etc/openwrt_release
+                release="${DISTRIB_RELEASE:-unknown}"
+                firmware="${DISTRIB_DESCRIPTION:-OpenWrt $release}"
+        elif [ -r /etc/openwrt_version ]; then
+                release="$(cat /etc/openwrt_version 2>/dev/null || printf unknown)"
+                firmware="OpenWrt $release"
+        fi
+
+        if [ -n "$status_json" ]; then
+                up="$(printf '%s' "$status_json" | json_bool up | head -n 1)"
+                available="$(printf '%s' "$status_json" | json_bool available | head -n 1)"
+                device="$(printf '%s' "$status_json" | json_string l3_device | head -n 1)"
+
+                if [ -n "$device" ] && [ -r "/sys/class/net/$device/carrier" ] &&
+                        [ "$(cat "/sys/class/net/$device/carrier" 2>/dev/null || printf 1)" = "0" ]; then
+                        wan_state="offline"
+                        wan_reason="кабель WAN отключён или порт без линка"
+                elif [ "$up" != "true" ]; then
+                        wan_state="offline"
+                        if [ "$available" = "false" ]; then
+                                wan_reason="WAN-интерфейс недоступен"
+                        else
+                                wan_reason="WAN-интерфейс не поднят"
+                        fi
+                elif [ -n "$ping_ms" ]; then
+                        wan_state="online"
+                        wan_reason="ya.ru отвечает"
+                else
+                        wan_state="limited"
+                        wan_reason="WAN поднят, но ya.ru не ответил на ping"
+                fi
+        fi
+
+        if [ -n "$lan_ports" ]; then
+                lan_count="$(printf '%s\n' "$lan_ports" | awk '{ print NF + 0 }')"
+        fi
+
+        print_kv current_time "$(date '+%d.%m.%Y %H:%M:%S %Z' 2>/dev/null || date)"
+        print_kv sheepfold_version "$sheepfold_version"
+        print_kv internet_status "$wan_state"
+        print_kv internet_reason "$wan_reason"
+        print_kv ping_yandex_ms "${ping_ms:-timeout}"
+        print_kv firmware_version "$firmware"
+        print_kv openwrt_release "$release"
+        print_kv kernel_version "$kernel"
+        print_kv router_model "$model"
+        print_kv uptime "$uptime_text"
+        print_kv load_average "$load_avg"
+        print_kv memory "$memory_text"
+        print_kv lan_ports_count "$lan_count"
+        print_kv lan_ports "${lan_ports:-unknown}"
+        print_kv podkop_installed "$([ -n "$podkop_version" ] && printf yes || printf no)"
+        print_kv podkop_version "${podkop_version:-not installed}"
+        print_kv adguard_installed "$([ -n "$adguard_version" ] && printf yes || printf no)"
+        print_kv adguard_version "${adguard_version:-not installed}"
+
+        wifi_index=0
+        for radio in $(uci -q show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p"); do
+                wifi_index=$((wifi_index + 1))
+                disabled="$(uci -q get "wireless.$radio.disabled" 2>/dev/null || printf 0)"
+                type="$(uci -q get "wireless.$radio.type" 2>/dev/null || printf unknown)"
+                path="$(uci -q get "wireless.$radio.path" 2>/dev/null || uci -q get "wireless.$radio.phy" 2>/dev/null || printf unknown)"
+                band="$(uci -q get "wireless.$radio.band" 2>/dev/null || uci -q get "wireless.$radio.hwmode" 2>/dev/null || printf unknown)"
+                channel="$(uci -q get "wireless.$radio.channel" 2>/dev/null || printf auto)"
+                country="$(uci -q get "wireless.$radio.country" 2>/dev/null || printf unknown)"
+                htmode="$(uci -q get "wireless.$radio.htmode" 2>/dev/null || printf unknown)"
+
+                print_kv "wifi_${wifi_index}_name" "$radio"
+                print_kv "wifi_${wifi_index}_status" "$([ "$disabled" = "1" ] && printf disabled || printf enabled)"
+                print_kv "wifi_${wifi_index}_type" "$type"
+                print_kv "wifi_${wifi_index}_path" "$path"
+                print_kv "wifi_${wifi_index}_band" "$band"
+                print_kv "wifi_${wifi_index}_channel" "$channel"
+                print_kv "wifi_${wifi_index}_country" "$country"
+                print_kv "wifi_${wifi_index}_mode" "$htmode"
+        done
+        print_kv wifi_count "$wifi_index"
 }
 
 wan_status_tick() {
@@ -727,6 +1239,9 @@ case "$COMMAND" in
         internet-status)
                 global_internet_status
                 ;;
+        router-info)
+                router_info
+                ;;
         messenger-disable)
                 messenger_disable
                 ;;
@@ -738,6 +1253,12 @@ case "$COMMAND" in
                 ;;
         messenger-status)
                 messenger_status
+                ;;
+        messenger-check)
+                messenger_check
+                ;;
+        time-save)
+                time_save "${2:-1}" "${3:-1}" "${4:-Europe/Moscow}" "${5:-MSK-3}" "${6:-ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org}"
                 ;;
         site-lists-update)
                 /usr/libexec/sheepfold/sheepfold-site-lists update
@@ -756,6 +1277,15 @@ case "$COMMAND" in
                 ;;
         set-device-status)
                 set_device_status "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}"
+                ;;
+        pair-admin-device)
+                pair_admin_device "${2:-}" "${3:-}" "${4:-}" "${5:-}"
+                ;;
+        activate-admin-pairing-code)
+                activate_admin_pairing_code "${2:-}" "${3:-}" "${4:-}" "${5:-600}"
+                ;;
+        admin-pairing-status)
+                admin_pairing_status "${2:-}" "${3:-0}"
                 ;;
         wps-button)
                 wps_button "${2:-short}"
@@ -798,7 +1328,7 @@ case "$COMMAND" in
                 printf 'wan_state=%s\n' "$(cat "$WAN_STATE_FILE" 2>/dev/null || true)"
                 ;;
         *)
-                echo "Usage: sheepfold-router-control [wifi-enable|wifi-disable|internet-enable|internet-disable|internet-status|messenger-disable|messenger-save-telegram|messenger-save-vk|messenger-status|site-lists-update|site-lists-cron-apply|site-lists-status|wifi-automation-tick|set-device-status|wps-button|led-apply|led-alert-ack|blocked-page-apply|status]" >&2
+                echo "Usage: sheepfold-router-control [wifi-enable|wifi-disable|internet-enable|internet-disable|internet-status|router-info|messenger-disable|messenger-save-telegram|messenger-save-vk|messenger-status|messenger-check|time-save|site-lists-update|site-lists-cron-apply|site-lists-status|wifi-automation-tick|set-device-status|pair-admin-device|activate-admin-pairing-code|admin-pairing-status|wps-button|led-apply|led-alert-ack|blocked-page-apply|status]" >&2
                 exit 1
                 ;;
 esac

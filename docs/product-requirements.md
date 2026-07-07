@@ -37,6 +37,8 @@
 - User agreement and data-processing consent shown before Android first setup and OpenWRT installation.
 - Privacy policy describing local storage, Android data, messenger data, AI-provider data sharing, logs, masking, export, and deletion.
 - Common Wi-Fi settings for 2.4 GHz and 5 GHz networks: SSID, password, security mode, and channel.
+- Router time settings: country-aware timezone setup, NTP client configuration, and optional router-as-NTP-server mode for LAN clients.
+- Router information page in LuCI settings and Android API diagnostics snapshot: current router time, Sheepfold version, internet status, ping to country-profile target, OpenWRT firmware, router model, Wi-Fi modules/statuses, LAN ports, Podkop/AdGuard Home installation and versions, plus basic health values such as uptime/load/memory.
 - Administrator devices and Android pairing by QR/manual setup.
 - Single parent-facing save action in LuCI instead of separate Save/Apply semantics.
 - First-open router root password gate.
@@ -73,10 +75,30 @@ Country profiles should control:
 - default emergency-useful site suggestions;
 - domain descriptions and warnings;
 - localization defaults.
+- diagnostic ping/DNS/HTTP targets;
+- default timezone and NTP server preferences.
 
 Manual user entries must not be deleted when the country changes.
 
 Provider availability must be configuration-driven because legal and network availability can change.
+
+## Router Connectivity And Time
+
+Connectivity diagnostics must be country-aware and configurable. Sheepfold must not depend only on foreign IPs or domains such as `1.1.1.1`, `8.8.8.8`, `google.com`, or Cloudflare/Google endpoints to decide whether the router has internet access.
+
+For the Russia profile, default diagnostics should prefer Russian or Russia-relevant targets. DNS checks should prefer domains such as `ya.ru`, `gosuslugi.ru`, and `ntp1.vniiftri.ru`; foreign targets may exist only as secondary fallback checks.
+
+ICMP ping alone is not enough. The backend should combine WAN `ubus` status, link/default route checks, country-profile DNS resolution, and lightweight HTTP(S) checks where needed.
+
+Sheepfold automatic setup should configure router time:
+
+- set the most suitable timezone from the selected country/region profile;
+- for Russia without a more precise region, use `Europe/Moscow` / `MSK-3`;
+- enable the router NTP client;
+- set default NTP servers to `ntp1.vniiftri.ru`, `ntp2.ntp-servers.net`, and `3.openwrt.pool.ntp.org`;
+- provide a setting to make the router an NTP server for LAN clients.
+
+These settings touch OpenWRT `system` UCI config and must be visible in LuCI/export/reporting where practical.
 
 ## Parent AI Assistant
 
@@ -89,6 +111,7 @@ Requirements:
 - provider options must change according to the selected router country profile;
 - API keys must be stored securely on Android;
 - MAC addresses, IP addresses, child names, device names, family details, logs, device lists, and router settings must not be sent to the AI provider without a separate explicit confirmation;
+- Android may offer a limited router diagnostics snapshot to the AI assistant only after showing the parent a preview. This diagnostics snapshot must not include Wi-Fi passwords, bot tokens, API keys, session cookies, child names, MAC addresses, device lists, or logs.
 - the assistant may recommend router/app settings, but must not perform actions without explicit parent confirmation;
 - the assistant should help parents move from external control toward child self-control.
 
@@ -383,7 +406,17 @@ Requirements:
 
 Sheepfold LuCI should show one clear `Save` / `Сохранить` action for parents.
 
-The UI should not expose separate `Apply` and `Save` actions because that distinction is confusing for non-technical users. Internally, Sheepfold may still perform the OpenWRT save/apply steps needed by UCI, firewall, services, and LuCI, but the parent-facing UI should present it as one confirmed save operation.
+All settings-page controls must use an explicit-save model:
+
+- changing a select, checkbox, radio group, text field, textarea, or time input must only change the local UI draft state;
+- settings must not be saved automatically on field blur, select change, checkbox change, or radio change;
+- the settings page must show `Save` / `Сохранить` at the top right and again at the bottom of the settings content;
+- when settings have unsaved changes, the UI should make that visible in plain parent-facing language;
+- risky settings, such as scheduled Wi-Fi disable, may still show an additional confirmation dialog when the parent presses `Save`.
+
+The UI should not expose separate `Apply` and `Save` actions because that distinction is confusing for non-technical users. Internally, Sheepfold may still perform the OpenWRT save/apply steps needed by UCI, firewall, services, cron, backend wrappers, and LuCI, but the parent-facing UI should present it as one deliberate save operation.
+
+When Sheepfold LuCI actions write UCI data immediately, for example allowlist/blocklist edits, administrator-device binding, group changes, or settings save, the implementation must also accept/apply LuCI's own pending-change queue. The standard LuCI banner such as `Unsaved changes` / `Не принятые изменения` must not remain after a successful Sheepfold action. Use a shared save/apply helper that saves the touched configs, applies through the LuCI changes API when available, and falls back to OpenWRT `uci.apply` only when needed.
 
 ## Integrations
 

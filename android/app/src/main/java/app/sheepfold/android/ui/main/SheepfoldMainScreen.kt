@@ -1,5 +1,11 @@
 package app.sheepfold.android.ui.main
 
+import android.Manifest
+import android.accounts.AccountManager
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -7,8 +13,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,9 +25,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -29,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,9 +50,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.sheepfold.android.notifications.NewDeviceNotification
 import app.sheepfold.android.notifications.SheepfoldNotifications
+import app.sheepfold.android.router.AiAssistantClient
+import app.sheepfold.android.router.AiAssistantRequest
 import app.sheepfold.android.router.InternetAccessState
 import app.sheepfold.android.router.InternetControlRepository
+import app.sheepfold.android.router.RouterConnectionRequest
+import app.sheepfold.android.router.SheepfoldConnectionStore
 import app.sheepfold.android.widget.SheepfoldWidgetRenderer
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.launch
 
 private val mainTabs = listOf(
     "Главная",
@@ -48,7 +66,39 @@ private val mainTabs = listOf(
     "Белый список",
     "Чёрный список",
     "Расписание",
+    "ИИ помощник",
     "Настройки"
+)
+
+private enum class AiAssistantModel(
+    val title: String,
+    val description: String,
+    val provider: String,
+    val apiModel: String
+) {
+    DeepSeek(
+        title = "DeepSeek",
+        description = "Подходит для подробных рассуждений и спокойного разбора семейной ситуации.",
+        provider = "deepseek",
+        apiModel = "deepseek-v4-flash"
+    ),
+    GeminiFree(
+        title = "Gemini Free",
+        description = "Бесплатный облачный вариант через Google AI Studio с лимитами бесплатного тарифа.",
+        provider = "gemini",
+        apiModel = "gemini-2.5-flash"
+    ),
+    Grok(
+        title = "Grok",
+        description = "Подходит для более коротких, прямых и практичных ответов.",
+        provider = "grok",
+        apiModel = "grok"
+    )
+}
+
+private data class AiChatMessage(
+    val fromParent: Boolean,
+    val text: String
 )
 
 private enum class DeviceStatus(
@@ -123,11 +173,14 @@ private val demoDevices = listOf(
 )
 
 @Composable
-fun SheepfoldMainScreen() {
+fun SheepfoldMainScreen(connection: RouterConnectionRequest?) {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
     var internetState by remember {
         mutableStateOf(InternetControlRepository.readInternetState(context))
+    }
+    var aiModel by remember {
+        mutableStateOf(readAiAssistantModel(context))
     }
 
     LaunchedEffect(Unit) {
@@ -178,7 +231,22 @@ fun SheepfoldMainScreen() {
                 intro = "Эти устройства заблокированы всегда, пока родитель не изменит правило."
             )
             4 -> SchedulesScreen()
-            5 -> SettingsScreen()
+            5 -> AiAssistantScreen(
+                connection = connection,
+                selectedModel = aiModel,
+                onModelChange = { model ->
+                    aiModel = model
+                    saveAiAssistantModel(context, model)
+                }
+            )
+            6 -> SettingsScreen(
+                connection = connection,
+                selectedModel = aiModel,
+                onModelChange = { model ->
+                    aiModel = model
+                    saveAiAssistantModel(context, model)
+                }
+            )
         }
     }
 }
@@ -359,7 +427,183 @@ private fun SchedulesScreen() {
 }
 
 @Composable
-private fun SettingsScreen() {
+private fun AiAssistantScreen(
+    connection: RouterConnectionRequest?,
+    selectedModel: AiAssistantModel,
+    onModelChange: (AiAssistantModel) -> Unit
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var input by remember { mutableStateOf("") }
+    // Информация роутера и журнал могут быть полезны помощнику, но это уже семейный контекст.
+    // Поэтому передаём их только по явному выбору родителя, а не автоматически с каждым вопросом.
+    var includeRouterInfo by remember { mutableStateOf(false) }
+    var includeProgramLog by remember { mutableStateOf(false) }
+    var isWaitingForAnswer by remember { mutableStateOf(false) }
+    var googleAccount by remember {
+        mutableStateOf(SheepfoldConnectionStore.readGoogleAccount(context))
+    }
+    val googleAccounts = remember { readGoogleAccounts(context) }
+    var messages by remember {
+        mutableStateOf(
+            listOf(
+                AiChatMessage(
+                    fromParent = false,
+                    text = "Я помогу спокойно разобрать ситуацию, подготовить разговор с ребёнком и понять, где нужен контроль, а где лучше передавать ответственность постепенно."
+                )
+            )
+        )
+    }
+
+    fun sendMessage(text: String) {
+        val trimmed = text.trim()
+
+        if (trimmed.isBlank()) {
+            return
+        }
+
+        if (isWaitingForAnswer) {
+            return
+        }
+
+        messages = messages + AiChatMessage(fromParent = true, text = trimmed)
+        input = ""
+
+        if (connection == null) {
+            messages = messages + AiChatMessage(
+                fromParent = false,
+                text = "Сначала подключите Android-приложение к роутеру через QR код или ручную настройку."
+            )
+            return
+        }
+
+        if (selectedModel == AiAssistantModel.Grok) {
+            messages = messages + AiChatMessage(
+                fromParent = false,
+                text = "Grok пока добавлен только как вариант настройки. Реальный backend сейчас реализован для DeepSeek и Gemini Free."
+            )
+            return
+        }
+
+        SheepfoldConnectionStore.saveGoogleAccount(context, googleAccount)
+        isWaitingForAnswer = true
+        coroutineScope.launch {
+            val answer = runCatching {
+                AiAssistantClient.ask(
+                    AiAssistantRequest(
+                        connection = connection,
+                        provider = selectedModel.provider,
+                        model = selectedModel.apiModel,
+                        message = trimmed,
+                        includeRouterInfo = includeRouterInfo,
+                        includeProgramLog = includeProgramLog,
+                        googleAccount = googleAccount.trim()
+                    )
+                )
+            }.getOrElse { error ->
+                "Не удалось получить ответ ${selectedModel.title}: ${error.message ?: "неизвестная ошибка"}"
+            }
+
+            messages = messages + AiChatMessage(fromParent = false, text = answer)
+            isWaitingForAnswer = false
+        }
+    }
+
+    ScreenSurface {
+        SectionHeader(
+            title = "ИИ помощник",
+            body = "Помощник не заменяет семейного психолога. Он помогает родителю сформулировать спокойный план разговора и не превращать ограничения в войну."
+        )
+        AiModelSelector(
+            selectedModel = selectedModel,
+            onModelChange = onModelChange
+        )
+        StatusCard(
+            title = "Подключение",
+            body = connection?.let {
+                "Роутер: ${it.routerName}\nAPI: ${it.apiUrl}"
+            } ?: "Роутер ещё не подключён. Помощник сможет отвечать после привязки приложения к роутеру.",
+            color = if (connection == null) Color(0xFFC62828) else Color(0xFF2E7D32)
+        )
+        GoogleAccountBox(
+            googleAccount = googleAccount,
+            googleAccounts = googleAccounts,
+            onGoogleAccountChange = { account ->
+                googleAccount = account
+                SheepfoldConnectionStore.saveGoogleAccount(context, account)
+            }
+        )
+        StatusCard(
+            title = "Приватность",
+            body = "По умолчанию отправляется только текст, который родитель написал сам. Имена детей, MAC, IP, списки устройств и журналы должны передаваться ИИ только после отдельного подтверждения.",
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        ContextConsentBox(
+            includeRouterInfo = includeRouterInfo,
+            includeProgramLog = includeProgramLog,
+            onIncludeRouterInfoChange = { includeRouterInfo = it },
+            onIncludeProgramLogChange = { includeProgramLog = it }
+        )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                "Ребёнок бунтует против ограничений",
+                "Как передавать самоконтроль постепенно",
+                "Как поговорить без обвинений"
+            ).forEach { prompt ->
+                OutlinedButton(
+                    onClick = { sendMessage(prompt) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(text = prompt)
+                }
+            }
+        }
+        messages.forEach { message ->
+            AiMessageCard(message = message)
+        }
+        if (isWaitingForAnswer) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CircularProgressIndicator(color = Color(0xFF2E7D32))
+                Text(text = "${selectedModel.title} готовит ответ...")
+            }
+        }
+        OutlinedTextField(
+            value = input,
+            onValueChange = { input = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Ваш вопрос") },
+            minLines = 3,
+            placeholder = {
+                Text("Например: ребёнок много сидит в интернете и злится на новые правила. Как поговорить?")
+            }
+        )
+        Button(
+            onClick = { sendMessage(input) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = input.isNotBlank() && !isWaitingForAnswer,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF2E7D32),
+                contentColor = Color.White
+            )
+        ) {
+            Text(text = "Спросить помощника")
+        }
+    }
+}
+
+@Composable
+private fun SettingsScreen(
+    connection: RouterConnectionRequest?,
+    selectedModel: AiAssistantModel,
+    onModelChange: (AiAssistantModel) -> Unit
+) {
     ScreenSurface {
         SectionHeader(
             title = "Настройки",
@@ -367,7 +611,8 @@ private fun SettingsScreen() {
         )
         StatusCard(
             title = "Роутер",
-            body = "Sheepfold API: http://192.168.1.1:5201",
+            body = connection?.let { "Sheepfold API: ${it.apiUrl}" }
+                ?: "Sheepfold API ещё не настроен.",
             color = MaterialTheme.colorScheme.onSurface
         )
         StatusCard(
@@ -385,7 +630,255 @@ private fun SettingsScreen() {
             body = "Пароль или PIN рекомендуются. Биометрия включается только вручную.",
             color = MaterialTheme.colorScheme.onSurface
         )
+        AiModelSelector(
+            selectedModel = selectedModel,
+            onModelChange = onModelChange
+        )
     }
+}
+
+@Composable
+private fun GoogleAccountBox(
+    googleAccount: String,
+    googleAccounts: List<String>,
+    onGoogleAccountChange: (String) -> Unit
+) {
+    val accountPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val accountName = result.data
+            ?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+            .orEmpty()
+
+        if (accountName.isNotBlank()) {
+            onGoogleAccountChange(accountName)
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, Color(0xFFD1DDD8)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(text = "Google-аккаунт родителя", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Аккаунт используется как подпись родителя в запросах к помощнику. DeepSeek API-ключ хранится на роутере.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            OutlinedButton(
+                onClick = {
+                    // Используем системный выбор Google-аккаунта как удобную подпись родителя.
+                    // Это не авторизация в Gemini: ключи AI-провайдеров всё равно задаются на роутере.
+                    val intent = AccountManager.newChooseAccountIntent(
+                        null,
+                        null,
+                        arrayOf("com.google"),
+                        false,
+                        null,
+                        null,
+                        null,
+                        null
+                    )
+                    accountPicker.launch(intent)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = "Выбрать Google-аккаунт на телефоне")
+            }
+            if (googleAccounts.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    googleAccounts.take(3).forEach { account ->
+                        FilterChip(
+                            selected = account == googleAccount,
+                            onClick = { onGoogleAccountChange(account) },
+                            label = { Text(text = account) }
+                        )
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = googleAccount,
+                onValueChange = onGoogleAccountChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Google аккаунт") },
+                singleLine = true,
+                placeholder = { Text("parent@gmail.com") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ContextConsentBox(
+    includeRouterInfo: Boolean,
+    includeProgramLog: Boolean,
+    onIncludeRouterInfoChange: (Boolean) -> Unit,
+    onIncludeProgramLogChange: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1)),
+        border = BorderStroke(1.dp, Color(0xFFE0B94D)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(text = "Что можно передать ИИ", style = MaterialTheme.typography.titleMedium)
+            ConsentRow(
+                checked = includeRouterInfo,
+                onCheckedChange = onIncludeRouterInfoChange,
+                text = "Добавить информацию со страницы «Информация»"
+            )
+            ConsentRow(
+                checked = includeProgramLog,
+                onCheckedChange = onIncludeProgramLogChange,
+                text = "Добавить журнал программы Sheepfold"
+            )
+            Text(
+                text = "Перед отправкой роутер скрывает чувствительные поля в журнале. Не отправляйте семейные детали, если они не нужны для вопроса.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConsentRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    text: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Text(text = text, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun AiModelSelector(
+    selectedModel: AiAssistantModel,
+    onModelChange: (AiAssistantModel) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, Color(0xFFD1DDD8)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(text = "Модель помощника", style = MaterialTheme.typography.titleMedium)
+            AiAssistantModel.entries.forEach { model ->
+                FilterChip(
+                    selected = selectedModel == model,
+                    onClick = { onModelChange(model) },
+                    label = {
+                        Column {
+                            Text(text = model.title, fontWeight = FontWeight.Bold)
+                            Text(text = model.description)
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiMessageCard(message: AiChatMessage) {
+    val background = if (message.fromParent) {
+        Color(0xFFEAF4EF)
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val borderColor = if (message.fromParent) {
+        Color(0xFF7BAF9A)
+    } else {
+        Color(0xFFD1DDD8)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = background),
+        border = BorderStroke(1.dp, borderColor),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = if (message.fromParent) "Родитель" else "ИИ помощник",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(text = message.text, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+private fun buildAssistantDraft(model: AiAssistantModel, parentText: String): String {
+    val style = when (model) {
+        AiAssistantModel.DeepSeek -> "подробно, мягко и с объяснением причин"
+        AiAssistantModel.GeminiFree -> "практично, спокойно и без лишней драматизации"
+        AiAssistantModel.Grok -> "коротко, прямо и практично"
+    }
+
+    return "Черновик ответа через ${model.title}: разберите ситуацию $style. " +
+        "Сначала уточните возраст ребёнка, что именно изменилось в правилах и как ребёнок объясняет своё сопротивление. " +
+        "Если видно, что родитель пока не понимает тревоги и мотивы ребёнка, начните не с наказания, а с вопросов: что ребёнок боится потерять, где ему стыдно, где он чувствует несправедливость. " +
+        "Дальше предложите маленькое правило на 3-7 дней, понятный критерий успеха и заранее оговорённый способ вернуть часть контроля ребёнку. " +
+        "Нельзя говорить: «ты зависимый» или «посмотри, ты такой же плохой пример». Лучше говорить о поведении, последствиях и совместном плане.\n\n" +
+        "Запрос родителя: $parentText"
+}
+
+private fun readAiAssistantModel(context: Context): AiAssistantModel {
+    val value = context
+        .getSharedPreferences("sheepfold-app", Context.MODE_PRIVATE)
+        .getString("aiAssistantModel", AiAssistantModel.DeepSeek.name)
+
+    return AiAssistantModel.entries.firstOrNull { model -> model.name == value } ?: AiAssistantModel.DeepSeek
+}
+
+private fun saveAiAssistantModel(context: Context, model: AiAssistantModel) {
+    context
+        .getSharedPreferences("sheepfold-app", Context.MODE_PRIVATE)
+        .edit()
+        .putString("aiAssistantModel", model.name)
+        .apply()
+}
+
+private fun readGoogleAccounts(context: Context): List<String> {
+    if (
+        ContextCompat.checkSelfPermission(context, Manifest.permission.GET_ACCOUNTS) !=
+        PackageManager.PERMISSION_GRANTED
+    ) {
+        return emptyList()
+    }
+
+    return runCatching {
+        AccountManager.get(context)
+            .getAccountsByType("com.google")
+            .map { account -> account.name }
+            .filter { name -> name.isNotBlank() }
+            .distinct()
+    }.getOrDefault(emptyList())
 }
 
 @Composable

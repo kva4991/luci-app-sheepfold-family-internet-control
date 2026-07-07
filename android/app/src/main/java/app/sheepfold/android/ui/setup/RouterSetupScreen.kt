@@ -159,7 +159,7 @@ private enum class DiscoveryStatus {
 }
 
 @Composable
-fun RouterSetupScreen(onSetupComplete: () -> Unit) {
+fun RouterSetupScreen(onSetupComplete: (RouterConnectionRequest?) -> Unit) {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val routerConnectionManager = remember { RouterConnectionManager() }
@@ -167,6 +167,7 @@ fun RouterSetupScreen(onSetupComplete: () -> Unit) {
     var isTestingConnection by remember { mutableStateOf(false) }
     var localDiscovery by remember { mutableStateOf<LocalSheepfoldDiscovery?>(null) }
     var discoveryAutoAdvanceUsed by remember { mutableStateOf(false) }
+    var pairedRequest by remember { mutableStateOf<RouterConnectionRequest?>(null) }
 
     fun goBack() {
         setupStep = when (setupStep) {
@@ -237,12 +238,13 @@ fun RouterSetupScreen(onSetupComplete: () -> Unit) {
                             try {
                                 val request = routerConnectionManager.parseQrPayload(payload)
                                 val connected = routerConnectionManager.testConnection(request)
-                                if (connected) {
-                                    snackbarHostState.showSnackbar(
-                                        "Подключено к серверу (${request.routerName})"
-                                    )
-                                    setupStep = SetupStep.AppProtection
-                                } else {
+                                 if (connected) {
+                                     snackbarHostState.showSnackbar(
+                                         "Подключено к серверу (${request.routerName})"
+                                     )
+                                     pairedRequest = request
+                                     setupStep = SetupStep.AppProtection
+                                 } else {
                                     snackbarHostState.showSnackbar("Не удалось подключиться к серверу")
                                 }
                             } catch (error: Exception) {
@@ -268,12 +270,13 @@ fun RouterSetupScreen(onSetupComplete: () -> Unit) {
                         coroutineScope.launch {
                             try {
                                 val connected = routerConnectionManager.testConnection(request)
-                                if (connected) {
-                                    snackbarHostState.showSnackbar(
-                                        "Подключено к серверу (${request.routerName})"
-                                    )
-                                    setupStep = SetupStep.AppProtection
-                                } else {
+                                 if (connected) {
+                                     snackbarHostState.showSnackbar(
+                                         "Подключено к серверу (${request.routerName})"
+                                     )
+                                     pairedRequest = request
+                                     setupStep = SetupStep.AppProtection
+                                 } else {
                                     snackbarHostState.showSnackbar("Не удалось подключиться к серверу")
                                 }
                             } catch (error: Exception) {
@@ -292,7 +295,7 @@ fun RouterSetupScreen(onSetupComplete: () -> Unit) {
                         coroutineScope.launch {
                             snackbarHostState.showSnackbar("Защита приложения настроена")
                         }
-                        onSetupComplete()
+                        onSetupComplete(pairedRequest)
                     }
                 )
             }
@@ -870,7 +873,7 @@ private fun ManualSetupScreen(
     var temporaryPassword by remember { mutableStateOf("") }
     var administratorLogin by remember { mutableStateOf("") }
     var serverAddress by remember(defaultServerAddress) { mutableStateOf(defaultServerAddress) }
-    var port by remember { mutableStateOf("80") }
+    var port by remember { mutableStateOf("5201") }
 
     Column(
         modifier = Modifier
@@ -915,7 +918,7 @@ private fun ManualSetupScreen(
             label = { Text("Порт") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            supportingText = { Text("По умолчанию 80 для LuCI/API.") }
+            supportingText = { Text("По умолчанию 5201 для Sheepfold API.") }
         )
         FramedButton(
             enabled = !isTestingConnection && serverAddress.isNotBlank() && port.isNotBlank(),
@@ -924,7 +927,7 @@ private fun ManualSetupScreen(
                     .removePrefix("http://")
                     .removePrefix("https://")
                     .trimEnd('/')
-                val url = "http://$host:${port.trim()}"
+                val url = "http://$host:${port.trim()}/cgi-bin/sheepfold-api"
                 onConnect(
                     RouterConnectionRequest(
                         apiUrl = url,
@@ -1407,7 +1410,8 @@ private fun readNetworkTransport(context: Context): NetworkTransport {
 private fun requiredRuntimePermissions(): List<String> {
     val permissions = mutableListOf(
         Manifest.permission.CAMERA,
-        Manifest.permission.ACCESS_FINE_LOCATION
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.GET_ACCOUNTS
     )
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

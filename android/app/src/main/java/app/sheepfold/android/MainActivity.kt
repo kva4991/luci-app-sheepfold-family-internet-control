@@ -11,7 +11,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import app.sheepfold.android.notifications.SheepfoldNotifications
+import app.sheepfold.android.router.SheepfoldConnectionStore
 import app.sheepfold.android.ui.main.SheepfoldMainScreen
 import app.sheepfold.android.ui.setup.RouterSetupScreen
 import app.sheepfold.android.ui.theme.OvcharnyaTheme
@@ -32,11 +34,19 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun SheepfoldApp() {
-    var setupComplete by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var setupComplete by remember { mutableStateOf(SheepfoldConnectionStore.hasConnection(context)) }
+    var connection by remember { mutableStateOf(SheepfoldConnectionStore.read(context)) }
 
     if (setupComplete) {
-        SheepfoldMainScreen()
+        SheepfoldMainScreen(connection = connection)
     } else {
-        RouterSetupScreen(onSetupComplete = { setupComplete = true })
+        RouterSetupScreen(onSetupComplete = { request ->
+            if (request != null) {
+                SheepfoldConnectionStore.save(context, request)
+                connection = request
+            }
+            setupComplete = true
+        })
     }
 }

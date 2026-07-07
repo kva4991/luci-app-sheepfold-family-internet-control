@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.Inet4Address
+import java.net.URLEncoder
 import java.net.URL
 
 data class RouterConnectionRequest(
@@ -80,7 +81,7 @@ class RouterConnectionManager {
                 .toMap()
 
             val baseUrl = normalizeRouterUrl(withOptionalPort(fields["h"].orEmpty(), fields["p"].orEmpty()))
-            val apiPath = fields["api"].orEmpty().trim()
+            val apiPath = fields["api"].orEmpty().trim().ifBlank { "/cgi-bin/sheepfold-api" }
             val apiUrl = when {
                 apiPath.isBlank() -> baseUrl
                 apiPath.startsWith("http://") || apiPath.startsWith("https://") -> normalizeRouterUrl(apiPath)
@@ -103,6 +104,10 @@ class RouterConnectionManager {
     }
 
     suspend fun testConnection(request: RouterConnectionRequest): Boolean = withContext(Dispatchers.IO) {
+        if (!request.temporaryPassword.isNullOrBlank() && !request.administratorLogin.isNullOrBlank()) {
+            return@withContext pairAdminDevice(request)
+        }
+
         val connection = URL(request.apiUrl).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 2500
@@ -111,6 +116,41 @@ class RouterConnectionManager {
             connection.instanceFollowRedirects = false
             connection.connect()
             connection.responseCode in 200..499
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun pairAdminDevice(request: RouterConnectionRequest): Boolean {
+        val pairUrl = "${request.apiUrl.trimEnd('/')}/pair"
+        val body = listOf(
+            "login" to request.administratorLogin.orEmpty(),
+            "code" to request.temporaryPassword.orEmpty(),
+            "client" to "android"
+        ).joinToString("&") { (key, value) ->
+            "${urlEncode(key)}=${urlEncode(value)}"
+        }
+        val connection = URL(pairUrl).openConnection() as HttpURLConnection
+
+        try {
+            connection.connectTimeout = 3500
+            connection.readTimeout = 3500
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.instanceFollowRedirects = false
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            connection.setRequestProperty("User-Agent", "Sheepfold Android")
+            connection.outputStream.use { output ->
+                output.write(body.toByteArray(Charsets.UTF_8))
+            }
+            connection.connect()
+            if (connection.responseCode in 200..299) {
+                return true
+            }
+
+            throw IllegalStateException(readApiError(connection).ifBlank {
+                "Не удалось выполнить сопряжение с роутером"
+            })
         } finally {
             connection.disconnect()
         }
@@ -170,6 +210,19 @@ class RouterConnectionManager {
         }
 
         return "${url.protocol}://${url.host}:$trimmedPort"
+    }
+
+    private fun urlEncode(value: String): String =
+        URLEncoder.encode(value, Charsets.UTF_8.name())
+
+    private fun readApiError(connection: HttpURLConnection): String {
+        val stream = connection.errorStream ?: connection.inputStream ?: return ""
+        val body = runCatching {
+            stream.bufferedReader().use { it.readText() }
+        }.getOrDefault("")
+        val json = runCatching { JSONObject(body) }.getOrNull()
+
+        return json?.optString("error").orEmpty().ifBlank { body.trim() }
     }
 
     private fun hostName(apiUrl: String): String {

@@ -28,7 +28,9 @@ Avoid:
 - In Russian, write `через OpenWRT-роутер и его веб-интерфейс LuCI` instead of only `через LuCI`.
 - Keep README files approachable for non-developers.
 - Keep user-facing strings localizable. Do not hardcode menu labels, validation messages, or bot replies when a localization resource should be used.
-- In Sheepfold LuCI, prefer one clear `Save` / `Сохранить` action. Do not expose separate `Apply` and `Save` actions unless OpenWRT internals force it; if both exist technically, hide or merge `Apply` in the Sheepfold UI so parents are not asked to understand the distinction.
+- In Sheepfold LuCI settings, all setting changes must be saved only after the parent presses the explicit `Save` / `Сохранить` button. Do not autosave settings on field blur, select change, checkbox change, or radio change. The settings page must show this save action at least twice: at the top right of the settings panel and again at the bottom after the settings content. Internally, Sheepfold may still perform OpenWRT `save`/`apply`, service restart, cron update, or backend wrapper calls, but the parent-facing model is one deliberate save action.
+- Do not expose separate `Apply` and `Save` actions unless OpenWRT internals force it; if both exist technically, hide or merge `Apply` in the Sheepfold UI so parents are not asked to understand the distinction.
+- After Sheepfold changes UCI from LuCI actions, the implementation must also apply/accept LuCI's own pending-change queue so the standard LuCI banner like "Unsaved changes" / `Не принятые изменения` does not remain visible. Prefer a shared helper that saves configs and then uses the LuCI changes API when available, with an OpenWRT `uci apply` fallback.
 - In Sheepfold LuCI, keep `All devices`, `Allowlist`, and `Blocklist` as nested tabs inside the top-level `User lists` / `Списки пользователей` tab. `All devices` must be the default nested tab.
 - Design the interface for a normal busy parent, not for a network engineer. Reuse the same visual pattern, wording, icon meaning, button placement, and confirmation style for the same action everywhere, so the parent can recognize behavior quickly without studying every screen.
 - Sheepfold UI must actively strive to be intuitive for a weak/uncertain PC user. Instructions, warnings, errors, confirmations, and notifications must be written in plain user language: what happened, why it matters, what will happen after the button press, and how to undo or fix it.
@@ -40,6 +42,8 @@ Avoid:
 - Use camelCase for JavaScript/Kotlin variables, functions, object fields, and UI state names whenever the surrounding platform does not require another convention.
 - Keep OpenWRT/UCI/package keys in their native format, usually snake_case or uppercase Make variables, for example `app_port`, `ui_asset_version`, `PKG_RELEASE`, and `SHEEPFOLD_UI_ASSET_VERSION`.
 - Do not convert external API fields, UCI options, package metadata, Android resource names, or documented protocol keys to camelCase unless the external contract itself uses camelCase.
+- When fixing non-obvious code in this repository, leave short Russian comments explaining why the fix is needed and why this approach is used. Do not comment obvious assignments or noise.
+- When a subtle implementation choice is intentionally correct, add a short Russian comment near that code so future agents do not "simplify" it away.
 
 ## README Layout
 
@@ -51,6 +55,17 @@ Avoid:
 - In the Codex sandbox, copying finished artifacts to `C:\Users\User\Downloads` usually requires an explicit escalated copy command. Build inside the repository first, then copy the already-built `.ipk`/`.apk` to Downloads with a narrow `Copy-Item` escalation instead of expecting the build script to write there from inside the sandbox.
 - The uninstall command must remove the package without clearing Sheepfold client lists or user settings, then print a report of remaining router settings that may require manual cleanup.
 - When changing installation, update, or uninstall commands, update both README files and `docs/github-install-setup.md` if relevant.
+
+## Router Connectivity, DNS, Time, And NTP
+
+- Connectivity checks must be country-aware and configurable. Do not depend only on foreign IPs/domains such as `1.1.1.1`, `8.8.8.8`, `google.com`, or Cloudflare/Google endpoints to decide whether the router has internet.
+- For the Russia country profile, prefer Russian or Russia-relevant targets for default ping/DNS/HTTP diagnostics. DNS probes should prefer domains such as `ya.ru`, `gosuslugi.ru`, and `ntp1.vniiftri.ru`; fallback foreign targets may exist only as secondary configurable fallback checks.
+- ICMP ping alone is not enough because many hosts block it. Use a small ordered diagnostic chain: WAN link/ubus state, default route/gateway, DNS resolution of country-profile domains, and then lightweight HTTP(S) checks where needed.
+- Sheepfold automatic setup must include router time setup. Add/keep settings for making the router an NTP server for the LAN, configuring the router NTP client, and choosing the router timezone.
+- Default NTP client servers for the Russia-oriented profile: `ntp1.vniiftri.ru`, `ntp2.ntp-servers.net`, `3.openwrt.pool.ntp.org`.
+- Router timezone must be changed to the most suitable value during installation/automatic setup. For Russia without a more specific region selection, use Moscow time (`Europe/Moscow`, POSIX `MSK-3`) as the default.
+- Because NTP/timezone changes touch OpenWRT system settings, preserve previous values in export/reporting where practical and show the setting clearly in LuCI.
+- The LuCI `Information` settings tab and Android `/cgi-bin/sheepfold-api/router-info` diagnostics snapshot may include router health and integration metadata, but must not include Wi-Fi passwords, bot/API tokens, session cookies, child names, client MAC addresses, client device lists, or logs. Android must show a preview and ask for explicit parent confirmation before sending this diagnostics snapshot to an AI provider.
 
 ## Implementation Entry Point
 
@@ -92,6 +107,13 @@ Avoid:
 - Add broad Yandex domains only when the parent/admin explicitly adds them manually or selects an advanced option with a clear warning.
 - Always explain the reason: broad Yandex domains can open much more than maps or search, including video, music, games, feeds, entertainment pages, and other Yandex services. Yandex Maps may require shared Yandex/static domains, so narrow allowance can be difficult.
 - Yandex Go, Yandex Taxi, Yandex Market, Yandex Food, Yandex Lavka, Yandex Delivery, and similar Yandex super-app surfaces must not be added to default emergency-useful site lists. They may be offered only as manually enabled transport/taxi suggestions with a clear warning that Yandex Go can also expose marketplace, food, delivery, carsharing, scooter, and other non-emergency services.
+
+## Site Lists And AdGuard Home
+
+- Sheepfold built-in site allow/block lists are a fallback for routers without AdGuard Home.
+- If AdGuard Home is detected on the router, Sheepfold should explain that domain allow/block lists can be configured more flexibly in AdGuard Home and can be disabled in Sheepfold.
+- During installation or first setup, when AdGuard Home is installed, prefer not to enable Sheepfold duplicate site filtering silently. Show a clear user-facing notice instead.
+- Keep device access control in Sheepfold; do not move Sheepfold device allowlist/blocklist semantics into AdGuard Home. This rule is about domain/site lists only.
 
 ## User Agreement And Privacy
 
@@ -220,6 +242,7 @@ Avoid:
 - Default UCI may expose this as `ui_asset_version`, but individual JS/CSS files must not hardcode their own versions.
 - Append the same version to Sheepfold JS/CSS/static asset URLs as a query suffix such as `?v=0.1.0-1`.
 - Bump the package version/release when LuCI frontend files change.
+- After changing LuCI asset versioning, run `node --test tests/*.test.mjs`. On Windows PowerShell, prefer this direct command or `npm.cmd test` if `npm.ps1` is blocked by Execution Policy.
 - Keep manual browser-cache clearing as troubleshooting, not the normal update path.
 - Clear LuCI index/module cache from install/update hooks when the menu or LuCI view structure changes.
 
