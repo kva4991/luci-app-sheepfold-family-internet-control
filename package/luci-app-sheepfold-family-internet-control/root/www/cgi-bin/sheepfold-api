@@ -24,15 +24,16 @@ run_legacy() {
     "$LEGACY" | sed '/^Access-Control-Allow-/d'
 }
 
-if [ "$method" = "OPTIONS" ]; then
-    header_json "204 No Content"
-    exit 0
-fi
-
-# Выпуск pairing-кода не является частью публичного HTTP API.
+# Выпуск pairing-кода не является частью публичного HTTP API. Проверка идёт
+# раньше общего OPTIONS, поэтому путь не обнаруживается ни одним HTTP-методом.
 if [ "$path_info" = "/pair-token" ]; then
     header_json "404 Not Found"
     printf '{"app":"sheepfold","ok":false,"error":"unknown_action"}\n'
+    exit 0
+fi
+
+if [ "$method" = "OPTIONS" ]; then
+    header_json "204 No Content"
     exit 0
 fi
 
