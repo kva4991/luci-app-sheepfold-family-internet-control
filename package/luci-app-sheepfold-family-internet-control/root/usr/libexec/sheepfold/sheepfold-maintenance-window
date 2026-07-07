@@ -1,0 +1,34 @@
+#!/bin/sh
+# sheepfold-maintenance-window
+#
+# Проверяет, находится ли текущее время в окне техобслуживания.
+# По умолчанию: 02:00–05:00 местного времени.
+# Настраивается через UCI:
+#   uci set sheepfold.global.maintenance_start=2   # час (0-23)
+#   uci set sheepfold.global.maintenance_end=5     # час (0-23)
+#
+# Выход: 0 = да, мы в окне; 1 = нет
+
+set -eu
+
+START=$(uci -q get sheepfold.global.maintenance_start 2>/dev/null || echo 2)
+END=$(uci  -q get sheepfold.global.maintenance_end   2>/dev/null || echo 5)
+
+# Валидация
+case "$START" in ''|*[!0-9]*) START=2 ;; esac
+case "$END"   in ''|*[!0-9]*) END=5   ;; esac
+[ "$START" -ge 0 ] && [ "$START" -le 23 ] || START=2
+[ "$END"   -ge 0 ] && [ "$END"   -le 23 ] || END=5
+
+HOUR=$(date +%-H 2>/dev/null || date +%H | sed 's/^0//')
+case "$HOUR" in ''|*[!0-9]*) HOUR=12 ;; esac
+
+if [ "$START" -lt "$END" ]; then
+    # Обычный диапазон: 02-05
+    [ "$HOUR" -ge "$START" ] && [ "$HOUR" -lt "$END" ] && exit 0
+else
+    # Переход через полуночь: 23-03
+    { [ "$HOUR" -ge "$START" ] || [ "$HOUR" -lt "$END" ]; } && exit 0
+fi
+
+exit 1  # не в окне

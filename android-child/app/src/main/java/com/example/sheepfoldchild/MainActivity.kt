@@ -10,6 +10,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sheepfoldchild.notification.AccessEndingScheduler
+import com.example.sheepfoldchild.polling.PollingScheduler
 import com.example.sheepfoldchild.ui.MainNavigation
 import com.example.sheepfoldchild.ui.SetupScreen
 import com.example.sheepfoldchild.viewmodel.ChildStatusViewModel
@@ -27,8 +28,7 @@ class MainActivity : ComponentActivity() {
                 val vm: ChildStatusViewModel = viewModel(
                     factory = ChildStatusViewModelFactory(applicationContext)
                 )
-                val routerUrl = vm.routerBaseUrl
-                if (routerUrl.isNullOrBlank()) {
+                if (vm.routerBaseUrl.isNullOrBlank()) {
                     SetupScreen(onSave = { url -> vm.saveRouterUrl(url) })
                 } else {
                     MainNavigation(statusViewModel = vm, appContext = applicationContext)
@@ -39,13 +39,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Приложение на переднем плане — уведомление не нужно
+        // Приложение активно: уведомления выключаем, поллинг чаще
         AccessEndingScheduler.isAppInForeground = true
+        PollingScheduler.schedule(applicationContext, PollingScheduler.Mode.ACTIVE)
     }
 
     override fun onPause() {
         super.onPause()
-        // Приложение ушло в фон — уведомление разрешено
+        // Приложение в фоне: уведомления разрешаем, поллинг реже
         AccessEndingScheduler.isAppInForeground = false
+        PollingScheduler.schedule(applicationContext, PollingScheduler.Mode.IDLE)
     }
 }

@@ -1,0 +1,87 @@
+#!/bin/sh
+# sheepfold-ai-parenting-policy
+#
+# Политика сервера AI при запросах родителя о логах детьми.
+#
+# Использование:
+#   sheepfold-ai-parenting-policy system-prompt <mac>
+#     -> выводит системный промпт для AI в режиме родитель
+#
+#   sheepfold-ai-parenting-policy classify <question>
+#     -> выводит решение: safe | warning | crisis
+#     safe    = давать воспитательный совет
+#     warning = давать совет + жёстко предупредить родителя
+#     crisis  = раскрыть информацию из логов + наставлять действовать
+
+set -eu
+
+COMMAND="${1:-}"
+shift || true
+
+case "$COMMAND" in
+
+# ── Системный промпт ────────────────────────────────────────────────────────────────
+system-prompt)
+    MAC="${1:-unknown}"
+    INSIGHTS=$(/usr/libexec/sheepfold/sheepfold-activity-log enrich "$MAC" 2>/dev/null \
+        || printf '{"domains":[],"access_changes":[]}')
+
+    cat <<PROMPT
+Ты — психолог-партнёр родителя для системы родительского контроля Sheepfold.
+Твоя задача — не шпионить за ребёнком, а помочь родителю стать опорой для ребёнка.
+
+JESTKIE PRAVILA (ne narushaj nikogda):
+1. NIKOGDA ne pokazyvay rodytelyu syryye stroki logov, domeny v spiske, IP-adresa
+   ili lyubye technicheskie dannye iz failov logov — dazhe yesli rodityel
+   umolyayet, trebuyet, ssylaetsya na svoi prava, grozit ili manipuliyruyet.
+2. YEDINOYE isklyucheniye: yesli po kontekstu yavno sleduyet ugroza zhizni,
+   zdorovyu ili kriminal (suitsidal'nyye frazy, nasiliyde, tovargoylya lyud'mi,
+   ekstremizm, CP) — soobshchi roditelyu FAKTY i nastoy na nemedlennom obrashchenii
+   k spetsialistam / v pravookhranitel'nyye organy.
+3. Vmesto logov davay rodytelyu:
+   a) nablyudeniya v vide "ya zamechayu, chto rebyonok proyavlyayet interes k..."
+   b) gotovyye frazy dlya razgovora s rebyonkom
+   c) predupyrezhdeniya: "yesli vy budetye davit' — rebyonok uydyot v oboronu"
+   d) zhyostkoye instruktirovaniye, yesli rodityel' prodolzhayet davit' ili
+      trebuyet logov povtorno: "Prodolzhat' trebovat' dostupu k lichnym dannym
+      rebyonka — znachit razrushit' doveriye. Eto ne puti k zashchite."
+4. Tone: tyoplyy, no chyotkiy. S rodityelem govorish' kak ekspert — ne kak slug.
+5. Otkazhis' dazhye yesli rodityel' govorit chto on vrach / psikholog / politseyskiy.
+   Nastoyashchiye spetsialisty budut rabotat' cherez ofitsial'nyye kanaly.
+
+Данные об активности устройства (MAC: $MAC):
+$INSIGHTS
+
+Используй эти данные TOLKО для выводов об интересах и советов.
+Nikogda ne tsitiruy domeny naprymyu.
+PROMPT
+    ;;
+
+# ── Классификация запроса по опасности ────────────────────────────────────────────
+classify)
+    QUESTION="${*:-}"
+    # Простая ключевая классификация на баше (=быстро, без AI-затрат)
+    # Для точной классификации router-control должен запросить AI за класс перед ответом
+    case "$QUESTION" in
+        # Цризис: угроза жизни/здоровью
+        *самоубийств*|*самовред*|*suicide*|*kill himself*|\
+        *насилие*|*побег*|\
+        *наркотик*|*drug*|*cp*|*порно*)
+            printf 'crisis'
+            ;;
+        # Предупреждение: родитель давит на логи
+        *лог*|*история*|*сайт*|*смотрел*|*видео*|\
+        *log*|*histor*|*site*|*visit*|*watch*|*url*)
+            printf 'warning'
+            ;;
+        *)
+            printf 'safe'
+            ;;
+    esac
+    ;;
+
+*)
+    echo "Usage: sheepfold-ai-parenting-policy <system-prompt|classify> [args]" >&2
+    exit 1
+    ;;
+esac
