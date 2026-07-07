@@ -1,0 +1,184 @@
+#!/bin/sh
+set -eu
+
+RUNTIME_DIR="/tmp/sheepfold/pair-attempts"
+mkdir -p "$RUNTIME_DIR"
+chmod 700 "$RUNTIME_DIR" 2>/dev/null || true
+
+json_escape() {
+    printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+url_decode() {
+    value="$(printf '%s' "$1" | sed 's/+/ /g; s/%/\\x/g')"
+    printf '%b' "$value"
+}
+
+form_get() {
+    key="$1"
+    body="$2"
+    printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
+        [ "$item_key" = "$key" ] || continue
+        url_decode "$item_value"
+        break
+    done
+}
+
+kv_get() {
+    key="$1"
+    printf '%s\n' "$2" | sed -n "s/^$key=//p" | sed -n '1p'
+}
+
+header_json() {
+    printf 'Status: %s\r\n' "$1"
+    printf 'Content-Type: application/json; charset=utf-8\r\n'
+    printf 'Cache-Control: no-store\r\n'
+    printf 'Access-Control-Allow-Origin: *\r\n'
+    printf 'Access-Control-Allow-Methods: POST, OPTIONS\r\n'
+    printf 'Access-Control-Allow-Headers: Content-Type\r\n'
+    [ -z "${2:-}" ] || printf 'Retry-After: %s\r\n' "$2"
+    printf '\r\n'
+}
+
+read_body() {
+    length="${CONTENT_LENGTH:-0}"
+    case "$length" in ''|*[!0-9]*) length=0 ;; esac
+    if [ "$length" -gt 4096 ]; then
+        header_json "413 Payload Too Large"
+        printf '{"app":"sheepfold","ok":false,"paired":false,"error":"request_too_large"}\n'
+        exit 0
+    fi
+    [ "$length" -gt 0 ] || return 0
+    dd bs=1 count="$length" 2>/dev/null || true
+}
+
+attempt_identity() {
+    ip="${REMOTE_ADDR:-unknown}"
+    mac=""
+    if [ -r /tmp/dhcp.leases ]; then
+        mac="$(awk -v ip="$ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases)"
+    fi
+    if [ -z "$mac" ] && [ -r /proc/net/arp ]; then
+        mac="$(awk -v ip="$ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp)"
+    fi
+    printf '%s' "${mac:-$ip}" | tr -cd 'A-Za-z0-9_.-'
+}
+
+consume_attempt() {
+    identity="$(attempt_identity)"
+    [ -n "$identity" ] || identity=unknown
+    max_attempts="$(uci -q get sheepfold.pairing_global.max_attempts 2>/dev/null || printf 10)"
+    window="$(uci -q get sheepfold.pairing_global.attempt_window_seconds 2>/dev/null || printf 600)"
+    case "$max_attempts" in ''|*[!0-9]*) max_attempts=10 ;; esac
+    case "$window" in ''|*[!0-9]*) window=600 ;; esac
+    [ "$max_attempts" -ge 1 ] || max_attempts=1
+    [ "$window" -ge 60 ] || window=60
+
+    lock="$RUNTIME_DIR/$identity.lock"
+    tries=0
+    while ! mkdir "$lock" 2>/dev/null; do
+        tries=$((tries + 1))
+        [ "$tries" -lt 20 ] || return 1
+        sleep 1
+    done
+    trap 'rmdir "$lock" 2>/dev/null || true' EXIT HUP INT TERM
+
+    file="$RUNTIME_DIR/$identity"
+    now="$(date +%s)"
+    started="$now"
+    count=0
+    if [ -r "$file" ]; then
+        read -r started count < "$file" || true
+    fi
+    case "$started" in ''|*[!0-9]*) started="$now" ;; esac
+    case "$count" in ''|*[!0-9]*) count=0 ;; esac
+    if [ "$now" -lt "$started" ] || [ $((now - started)) -ge "$window" ]; then
+        started="$now"
+        count=0
+    fi
+    if [ "$count" -ge "$max_attempts" ]; then
+        retry_after=$((window - (now - started)))
+        [ "$retry_after" -gt 0 ] || retry_after=60
+        rmdir "$lock" 2>/dev/null || true
+        trap - EXIT HUP INT TERM
+        return 1
+    fi
+    count=$((count + 1))
+    printf '%s %s\n' "$started" "$count" > "$file"
+    chmod 600 "$file" 2>/dev/null || true
+    rmdir "$lock" 2>/dev/null || true
+    trap - EXIT HUP INT TERM
+    return 0
+}
+
+clear_attempts() {
+    identity="$(attempt_identity)"
+    [ -n "$identity" ] && rm -f "$RUNTIME_DIR/$identity" 2>/dev/null || true
+}
+
+if [ "${REQUEST_METHOD:-POST}" = "OPTIONS" ]; then
+    header_json "204 No Content"
+    exit 0
+fi
+
+if [ "${REQUEST_METHOD:-POST}" != "POST" ]; then
+    header_json "405 Method Not Allowed"
+    printf '{"app":"sheepfold","ok":false,"paired":false,"error":"method_not_allowed"}\n'
+    exit 0
+fi
+
+consume_attempt || {
+    header_json "429 Too Many Requests" "${retry_after:-600}"
+    printf '{"app":"sheepfold","ok":false,"paired":false,"error":"rate_limited","message":"Too many pairing attempts. Try again later."}\n'
+    exit 0
+}
+
+body="$(read_body)"
+login="$(form_get login "$body")"
+code="$(form_get code "$body")"
+
+if [ -z "$login" ] || [ -z "$code" ]; then
+    header_json "400 Bad Request"
+    printf '{"app":"sheepfold","ok":false,"paired":false,"error":"login_and_code_required"}\n'
+    exit 0
+fi
+
+case "$login" in *[!A-Za-z0-9_.@+-]*|'')
+    header_json "400 Bad Request"
+    printf '{"app":"sheepfold","ok":false,"paired":false,"error":"invalid_login"}\n'
+    exit 0
+    ;;
+esac
+case "$code" in *[!A-Za-z0-9]*|'')
+    header_json "400 Bad Request"
+    printf '{"app":"sheepfold","ok":false,"paired":false,"error":"invalid_code"}\n'
+    exit 0
+    ;;
+esac
+
+status=0
+output="$(/usr/libexec/sheepfold/sheepfold-router-control pair-admin-device \
+    "$login" "$code" "${REMOTE_ADDR:-}" "${HTTP_USER_AGENT:-Android Sheepfold}" 2>&1)" || status="$?"
+
+if [ "$status" != "0" ]; then
+    case "$status" in
+        4) http_status="409 Conflict"; error_code="device_not_resolved" ;;
+        5) http_status="403 Forbidden"; error_code="device_blocklisted" ;;
+        *) http_status="403 Forbidden"; error_code="pairing_rejected" ;;
+    esac
+    header_json "$http_status"
+    printf '{"app":"sheepfold","ok":false,"paired":false,"error":"%s","message":"%s"}\n' \
+        "$error_code" "$(json_escape "$output")"
+    exit 0
+fi
+
+clear_attempts
+header_json "200 OK"
+printf '{"app":"sheepfold","ok":true,"paired":true,'
+printf '"routerName":"%s",' "$(json_escape "$(uci -q get system.@system[0].hostname 2>/dev/null || printf OpenWrt)")"
+printf '"adminName":"%s",' "$(json_escape "$(kv_get admin_name "$output")")"
+printf '"adminLogin":"%s",' "$(json_escape "$(kv_get admin_login "$output")")"
+printf '"deviceName":"%s",' "$(json_escape "$(kv_get device_name "$output")")"
+printf '"mac":"%s",' "$(json_escape "$(kv_get mac "$output")")"
+printf '"ip":"%s",' "$(json_escape "$(kv_get ip "$output")")"
+printf '"token":"%s"}\n' "$(json_escape "$(kv_get token "$output")")"
