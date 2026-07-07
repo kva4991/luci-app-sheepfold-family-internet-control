@@ -16,7 +16,7 @@ import app.sheepfold.android.notifications.SheepfoldNotifications
 import app.sheepfold.android.router.SheepfoldConnectionStore
 import app.sheepfold.android.ui.main.SheepfoldMainScreen
 import app.sheepfold.android.ui.setup.RouterSetupScreen
-import app.sheepfold.android.ui.theme.OvcharnyaTheme
+import app.sheepfold.android.ui.theme.SheepfoldTheme
 import app.sheepfold.android.ui.theme.ThemeMode
 import app.sheepfold.android.ui.theme.ThemePreferenceStore
 
@@ -43,9 +43,9 @@ private fun SheepfoldRoot() {
     var setupComplete by remember { mutableStateOf(SheepfoldConnectionStore.hasConnection(context)) }
     var connection by remember { mutableStateOf(SheepfoldConnectionStore.read(context)) }
 
-    // OvcharnyaTheme — единственная обёртка темы.
+    // SheepfoldTheme — единственная обёртка темы.
     // Передаём themeMode снаружи, чтобы тема обновлялась реактивно.
-    OvcharnyaTheme(themeMode = themeMode) {
+    SheepfoldTheme(themeMode = themeMode) {
         Surface(modifier = Modifier.fillMaxSize()) {
             if (setupComplete) {
                 SheepfoldMainScreen(

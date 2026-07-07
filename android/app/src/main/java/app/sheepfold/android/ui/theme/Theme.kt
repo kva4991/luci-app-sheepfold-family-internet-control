@@ -69,15 +69,15 @@ private val DarkColors = darkColorScheme(
 // Хранится в SharedPreferences через ThemePreferenceStore.
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
-// OvcharnyaTheme — единственная точка входа для темы.
+// SheepfoldTheme — единственная точка входа для темы.
 // themeMode приходит из MainActivity, который читает его из DataStore.
 // Это позволяет переключать тему без перезапуска Activity.
 @Composable
-fun OvcharnyaTheme(
+fun SheepfoldTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     content: @Composable () -> Unit
 ) {
-    // Определяем isDark один раз здесь, а не в каждом компонуемом.
+    // Определяем isDark один раз здесь, а не в каждом компоненте.
     // SYSTEM — следуем ОС; LIGHT/DARK — принудительно.
     val isDark = when (themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
