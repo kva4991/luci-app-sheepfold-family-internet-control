@@ -13,14 +13,69 @@
 #   sheepfold-activity-log clean-all
 #   sheepfold-activity-log enrich <mac>   # -> JSON
 #   sheepfold-activity-log status
+#
+# Лимиты определяются автоматически по MemAvailable или через UCI:
+#   sheepfold.global.log_max_dir_kb      (0 = авто)
+#   sheepfold.global.log_max_device_kb   (0 = авто)
+#
+# Авто-шкала (по MemAvailable):
+#   ≥ 128 МБ свободно  -> 12 МБ папка / 2 МБ устройство
+#    64-127 МБ свободно  ->  8 МБ папка / 1.5 МБ устройство
+#   < 64  МБ свободно  ->  2 МБ папка / 256 КБ устройство
+#   + жёсткий потолок: не более 15% MemAvailable
 
 set -eu
 
 PRIV_DIR="/tmp/sheepfold/.private"
 ARCHIVE_DIR="${PRIV_DIR}/archive"
-MAX_DIR_KB=2048
-MAX_PER_DEVICE_KB=512
+MAX_SAFE_FRACTION=15
 
+# ── Адаптивный расчёт лимитов ─────────────────────────────────────────────────
+compute_limits() {
+    UCI_DIR=$(uci -q get sheepfold.global.log_max_dir_kb    2>/dev/null || echo 0)
+    UCI_DEV=$(uci -q get sheepfold.global.log_max_device_kb 2>/dev/null || echo 0)
+    case "$UCI_DIR" in ''|*[!0-9]*) UCI_DIR=0 ;; esac
+    case "$UCI_DEV" in ''|*[!0-9]*) UCI_DEV=0 ;; esac
+
+    if [ "$UCI_DIR" -gt 0 ] && [ "$UCI_DEV" -gt 0 ]; then
+        MAX_DIR_KB="$UCI_DIR"
+        MAX_PER_DEVICE_KB="$UCI_DEV"
+        return
+    fi
+
+    FREE_MB=0
+    if [ -r /proc/meminfo ]; then
+        FREE_KB=$(grep '^MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}' | head -1)
+        [ -z "$FREE_KB" ] && \
+            FREE_KB=$(grep '^MemFree:' /proc/meminfo 2>/dev/null | awk '{print $2}' | head -1)
+        case "$FREE_KB" in ''|*[!0-9]*) FREE_KB=0 ;; esac
+        FREE_MB=$((FREE_KB / 1024))
+    fi
+
+    if [ "$FREE_MB" -ge 128 ]; then
+        AUTO_DIR_KB=12288
+        AUTO_DEV_KB=2048
+    elif [ "$FREE_MB" -ge 64 ]; then
+        AUTO_DIR_KB=8192
+        AUTO_DEV_KB=1536
+    else
+        AUTO_DIR_KB=2048
+        AUTO_DEV_KB=256
+    fi
+
+    # Не более 15% MemAvailable — жёсткая защита
+    if [ "$FREE_MB" -gt 0 ]; then
+        CAP=$(( (FREE_MB * 1024 * MAX_SAFE_FRACTION) / 100 ))
+        [ "$AUTO_DIR_KB" -gt "$CAP" ] && AUTO_DIR_KB="$CAP"
+    fi
+
+    MAX_DIR_KB="$AUTO_DIR_KB"
+    MAX_PER_DEVICE_KB="$AUTO_DEV_KB"
+}
+
+compute_limits
+
+# ── Вспомогательные ───────────────────────────────────────────────────────────
 log_enabled() {
     [ "$(uci -q get sheepfold.global.private_logs 2>/dev/null || echo 0)" = "1" ]
 }
@@ -42,13 +97,13 @@ ensure_dirs() {
 dir_size_kb()  { du -sk "$1" 2>/dev/null | awk '{print $1}' || echo 0; }
 file_size_kb() { du -sk "$1" 2>/dev/null | awk '{print $1}' || echo 0; }
 
+# ── write ───────────────────────────────────────────────────────────────────
 cmd_write() {
     MAC="${1:-}"; TYPE="${2:-}"; DATA="${3:-}"
     [ -n "$MAC" ] && [ -n "$TYPE" ] || return 0
     log_enabled || return 0
     ensure_dirs
 
-    # Контроль общего размера — удаляем самый старый файл
     while [ "$(dir_size_kb "$PRIV_DIR")" -ge "$MAX_DIR_KB" ]; do
         OLDEST=$(find "$PRIV_DIR" -maxdepth 1 -name '*.log' -type f 2>/dev/null \
             | xargs ls -t 2>/dev/null | tail -1)
@@ -58,7 +113,6 @@ cmd_write() {
 
     FILE="${PRIV_DIR}/$(mac_to_file "$MAC")"
 
-    # Контроль размера файла — обрезаем, оставляем 200 строк
     if [ -f "$FILE" ] && [ "$(file_size_kb "$FILE")" -ge "$MAX_PER_DEVICE_KB" ]; then
         TMP="${FILE}.tmp"
         tail -200 "$FILE" > "$TMP" && mv "$TMP" "$FILE"
@@ -70,6 +124,7 @@ cmd_write() {
     chmod 600 "$FILE" 2>/dev/null || true
 }
 
+# ── rotate ───────────────────────────────────────────────────────────────────
 cmd_rotate() {
     ensure_dirs
     DATE=$(date '+%Y-%m-%d')
@@ -102,6 +157,7 @@ cmd_clean() {
 
 cmd_clean_all() { rm -rf "$PRIV_DIR"; }
 
+# ── enrich ───────────────────────────────────────────────────────────────────
 cmd_enrich() {
     MAC="${1:-}"
     [ -n "$MAC" ] || { printf '{"error":"no_mac"}\n'; return 0; }
@@ -153,20 +209,32 @@ cmd_enrich() {
         END{printf "]"}
     ' "$FILE")
 
-    printf '{"mac":"%s","days_covered":%s,"domains":%s,"access_changes":%s,"total_raw_lines":%s}\n' \
-        "$MAC" "$DAYS" "$DOMAINS_JSON" "$ACCESS_JSON" "$TOTAL"
+    printf '{"mac":"%s","days_covered":%s,"domains":%s,"access_changes":%s,"total_raw_lines":%s,"limits":{"dir_kb":%s,"device_kb":%s}}\n' \
+        "$MAC" "$DAYS" "$DOMAINS_JSON" "$ACCESS_JSON" "$TOTAL" \
+        "$MAX_DIR_KB" "$MAX_PER_DEVICE_KB"
 }
 
+# ── status ───────────────────────────────────────────────────────────────────
 cmd_status() {
     ENABLED=$(uci -q get sheepfold.global.private_logs 2>/dev/null || echo 0)
     TOTAL_KB=$(dir_size_kb "$PRIV_DIR" 2>/dev/null || echo 0)
     ARCHIVE_KB=$(dir_size_kb "$ARCHIVE_DIR" 2>/dev/null || echo 0)
     FILES=$(find "$PRIV_DIR" -maxdepth 1 -name '*.log' -type f 2>/dev/null | wc -l | tr -d ' ')
     ARCHIVES=$(find "$ARCHIVE_DIR" -type f 2>/dev/null | wc -l | tr -d ' ')
-    printf 'private_logs_enabled: %s\ncurrent_logs_kb: %s/%s\narchive_kb: %s\ndevice_files: %s\narchive_files: %s\n' \
-        "$ENABLED" "$TOTAL_KB" "$MAX_DIR_KB" "$ARCHIVE_KB" "$FILES" "$ARCHIVES"
+    FREE_KB=0
+    [ -r /proc/meminfo ] && \
+        FREE_KB=$(grep '^MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}' | head -1 || echo 0)
+    case "$FREE_KB" in ''|*[!0-9]*) FREE_KB=0 ;; esac
+    printf 'private_logs_enabled: %s\n' "$ENABLED"
+    printf 'current_logs_kb:      %s / %s\n' "$TOTAL_KB" "$MAX_DIR_KB"
+    printf 'per_device_limit_kb:  %s\n' "$MAX_PER_DEVICE_KB"
+    printf 'archive_kb:           %s\n' "$ARCHIVE_KB"
+    printf 'device_files:         %s\n' "$FILES"
+    printf 'archive_files:        %s\n' "$ARCHIVES"
+    printf 'ram_available_kb:     %s\n' "$FREE_KB"
 }
 
+# ── Диспетчер ──────────────────────────────────────────────────────────────────
 COMMAND="${1:-}"; shift || true
 case "$COMMAND" in
     write)     cmd_write "$@" ;;
