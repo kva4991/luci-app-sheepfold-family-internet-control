@@ -1,0 +1,179 @@
+#!/bin/sh
+# sheepfold-activity-log
+# Хранится в RAM: /tmp/sheepfold/.private/
+# Не показывается пользователю.
+#
+# Формат строки: <ISO8601>\t<mac>\t<event_type>\t<data>
+# event_type: dns | http_host | access_change | connect | disconnect
+#
+# Использование:
+#   sheepfold-activity-log write  <mac> <event_type> <data>
+#   sheepfold-activity-log rotate
+#   sheepfold-activity-log clean  <mac>
+#   sheepfold-activity-log clean-all
+#   sheepfold-activity-log enrich <mac>   # -> JSON
+#   sheepfold-activity-log status
+
+set -eu
+
+PRIV_DIR="/tmp/sheepfold/.private"
+ARCHIVE_DIR="${PRIV_DIR}/archive"
+MAX_DIR_KB=2048
+MAX_PER_DEVICE_KB=512
+
+log_enabled() {
+    [ "$(uci -q get sheepfold.global.private_logs 2>/dev/null || echo 0)" = "1" ]
+}
+
+get_log_days() {
+    uci -q get sheepfold.global.log_days 2>/dev/null || echo 7
+}
+
+mac_to_file() {
+    printf '%s' "$1" | tr '[:upper:]:' '[:lower:]' | tr -d ':'
+    printf '.log'
+}
+
+ensure_dirs() {
+    mkdir -p "$PRIV_DIR" "$ARCHIVE_DIR"
+    chmod 700 "$PRIV_DIR" "$ARCHIVE_DIR" 2>/dev/null || true
+}
+
+dir_size_kb()  { du -sk "$1" 2>/dev/null | awk '{print $1}' || echo 0; }
+file_size_kb() { du -sk "$1" 2>/dev/null | awk '{print $1}' || echo 0; }
+
+cmd_write() {
+    MAC="${1:-}"; TYPE="${2:-}"; DATA="${3:-}"
+    [ -n "$MAC" ] && [ -n "$TYPE" ] || return 0
+    log_enabled || return 0
+    ensure_dirs
+
+    # Контроль общего размера — удаляем самый старый файл
+    while [ "$(dir_size_kb "$PRIV_DIR")" -ge "$MAX_DIR_KB" ]; do
+        OLDEST=$(find "$PRIV_DIR" -maxdepth 1 -name '*.log' -type f 2>/dev/null \
+            | xargs ls -t 2>/dev/null | tail -1)
+        [ -n "$OLDEST" ] || break
+        rm -f "$OLDEST"
+    done
+
+    FILE="${PRIV_DIR}/$(mac_to_file "$MAC")"
+
+    # Контроль размера файла — обрезаем, оставляем 200 строк
+    if [ -f "$FILE" ] && [ "$(file_size_kb "$FILE")" -ge "$MAX_PER_DEVICE_KB" ]; then
+        TMP="${FILE}.tmp"
+        tail -200 "$FILE" > "$TMP" && mv "$TMP" "$FILE"
+    fi
+
+    CLEAN=$(printf '%s' "$DATA" | tr '\r\n\t' '   ' | sed 's/[<>]//g')
+    printf '%s\t%s\t%s\t%s\n' \
+        "$(date '+%Y-%m-%dT%H:%M:%S')" "$MAC" "$TYPE" "$CLEAN" >> "$FILE"
+    chmod 600 "$FILE" 2>/dev/null || true
+}
+
+cmd_rotate() {
+    ensure_dirs
+    DATE=$(date '+%Y-%m-%d')
+    FILES=$(find "$PRIV_DIR" -maxdepth 1 -name '*.log' -type f 2>/dev/null)
+    [ -n "$FILES" ] || return 0
+
+    TMPTAR="${PRIV_DIR}/daily.tar"
+    ARCHIVE="${ARCHIVE_DIR}/${DATE}.tar.gz"
+    if command -v gzip >/dev/null 2>&1; then
+        # shellcheck disable=SC2086
+        tar -cf "$TMPTAR" $FILES 2>/dev/null && gzip -f "$TMPTAR" && mv "${TMPTAR}.gz" "$ARCHIVE"
+    else
+        ARCHIVE="${ARCHIVE_DIR}/${DATE}.tar"
+        # shellcheck disable=SC2086
+        tar -cf "$ARCHIVE" $FILES 2>/dev/null
+    fi
+    chmod 600 "$ARCHIVE" 2>/dev/null || true
+    # shellcheck disable=SC2086
+    rm -f $FILES
+
+    LOG_DAYS=$(get_log_days)
+    find "$ARCHIVE_DIR" -type f -mtime "+${LOG_DAYS}" -delete 2>/dev/null || true
+    find "$ARCHIVE_DIR" -type f -mtime "+7"           -delete 2>/dev/null || true
+}
+
+cmd_clean() {
+    MAC="${1:-}"; [ -n "$MAC" ] || return 0
+    rm -f "${PRIV_DIR}/$(mac_to_file "$MAC")"
+}
+
+cmd_clean_all() { rm -rf "$PRIV_DIR"; }
+
+cmd_enrich() {
+    MAC="${1:-}"
+    [ -n "$MAC" ] || { printf '{"error":"no_mac"}\n'; return 0; }
+    log_enabled || { printf '{"error":"private_logs_disabled"}\n'; return 0; }
+    FILE="${PRIV_DIR}/$(mac_to_file "$MAC")"
+    [ -f "$FILE" ] || {
+        printf '{"mac":"%s","days_covered":0,"domains":[],"access_changes":[],"total_raw_lines":0}\n' "$MAC"
+        return 0
+    }
+
+    TOTAL=$(wc -l < "$FILE" | tr -d ' ')
+    DAYS=$(awk -F'\t' '{print substr($1,1,10)}' "$FILE" | sort -u | wc -l | tr -d ' ')
+
+    DOMAINS_JSON=$(awk -F'\t' '
+        ($3=="dns"||$3=="http_host"){
+            raw=$4
+            gsub(/^(GET|POST|HEAD) /,"",raw)
+            gsub(/https?:\/\//,"",raw)
+            gsub(/\/.*/,"",raw)
+            gsub(/:.*/,"",raw)
+            gsub(/^www\./,"",raw)
+            if(length(raw)<4||raw~/^[0-9]+\.[0-9]/) next
+            hour=substr($1,1,13)
+            count[raw]++
+            if(!(raw in first)||hour<first[raw]) first[raw]=hour
+            if(!(raw in last)||hour>last[raw]) last[raw]=hour
+        }
+        END{
+            n=0; for(d in count){e[n]=d;n++}
+            for(i=0;i<n;i++)for(j=i+1;j<n;j++){
+                if(count[e[j]]>count[e[i]]){t=e[i];e[i]=e[j];e[j]=t}
+            }
+            printf "["
+            for(i=0;i<n&&i<50;i++){
+                if(i>0)printf ","
+                printf "{\"domain\":\"%s\",\"visits\":%d,\"first\":\"%s\",\"last\":\"%s\"}",
+                    e[i],count[e[i]],first[e[i]],last[e[i]]
+            }
+            printf "]"
+        }
+    ' "$FILE")
+
+    ACCESS_JSON=$(awk -F'\t' '
+        BEGIN{printf "["}
+        $3=="access_change"{
+            if(NR>1)printf ","
+            printf "{\"time\":\"%s\",\"event\":\"%s\"}",substr($1,1,13),$4
+        }
+        END{printf "]"}
+    ' "$FILE")
+
+    printf '{"mac":"%s","days_covered":%s,"domains":%s,"access_changes":%s,"total_raw_lines":%s}\n' \
+        "$MAC" "$DAYS" "$DOMAINS_JSON" "$ACCESS_JSON" "$TOTAL"
+}
+
+cmd_status() {
+    ENABLED=$(uci -q get sheepfold.global.private_logs 2>/dev/null || echo 0)
+    TOTAL_KB=$(dir_size_kb "$PRIV_DIR" 2>/dev/null || echo 0)
+    ARCHIVE_KB=$(dir_size_kb "$ARCHIVE_DIR" 2>/dev/null || echo 0)
+    FILES=$(find "$PRIV_DIR" -maxdepth 1 -name '*.log' -type f 2>/dev/null | wc -l | tr -d ' ')
+    ARCHIVES=$(find "$ARCHIVE_DIR" -type f 2>/dev/null | wc -l | tr -d ' ')
+    printf 'private_logs_enabled: %s\ncurrent_logs_kb: %s/%s\narchive_kb: %s\ndevice_files: %s\narchive_files: %s\n' \
+        "$ENABLED" "$TOTAL_KB" "$MAX_DIR_KB" "$ARCHIVE_KB" "$FILES" "$ARCHIVES"
+}
+
+COMMAND="${1:-}"; shift || true
+case "$COMMAND" in
+    write)     cmd_write "$@" ;;
+    rotate)    cmd_rotate ;;
+    clean)     cmd_clean "$@" ;;
+    clean-all) cmd_clean_all ;;
+    enrich)    cmd_enrich "$@" ;;
+    status)    cmd_status ;;
+    *) echo "Usage: sheepfold-activity-log <write|rotate|clean|clean-all|enrich|status>" >&2; exit 1 ;;
+esac
