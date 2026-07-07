@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Português -->
+<resources>
+    <string name="app_name">Curral</string>
+    <string name="app_tagline">Controlo de Internet Familiar</string>
+    <string name="tab_devices">Dispositivos</string>
+    <string name="tab_schedule">Horário</string>
+    <string name="tab_ai">Assistente IA</string>
+    <string name="tab_settings">Definições</string>
+    <string name="devices_title">Dispositivos na rede</string>
+    <string name="devices_empty">Nenhum dispositivo encontrado</string>
+    <string name="device_block">Bloquear</string>
+    <string name="device_unblock">Desbloquear</string>
+    <string name="device_status_online">Online</string>
+    <string name="device_status_offline">Offline</string>
+    <string name="device_status_blocked">Bloqueado</string>
+    <string name="schedule_title">Horário de acesso</string>
+    <string name="schedule_add">Adicionar regra</string>
+    <string name="schedule_empty">Sem regras configuradas</string>
+    <string name="ai_title">Assistente IA</string>
+    <string name="ai_hint">Fazer uma pergunta…</string>
+    <string name="ai_send">Enviar</string>
+    <string name="ai_privacy_title">Privacidade</string>
+    <string name="ai_privacy_router">Incluir dados do router</string>
+    <string name="ai_privacy_log">Incluir registo do programa</string>
+    <string name="ai_provider_label">Fornecedor de IA</string>
+    <string name="ai_beta_label">Em breve</string>
+    <string name="settings_title">Definições</string>
+    <string name="settings_router_ip">Endereço IP do router</string>
+    <string name="settings_router_password">Palavra-passe do router</string>
+    <string name="settings_theme">Tema</string>
+    <string name="settings_theme_system">Sistema</string>
+    <string name="settings_theme_light">Claro</string>
+    <string name="settings_theme_dark">Escuro</string>
+    <string name="settings_language">Idioma</string>
+    <string name="settings_save">Guardar</string>
+    <string name="settings_saved">Definições guardadas</string>
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_retry">Tentar novamente</string>
+    <string name="error_connection">Erro de ligação ao router</string>
+    <string name="error_auth">Palavra-passe incorreta</string>
+    <string name="loading">A carregar…</string>
+</resources>

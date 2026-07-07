@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English -->
+<resources>
+    <string name="app_name">Sheepfold</string>
+    <string name="app_tagline">Family Internet Control</string>
+    <string name="tab_devices">Devices</string>
+    <string name="tab_schedule">Schedule</string>
+    <string name="tab_ai">AI Assistant</string>
+    <string name="tab_settings">Settings</string>
+    <string name="devices_title">Network Devices</string>
+    <string name="devices_empty">No devices found</string>
+    <string name="device_block">Block</string>
+    <string name="device_unblock">Unblock</string>
+    <string name="device_status_online">Online</string>
+    <string name="device_status_offline">Offline</string>
+    <string name="device_status_blocked">Blocked</string>
+    <string name="schedule_title">Access Schedule</string>
+    <string name="schedule_add">Add Rule</string>
+    <string name="schedule_empty">No rules configured</string>
+    <string name="ai_title">AI Assistant</string>
+    <string name="ai_hint">Ask a question…</string>
+    <string name="ai_send">Send</string>
+    <string name="ai_privacy_title">Privacy</string>
+    <string name="ai_privacy_router">Include router data</string>
+    <string name="ai_privacy_log">Include program log</string>
+    <string name="ai_provider_label">AI Provider</string>
+    <string name="ai_beta_label">Coming Soon</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_router_ip">Router IP Address</string>
+    <string name="settings_router_password">Router Password</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_saved">Settings saved</string>
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_retry">Retry</string>
+    <string name="error_connection">Router connection error</string>
+    <string name="error_auth">Wrong password</string>
+    <string name="loading">Loading…</string>
+</resources>

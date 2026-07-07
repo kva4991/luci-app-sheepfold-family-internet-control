@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Türkçe -->
+<resources>
+    <string name="app_name">Ağıl</string>
+    <string name="app_tagline">Aile İnternet Kontrolü</string>
+    <string name="tab_devices">Cihazlar</string>
+    <string name="tab_schedule">Program</string>
+    <string name="tab_ai">YZ Asistan</string>
+    <string name="tab_settings">Ayarlar</string>
+    <string name="devices_title">Ağ Cihazları</string>
+    <string name="devices_empty">Cihaz bulunamadı</string>
+    <string name="device_block">Engelle</string>
+    <string name="device_unblock">Engeli Kaldır</string>
+    <string name="device_status_online">Çevrimiçi</string>
+    <string name="device_status_offline">Çevrimdışı</string>
+    <string name="device_status_blocked">Engellendi</string>
+    <string name="schedule_title">Erişim Programı</string>
+    <string name="schedule_add">Kural Ekle</string>
+    <string name="schedule_empty">Kural yapılandırılmadı</string>
+    <string name="ai_title">YZ Asistan</string>
+    <string name="ai_hint">Soru sor…</string>
+    <string name="ai_send">Gönder</string>
+    <string name="ai_privacy_title">Gizlilik</string>
+    <string name="ai_privacy_router">Yönlendirici verilerini dahil et</string>
+    <string name="ai_privacy_log">Program günlüğünü dahil et</string>
+    <string name="ai_provider_label">YZ Sağlayıcı</string>
+    <string name="ai_beta_label">Yakında</string>
+    <string name="settings_title">Ayarlar</string>
+    <string name="settings_router_ip">Yönlendirici IP Adresi</string>
+    <string name="settings_router_password">Yönlendirici Şifresi</string>
+    <string name="settings_theme">Tema</string>
+    <string name="settings_theme_system">Sistem</string>
+    <string name="settings_theme_light">Açık</string>
+    <string name="settings_theme_dark">Koyu</string>
+    <string name="settings_language">Dil</string>
+    <string name="settings_save">Kaydet</string>
+    <string name="settings_saved">Ayarlar kaydedildi</string>
+    <string name="action_ok">Tamam</string>
+    <string name="action_cancel">İptal</string>
+    <string name="action_retry">Tekrar Dene</string>
+    <string name="error_connection">Yönlendirici bağlantı hatası</string>
+    <string name="error_auth">Yanlış şifre</string>
+    <string name="loading">Yükleniyor…</string>
+</resources>

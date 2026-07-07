@@ -1,6 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Основной файл строк — русский язык (базовый) -->
 <resources>
-    <string name="app_name">Sheepfold</string>
-    <string name="widget_internet_enabled">Sheepfold: internet enabled</string>
-    <string name="widget_internet_disabled">Sheepfold: internet disabled</string>
-    <string name="widget_internet_switch">Sheepfold: internet switch</string>
+    <string name="app_name">Овчарня</string>
+    <string name="app_tagline">Семейный интернет-контроль</string>
+
+    <!-- Навигация -->
+    <string name="tab_devices">Устройства</string>
+    <string name="tab_schedule">Расписание</string>
+    <string name="tab_ai">ИИ-помощник</string>
+    <string name="tab_settings">Настройки</string>
+
+    <!-- Устройства -->
+    <string name="devices_title">Устройства в сети</string>
+    <string name="devices_empty">Устройства не найдены</string>
+    <string name="device_block">Заблокировать</string>
+    <string name="device_unblock">Разблокировать</string>
+    <string name="device_status_online">В сети</string>
+    <string name="device_status_offline">Не в сети</string>
+    <string name="device_status_blocked">Заблокировано</string>
+
+    <!-- Расписание -->
+    <string name="schedule_title">Расписание доступа</string>
+    <string name="schedule_add">Добавить правило</string>
+    <string name="schedule_empty">Правила не настроены</string>
+
+    <!-- ИИ-помощник -->
+    <string name="ai_title">ИИ-помощник</string>
+    <string name="ai_hint">Задайте вопрос…</string>
+    <string name="ai_send">Отправить</string>
+    <string name="ai_privacy_title">Конфиденциальность</string>
+    <string name="ai_privacy_router">Включить данные роутера</string>
+    <string name="ai_privacy_log">Включить журнал программы</string>
+    <string name="ai_provider_label">Провайдер ИИ</string>
+    <string name="ai_beta_label">Скоро</string>
+
+    <!-- Настройки -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_router_ip">IP-адрес роутера</string>
+    <string name="settings_router_password">Пароль роутера</string>
+    <string name="settings_theme">Оформление</string>
+    <string name="settings_theme_system">Системная</string>
+    <string name="settings_theme_light">Светлая</string>
+    <string name="settings_theme_dark">Тёмная</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_save">Сохранить</string>
+    <string name="settings_saved">Настройки сохранены</string>
+
+    <!-- Общее -->
+    <string name="action_ok">ОК</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_retry">Повторить</string>
+    <string name="error_connection">Ошибка подключения к роутеру</string>
+    <string name="error_auth">Неверный пароль</string>
+    <string name="loading">Загрузка…</string>
 </resources>

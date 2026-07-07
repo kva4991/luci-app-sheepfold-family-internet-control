@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Español -->
+<resources>
+    <string name="app_name">Redil</string>
+    <string name="app_tagline">Control de Internet Familiar</string>
+    <string name="tab_devices">Dispositivos</string>
+    <string name="tab_schedule">Horario</string>
+    <string name="tab_ai">Asistente IA</string>
+    <string name="tab_settings">Ajustes</string>
+    <string name="devices_title">Dispositivos en red</string>
+    <string name="devices_empty">No se encontraron dispositivos</string>
+    <string name="device_block">Bloquear</string>
+    <string name="device_unblock">Desbloquear</string>
+    <string name="device_status_online">En línea</string>
+    <string name="device_status_offline">Fuera de línea</string>
+    <string name="device_status_blocked">Bloqueado</string>
+    <string name="schedule_title">Horario de acceso</string>
+    <string name="schedule_add">Agregar regla</string>
+    <string name="schedule_empty">Sin reglas configuradas</string>
+    <string name="ai_title">Asistente IA</string>
+    <string name="ai_hint">Hacer una pregunta…</string>
+    <string name="ai_send">Enviar</string>
+    <string name="ai_privacy_title">Privacidad</string>
+    <string name="ai_privacy_router">Incluir datos del router</string>
+    <string name="ai_privacy_log">Incluir registro del programa</string>
+    <string name="ai_provider_label">Proveedor de IA</string>
+    <string name="ai_beta_label">Próximamente</string>
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_router_ip">Dirección IP del router</string>
+    <string name="settings_router_password">Contraseña del router</string>
+    <string name="settings_theme">Tema</string>
+    <string name="settings_theme_system">Sistema</string>
+    <string name="settings_theme_light">Claro</string>
+    <string name="settings_theme_dark">Oscuro</string>
+    <string name="settings_language">Idioma</string>
+    <string name="settings_save">Guardar</string>
+    <string name="settings_saved">Ajustes guardados</string>
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="error_connection">Error de conexión al router</string>
+    <string name="error_auth">Contraseña incorrecta</string>
+    <string name="loading">Cargando…</string>
+</resources>

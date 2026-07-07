@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- العربية -->
+<resources>
+    <string name="app_name">حظيرة الأغنام</string>
+    <string name="app_tagline">التحكم في الإنترنت العائلي</string>
+    <string name="tab_devices">الأجهزة</string>
+    <string name="tab_schedule">الجدول الزمني</string>
+    <string name="tab_ai">مساعد الذكاء الاصطناعي</string>
+    <string name="tab_settings">الإعدادات</string>
+    <string name="devices_title">أجهزة الشبكة</string>
+    <string name="devices_empty">لم يتم العثور على أجهزة</string>
+    <string name="device_block">حظر</string>
+    <string name="device_unblock">رفع الحظر</string>
+    <string name="device_status_online">متصل</string>
+    <string name="device_status_offline">غير متصل</string>
+    <string name="device_status_blocked">محظور</string>
+    <string name="schedule_title">جدول الوصول</string>
+    <string name="schedule_add">إضافة قاعدة</string>
+    <string name="schedule_empty">لم يتم تكوين قواعد</string>
+    <string name="ai_title">مساعد الذكاء الاصطناعي</string>
+    <string name="ai_hint">اطرح سؤالاً…</string>
+    <string name="ai_send">إرسال</string>
+    <string name="ai_privacy_title">الخصوصية</string>
+    <string name="ai_privacy_router">تضمين بيانات الراوتر</string>
+    <string name="ai_privacy_log">تضمين سجل البرنامج</string>
+    <string name="ai_provider_label">مزود الذكاء الاصطناعي</string>
+    <string name="ai_beta_label">قريباً</string>
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_router_ip">عنوان IP للراوتر</string>
+    <string name="settings_router_password">كلمة مرور الراوتر</string>
+    <string name="settings_theme">المظهر</string>
+    <string name="settings_theme_system">النظام</string>
+    <string name="settings_theme_light">فاتح</string>
+    <string name="settings_theme_dark">داكن</string>
+    <string name="settings_language">اللغة</string>
+    <string name="settings_save">حفظ</string>
+    <string name="settings_saved">تم حفظ الإعدادات</string>
+    <string name="action_ok">حسناً</string>
+    <string name="action_cancel">إلغاء</string>
+    <string name="action_retry">إعادة المحاولة</string>
+    <string name="error_connection">خطأ في الاتصال بالراوتر</string>
+    <string name="error_auth">كلمة مرور خاطئة</string>
+    <string name="loading">جار التحميل…</string>
+</resources>
