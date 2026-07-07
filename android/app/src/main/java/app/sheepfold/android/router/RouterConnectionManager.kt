@@ -139,16 +139,37 @@ class RouterConnectionManager {
             connection.doOutput = true
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("User-Agent", "Sheepfold Android")
             connection.outputStream.use { output ->
                 output.write(body.toByteArray(Charsets.UTF_8))
             }
-            connection.connect()
-            if (connection.responseCode in 200..299) {
+
+            val responseCode = connection.responseCode
+            val responseBody = (if (responseCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            })?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+
+            if (responseCode in 200..299) {
+                val response = runCatching { JSONObject(responseBody) }.getOrElse {
+                    throw IllegalStateException("Роутер вернул некорректный ответ сопряжения")
+                }
+                if (!response.optBoolean("ok", false) || !response.optBoolean("paired", false)) {
+                    throw IllegalStateException(apiErrorFromJson(response).ifBlank {
+                        "Роутер не подтвердил сопряжение"
+                    })
+                }
+                val bearer = response.optString("token").trim()
+                if (bearer.isBlank()) {
+                    throw IllegalStateException("Роутер не выдал токен административной сессии")
+                }
+                request.bearerToken = bearer
                 return true
             }
 
-            throw IllegalStateException(readApiError(connection).ifBlank {
+            throw IllegalStateException(readApiError(responseBody, responseCode).ifBlank {
                 "Не удалось выполнить сопряжение с роутером"
             })
         } finally {
@@ -178,8 +199,8 @@ class RouterConnectionManager {
             )
         )
 
-        probeUrls.firstNotNullOfOrNull { url ->
-            probeSheepfold(url, gatewayHost)
+        probeUrls.firstNotNullOfOrNull { probe ->
+            probeSheepfold(probe, gatewayHost)
         }
     }
 
@@ -215,14 +236,21 @@ class RouterConnectionManager {
     private fun urlEncode(value: String): String =
         URLEncoder.encode(value, Charsets.UTF_8.name())
 
-    private fun readApiError(connection: HttpURLConnection): String {
-        val stream = connection.errorStream ?: connection.inputStream ?: return ""
-        val body = runCatching {
-            stream.bufferedReader().use { it.readText() }
-        }.getOrDefault("")
+    private fun readApiError(body: String, responseCode: Int): String {
         val json = runCatching { JSONObject(body) }.getOrNull()
+        return json?.let(::apiErrorFromJson).orEmpty()
+            .ifBlank { body.trim() }
+            .ifBlank { "HTTP $responseCode" }
+    }
 
-        return json?.optString("error").orEmpty().ifBlank { body.trim() }
+    private fun apiErrorFromJson(json: JSONObject): String {
+        val structured = json.optJSONObject("error")
+        return structured?.optString("message").orEmpty()
+            .ifBlank { json.optString("message") }
+            .ifBlank {
+                val error = json.opt("error")
+                if (error is String) error else ""
+            }
     }
 
     private fun hostName(apiUrl: String): String {
