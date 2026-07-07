@@ -4,6 +4,7 @@ set -eu
 ROOT="${1:-}"
 CGI="$ROOT/www/cgi-bin/sheepfold-api"
 CONTROL="$ROOT/usr/libexec/sheepfold/sheepfold-router-control"
+ACL="$ROOT/usr/share/rpcd/acl.d/luci-app-sheepfold-family-internet-control.json"
 
 atomic_replace() {
     source_file="$1"
@@ -105,8 +106,8 @@ patch_router_control() {
             next
         }
         in_pair && /remove_mac_from_list blocklist "\$device_mac"/ { next }
-        in_pair && $0 == "}" { in_pair=0; print; next }
         /^activate_admin_pairing_code\(\) \{$/ {
+            in_pair=0
             print_activation()
             skip_activation=1
             next
@@ -121,8 +122,23 @@ patch_router_control() {
     atomic_replace "$CONTROL" "$tmp"
 }
 
+patch_acl() {
+    [ -f "$ACL" ] || return 0
+    grep -q 'sheepfold-openssl-ensure' "$ACL" 2>/dev/null && return 0
+    tmp="$ACL.hardened.$$"
+    awk '
+        /"\/usr\/libexec\/sheepfold\/sheepfold-router-control": \[ "exec" \]/ {
+            print "        \"/usr/libexec/sheepfold/sheepfold-openssl-ensure\": [ \"exec\" ],"
+        }
+        { print }
+    ' "$ACL" > "$tmp"
+    chmod 0644 "$tmp"
+    mv -f "$tmp" "$ACL"
+}
+
 patch_cgi
 patch_router_control
+patch_acl
 
 # Public code creation must not survive as an addressable CGI action.
 if grep -q '/pair-token)' "$CGI" 2>/dev/null; then
