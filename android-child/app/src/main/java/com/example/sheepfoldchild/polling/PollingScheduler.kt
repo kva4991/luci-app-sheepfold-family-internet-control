@@ -1,55 +1,53 @@
 package com.example.sheepfoldchild.polling
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
-import androidx.work.*
-import java.util.concurrent.TimeUnit
+import android.content.Intent
+import android.os.SystemClock
 
 /**
- * Планировщик опроса роутера через WorkManager.
+ * Негарантированный фоновый опрос без WorkManager.
  *
- * Режимы интервала:
- *   ACTIVE   — пользователь активен: 5 мин
- *   IDLE     — приложение в фоне, устройство не используется: 30 мин
- *
- * WorkManager автоматически уважает Doze/App Standby:
- * в глубом сне Android работа откладывается до следующего окна Doze — это норма.
+ * ACTIVE использует 15 минут, IDLE — 30 минут. AlarmManager вправе объединять
+ * срабатывания в Doze; точное время для обычного обновления статуса не нужно.
  */
 object PollingScheduler {
 
-    private const val WORK_NAME = "sheepfold_status_poll"
+    private const val REQUEST_CODE = 4102
+    private const val ACTIVE_INTERVAL_MS = 15L * 60L * 1000L
+    private const val IDLE_INTERVAL_MS = 30L * 60L * 1000L
 
-    /** Вызывать из onResume (=ACTIVE) и onPause (=IDLE). */
     fun schedule(context: Context, mode: Mode) {
-        val intervalMinutes = when (mode) {
-            Mode.ACTIVE -> 5L
-            Mode.IDLE   -> 30L
+        val appContext = context.applicationContext
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val interval = when (mode) {
+            Mode.ACTIVE -> ACTIVE_INTERVAL_MS
+            Mode.IDLE -> IDLE_INTERVAL_MS
         }
-
-        val request = PeriodicWorkRequestBuilder<StatusPollWorker>(
-            intervalMinutes, TimeUnit.MINUTES
+        alarmManager.setInexactRepeating(
+            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            SystemClock.elapsedRealtime() + interval,
+            interval,
+            pendingIntent(appContext)
         )
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .setBackoffCriteria(
-                BackoffPolicy.LINEAR,
-                WorkRequest.MIN_BACKOFF_MILLIS,
-                TimeUnit.MILLISECONDS
-            )
-            .build()
-
-        WorkManager.getInstance(context.applicationContext)
-            .enqueueUniquePeriodicWork(
-                WORK_NAME,
-                ExistingPeriodicWorkPolicy.UPDATE,
-                request
-            )
     }
 
     fun cancel(context: Context) {
-        WorkManager.getInstance(context.applicationContext).cancelUniqueWork(WORK_NAME)
+        val appContext = context.applicationContext
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.cancel(pendingIntent(appContext))
+    }
+
+    private fun pendingIntent(context: Context): PendingIntent {
+        val intent = Intent(context, StatusPollReceiver::class.java)
+            .setAction(StatusPollReceiver.ACTION_POLL)
+        return PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     enum class Mode { ACTIVE, IDLE }
