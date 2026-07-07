@@ -1,0 +1,13 @@
+{
+  "admin/services/sheepfold/ai": {
+    "title": "ИИ помощник",
+    "order": 80,
+    "action": {
+      "type": "view",
+      "path": "sheepfold/ai"
+    },
+    "depends": {
+      "acl": [ "luci-app-sheepfold-family-internet-control" ]
+    }
+  }
+}
