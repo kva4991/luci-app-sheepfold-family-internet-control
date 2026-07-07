@@ -1,38 +1,44 @@
 package com.example.sheepfoldchild.polling
 
+import android.content.BroadcastReceiver
 import android.content.Context
-import androidx.work.CoroutineWorker
-import androidx.work.WorkerParameters
+import android.content.Intent
 import com.example.sheepfoldchild.data.ClientStatusRepository
 import com.example.sheepfoldchild.notification.AccessEndingScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
-/**
- * WorkManager-работа: опрашивает /client-status и обновляет планировщик
- * уведомления при каждом срабатывании.
- * Не показывает UI — только перепланирует Alarm.
- */
-class StatusPollWorker(
-    appContext: Context,
-    params: WorkerParameters
-) : CoroutineWorker(appContext, params) {
+/** Фоновый опрос статуса, запускаемый AlarmManager. */
+class StatusPollReceiver : BroadcastReceiver() {
 
-    override suspend fun doWork(): Result {
-        val repo = ClientStatusRepository(applicationContext)
-        val url = repo.getRouterBaseUrl() ?: return Result.success()
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != ACTION_POLL) return
+        val pendingResult = goAsync()
+        val appContext = context.applicationContext
 
-        repo.fetchClientStatus(url).onSuccess { response ->
-            if (response.ok && response.data != null) {
-                // Перепланируем уведомление только если приложение не на переднем плане
-                if (!AccessEndingScheduler.isAppInForeground) {
-                    AccessEndingScheduler.schedule(
-                        applicationContext,
-                        response.data.accessEndsAt,
-                        response.serverTime,
-                        response.data.minutesRemaining
-                    )
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val repo = ClientStatusRepository(appContext)
+                val url = repo.getRouterBaseUrl() ?: return@launch
+                repo.fetchClientStatus(url).onSuccess { response ->
+                    val data = response.data ?: return@onSuccess
+                    if (!AccessEndingScheduler.isAppInForeground) {
+                        AccessEndingScheduler.schedule(
+                            appContext,
+                            data.accessEndsAt,
+                            response.serverTime,
+                            data.minutesRemaining
+                        )
+                    }
                 }
+            } finally {
+                pendingResult.finish()
             }
         }
-        return Result.success()
+    }
+
+    companion object {
+        const val ACTION_POLL = "com.example.sheepfoldchild.action.POLL_STATUS"
     }
 }
