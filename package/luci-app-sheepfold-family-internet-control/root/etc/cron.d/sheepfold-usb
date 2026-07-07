@@ -1,0 +1,4 @@
+# USB archive-push в окне техобслуживания: сразу после rotate (02:10)
+10 2 * * * root /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-usb-storage archive-push >/dev/null 2>&1 || true
+# Резервный запуск в 04:15
+15 4 * * * root /usr/libexec/sheepfold/sheepfold-usb-storage archive-push >/dev/null 2>&1 || true
