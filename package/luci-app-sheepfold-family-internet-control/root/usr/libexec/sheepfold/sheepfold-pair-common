@@ -92,6 +92,8 @@ pair_add_allowlist() {
     pair_list_has_mac allowlist "$mac" || uci -q add_list "sheepfold.allowlist.mac=$mac"
 }
 
+# Возвращает существующую device-секцию либо безопасное имя для новой,
+# но ничего не записывает в UCI до повторной проверки blocklist.
 pair_device_section_for_mac() {
     wanted="$(pair_normalize_mac "$1")"
     pair_valid_mac "$wanted" || return 1
@@ -101,9 +103,16 @@ pair_device_section_for_mac() {
         printf '%s\n' "$section"
         return 0
     done
+
     section="device_$(printf '%s' "$wanted" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
-    [ "$(uci -q get "sheepfold.$section" 2>/dev/null || true)" = device ] || uci -q set "sheepfold.$section=device"
-    printf '%s\n' "$section"
+    section_type="$(uci -q get "sheepfold.$section" 2>/dev/null || true)"
+    case "$section_type" in
+        ''|device) printf '%s\n' "$section" ;;
+        *)
+            echo "Generated device section name collides with another UCI section." >&2
+            return 1
+            ;;
+    esac
 }
 
 pair_sha256() {
