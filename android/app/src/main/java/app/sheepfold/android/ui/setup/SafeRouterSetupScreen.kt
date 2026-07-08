@@ -2,6 +2,7 @@ package app.sheepfold.android.ui.setup
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,6 +37,10 @@ import app.sheepfold.android.router.RouterConnectionRequest
 import app.sheepfold.android.router.SecureRouterConnectionManager
 import app.sheepfold.android.security.AppProtectionMode
 import app.sheepfold.android.security.AppProtectionStore
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.HybridBinarizer
 import kotlinx.coroutines.launch
 
 /**
@@ -58,10 +63,27 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
     var secret by remember { mutableStateOf("") }
     var secretRepeat by remember { mutableStateOf("") }
 
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap == null) return@rememberLauncherForActivityResult
+        runCatching { decodeQrBitmap(bitmap) }
+            .onSuccess { qrPayload = it }
+            .onFailure { errorMessage = "QR-код не распознан. Можно повторить фото или вставить данные вручную." }
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            cameraLauncher.launch(null)
+        } else {
+            errorMessage = "Камера не разрешена. Ручное сопряжение и вставка QR-данных остаются доступными."
+        }
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        // Разрешения необязательны: пользователь продолжает работу после отказа.
+        // Необязательные разрешения не влияют на возможность сопряжения.
     }
     val optionalPermissions = buildList {
         if (
@@ -69,6 +91,15 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    fun openCamera() {
+        errorMessage = null
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            cameraLauncher.launch(null)
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -96,9 +127,9 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
             InfoCard(
                 title = "Разрешения Android",
                 body = if (optionalPermissions.isEmpty()) {
-                    "Все доступные разрешения выданы. Для сопряжения специальных разрешений не требуется."
+                    "Обязательных разрешений для ручного сопряжения нет. Камера запрашивается только при сканировании QR-кода."
                 } else {
-                    "Уведомления необязательны. Даже после отказа сопряжение и управление роутером продолжат работать."
+                    "Уведомления и камера необязательны. После отказа ручное сопряжение продолжит работать."
                 }
             )
             if (optionalPermissions.isNotEmpty()) {
@@ -106,16 +137,23 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
                     onClick = { permissionLauncher.launch(optionalPermissions.toTypedArray()) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Запросить необязательные разрешения")
+                    Text("Запросить разрешение на уведомления")
                 }
             }
 
+            OutlinedButton(
+                onClick = ::openCamera,
+                enabled = !isConnecting,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Сфотографировать QR-код")
+            }
             OutlinedTextField(
                 value = qrPayload,
                 onValueChange = { qrPayload = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Данные QR-кода") },
-                supportingText = { Text("Вставьте строку SF1|... или JSON из LuCI") },
+                supportingText = { Text("После фото данные появятся здесь. Также можно вставить строку SF1|... или JSON из LuCI.") },
                 minLines = 3
             )
             Button(
@@ -127,7 +165,7 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Подключиться по QR-данным")
+                Text("Подключиться по QR-коду")
             }
 
             Text("Или ручная настройка", style = MaterialTheme.typography.titleMedium)
@@ -140,7 +178,7 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
             )
             OutlinedTextField(
                 value = login,
-                onValueChange = { login = it.filter { char -> char.isLetterOrDigit() || char in "._-@" }.take(64) },
+                onValueChange = { login = it.filter { char -> char.isLetterOrDigit() || char in "._-@+" }.take(64) },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Логин администратора") },
                 singleLine = true
@@ -219,6 +257,16 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
             Text(it, color = MaterialTheme.colorScheme.error)
         }
     }
+}
+
+private fun decodeQrBitmap(bitmap: Bitmap): String {
+    val pixels = IntArray(bitmap.width * bitmap.height)
+    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+    val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
+    val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+    return MultiFormatReader().decode(binaryBitmap).text
+        ?.takeIf { it.isNotBlank() }
+        ?: throw IllegalArgumentException("QR-код пуст")
 }
 
 @Composable
