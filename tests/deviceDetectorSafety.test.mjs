@@ -1,8 +1,14 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -10,21 +16,76 @@ const detectorPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-detector',
 );
+const classifierPath = resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-classifier',
+);
+const temporaryDirectories = [];
 
-function classify(name, ports = '') {
-  const result = spawnSync('sh', [detectorPath, 'classify', name, ports], {
-    encoding: 'utf8',
-  });
+afterEach(() => {
+  while (temporaryDirectories.length > 0) {
+    rmSync(temporaryDirectories.pop(), { recursive: true, force: true });
+  }
+});
+
+function createSignal(fields) {
+  const directory = mkdtempSync(join(tmpdir(), 'sheepfold-signals-'));
+  const file = join(directory, 'device.dhcp');
+  const content = Object.entries(fields)
+    .map(([key, value]) => `${key}\t${value}`)
+    .join('\n');
+
+  temporaryDirectories.push(directory);
+  writeFileSync(file, `${content}\n`, 'utf8');
+  return file;
+}
+
+function classify({
+  name,
+  ports = '',
+  staticName = '',
+  signalFile = '',
+  mac = '00:11:22:33:44:55',
+}) {
+  const result = spawnSync(
+    'sh',
+    [classifierPath, name, ports, staticName, signalFile, mac],
+    { encoding: 'utf8' },
+  );
 
   assert.equal(result.status, 0, result.stderr || `Не удалось классифицировать ${name}`);
-  const [type, confidence, targetGroup, reason] = result.stdout.trimEnd().split('\t');
+  const [
+    type,
+    confidence,
+    targetGroup,
+    reason,
+    autoScore,
+    evidence,
+    evidenceCount,
+    hardDeny,
+    policyVersion,
+    ouiVendor,
+  ] = result.stdout.trimEnd().split('\t');
 
   return {
     type,
     confidence: Number(confidence),
     targetGroup,
     reason,
+    autoScore: Number(autoScore),
+    evidence: evidence ? evidence.split(',') : [],
+    evidenceCount: Number(evidenceCount),
+    hardDeny: hardDeny === '1',
+    policyVersion,
+    ouiVendor,
   };
+}
+
+function isAutoAssignable(device, threshold = 80) {
+  return !device.hardDeny
+    && device.targetGroup === 'Без ограничений'
+    && device.autoScore >= threshold
+    && device.evidenceCount >= 2;
 }
 
 function functionBody(source, name, nextName) {
@@ -37,33 +98,71 @@ function functionBody(source, name, nextName) {
 }
 
 describe('Безопасное автоназначение устройств', () => {
-  it('никогда не добавляет OpenWrt-роутер в группу без ограничений', () => {
-    const device = classify('OpenWrt');
+  it('никогда не доверяет OpenWrt-роутеру автоматически', () => {
+    const device = classify({ name: 'OpenWrt' });
 
     assert.equal(device.type, 'network');
     assert.equal(device.targetGroup, '');
     assert.ok(device.confidence >= 90);
+    assert.equal(device.autoScore, 0);
+    assert.equal(device.hardDeny, true);
+    assert.equal(isAutoAssignable(device), false);
   });
 
   it('сетевой маркер старше ложного инженерного маркера', () => {
-    const device = classify('OpenWrt alarm controller', '22,53,80,443');
+    const device = classify({
+      name: 'OpenWrt alarm controller',
+      ports: '22,53,80,443',
+    });
 
     assert.equal(device.type, 'network');
-    assert.equal(device.targetGroup, '');
+    assert.equal(device.hardDeny, true);
+    assert.equal(isAutoAssignable(device), false);
   });
 
-  it('разрешает автоматическую группу для умной колонки', () => {
-    const device = classify('Yandex Station');
+  it('не доверяет умной колонке только по hostname', () => {
+    const device = classify({ name: 'Yandex Station' });
 
     assert.equal(device.type, 'speaker');
-    assert.equal(device.targetGroup, 'Без ограничений');
+    assert.equal(device.evidenceCount, 1);
+    assert.equal(device.autoScore, 50);
+    assert.equal(isAutoAssignable(device), false);
   });
 
-  it('разрешает автоматическую группу для умной лампы', () => {
-    const device = classify('Yeelight lamp');
+  it('разрешает колонку после независимого DHCP-подтверждения', () => {
+    const signalFile = createSignal({
+      vendor_class: 'Yandex Station IoT',
+      requested_options: '1,3,6,15,51',
+    });
+    const device = classify({ name: 'Yandex Station', signalFile });
+
+    assert.equal(device.type, 'speaker');
+    assert.deepEqual(device.evidence.sort(), ['dhcp', 'name']);
+    assert.ok(device.autoScore >= 80);
+    assert.equal(isAutoAssignable(device), true);
+  });
+
+  it('считает статическое имя владельца независимым подтверждением лампы', () => {
+    const device = classify({
+      name: 'Yeelight lamp',
+      staticName: 'Yeelight kitchen lamp',
+    });
 
     assert.equal(device.type, 'smart_home');
-    assert.equal(device.targetGroup, 'Без ограничений');
+    assert.deepEqual(device.evidence.sort(), ['name', 'owner_configured']);
+    assert.equal(isAutoAssignable(device), true);
+  });
+
+  it('DHCP-профиль компьютера запрещает доверие поддельному имени лампы', () => {
+    const signalFile = createSignal({
+      vendor_class: 'MSFT 5.0',
+      requested_options: '1,3,6,15,31,33,43,44,46,47,119,121,249,252',
+    });
+    const device = classify({ name: 'Yeelight lamp', signalFile });
+
+    assert.equal(device.type, 'smart_home');
+    assert.equal(device.hardDeny, true);
+    assert.equal(isAutoAssignable(device), false);
   });
 
   it('не повторяет автоназначение для уже закреплённого типа', () => {
