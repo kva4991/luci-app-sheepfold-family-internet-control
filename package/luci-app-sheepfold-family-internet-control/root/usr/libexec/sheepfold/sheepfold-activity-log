@@ -1,56 +1,34 @@
 #!/bin/sh
 # sheepfold-activity-log
-# Хранится в RAM: /tmp/sheepfold/.private/
-# Не показывается пользователю.
-#
+# Активные журналы живут в RAM: /tmp/sheepfold/.private/
+# Формат имени: <unix_timestamp>-<device_id>-sheepfold.log
 # Формат строки: <ISO8601>\t<mac>\t<event_type>\t<data>
-# event_type: dns | http_host | access_change | connect | disconnect
-#
-# Использование:
-#   sheepfold-activity-log write  <mac> <event_type> <data>
-#   sheepfold-activity-log rotate
-#   sheepfold-activity-log clean  <mac>
-#   sheepfold-activity-log clean-all
-#   sheepfold-activity-log enrich <mac>   # -> JSON
-#   sheepfold-activity-log status
-#
-# Лимиты определяются автоматически по MemAvailable или через UCI:
-#   sheepfold.global.log_max_dir_kb      (0 = авто)
-#   sheepfold.global.log_max_device_kb   (0 = авто)
-#
-# Авто-шкала (по MemAvailable):
-#   ≥ 128 МБ свободно  -> 12 МБ папка / 2 МБ устройство
-#    64-127 МБ свободно  ->  8 МБ папка / 1.5 МБ устройство
-#   < 64  МБ свободно  ->  2 МБ папка / 256 КБ устройство
-#   + жёсткий потолок: не более 15% MemAvailable
 
 set -eu
 
 PRIV_DIR="/tmp/sheepfold/.private"
 ARCHIVE_DIR="${PRIV_DIR}/archive"
+LOCK_DIR="${PRIV_DIR}/.activity-log.lock"
 MAX_SAFE_FRACTION=15
 
-# ── Адаптивный расчёт лимитов ─────────────────────────────────────────────────
 compute_limits() {
-    UCI_DIR=$(uci -q get sheepfold.global.log_max_dir_kb    2>/dev/null || echo 0)
-    UCI_DEV=$(uci -q get sheepfold.global.log_max_device_kb 2>/dev/null || echo 0)
+    UCI_DIR="$(uci -q get sheepfold.global.log_max_dir_kb 2>/dev/null || echo 0)"
+    UCI_DEV="$(uci -q get sheepfold.global.log_max_device_kb 2>/dev/null || echo 0)"
     case "$UCI_DIR" in ''|*[!0-9]*) UCI_DIR=0 ;; esac
     case "$UCI_DEV" in ''|*[!0-9]*) UCI_DEV=0 ;; esac
-
     if [ "$UCI_DIR" -gt 0 ] && [ "$UCI_DEV" -gt 0 ]; then
         MAX_DIR_KB="$UCI_DIR"
         MAX_PER_DEVICE_KB="$UCI_DEV"
         return
     fi
 
-    FREE_MB=0
+    FREE_KB=0
     if [ -r /proc/meminfo ]; then
-        FREE_KB=$(grep '^MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}' | head -1)
-        [ -z "$FREE_KB" ] && \
-            FREE_KB=$(grep '^MemFree:' /proc/meminfo 2>/dev/null | awk '{print $2}' | head -1)
-        case "$FREE_KB" in ''|*[!0-9]*) FREE_KB=0 ;; esac
-        FREE_MB=$((FREE_KB / 1024))
+        FREE_KB="$(grep '^MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}' | head -1)"
+        [ -n "$FREE_KB" ] || FREE_KB="$(grep '^MemFree:' /proc/meminfo 2>/dev/null | awk '{print $2}' | head -1)"
     fi
+    case "$FREE_KB" in ''|*[!0-9]*) FREE_KB=0 ;; esac
+    FREE_MB=$((FREE_KB / 1024))
 
     if [ "$FREE_MB" -ge 128 ]; then
         AUTO_DIR_KB=12288
@@ -63,25 +41,22 @@ compute_limits() {
         AUTO_DEV_KB=256
     fi
 
-    # Не более 15% MemAvailable — жёсткая защита
     if [ "$FREE_MB" -gt 0 ]; then
-        CAP=$(( (FREE_MB * 1024 * MAX_SAFE_FRACTION) / 100 ))
-        [ "$AUTO_DIR_KB" -gt "$CAP" ] && AUTO_DIR_KB="$CAP"
+        CAP=$((FREE_MB * 1024 * MAX_SAFE_FRACTION / 100))
+        [ "$AUTO_DIR_KB" -le "$CAP" ] || AUTO_DIR_KB="$CAP"
     fi
-
     MAX_DIR_KB="$AUTO_DIR_KB"
     MAX_PER_DEVICE_KB="$AUTO_DEV_KB"
 }
 
 compute_limits
 
-# ── Вспомогательные ───────────────────────────────────────────────────────────
 log_enabled() {
-    [ "$(uci -q get sheepfold.global.private_logs 2>/dev/null || echo 0)" = "1" ]
+    [ "$(uci -q get sheepfold.global.private_logs 2>/dev/null || echo 0)" = 1 ]
 }
 
 get_log_days() {
-    DAYS=$(uci -q get sheepfold.global.log_days 2>/dev/null || echo 7)
+    DAYS="$(uci -q get sheepfold.global.log_days 2>/dev/null || echo 7)"
     case "$DAYS" in ''|*[!0-9]*) DAYS=7 ;; esac
     [ "$DAYS" -ge 1 ] || DAYS=1
     [ "$DAYS" -le 365 ] || DAYS=365
@@ -103,164 +78,244 @@ valid_event_type() {
     esac
 }
 
-mac_to_file() {
-    # Только предварительно проверенный MAC может участвовать в имени файла.
-    # Это исключает ../../ path traversal для clean/enrich/write.
-    printf '%s.log' "$(normalize_mac "$1" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
-}
-
 ensure_dirs() {
     mkdir -p "$PRIV_DIR" "$ARCHIVE_DIR"
     chmod 700 "$PRIV_DIR" "$ARCHIVE_DIR" 2>/dev/null || true
 }
 
-dir_size_kb()  { du -sk "$1" 2>/dev/null | awk '{print $1}' || echo 0; }
+acquire_lock() {
+    ensure_dirs
+    attempts=0
+    while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+        attempts=$((attempts + 1))
+        [ "$attempts" -lt 30 ] || {
+            echo "Activity log is busy." >&2
+            return 1
+        }
+        sleep 1
+    done
+    trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT HUP INT TERM
+}
+
+release_lock() {
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+    trap - EXIT HUP INT TERM
+}
+
+dir_size_kb() { du -sk "$1" 2>/dev/null | awk '{print $1}' || echo 0; }
 file_size_kb() { du -sk "$1" 2>/dev/null | awk '{print $1}' || echo 0; }
 
-# ── write ───────────────────────────────────────────────────────────────────
+device_id_for_mac() {
+    wanted="$(normalize_mac "$1")"
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+        existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+        [ "$(normalize_mac "$existing")" = "$wanted" ] || continue
+        device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || printf '%s' "$section")"
+        printf '%s' "$device_id" | tr -cd 'A-Za-z0-9_.-'
+        return 0
+    done
+    printf '%s' "$wanted" | tr -d ':' | tr '[:upper:]' '[:lower:]'
+}
+
+current_log_file() {
+    device_id="$1"
+    for candidate in "$PRIV_DIR"/*-"$device_id"-sheepfold.log; do
+        [ -f "$candidate" ] || continue
+        printf '%s\n' "$candidate"
+        return 0
+    done
+    return 1
+}
+
+new_log_file() {
+    device_id="$1"
+    timestamp="$(date +%s)"
+    printf '%s/%s-%s-sheepfold.log\n' "$PRIV_DIR" "$timestamp" "$device_id"
+}
+
+oldest_active_log() {
+    # Шаблон передаётся непосредственно ls; при отсутствии файлов stdout пуст.
+    ls -1tr "$PRIV_DIR"/*-sheepfold.log 2>/dev/null | sed -n '1p'
+}
+
 cmd_write() {
-    MAC="${1:-}"; TYPE="${2:-}"; DATA="${3:-}"
-    valid_mac "$MAC" || {
-        echo "Invalid MAC address for activity log." >&2
-        return 2
-    }
-    valid_event_type "$TYPE" || {
-        echo "Invalid activity event type." >&2
-        return 2
-    }
+    MAC="${1:-}"
+    TYPE="${2:-}"
+    DATA="${3:-}"
+    valid_mac "$MAC" || { echo "Invalid MAC address for activity log." >&2; return 2; }
+    valid_event_type "$TYPE" || { echo "Invalid activity event type." >&2; return 2; }
     log_enabled || return 0
-    ensure_dirs
+    acquire_lock
 
     while [ "$(dir_size_kb "$PRIV_DIR")" -ge "$MAX_DIR_KB" ]; do
-        OLDEST=$(find "$PRIV_DIR" -maxdepth 1 -name '*.log' -type f 2>/dev/null \
-            | xargs ls -t 2>/dev/null | tail -1)
+        OLDEST="$(oldest_active_log || true)"
         [ -n "$OLDEST" ] || break
-        rm -f "$OLDEST"
+        rm -f -- "$OLDEST"
     done
 
-    MAC=$(normalize_mac "$MAC")
-    FILE="${PRIV_DIR}/$(mac_to_file "$MAC")"
+    MAC="$(normalize_mac "$MAC")"
+    DEVICE_ID="$(device_id_for_mac "$MAC")"
+    [ -n "$DEVICE_ID" ] || DEVICE_ID="unknown"
+    FILE="$(current_log_file "$DEVICE_ID" 2>/dev/null || new_log_file "$DEVICE_ID")"
 
     if [ -f "$FILE" ] && [ "$(file_size_kb "$FILE")" -ge "$MAX_PER_DEVICE_KB" ]; then
         TMP="${FILE}.tmp.$$"
-        tail -200 "$FILE" > "$TMP" && chmod 600 "$TMP" && mv "$TMP" "$FILE"
+        if tail -200 "$FILE" > "$TMP"; then
+            chmod 600 "$TMP"
+            mv -f "$TMP" "$FILE"
+        else
+            rm -f "$TMP"
+        fi
     fi
 
-    # Кавычки и обратные слеши убираются при записи, чтобы последующая выдача
-    # агрегированного JSON не могла быть сломана содержимым сетевого события.
-    CLEAN=$(printf '%s' "$DATA" | tr '\r\n\t' '   ' | sed 's/[\\"]/ /g; s/[<>]//g')
+    CLEAN="$(printf '%s' "$DATA" | tr '\r\n\t' '   ' | sed 's/[\\"]/ /g; s/[<>]//g')"
     printf '%s\t%s\t%s\t%s\n' \
         "$(date '+%Y-%m-%dT%H:%M:%S')" "$MAC" "$TYPE" "$CLEAN" >> "$FILE"
     chmod 600 "$FILE" 2>/dev/null || true
+    release_lock
 }
 
-# ── rotate ───────────────────────────────────────────────────────────────────
+restore_staged_logs() {
+    stage="$1"
+    for staged in "$stage"/*-sheepfold.log; do
+        [ -f "$staged" ] || continue
+        mv -f "$staged" "$PRIV_DIR/" 2>/dev/null || true
+    done
+    rmdir "$stage" 2>/dev/null || true
+}
+
 cmd_rotate() {
-    ensure_dirs
-    DATE=$(date '+%Y-%m-%d')
-    FILES=$(find "$PRIV_DIR" -maxdepth 1 -name '*.log' -type f 2>/dev/null)
-    [ -n "$FILES" ] || return 0
-
-    TMPTAR="${PRIV_DIR}/daily.tar"
-    ARCHIVE="${ARCHIVE_DIR}/${DATE}.tar.gz"
-    if command -v gzip >/dev/null 2>&1; then
-        # Имена состоят только из hex MAC, поэтому безопасны для этого списка tar.
-        # shellcheck disable=SC2086
-        tar -cf "$TMPTAR" $FILES 2>/dev/null && gzip -f "$TMPTAR" && mv "${TMPTAR}.gz" "$ARCHIVE"
-    else
-        ARCHIVE="${ARCHIVE_DIR}/${DATE}.tar"
-        # shellcheck disable=SC2086
-        tar -cf "$ARCHIVE" $FILES 2>/dev/null
+    acquire_lock
+    NOW="$(date +%s)"
+    STAGE="${PRIV_DIR}/rotate.${NOW}.$$"
+    mkdir -p "$STAGE"
+    MOVED=0
+    for file in "$PRIV_DIR"/*-sheepfold.log; do
+        [ -f "$file" ] || continue
+        if mv "$file" "$STAGE/"; then
+            MOVED=$((MOVED + 1))
+        else
+            restore_staged_logs "$STAGE"
+            release_lock
+            return 1
+        fi
+    done
+    if [ "$MOVED" -eq 0 ]; then
+        rmdir "$STAGE"
+        release_lock
+        return 0
     fi
-    chmod 600 "$ARCHIVE" 2>/dev/null || true
-    # shellcheck disable=SC2086
-    rm -f $FILES
 
-    LOG_DAYS=$(get_log_days)
+    TMP_TAR="${PRIV_DIR}/${NOW}-sheepfold-activity.tar.tmp.$$"
+    if ! tar -C "$STAGE" -cf "$TMP_TAR" . 2>/dev/null; then
+        rm -f "$TMP_TAR"
+        restore_staged_logs "$STAGE"
+        release_lock
+        return 1
+    fi
+
+    if command -v gzip >/dev/null 2>&1; then
+        TMP_ARCHIVE="${ARCHIVE_DIR}/${NOW}-sheepfold-activity.tar.gz.tmp.$$"
+        FINAL_ARCHIVE="${ARCHIVE_DIR}/${NOW}-sheepfold-activity.tar.gz"
+        if ! gzip -c "$TMP_TAR" > "$TMP_ARCHIVE"; then
+            rm -f "$TMP_TAR" "$TMP_ARCHIVE"
+            restore_staged_logs "$STAGE"
+            release_lock
+            return 1
+        fi
+    else
+        TMP_ARCHIVE="${ARCHIVE_DIR}/${NOW}-sheepfold-activity.tar.tmp.$$"
+        FINAL_ARCHIVE="${ARCHIVE_DIR}/${NOW}-sheepfold-activity.tar"
+        mv "$TMP_TAR" "$TMP_ARCHIVE"
+        TMP_TAR=""
+    fi
+
+    chmod 600 "$TMP_ARCHIVE"
+    if ! mv -f "$TMP_ARCHIVE" "$FINAL_ARCHIVE"; then
+        [ -z "$TMP_TAR" ] || rm -f "$TMP_TAR"
+        rm -f "$TMP_ARCHIVE"
+        restore_staged_logs "$STAGE"
+        release_lock
+        return 1
+    fi
+    [ -z "$TMP_TAR" ] || rm -f "$TMP_TAR"
+    rm -rf "$STAGE"
+
+    LOG_DAYS="$(get_log_days)"
     find "$ARCHIVE_DIR" -type f -mtime "+${LOG_DAYS}" -delete 2>/dev/null || true
-    find "$ARCHIVE_DIR" -type f -mtime "+7" -delete 2>/dev/null || true
+    release_lock
 }
 
 cmd_clean() {
     MAC="${1:-}"
-    valid_mac "$MAC" || {
-        echo "Invalid MAC address for activity-log cleanup." >&2
-        return 2
-    }
-    rm -f "${PRIV_DIR}/$(mac_to_file "$MAC")"
+    valid_mac "$MAC" || { echo "Invalid MAC address for activity-log cleanup." >&2; return 2; }
+    acquire_lock
+    DEVICE_ID="$(device_id_for_mac "$MAC")"
+    for file in "$PRIV_DIR"/*-"$DEVICE_ID"-sheepfold.log; do
+        [ -f "$file" ] || continue
+        rm -f -- "$file"
+    done
+    release_lock
 }
 
-cmd_clean_all() { rm -rf "$PRIV_DIR"; }
+cmd_clean_all() {
+    acquire_lock
+    find "$PRIV_DIR" -maxdepth 1 -name '*-sheepfold.log' -type f -delete 2>/dev/null || true
+    release_lock
+}
 
-# ── enrich ───────────────────────────────────────────────────────────────────
 cmd_enrich() {
     MAC="${1:-}"
     valid_mac "$MAC" || { printf '{"error":"invalid_mac"}\n'; return 2; }
-    MAC=$(normalize_mac "$MAC")
+    MAC="$(normalize_mac "$MAC")"
     log_enabled || { printf '{"error":"private_logs_disabled"}\n'; return 0; }
-    FILE="${PRIV_DIR}/$(mac_to_file "$MAC")"
-    [ -f "$FILE" ] || {
-        printf '{"mac":"%s","days_covered":0,"domains":[],"access_changes":[],"total_raw_lines":0}\n' "$MAC"
+    DEVICE_ID="$(device_id_for_mac "$MAC")"
+    FILES=""
+    for file in "$PRIV_DIR"/*-"$DEVICE_ID"-sheepfold.log; do
+        [ -f "$file" ] || continue
+        FILES="$FILES $file"
+    done
+    if [ -z "$FILES" ]; then
+        printf '{"mac":"%s","device_id":"%s","days_covered":0,"domains":[],"access_changes":[],"total_raw_lines":0}\n' "$MAC" "$DEVICE_ID"
         return 0
-    }
+    fi
 
-    TOTAL=$(wc -l < "$FILE" | tr -d ' ')
-    DAYS=$(awk -F'\t' '{print substr($1,1,10)}' "$FILE" | sort -u | wc -l | tr -d ' ')
-
-    DOMAINS_JSON=$(awk -F'\t' '
+    # Имена файлов формируются только из timestamp и безопасного device_id.
+    # shellcheck disable=SC2086
+    TOTAL="$(cat $FILES | wc -l | tr -d ' ')"
+    # shellcheck disable=SC2086
+    DAYS="$(awk -F'\t' '{print substr($1,1,10)}' $FILES | sort -u | wc -l | tr -d ' ')"
+    # shellcheck disable=SC2086
+    DOMAINS_JSON="$(awk -F'\t' '
         ($3=="dns"||$3=="http_host"){
-            raw=$4
-            gsub(/^(GET|POST|HEAD) /,"",raw)
-            gsub(/https?:\/\//,"",raw)
-            gsub(/\/.*/,"",raw)
-            gsub(/:.*/,"",raw)
-            gsub(/^www\./,"",raw)
+            raw=$4; gsub(/^(GET|POST|HEAD) /,"",raw); gsub(/https?:\/\//,"",raw)
+            gsub(/\/.*/,"",raw); gsub(/:.*/,"",raw); gsub(/^www\./,"",raw)
             if(length(raw)<4||raw~/^[0-9]+\.[0-9]/) next
-            hour=substr($1,1,13)
-            count[raw]++
+            hour=substr($1,1,13); count[raw]++
             if(!(raw in first)||hour<first[raw]) first[raw]=hour
             if(!(raw in last)||hour>last[raw]) last[raw]=hour
         }
         END{
             n=0; for(d in count){e[n]=d;n++}
-            for(i=0;i<n;i++)for(j=i+1;j<n;j++){
-                if(count[e[j]]>count[e[i]]){t=e[i];e[i]=e[j];e[j]=t}
-            }
-            printf "["
-            for(i=0;i<n&&i<50;i++){
-                if(i>0)printf ","
-                printf "{\"domain\":\"%s\",\"visits\":%d,\"first\":\"%s\",\"last\":\"%s\"}",
-                    e[i],count[e[i]],first[e[i]],last[e[i]]
-            }
-            printf "]"
+            for(i=0;i<n;i++)for(j=i+1;j<n;j++)if(count[e[j]]>count[e[i]]){t=e[i];e[i]=e[j];e[j]=t}
+            printf "["; for(i=0;i<n&&i<50;i++){if(i>0)printf ","; printf "{\"domain\":\"%s\",\"visits\":%d,\"first\":\"%s\",\"last\":\"%s\"}",e[i],count[e[i]],first[e[i]],last[e[i]]} printf "]"
         }
-    ' "$FILE")
+    ' $FILES)"
+    # shellcheck disable=SC2086
+    ACCESS_JSON="$(awk -F'\t' 'BEGIN{printf "["; first=1} $3=="access_change"{if(!first)printf ","; first=0; printf "{\"time\":\"%s\",\"event\":\"%s\"}",substr($1,1,13),$4} END{printf "]"}' $FILES)"
 
-    ACCESS_JSON=$(awk -F'\t' '
-        BEGIN{printf "["; first=1}
-        $3=="access_change"{
-            if(!first)printf ","
-            first=0
-            printf "{\"time\":\"%s\",\"event\":\"%s\"}",substr($1,1,13),$4
-        }
-        END{printf "]"}
-    ' "$FILE")
-
-    printf '{"mac":"%s","days_covered":%s,"domains":%s,"access_changes":%s,"total_raw_lines":%s,"limits":{"dir_kb":%s,"device_kb":%s}}\n' \
-        "$MAC" "$DAYS" "$DOMAINS_JSON" "$ACCESS_JSON" "$TOTAL" \
-        "$MAX_DIR_KB" "$MAX_PER_DEVICE_KB"
+    printf '{"mac":"%s","device_id":"%s","days_covered":%s,"domains":%s,"access_changes":%s,"total_raw_lines":%s,"limits":{"dir_kb":%s,"device_kb":%s}}\n' \
+        "$MAC" "$DEVICE_ID" "$DAYS" "$DOMAINS_JSON" "$ACCESS_JSON" "$TOTAL" "$MAX_DIR_KB" "$MAX_PER_DEVICE_KB"
 }
 
-# ── status ───────────────────────────────────────────────────────────────────
 cmd_status() {
-    ENABLED=$(uci -q get sheepfold.global.private_logs 2>/dev/null || echo 0)
-    TOTAL_KB=$(dir_size_kb "$PRIV_DIR" 2>/dev/null || echo 0)
-    ARCHIVE_KB=$(dir_size_kb "$ARCHIVE_DIR" 2>/dev/null || echo 0)
-    FILES=$(find "$PRIV_DIR" -maxdepth 1 -name '*.log' -type f 2>/dev/null | wc -l | tr -d ' ')
-    ARCHIVES=$(find "$ARCHIVE_DIR" -type f 2>/dev/null | wc -l | tr -d ' ')
+    ENABLED="$(uci -q get sheepfold.global.private_logs 2>/dev/null || echo 0)"
+    TOTAL_KB="$(dir_size_kb "$PRIV_DIR" 2>/dev/null || echo 0)"
+    ARCHIVE_KB="$(dir_size_kb "$ARCHIVE_DIR" 2>/dev/null || echo 0)"
+    FILES="$(find "$PRIV_DIR" -maxdepth 1 -name '*-sheepfold.log' -type f 2>/dev/null | wc -l | tr -d ' ')"
+    ARCHIVES="$(find "$ARCHIVE_DIR" -type f 2>/dev/null | wc -l | tr -d ' ')"
     FREE_KB=0
-    [ -r /proc/meminfo ] && \
-        FREE_KB=$(grep '^MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}' | head -1 || echo 0)
+    [ -r /proc/meminfo ] && FREE_KB="$(grep '^MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}' | head -1 || echo 0)"
     case "$FREE_KB" in ''|*[!0-9]*) FREE_KB=0 ;; esac
     printf 'private_logs_enabled: %s\n' "$ENABLED"
     printf 'current_logs_kb:      %s / %s\n' "$TOTAL_KB" "$MAX_DIR_KB"
@@ -271,14 +326,14 @@ cmd_status() {
     printf 'ram_available_kb:     %s\n' "$FREE_KB"
 }
 
-# ── Диспетчер ────────────────────────────────────────────────────────────────
-COMMAND="${1:-}"; shift || true
+COMMAND="${1:-}"
+shift || true
 case "$COMMAND" in
-    write)     cmd_write "$@" ;;
-    rotate)    cmd_rotate ;;
-    clean)     cmd_clean "$@" ;;
+    write) cmd_write "$@" ;;
+    rotate) cmd_rotate ;;
+    clean) cmd_clean "$@" ;;
     clean-all) cmd_clean_all ;;
-    enrich)    cmd_enrich "$@" ;;
-    status)    cmd_status ;;
+    enrich) cmd_enrich "$@" ;;
+    status) cmd_status ;;
     *) echo "Usage: sheepfold-activity-log <write|rotate|clean|clean-all|enrich|status>" >&2; exit 1 ;;
 esac
