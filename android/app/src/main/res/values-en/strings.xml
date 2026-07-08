@@ -1,30 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- English -->
 <resources>
     <string name="app_name">Sheepfold</string>
     <string name="app_tagline">Family Internet Control</string>
+
+    <string name="tab_control">Control</string>
     <string name="tab_devices">Devices</string>
     <string name="tab_schedule">Schedule</string>
     <string name="tab_ai">AI Assistant</string>
+    <string name="tab_info">Information</string>
     <string name="tab_settings">Settings</string>
+
     <string name="devices_title">Network Devices</string>
-    <string name="devices_empty">No devices found</string>
+    <string name="devices_empty">The router returned no registered devices.</string>
     <string name="device_block">Block</string>
     <string name="device_unblock">Unblock</string>
     <string name="device_status_online">Online</string>
     <string name="device_status_offline">Offline</string>
     <string name="device_status_blocked">Blocked</string>
+    <string name="device_status_format">Status: %1$s</string>
+    <string name="device_ip_format">IP: %1$s</string>
+    <string name="device_mac_format">MAC: %1$s</string>
+    <string name="device_group_format">Group: %1$s</string>
+
     <string name="schedule_title">Access Schedule</string>
     <string name="schedule_add">Add Rule</string>
     <string name="schedule_empty">No rules configured</string>
+
     <string name="ai_title">AI Assistant</string>
+    <string name="ai_parent_title">AI Assistant for Parents</string>
+    <string name="ai_parent_privacy_default">By default, only the question and the verified device role are sent.</string>
     <string name="ai_hint">Ask a question…</string>
+    <string name="ai_question">Question</string>
     <string name="ai_send">Send</string>
+    <string name="ai_ask">Ask</string>
+    <string name="ai_answer_failed">Could not get an answer</string>
     <string name="ai_privacy_title">Privacy</string>
     <string name="ai_privacy_router">Include router data</string>
     <string name="ai_privacy_log">Include program log</string>
     <string name="ai_provider_label">AI Provider</string>
     <string name="ai_beta_label">Coming Soon</string>
+
     <string name="settings_title">Settings</string>
     <string name="settings_router_ip">Router IP Address</string>
     <string name="settings_router_password">Router Password</string>
@@ -35,10 +50,57 @@
     <string name="settings_language">Language</string>
     <string name="settings_save">Save</string>
     <string name="settings_saved">Settings saved</string>
+    <string name="settings_disconnect">Disconnect the app from the router</string>
+
+    <string name="setup_connect_title">Connect Sheepfold</string>
+    <string name="setup_permissions_title">Android Permissions</string>
+    <string name="setup_permissions_ready">Manual pairing requires no runtime permission. Camera access is requested only when scanning a QR code.</string>
+    <string name="setup_permissions_optional">Notifications and camera access are optional. Manual pairing remains available after a denial.</string>
+    <string name="setup_request_notifications">Request notification permission</string>
+    <string name="setup_take_qr_photo">Photograph QR code</string>
+    <string name="setup_qr_data">QR code data</string>
+    <string name="setup_qr_hint">After taking a photo, the data appears here. You may also paste an SF1|… string or JSON from LuCI.</string>
+    <string name="setup_connect_qr">Connect with QR code</string>
+    <string name="setup_manual">Or configure manually</string>
+    <string name="setup_router_address">Router address</string>
+    <string name="setup_admin_login">Administrator login</string>
+    <string name="setup_pairing_code">Temporary pairing code</string>
+    <string name="setup_connect">Connect</string>
+    <string name="setup_qr_not_recognized">The QR code was not recognized. Retake the photo or paste the data manually.</string>
+    <string name="setup_camera_denied">Camera access was denied. Manual pairing and pasted QR data remain available.</string>
+    <string name="setup_connection_failed">Could not connect to the router</string>
+
+    <string name="protection_title">App Protection</string>
+    <string name="protection_description">A password is recommended. Face and Fingerprint may be selected, but Sheepfold relies on the phone system lock and does not treat these modes as stronger protection.</string>
+    <string name="protection_password">Password — recommended</string>
+    <string name="protection_pin">PIN</string>
+    <string name="protection_face">Face — not recommended</string>
+    <string name="protection_fingerprint">Fingerprint — not recommended</string>
+    <string name="protection_none">No additional protection</string>
+    <string name="protection_password_label">Password</string>
+    <string name="protection_repeat">Repeat the value</string>
+    <string name="protection_finish">Finish setup</string>
+    <string name="unlock_title">Unlock Sheepfold</string>
+    <string name="unlock_enter_pin">Enter PIN</string>
+    <string name="unlock_enter_password">Enter password</string>
+    <string name="unlock_invalid">Incorrect value</string>
+    <string name="unlock_open">Open</string>
+
+    <string name="router_label_format">Router: %1$s</string>
+    <string name="router_commands_direct">Commands are executed directly on the OpenWrt router.</string>
+    <string name="router_enable_internet">Enable internet</string>
+    <string name="router_disable_internet">Disable internet for everyone</string>
+    <string name="router_global_block_enabled">Global blocking is enabled on the router</string>
+    <string name="router_internet_enabled">Internet is enabled on the router</string>
+    <string name="router_refresh_failed">Could not refresh data</string>
+    <string name="router_info_title">Router Information</string>
+
     <string name="action_ok">OK</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_retry">Retry</string>
+    <string name="action_refresh">Refresh</string>
     <string name="error_connection">Router connection error</string>
     <string name="error_auth">Wrong password</string>
     <string name="loading">Loading…</string>
+    <string name="value_empty">—</string>
 </resources>
