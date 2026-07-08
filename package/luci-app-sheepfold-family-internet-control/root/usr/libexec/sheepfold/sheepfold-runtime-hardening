@@ -14,6 +14,8 @@ CLIENT_STATUS="$(path /usr/libexec/sheepfold/sheepfold-client-status-effective)"
 SERVICE="$(path /usr/libexec/sheepfold/sheepfold-service)"
 DEVICE_DETECTOR="$(path /usr/libexec/sheepfold/sheepfold-device-detector)"
 DEVICE_CLASSIFIER="$(path /usr/libexec/sheepfold/sheepfold-device-classifier)"
+DEVICE_MDNS="$(path /usr/libexec/sheepfold/sheepfold-device-mdns)"
+DEVICE_RECLASSIFY="$(path /usr/libexec/sheepfold/sheepfold-device-reclassify)"
 DHCP_SIGNALS="$(path /etc/hotplug.d/dhcp/90-sheepfold-device-signals)"
 LED_CONTROL="$(path /usr/libexec/sheepfold/sheepfold-led-control)"
 PAIR_ACTIVATE="$(path /usr/libexec/sheepfold/sheepfold-pair-activate)"
@@ -40,11 +42,12 @@ CUDY_FIX_UNINSTALL="$CUDY_PROFILE/fixLed/uninstall"
 
 for required in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DHCP_SIGNALS" \
-    "$LED_CONTROL" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$PAIR_COMMON" "$PAIR_API" \
-    "$STATUS_API" "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
-    "$ACL" "$PRIVACY_NOTICE" "$CUDY_LED_APPLY_MODE" "$CUDY_LED_PACKAGE" \
+    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
+    "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" "$PAIR_ACTIVATE" \
+    "$PAIR_DEVICE" "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" "$AI_GATE" \
+    "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" \
+    "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$ACL" \
+    "$PRIVACY_NOTICE" "$CUDY_LED_APPLY_MODE" "$CUDY_LED_PACKAGE" \
     "$CUDY_LED_COMMAND" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
     [ -f "$required" ] || die "missing file $required"
 done
@@ -52,11 +55,12 @@ done
 # Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно.
 for executable in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DHCP_SIGNALS" \
-    "$LED_CONTROL" "$STATUS_API" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
-    "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
+    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
+    "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" "$STATUS_API" \
+    "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" "$AI_HANDLER" \
+    "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" \
+    "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$CUDY_LED_APPLY_MODE" \
+    "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
@@ -107,6 +111,10 @@ grep -q 'NETWORK_NAME_PATTERN=' "$DEVICE_CLASSIFIER" || die "network infrastruct
 grep -q 'POLICY_VERSION="2"' "$DEVICE_CLASSIFIER" || die "device classification policy version is missing"
 grep -q 'EVIDENCE_COUNT' "$DEVICE_CLASSIFIER" || die "independent evidence counting is missing"
 grep -q 'nmap-mac-prefixes' "$DEVICE_CLASSIFIER" || die "local OUI lookup is missing"
+grep -q 'mdns_has' "$DEVICE_CLASSIFIER" || die "mDNS evidence handling is missing"
+grep -q 'ubus.call("umdns", "browse"' "$DEVICE_MDNS" || die "mDNS collector does not use the OpenWrt browse API"
+grep -q 'device-mdns.tsv' "$DEVICE_DETECTOR" || die "mDNS snapshot is not included in detection"
+grep -q 'detection_mdns_services' "$DEVICE_DETECTOR" || die "mDNS evidence is not persisted"
 grep -q '\[ "\$evidence_count" -ge 2 \]' "$DEVICE_DETECTOR" || die "automatic group assignment does not require two evidence families"
 grep -q 'detection_fingerprint' "$DEVICE_DETECTOR" || die "device fingerprint persistence is missing"
 grep -q 'detection_policy_version' "$DEVICE_DETECTOR" || die "classification policy version is not persisted"
@@ -115,6 +123,12 @@ assignment_calls="$(grep -c 'assign_no_restrictions_if_allowed "\$section"' "$DE
 [ "$assignment_calls" -eq 1 ] || die "automatic group assignment can run outside a new classification"
 ! grep -q 'revoke_unsafe_auto_assignment' "$DEVICE_DETECTOR" || die "automatic group rollback must not be present"
 grep -q 'classify <name>' "$DEVICE_DETECTOR" || die "detector regression interface is missing"
+
+# Повторное определение не может менять пользовательскую политику доступа.
+grep -q 'DEVICE_RECLASSIFY=.*/sheepfold-device-reclassify' "$CONTROL" || die "device reclassification is not routed"
+grep -q 'exec "\$DEVICE_RECLASSIFY"' "$CONTROL" || die "device reclassification helper is not executed"
+grep -q 'manual_device_type_locked' "$DEVICE_RECLASSIFY" || die "manual device type is not protected"
+! grep -q 'delete.*\.group\|delete.*allowlist\|delete.*blocklist' "$DEVICE_RECLASSIFY" || die "reclassification can change access policy"
 
 # LED helper выбирает профиль по board name и сохраняет общий fallback.
 grep -q 'PROFILE_ROOT="/usr/share/sheepfold/router-profiles"' "$LED_CONTROL" || die "router profile root is missing"
@@ -154,11 +168,12 @@ grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does 
 
 for script in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DHCP_SIGNALS" \
-    "$LED_CONTROL" "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$PAIR_ACTIVATE" \
-    "$PAIR_DEVICE" "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
-    "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
+    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DEVICE_RECLASSIFY" \
+    "$DHCP_SIGNALS" "$LED_CONTROL" "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" \
+    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" \
+    "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" \
+    "$WELL_KNOWN_GENERATOR" "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" \
+    "$CUDY_FIX_UNINSTALL"; do
     /bin/sh -n "$script" || die "shell syntax error in $script"
 done
 
