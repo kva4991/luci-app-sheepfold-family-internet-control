@@ -1,0 +1,83 @@
+#!/bin/sh
+set -eu
+
+SECTION="sheepfold_wan_status"
+PREFERRED_LED="white:wan-online"
+
+find_wan_online_led() {
+    if [ -d "/sys/class/leds/$PREFERRED_LED" ]; then
+        printf '%s\n' "$PREFERRED_LED"
+        return 0
+    fi
+
+    for led_path in /sys/class/leds/*:wan-online; do
+        [ -d "$led_path" ] || continue
+        printf '%s\n' "${led_path##*/}"
+        return 0
+    done
+
+    return 1
+}
+
+find_equivalent_section() {
+    for section in $(uci -q show system 2>/dev/null | sed -n 's/^system\.\([^.=]*\)=led$/\1/p'); do
+        sysfs="$(uci -q get "system.$section.sysfs" 2>/dev/null || true)"
+        trigger="$(uci -q get "system.$section.trigger" 2>/dev/null || true)"
+        device="$(uci -q get "system.$section.dev" 2>/dev/null || true)"
+        mode="$(uci -q get "system.$section.mode" 2>/dev/null || true)"
+
+        if [ "$sysfs" = "$1" ] && [ "$trigger" = "netdev" ] && \
+           [ "$device" = "wan" ] && [ "$mode" = "link" ]; then
+            printf '%s\n' "$section"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+restart_led_service() {
+    if [ -x /etc/init.d/led ]; then
+        /etc/init.d/led restart >/dev/null 2>&1 || /etc/init.d/led reload >/dev/null 2>&1 || true
+    fi
+}
+
+led_name="$(find_wan_online_led || true)"
+[ -n "$led_name" ] || {
+    echo "WAN online LED was not found in /sys/class/leds." >&2
+    exit 2
+}
+
+existing_section="$(find_equivalent_section "$led_name" || true)"
+if [ -n "$existing_section" ]; then
+    printf 'status=already_configured\n'
+    printf 'section=%s\n' "$existing_section"
+    printf 'led=%s\n' "$led_name"
+    exit 0
+fi
+
+if uci -q get "system.$SECTION" >/dev/null 2>&1 && \
+   [ "$(uci -q get "system.$SECTION.sheepfold_managed" 2>/dev/null || printf 0)" != "1" ]; then
+    echo "The reserved system.$SECTION section exists and is not managed by Sheepfold." >&2
+    exit 3
+fi
+
+uci -q delete "system.$SECTION" 2>/dev/null || true
+uci -q set "system.$SECTION=led"
+uci -q set "system.$SECTION.name=WAN_Status (Sheepfold)"
+uci -q set "system.$SECTION.sysfs=$led_name"
+uci -q set "system.$SECTION.trigger=netdev"
+uci -q set "system.$SECTION.dev=wan"
+uci -q set "system.$SECTION.mode=link"
+uci -q set "system.$SECTION.sheepfold_managed=1"
+uci -q commit system
+restart_led_service
+
+[ "$(uci -q get "system.$SECTION.sysfs" 2>/dev/null || true)" = "$led_name" ] || {
+    echo "WAN LED fix verification failed." >&2
+    exit 4
+}
+
+printf 'status=installed\n'
+printf 'section=%s\n' "$SECTION"
+printf 'led=%s\n' "$led_name"
