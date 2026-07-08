@@ -1,45 +1,53 @@
 #!/bin/sh
 # sheepfold-key-derive
-#
-# Итоговый ключ приватных архивов собирается из двух случайных компонентов,
-# хранящихся отдельно в /etc/sheepfold с правами только для root:
-#
-#   KEY_PART  — /etc/sheepfold/.kp
-#   APP_SALT  — /etc/sheepfold/.app_salt
-#   FINAL_KEY = sha256(KEY_PART ":" APP_SALT)
-#
-# Оба компонента создаются лениво и атомарно при первом обращении. В пакет
-# никогда не встраивается общая соль, поэтому обновление пакета не меняет ключ.
-# Вывод: hex-строка итогового ключа в stdout.
+# Итоговый ключ собирается из двух случайных компонентов в /etc/sheepfold.
 
 set -eu
 
 STATE_DIR="/etc/sheepfold"
 KEY_PART_FILE="$STATE_DIR/.kp"
 SALT_FILE="$STATE_DIR/.app_salt"
+LOCK_DIR="$STATE_DIR/.key-derive.lock"
 
 random_hex_32() {
     dd if=/dev/urandom bs=32 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n'
+}
+
+acquire_lock() {
+    umask 077
+    mkdir -p "$STATE_DIR"
+    chmod 700 "$STATE_DIR"
+    attempts=0
+    while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+        attempts=$((attempts + 1))
+        [ "$attempts" -lt 30 ] || {
+            echo "Sheepfold key initialization is busy." >&2
+            exit 1
+        }
+        sleep 1
+    done
+    trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT HUP INT TERM
+}
+
+release_lock() {
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+    trap - EXIT HUP INT TERM
 }
 
 ensure_secret_file() {
     target="$1"
     [ -s "$target" ] && return 0
 
-    umask 077
-    mkdir -p "$STATE_DIR"
-    chmod 700 "$STATE_DIR"
-
     tmp="$target.tmp.$$"
-    trap 'rm -f "$tmp"' EXIT HUP INT TERM
     random_hex_32 > "$tmp"
     [ "$(wc -c < "$tmp" | tr -d ' ')" -eq 64 ] || {
+        rm -f "$tmp"
         echo "Failed to generate Sheepfold key material." >&2
         exit 1
     }
     chmod 600 "$tmp"
+    # Lock гарантирует, что два процесса не смешают компоненты разных генераций.
     mv -f "$tmp" "$target"
-    trap - EXIT HUP INT TERM
 }
 
 ensure_key_material() {
@@ -54,6 +62,7 @@ derive() {
         exit 1
     }
 
+    acquire_lock
     ensure_key_material
     key_part="$(cat "$KEY_PART_FILE")"
     app_salt="$(cat "$SALT_FILE")"
@@ -65,6 +74,7 @@ derive() {
 
     printf '%s:%s' "$key_part" "$app_salt" | \
         openssl dgst -sha256 -hex 2>/dev/null | awk '{print $NF}'
+    release_lock
 }
 
 derive
