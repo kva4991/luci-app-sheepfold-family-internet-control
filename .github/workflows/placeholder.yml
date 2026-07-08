@@ -1,6 +1,7 @@
 name: Validate Sheepfold
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
@@ -24,6 +25,21 @@ jobs:
             -type f -print0 | xargs -0 -n1 sh -n
           sh -n package/luci-app-sheepfold-family-internet-control/root/www/cgi-bin/sheepfold-api
           sh -n package/luci-app-sheepfold-family-internet-control/root/www/.well-known/sheepfold.json.sh
+          sh -n package/luci-app-sheepfold-family-internet-control/root/etc/init.d/sheepfold
+
+      - name: Validate Android XML
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          for project in (Path('android'), Path('android-child')):
+              for xml_file in project.rglob('*.xml'):
+                  ET.parse(xml_file)
+                  print(xml_file)
+          PY
 
       - uses: actions/setup-node@v4
         with:
