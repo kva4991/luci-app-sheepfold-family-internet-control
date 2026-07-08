@@ -16,11 +16,31 @@ header_json() {
     printf 'Cache-Control: no-store\r\n\r\n'
 }
 
+normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+
+mac_for_ip() {
+    client_ip="$1"
+    mac=""
+    [ ! -r /tmp/dhcp.leases ] || mac="$(awk -v ip="$client_ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases)"
+    [ -n "$mac" ] || [ ! -r /proc/net/arp ] || mac="$(awk -v ip="$client_ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp)"
+    normalize_mac "$mac"
+}
+
+device_section_for_mac() {
+    wanted="$(normalize_mac "$1")"
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+        existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+        [ "$(normalize_mac "$existing")" = "$wanted" ] || continue
+        printf '%s\n' "$section"
+        return 0
+    done
+    return 1
+}
+
 remote_ip="${REMOTE_ADDR:-${1:-}}"
 output="$(/usr/libexec/sheepfold/sheepfold-router-control client-status "$remote_ip" 2>/dev/null || true)"
 status="$(kv_get status "$output")"
 reason="$(kv_get reason "$output")"
-schedule="$(kv_get schedule_name "$output")"
 access_ends_at="$(kv_get next_change_at "$output")"
 [ -n "$status" ] || status=unknown
 
@@ -61,12 +81,22 @@ case "$status" in
         ;;
 esac
 
+mac="$(mac_for_ip "$remote_ip")"
+device_section="$(device_section_for_mac "$mac" 2>/dev/null || true)"
+device_id="$device_section"
 device_name=""
-for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
-    [ "$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)" = "$remote_ip" ] || continue
-    device_name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
-    break
-done
+is_administrator=0
+client_role=child
+if [ -n "$device_section" ]; then
+    device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || printf '%s' "$device_section")"
+    device_name="$(uci -q get "sheepfold.$device_section.name" 2>/dev/null || true)"
+    is_administrator="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
+    if [ "$is_administrator" = 1 ]; then
+        client_role=parent
+    else
+        is_administrator=0
+    fi
+fi
 if [ -z "$device_name" ] && [ -r /tmp/dhcp.leases ]; then
     device_name="$(awk -v ip="$remote_ip" '$3 == ip { print $4; exit }' /tmp/dhcp.leases)"
     [ "$device_name" != "*" ] || device_name=""
@@ -86,8 +116,11 @@ case "$access_ends_at" in
 esac
 
 header_json "200 OK"
-printf '{"ok":true,"apiVersion":"1","serverTime":"%s","data":{' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf '{"ok":true,"apiVersion":"2","serverTime":"%s","data":{' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf '"deviceId":"%s",' "$(json_escape "$device_id")"
 printf '"deviceName":"%s",' "$(json_escape "$device_name")"
+printf '"isAdministrator":%s,' "$([ "$is_administrator" = 1 ] && printf true || printf false)"
+printf '"clientRole":"%s",' "$(json_escape "$client_role")"
 printf '"internetState":"%s",' "$(json_escape "$internet_state")"
 printf '"accessMode":"%s",' "$(json_escape "$access_mode")"
 if [ -n "$access_ends_at" ]; then
