@@ -9,6 +9,8 @@ NEW_DEVICE_ALERT_FLAG="$CACHE_DIR/new-device-alert"
 LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
 DEFAULT_SCAN_PORTS="22,53,80,81,443,445,548,554,631,1883,3000,3001,5000,5001,5353,8000,8006,8080,8081,8123,8554,9000,9100,32400"
 NO_RESTRICTIONS_GROUP="Без ограничений"
+NETWORK_NAME_PATTERN='(^|[^a-z0-9])(openwrt|router|gateway|repeater|extender|access[ _-]?point|wireless[ _-]?ap|wi-?fi[ _-]?ap|mesh)([^a-z0-9]|$)|(^|[^a-z0-9])ap[-_][a-z0-9]'
+SMART_HOME_NETWORK_PATTERN='zigbee|z-wave|zwave|thread border router|matter bridge|homekit bridge|smart[ _-]?home|smarthome|aqara|xiaomi|mijia|tuya|tradfri|dirigera|hue bridge|sonoff'
 
 global_get() {
         uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "$2"
@@ -70,17 +72,55 @@ mac_in_named_list() {
         return 1
 }
 
+text_has() {
+        printf '%s' "$1" | grep -Eiq "$2"
+}
+
+name_is_network_infrastructure() {
+        candidate_name="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+        [ -n "$candidate_name" ] || return 1
+
+        # Шлюзы умного дома являются конечными бытовыми устройствами, а не сетевыми роутерами
+        if text_has "$candidate_name" "$SMART_HOME_NETWORK_PATTERN"; then
+                return 1
+        fi
+
+        text_has "$candidate_name" "$NETWORK_NAME_PATTERN"
+}
+
 target_group_for_detected_type() {
-        # В "Без ограничений" отправляем только домашнюю инфраструктуру, а не детские гаджеты.
-        # Это удобная автонастройка для камер, серверов и умного дома, но не замена белому списку.
+        # Автоматически разрешаем только устройства, через которые обычно нельзя пользоваться интернетом
         case "$1" in
-                server|network|engineering|camera|smart_home|vacuum)
+                server|engineering|camera|smart_home|vacuum|speaker)
                         printf '%s\n' "$NO_RESTRICTIONS_GROUP"
                         ;;
                 *)
                         printf '\n'
                         ;;
         esac
+}
+
+revoke_unsafe_auto_assignment() {
+        section="$1"
+        mac="$2"
+        ip="$3"
+        name="$4"
+        reason="$5"
+        current_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+        auto_assigned="$(uci -q get "sheepfold.$section.auto_group_assigned" 2>/dev/null || true)"
+
+        [ "$auto_assigned" = "1" ] || return 0
+        case "$current_group" in
+                "$NO_RESTRICTIONS_GROUP"|"No restrictions") ;;
+                *) return 0 ;;
+        esac
+
+        uci -q delete "sheepfold.$section.group" 2>/dev/null || true
+        uci -q set "sheepfold.$section.auto_group_assigned=0"
+        uci -q delete "sheepfold.$section.auto_group_reason" 2>/dev/null || true
+        uci -q set "sheepfold.$section.auto_group_revoked_reason=$reason"
+        uci -q set "sheepfold.$section.auto_group_revoked_at=$(date +%s)"
+        log_event "Устройство ${name:-$mac}, IP ${ip:-неизвестен} удалено из группы \"$NO_RESTRICTIONS_GROUP\": $reason"
 }
 
 assign_no_restrictions_if_allowed() {
@@ -91,10 +131,17 @@ assign_no_restrictions_if_allowed() {
         confidence="$5"
         target_group="$6"
         reason="$7"
+        device_type="$8"
         min_confidence="$(global_get detector_min_no_restrictions_confidence 80)"
         no_restrictions_auto_assign="$(global_get no_restrictions_auto_assign 1)"
         current_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
         auto_excluded="$(uci -q get "sheepfold.$section.no_restrictions_auto_excluded" 2>/dev/null || true)"
+
+        # Роутеры, точки доступа и другие сетевые устройства никогда не получают эту группу автоматически
+        if [ "$device_type" = "network" ] || name_is_network_infrastructure "$name"; then
+                revoke_unsafe_auto_assignment "$section" "$mac" "$ip" "$name" "network infrastructure must be configured manually"
+                return 0
+        fi
 
         case "$confidence" in
                 ''|*[!0-9]*) confidence=0 ;;
@@ -107,8 +154,8 @@ assign_no_restrictions_if_allowed() {
         [ "$auto_excluded" = "1" ] && return 0
         [ -n "$target_group" ] || return 0
         [ "$confidence" -ge "$min_confidence" ] || return 0
-        # Чёрный список всегда старше любой автоматики: если родитель явно запретил устройство,
-        # детектор не имеет права вернуть его в мягкую группу даже при похожести на сервер/камеру.
+
+        # Чёрный список всегда старше любой автоматики
         mac_in_named_list blocklist "$mac" && return 0
 
         case "$current_group" in
@@ -116,6 +163,8 @@ assign_no_restrictions_if_allowed() {
                         uci -q set "sheepfold.$section.group=$target_group"
                         uci -q set "sheepfold.$section.auto_group_assigned=1"
                         uci -q set "sheepfold.$section.auto_group_reason=$reason"
+                        uci -q delete "sheepfold.$section.auto_group_revoked_reason" 2>/dev/null || true
+                        uci -q delete "sheepfold.$section.auto_group_revoked_at" 2>/dev/null || true
                         log_event "Устройство ${name:-$mac}, IP ${ip:-неизвестен} автоматически добавлено в группу \"$target_group\": $reason"
                         ;;
         esac
@@ -183,20 +232,21 @@ scan_ports() {
                 awk -F/ '/open/ { ports = ports (ports == "" ? "" : ",") $1 } END { print ports }'
 }
 
-text_has() {
-        printf '%s' "$1" | grep -Eiq "$2"
-}
-
 classify_device() {
-        text="$1"
+        name="$1"
         ports="$2"
-        lower="$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')"
+        lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
         type="smart"
         confidence=35
         reason="lightweight router metadata"
         target_group=""
 
-        if text_has "$lower" 'home[ -]?assistant|hassio|hass\.io|haos|openhab|adguard[ -]?home|adguardhome|samba|smb|cifs|file server|nas|proxmox|pve|truenas|freenas|openmediavault|omv|synology|diskstation|qnap|unraid|docker host|portainer|smlight|slzb|zigbee2mqtt|zha coordinator|zigbee coordinator|zigbee gateway|zigbee bridge|matter bridge|thread border router|homekit bridge|smart home hub|smarthome hub|philips hue bridge|hue bridge|ikea dirigera|dirigera|tradfri gateway|aqara hub|xiaomi gateway|mijia gateway|tuya gateway|sonoff zigbee bridge|hubitat|smartthings hub|aeotec hub|homey|fibaro home center|homematic|deconz|conbee|skyconnect|zwavejs|z-wave js|z-wave gateway|zwave gateway'; then
+        if name_is_network_infrastructure "$name"; then
+                type="network"
+                confidence=96
+                reason="network infrastructure marker"
+        elif text_has "$lower" 'home[ -]?assistant|hassio|hass\.io|haos|openhab|adguard[ -]?home|adguardhome|file server|proxmox|truenas|freenas|openmediavault|synology|diskstation|qnap|unraid|docker host|portainer|smlight|slzb|zigbee2mqtt|zha coordinator|zigbee coordinator|zigbee gateway|zigbee bridge|matter bridge|thread border router|homekit bridge|smart home hub|smarthome hub|philips hue bridge|hue bridge|ikea dirigera|dirigera|tradfri gateway|aqara hub|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|sonoff zigbee bridge|hubitat|smartthings hub|aeotec hub|homey|fibaro home center|homematic|deconz|conbee|skyconnect|zwavejs|z-wave js|z-wave gateway|zwave gateway' ||
+             text_has "$lower" '(^|[^a-z0-9])(samba|smb|cifs|nas|pve|omv)([^a-z0-9]|$)'; then
                 type="server"
                 confidence=86
                 reason="home infrastructure name marker"
@@ -204,15 +254,11 @@ classify_device() {
                 type="server"
                 confidence=86
                 reason="video recorder or surveillance server name marker"
-        elif text_has "$lower" 'zont|ectostroy|ectocontrol|myheat|teplocom|xital|telemetrika|owen|saures|boiler|kotel|кот[её]л|baxi|navien|vaillant|buderus|protherm|ariston|heating|thermostat|alarm'; then
+        elif text_has "$lower" 'zont|ectostroy|ectocontrol|myheat|teplocom|xital|telemetrika|owen|saures|baxi|navien|vaillant|buderus|protherm|ariston' ||
+             text_has "$lower" '(^|[^a-z0-9])(boiler|kotel|heating|thermostat|alarm)([^a-z0-9]|$)|кот[её]л'; then
                 type="engineering"
                 confidence=86
                 reason="engineering, heating, or safety controller name marker"
-        elif text_has "$lower" 'router|gateway|repeater|extender|openwrt|access point|ap-|mesh'; then
-                type="network"
-                confidence=86
-                reason="network infrastructure marker"
-                target_group="$NO_RESTRICTIONS_GROUP"
         elif text_has "$lower" 'printer|print|epson|canon|hp-|brother'; then
                 type="printer"
                 confidence=82
@@ -241,9 +287,9 @@ classify_device() {
                 type="console"
                 confidence=82
                 reason="game console marker"
-        elif text_has "$lower" 'alice|alisa|yandex|station|smart speaker|speaker|sonos|homepod|alexa|amazon echo|google home|sberboom|marusya'; then
+        elif text_has "$lower" 'alice|alisa|yandex[ _-]?(station|stantsiya)|яндекс[ _-]?станц|smart speaker|sonos|homepod|alexa|amazon echo|google home|sberboom|marusya'; then
                 type="speaker"
-                confidence=80
+                confidence=84
                 reason="smart speaker marker"
         elif text_has "$lower" 'vacuum|roborock|dreame|deebot|ecovacs|irobot|roomba|miio|xiaomi-vacuum|viomi|ilife|eufy|yeedi'; then
                 type="vacuum"
@@ -259,7 +305,7 @@ classify_device() {
                 reason="ESP smart-home device marker"
         fi
 
-        [ -n "$target_group" ] || target_group="$(target_group_for_detected_type "$type")"
+        target_group="$(target_group_for_detected_type "$type")"
 
         case ",$ports," in
                 *,8123,*)
@@ -300,6 +346,14 @@ classify_device() {
                 target_group="$(target_group_for_detected_type "$type")"
         fi
 
+        # Имя сетевого устройства имеет максимальный приоритет над портовыми эвристиками
+        if name_is_network_infrastructure "$name"; then
+                type="network"
+                confidence=96
+                reason="network infrastructure marker"
+                target_group=""
+        fi
+
         printf '%s\t%s\t%s\t%s\n' "$type" "$confidence" "$target_group" "$reason"
 }
 
@@ -312,8 +366,7 @@ write_manual_device_observation() {
         section="$(ensure_device_section "$mac")"
         device_type="$(uci -q get "sheepfold.$section.device_type" 2>/dev/null || printf unknown)"
 
-        # Если родитель вручную выбрал тип устройства, больше не спорим с ним автоопределением.
-        # Меняем только живые поля вроде IP/источников, чтобы таблица оставалась актуальной.
+        # Ручной тип устройства всегда старше автоопределения
         uci -q set "sheepfold.$section.ip=$ip"
         [ -n "$name" ] && [ -z "$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)" ] && uci -q set "sheepfold.$section.name=$name"
         uci -q set "sheepfold.$section.detection_sources=$sources"
@@ -349,7 +402,7 @@ write_locked_device_observation() {
                 uci -q delete "sheepfold.$section.just_detected" 2>/dev/null || true
         fi
 
-        assign_no_restrictions_if_allowed "$section" "$mac" "$ip" "$name" "$confidence" "$target_group" "$reason"
+        assign_no_restrictions_if_allowed "$section" "$mac" "$ip" "$name" "$confidence" "$target_group" "$reason" "$device_type"
 
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$mac" "$ip" "$name" "$device_type" "$confidence" "$target_group" "$reason" "" >> "$CACHE_FILE"
 }
@@ -362,8 +415,7 @@ write_detection() {
         mode="$5"
         ports="$6"
         now="$7"
-        text="$name $ip $mac $ports"
-        result="$(classify_device "$text" "$ports")"
+        result="$(classify_device "$name" "$ports")"
         device_type="$(printf '%s' "$result" | awk -F '\t' '{ print $1 }')"
         confidence="$(printf '%s' "$result" | awk -F '\t' '{ print $2 }')"
         target_group="$(printf '%s' "$result" | awk -F '\t' '{ print $3 }')"
@@ -384,7 +436,7 @@ write_detection() {
                 uci -q delete "sheepfold.$section.just_detected" 2>/dev/null || true
         fi
 
-        assign_no_restrictions_if_allowed "$section" "$mac" "$ip" "$name" "$confidence" "$target_group" "$reason"
+        assign_no_restrictions_if_allowed "$section" "$mac" "$ip" "$name" "$confidence" "$target_group" "$reason" "$device_type"
 
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$mac" "$ip" "$name" "$device_type" "$confidence" "$target_group" "$reason" "$ports" >> "$CACHE_FILE"
 }
@@ -410,6 +462,10 @@ scan_devices() {
 
         aggregate_router_devices | while IFS="$(printf '\t')" read -r mac ip name sources; do
                 section="$(section_for_mac "$mac" 2>/dev/null || true)"
+                if [ -n "$section" ] && [ -z "$name" ]; then
+                        name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+                fi
+
                 if [ -n "$section" ] && [ "$(uci -q get "sheepfold.$section.manual_device_type" 2>/dev/null || true)" = "1" ]; then
                         write_manual_device_observation "$mac" "$ip" "$name" "$sources" "$now"
                         continue
@@ -418,12 +474,18 @@ scan_devices() {
                 if [ -n "$section" ]; then
                         existing_confidence="$(uci -q get "sheepfold.$section.detection_confidence" 2>/dev/null || true)"
                         existing_type="$(uci -q get "sheepfold.$section.detected_type" 2>/dev/null || true)"
+                        force_network_reclassification=0
                         case "$existing_confidence" in
                                 ''|*[!0-9]*) existing_confidence=0 ;;
                         esac
-                        # Уверенно определённый тип тоже фиксируем: иначе периодический скан может
-                        # прыгать между "сервер", "камера" и "умное устройство" из-за временно открытых портов.
-                        if [ -n "$existing_type" ] && [ "$existing_confidence" -ge "$min_device_type_confidence" ]; then
+
+                        # Сетевой маркер исправляет даже ранее закреплённую ошибочную классификацию
+                        if name_is_network_infrastructure "$name" && [ "$existing_type" != "network" ]; then
+                                force_network_reclassification=1
+                        fi
+
+                        # Уверенный тип фиксируется, если не сработал более важный сетевой запрет
+                        if [ -n "$existing_type" ] && [ "$existing_confidence" -ge "$min_device_type_confidence" ] && [ "$force_network_reclassification" != "1" ]; then
                                 write_locked_device_observation "$mac" "$ip" "$name" "$sources" "$now"
                                 continue
                         fi
@@ -448,8 +510,11 @@ case "$COMMAND" in
         status)
                 [ -r "$CACHE_FILE" ] && cat "$CACHE_FILE"
                 ;;
+        classify)
+                classify_device "${2:-}" "${3:-}"
+                ;;
         *)
-                echo "Usage: sheepfold-device-detector [scan|status]" >&2
+                echo "Usage: sheepfold-device-detector [scan|status|classify <name> [ports]]" >&2
                 exit 1
                 ;;
 esac
