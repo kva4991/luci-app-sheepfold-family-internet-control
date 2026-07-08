@@ -1,88 +1,21 @@
-#!/usr/bin/ucode
-'use strict';
+#!/bin/sh
+set -eu
 
-import * as libubus from "ubus";
-import { writefile, rename, chmod } from "fs";
+UCODE_SOURCE="/usr/share/sheepfold/device-mdns.uc"
+OUTPUT="/tmp/sheepfold/device-mdns.tsv"
+TEMP="$OUTPUT.tmp.$$"
 
-const OUTPUT = "/tmp/sheepfold/device-mdns.tsv";
-const TEMP = "/tmp/sheepfold/device-mdns.tsv.tmp";
+mkdir -p /tmp/sheepfold
+chmod 700 /tmp/sheepfold 2>/dev/null || true
+umask 077
 
-function strip_local(name) {
-        name = `${name ?? ""}`;
-        return substr(name, -6) == ".local" ? substr(name, 0, length(name) - 6) : name;
-}
+if command -v ucode >/dev/null 2>&1 && [ -r "$UCODE_SOURCE" ]; then
+        if ! ucode "$UCODE_SOURCE" > "$TEMP" 2>/dev/null; then
+                : > "$TEMP"
+        fi
+else
+        : > "$TEMP"
+fi
 
-function safe_field(value) {
-        return substr(replace(`${value ?? ""}`, /[\r\n\t\x00-\x1f\x7f]+/g, " "), 0, 160);
-}
-
-function append_addresses(result, value) {
-        if (type(value) == "array") {
-                for (let address in value)
-                        append_addresses(result, address);
-                return;
-        }
-
-        if (value && index(result, value) < 0)
-                push(result, value);
-}
-
-function host_addresses(host_data, hosts) {
-        let result = [];
-        let host_name = lc(strip_local(host_data?.host));
-        let host_record = hosts?.[host_name] ?? {};
-
-        append_addresses(result, host_data?.ipv4);
-        append_addresses(result, host_record?.ipv4);
-        return result;
-}
-
-function write_snapshot(lines) {
-        writefile(TEMP, join(sort(lines), ""));
-        chmod(TEMP, 0600);
-        rename(TEMP, OUTPUT);
-}
-
-let ubus = libubus.connect();
-if (!ubus) {
-        write_snapshot([]);
-        exit(0);
-}
-
-try {
-        ubus.call("umdns", "update");
-} catch (e) {
-        // Текущий кеш browse всё равно может содержать полезные объявления.
-}
-
-let browse = {};
-let raw_hosts = {};
-try {
-        browse = ubus.call("umdns", "browse", { array: true, address: true }) ?? {};
-        raw_hosts = ubus.call("umdns", "hosts", { array: true }) ?? {};
-} catch (e) {
-        write_snapshot([]);
-        exit(0);
-}
-
-let hosts = {};
-for (let name, data in raw_hosts)
-        hosts[lc(strip_local(name))] = data;
-
-let lines = [];
-for (let service_name, service_data in browse) {
-        service_name = strip_local(service_name);
-        for (let instance_name, host_data in service_data) {
-                if (!host_data?.host)
-                        continue;
-
-                let host_name = strip_local(host_data.host);
-                for (let address in host_addresses(host_data, hosts)) {
-                        if (length(lines) >= 512)
-                                break;
-                        push(lines, `${safe_field(address)}\t${safe_field(service_name)}\t${safe_field(host_name)}\t${safe_field(instance_name)}\n`);
-                }
-        }
-}
-
-write_snapshot(lines);
+chmod 600 "$TEMP" 2>/dev/null || true
+mv -f "$TEMP" "$OUTPUT"
