@@ -32,7 +32,9 @@ chmod 700 "$SIGNAL_DIR" 2>/dev/null || true
 
 file="$SIGNAL_DIR/$(printf '%s' "$mac" | tr ':' '_').dhcp"
 tmp="$file.tmp.$$"
-user_classes="$(env 2>/dev/null | sed -n 's/^DNSMASQ_USER_CLASS[0-9]*=//p' | paste -sd ',' - 2>/dev/null || true)"
+user_classes="$(env 2>/dev/null |
+        sed -n 's/^DNSMASQ_USER_CLASS[0-9]*=//p' |
+        awk 'BEGIN { separator="" } { printf "%s%s", separator, $0; separator="," } END { print "" }')"
 
 umask 077
 {
