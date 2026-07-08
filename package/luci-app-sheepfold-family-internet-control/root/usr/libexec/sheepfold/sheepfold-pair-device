@@ -51,6 +51,8 @@ admin_name="$(uci -q get "sheepfold.$admin_section.display_name" 2>/dev/null || 
 device_name="$(pair_name_for_ip "$remote_ip" | sed -n '1p')"
 [ -n "$device_name" ] && [ "$device_name" != "*" ] || device_name="Телефон администратора"
 device_section="$(pair_device_section_for_mac "$device_mac")" || exit 6
+device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || true)"
+[ -n "$device_id" ] || device_id="$device_section"
 
 pair_prepare_token "$login" || {
     echo "Could not generate administrator token." >&2
@@ -65,6 +67,7 @@ pair_list_has_mac blocklist "$device_mac" && {
 
 [ "$(uci -q get "sheepfold.$device_section" 2>/dev/null || true)" = device ] || \
     uci -q set "sheepfold.$device_section=device"
+uci -q set "sheepfold.$device_section.id=$device_id"
 uci -q set "sheepfold.$device_section.mac=$device_mac"
 uci -q set "sheepfold.$device_section.name=$device_name"
 uci -q set "sheepfold.$device_section.ip=$remote_ip"
@@ -81,8 +84,6 @@ uci -q set "sheepfold.$device_section.paired_at=$now"
 uci -q set "sheepfold.$device_section.pairing_user_agent=$user_agent"
 pair_add_allowlist "$device_mac"
 
-# Сначала фиксируем права устройства. Код пока остаётся активным, поэтому сбой
-# записи токена можно безопасно повторить без ручного выпуска нового кода.
 if ! uci -q commit sheepfold; then
     echo "Could not save administrator device settings." >&2
     exit 6
@@ -93,8 +94,6 @@ if ! pair_store_token; then
     exit 6
 fi
 
-# Код потребляется только после надёжной записи хэша. Если финальный commit не
-# удался, удаляем хэш и возвращаем deletion delta к последнему committed коду.
 uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
 uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
 if ! uci -q commit sheepfold; then
@@ -110,6 +109,7 @@ pair_log_event "Android-приложение привязало телефон �
 pair_print_kv paired 1
 pair_print_kv admin_name "$admin_name"
 pair_print_kv admin_login "$login"
+pair_print_kv device_id "$device_id"
 pair_print_kv device_name "$device_name"
 pair_print_kv mac "$device_mac"
 pair_print_kv ip "$remote_ip"
