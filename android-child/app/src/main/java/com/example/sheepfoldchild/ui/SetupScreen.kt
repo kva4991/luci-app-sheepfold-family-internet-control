@@ -48,7 +48,7 @@ fun SetupScreen(
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "Сначала используется HTTPS. Если он недоступен, приложение автоматически попробует HTTP только в локальной сети.",
+                text = stringResource(R.string.setup_transport_hint),
                 textAlign = TextAlign.Center
             )
             OutlinedTextField(
