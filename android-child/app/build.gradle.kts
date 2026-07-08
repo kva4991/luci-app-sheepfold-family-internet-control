@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "com.example.sheepfoldchild"
-        minSdk = 26
+        minSdk = 21
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {
@@ -25,6 +25,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions { jvmTarget = "11" }
     buildFeatures { compose = true }
@@ -40,6 +41,8 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation("androidx.compose.material:material-icons-core")
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
