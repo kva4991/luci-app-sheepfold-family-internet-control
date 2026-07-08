@@ -1,6 +1,7 @@
 package app.sheepfold.android
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -90,6 +91,7 @@ private fun SheepfoldRoot() {
                 else -> {
                     SafeRouterSetupScreen { request ->
                         SheepfoldConnectionStore.save(context, request)
+                        revokeCameraPermissionAfterPairing(context)
                         connection = request
                         setupComplete = true
                         unlocked = !AppProtectionStore.requiresSecret(context)
@@ -97,5 +99,15 @@ private fun SheepfoldRoot() {
                 }
             }
         }
+    }
+}
+
+/** На Android 13+ камера больше не нужна после успешного сопряжения. */
+private fun revokeCameraPermissionAfterPairing(context: Context) {
+    if (
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    ) {
+        context.revokeSelfPermissionOnKill(Manifest.permission.CAMERA)
     }
 }
