@@ -49,12 +49,9 @@ read_body() {
     dd bs=1 count="$length" 2>/dev/null || true
 }
 
-# Должен принимать тот же алфавит, который использует LuCI. Посимвольная
-# проверка предсказуема во всех версиях BusyBox и не зависит от regex-escape [].
 valid_pairing_code() {
     code_rest="$1"
     [ -n "$code_rest" ] || return 1
-
     while [ -n "$code_rest" ]; do
         code_char="${code_rest%"${code_rest#?}"}"
         case "$code_char" in
@@ -63,7 +60,6 @@ valid_pairing_code() {
         esac
         code_rest="${code_rest#?}"
     done
-
     return 0
 }
 
@@ -142,9 +138,6 @@ if [ "${REQUEST_METHOD:-POST}" != "POST" ]; then
     exit 0
 fi
 
-# HTML-форма с чужого сайта не умеет установить произвольный X-заголовок,
-# а браузерный JavaScript не может подменить User-Agent. Новый клиент использует
-# X-Sheepfold-Client, предыдущая Android-версия совместима по своему User-Agent.
 if [ "${HTTP_X_SHEEPFOLD_CLIENT:-}" != "android-admin-v1" ] && \
    [ "${HTTP_USER_AGENT:-}" != "Sheepfold Android" ]; then
     header_json "403 Forbidden"
@@ -203,6 +196,7 @@ printf '{"app":"sheepfold","ok":true,"paired":true,'
 printf '"routerName":"%s",' "$(json_escape "$(uci -q get system.@system[0].hostname 2>/dev/null || printf OpenWrt)")"
 printf '"adminName":"%s",' "$(json_escape "$(kv_get admin_name "$output")")"
 printf '"adminLogin":"%s",' "$(json_escape "$(kv_get admin_login "$output")")"
+printf '"deviceId":"%s",' "$(json_escape "$(kv_get device_id "$output")")"
 printf '"deviceName":"%s",' "$(json_escape "$(kv_get device_name "$output")")"
 printf '"mac":"%s",' "$(json_escape "$(kv_get mac "$output")")"
 printf '"ip":"%s",' "$(json_escape "$(kv_get ip "$output")")"
