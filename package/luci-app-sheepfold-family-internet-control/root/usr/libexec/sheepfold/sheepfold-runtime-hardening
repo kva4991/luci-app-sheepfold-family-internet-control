@@ -11,6 +11,7 @@ CGI_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-api-legacy)"
 CONTROL="$(path /usr/libexec/sheepfold/sheepfold-router-control)"
 CONTROL_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-router-control-legacy)"
 CLIENT_STATUS="$(path /usr/libexec/sheepfold/sheepfold-client-status-effective)"
+DEVICE_DETECTOR="$(path /usr/libexec/sheepfold/sheepfold-device-detector)"
 LED_CONTROL="$(path /usr/libexec/sheepfold/sheepfold-led-control)"
 PAIR_ACTIVATE="$(path /usr/libexec/sheepfold/sheepfold-pair-activate)"
 PAIR_DEVICE="$(path /usr/libexec/sheepfold/sheepfold-pair-device)"
@@ -28,29 +29,31 @@ WELL_KNOWN_GENERATOR="$(path /www/.well-known/sheepfold.json.sh)"
 ACL="$(path /usr/share/rpcd/acl.d/luci-app-sheepfold-family-internet-control.json)"
 PRIVACY_NOTICE="$(path /usr/share/sheepfold/PRIVACY_NOTICE.md)"
 CUDY_PROFILE="$(path /usr/share/sheepfold/router-profiles/cudy,wr3000s-v1)"
-CUDY_LED_APPLY="$CUDY_PROFILE/led/apply"
+CUDY_LED_APPLY_MODE="$CUDY_PROFILE/led/apply-mode"
 CUDY_LED_PACKAGE="$CUDY_PROFILE/led/dependency-package"
 CUDY_LED_COMMAND="$CUDY_PROFILE/led/dependency-command"
 CUDY_FIX_INSTALL="$CUDY_PROFILE/fixLed/install"
 CUDY_FIX_UNINSTALL="$CUDY_PROFILE/fixLed/uninstall"
 
 for required in \
-    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" "$LED_CONTROL" \
-    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" \
-    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
-    "$ACL" "$PRIVACY_NOTICE" "$CUDY_LED_APPLY" "$CUDY_LED_PACKAGE" \
-    "$CUDY_LED_COMMAND" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
+    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
+    "$DEVICE_DETECTOR" "$LED_CONTROL" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+    "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" "$AI_GATE" "$AI_HANDLER" \
+    "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" \
+    "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$ACL" "$PRIVACY_NOTICE" \
+    "$CUDY_LED_APPLY_MODE" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND" \
+    "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
     [ -f "$required" ] || die "missing file $required"
 done
 
 # Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно
 for executable in \
-    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" "$LED_CONTROL" \
-    "$STATUS_API" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
-    "$CUDY_LED_APPLY" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
+    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
+    "$DEVICE_DETECTOR" "$LED_CONTROL" "$STATUS_API" "$PAIR_API" \
+    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" "$AI_HANDLER" \
+    "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" \
+    "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$CUDY_LED_APPLY_MODE" \
+    "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
@@ -93,14 +96,24 @@ grep -q 'global_block' "$CLIENT_STATUS" || die "effective status ignores global 
 grep -q 'temporary_access_expired' "$CLIENT_STATUS" || die "effective status ignores expired temporary access"
 grep -q 'schedule_pending_evaluation' "$CLIENT_STATUS" || die "scheduled status still claims an unverified result"
 
+# Детектор никогда не выдаёт сетевой инфраструктуре группу без ограничений автоматически
+grep -q 'NETWORK_NAME_PATTERN=' "$DEVICE_DETECTOR" || die "network infrastructure name guard is missing"
+grep -q 'revoke_unsafe_auto_assignment' "$DEVICE_DETECTOR" || die "unsafe automatic group rollback is missing"
+grep -q 'server|engineering|camera|smart_home|vacuum|speaker' "$DEVICE_DETECTOR" || die "safe automatic device types are incomplete"
+! grep -q 'server|network|engineering' "$DEVICE_DETECTOR" || die "network devices can still enter no-restrictions automatically"
+grep -q 'network infrastructure must be configured manually' "$DEVICE_DETECTOR" || die "network auto-assignment guard is missing"
+grep -q 'force_network_reclassification' "$DEVICE_DETECTOR" || die "locked detector mistakes cannot be corrected"
+grep -q 'classify <name>' "$DEVICE_DETECTOR" || die "detector regression interface is missing"
+
 # LED helper выбирает профиль по board name и сохраняет общий fallback
 grep -q 'PROFILE_ROOT="/usr/share/sheepfold/router-profiles"' "$LED_CONTROL" || die "router profile root is missing"
+grep -q '/led/apply-mode' "$LED_CONTROL" || die "explicit LED apply-mode entry point is missing"
 grep -q 'exec "\$LEGACY" led-apply' "$LED_CONTROL" || die "generic LED fallback is missing"
 grep -q 'led-repair-status' "$CONTROL" || die "LED repair status is not routed"
 grep -q 'led-repair-apply' "$CONTROL" || die "LED repair apply is not routed"
 [ "$(cat "$CUDY_LED_PACKAGE")" = "mdio-tools" ] || die "Cudy LED dependency package is invalid"
 [ "$(cat "$CUDY_LED_COMMAND")" = "mdio" ] || die "Cudy LED dependency command is invalid"
-grep -q 'mdio mt7530-0 0:0x1f raw 0x21 0x0008' "$CUDY_LED_APPLY" || die "Cudy WR3000S LED command is missing"
+grep -q 'mdio mt7530-0 0:0x1f raw 0x21 0x0008' "$CUDY_LED_APPLY_MODE" || die "Cudy WR3000S LED command is missing"
 grep -q 'PREFERRED_LED="white:wan-online"' "$CUDY_FIX_INSTALL" || die "Cudy WAN online LED name is missing"
 grep -q 'system.\$SECTION.sheepfold_managed' "$CUDY_FIX_INSTALL" || die "LED fix ownership marker is missing"
 grep -q 'find_equivalent_section' "$CUDY_FIX_INSTALL" || die "LED fix does not preserve existing equivalent settings"
@@ -129,11 +142,12 @@ grep -q 'sheepfold-openssl-ensure' "$ACL" || die "OpenSSL verification helper is
 grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable individual logs"
 
 for script in \
-    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" "$LED_CONTROL" \
-    "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
-    "$CUDY_LED_APPLY" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
+    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
+    "$DEVICE_DETECTOR" "$LED_CONTROL" "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" \
+    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" \
+    "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" \
+    "$WELL_KNOWN_GENERATOR" "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" \
+    "$CUDY_FIX_UNINSTALL"; do
     /bin/sh -n "$script" || die "shell syntax error in $script"
 done
 
