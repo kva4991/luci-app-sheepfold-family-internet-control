@@ -22,7 +22,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.sheepfold.android.R
 import app.sheepfold.android.router.AiAssistantClient
 import app.sheepfold.android.router.AiAssistantRequest
 import app.sheepfold.android.router.RouterAdminClient
@@ -42,6 +44,16 @@ fun OperationalMainScreen(
 ) {
     val scope = rememberCoroutineScope()
     val client = remember(connection.apiUrl, connection.bearerToken) { RouterAdminClient(connection) }
+    val refreshFailedText = stringResource(R.string.router_refresh_failed)
+    val blockEnabledText = stringResource(R.string.router_global_block_enabled)
+    val internetEnabledText = stringResource(R.string.router_internet_enabled)
+    val tabs = listOf(
+        stringResource(R.string.tab_control),
+        stringResource(R.string.tab_devices),
+        stringResource(R.string.tab_ai),
+        stringResource(R.string.tab_info),
+        stringResource(R.string.tab_settings)
+    )
     var selectedTab by remember { mutableIntStateOf(0) }
     var devices by remember { mutableStateOf<List<RouterDevice>>(emptyList()) }
     var snapshot by remember { mutableStateOf<RouterSnapshot?>(null) }
@@ -55,7 +67,7 @@ fun OperationalMainScreen(
             runCatching {
                 devices = client.loadDevices()
                 snapshot = client.loadRouterInfo()
-            }.onFailure { message = it.message ?: "Не удалось обновить данные" }
+            }.onFailure { message = it.message ?: refreshFailedText }
             isLoading = false
         }
     }
@@ -64,14 +76,13 @@ fun OperationalMainScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         ScrollableTabRow(selectedTabIndex = selectedTab) {
-            listOf("Управление", "Устройства", "ИИ", "Информация", "Настройки")
-                .forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = { Text(title) }
-                    )
-                }
+            tabs.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTab == index,
+                    onClick = { selectedTab = index },
+                    text = { Text(title) }
+                )
+            }
         }
         when (selectedTab) {
             0 -> ControlTab(
@@ -84,7 +95,7 @@ fun OperationalMainScreen(
                     scope.launch {
                         runCatching { client.setGlobalBlock(enabled) }
                             .onSuccess {
-                                message = if (enabled) "Глобальная блокировка включена на роутере" else "Интернет включён на роутере"
+                                message = if (enabled) blockEnabledText else internetEnabledText
                             }
                             .onFailure { message = it.message }
                         isLoading = false
@@ -111,20 +122,20 @@ private fun ControlTab(
         modifier = Modifier.padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("Роутер: $routerName", style = MaterialTheme.typography.headlineSmall)
-        Text("Команды выполняются непосредственно на OpenWrt-роутере.")
+        Text(stringResource(R.string.router_label_format, routerName), style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.router_commands_direct))
         Button(
             onClick = { onBlock(false) },
             enabled = !isLoading,
             modifier = Modifier.fillMaxWidth()
-        ) { Text("Включить интернет") }
+        ) { Text(stringResource(R.string.router_enable_internet)) }
         Button(
             onClick = { onBlock(true) },
             enabled = !isLoading,
             modifier = Modifier.fillMaxWidth()
-        ) { Text("Отключить интернет для всех") }
+        ) { Text(stringResource(R.string.router_disable_internet)) }
         OutlinedButton(onClick = onRefresh, enabled = !isLoading, modifier = Modifier.fillMaxWidth()) {
-            Text("Обновить данные")
+            Text(stringResource(R.string.action_refresh))
         }
         if (isLoading) CircularProgressIndicator()
         message?.let { Text(it) }
@@ -133,6 +144,7 @@ private fun ControlTab(
 
 @Composable
 private fun DevicesTab(devices: List<RouterDevice>, isLoading: Boolean, onRefresh: () -> Unit) {
+    val emptyValue = stringResource(R.string.value_empty)
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -141,12 +153,14 @@ private fun DevicesTab(devices: List<RouterDevice>, isLoading: Boolean, onRefres
     ) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Устройства роутера", style = MaterialTheme.typography.headlineSmall)
-                OutlinedButton(onClick = onRefresh, enabled = !isLoading) { Text("Обновить") }
+                Text(stringResource(R.string.devices_title), style = MaterialTheme.typography.headlineSmall)
+                OutlinedButton(onClick = onRefresh, enabled = !isLoading) {
+                    Text(stringResource(R.string.action_refresh))
+                }
             }
         }
         if (!isLoading && devices.isEmpty()) {
-            item { Text("Роутер не вернул зарегистрированных устройств.") }
+            item { Text(stringResource(R.string.devices_empty)) }
         }
         items(devices, key = { it.id }) { device ->
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -155,10 +169,10 @@ private fun DevicesTab(devices: List<RouterDevice>, isLoading: Boolean, onRefres
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text((if (device.isAdministrator) "♛ " else "") + device.name)
-                    Text("Статус: ${device.status}")
-                    Text("IP: ${device.ip.ifBlank { "—" }}")
-                    Text("MAC: ${device.mac.ifBlank { "—" }}")
-                    Text("Группа: ${device.group.ifBlank { "—" }}")
+                    Text(stringResource(R.string.device_status_format, device.status))
+                    Text(stringResource(R.string.device_ip_format, device.ip.ifBlank { emptyValue }))
+                    Text(stringResource(R.string.device_mac_format, device.mac.ifBlank { emptyValue }))
+                    Text(stringResource(R.string.device_group_format, device.group.ifBlank { emptyValue }))
                 }
             }
         }
@@ -168,6 +182,7 @@ private fun DevicesTab(devices: List<RouterDevice>, isLoading: Boolean, onRefres
 @Composable
 private fun AiTab(connection: RouterConnectionRequest) {
     val scope = rememberCoroutineScope()
+    val answerFailedText = stringResource(R.string.ai_answer_failed)
     var question by remember { mutableStateOf("") }
     var answer by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -176,13 +191,13 @@ private fun AiTab(connection: RouterConnectionRequest) {
         modifier = Modifier.padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("ИИ-помощник для родителя", style = MaterialTheme.typography.headlineSmall)
-        Text("По умолчанию передаётся только вопрос и проверенная роль устройства.")
+        Text(stringResource(R.string.ai_parent_title), style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.ai_parent_privacy_default))
         OutlinedTextField(
             value = question,
             onValueChange = { question = it },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Вопрос") },
+            label = { Text(stringResource(R.string.ai_question)) },
             minLines = 3
         )
         Button(
@@ -202,12 +217,12 @@ private fun AiTab(connection: RouterConnectionRequest) {
                                 googleAccount = ""
                             )
                         )
-                    }.getOrElse { it.message ?: "Не удалось получить ответ" }
+                    }.getOrElse { it.message ?: answerFailedText }
                     isLoading = false
                 }
             },
             modifier = Modifier.fillMaxWidth()
-        ) { Text("Спросить") }
+        ) { Text(stringResource(R.string.ai_ask)) }
         if (isLoading) CircularProgressIndicator()
         if (answer.isNotBlank()) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -219,6 +234,7 @@ private fun AiTab(connection: RouterConnectionRequest) {
 
 @Composable
 private fun RouterInfoTab(snapshot: RouterSnapshot?, isLoading: Boolean, onRefresh: () -> Unit) {
+    val emptyValue = stringResource(R.string.value_empty)
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -226,16 +242,18 @@ private fun RouterInfoTab(snapshot: RouterSnapshot?, isLoading: Boolean, onRefre
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Text("Информация о роутере", style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.router_info_title), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onRefresh, enabled = !isLoading) { Text("Обновить") }
+            OutlinedButton(onClick = onRefresh, enabled = !isLoading) {
+                Text(stringResource(R.string.action_refresh))
+            }
         }
         snapshot?.diagnostics?.entries?.sortedBy { it.key }?.let { entries ->
             items(entries) { entry ->
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Row(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                         Text(entry.key, modifier = Modifier.weight(1f))
-                        Text(entry.value.ifBlank { "—" }, modifier = Modifier.weight(1f))
+                        Text(entry.value.ifBlank { emptyValue }, modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -253,17 +271,26 @@ private fun SettingsTab(
         modifier = Modifier.padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Настройки", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall)
         ThemeMode.entries.forEach { mode ->
             OutlinedButton(
                 onClick = { onThemeModeChange(mode) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text((if (themeMode == mode) "✓ " else "") + mode.name)
+                Text((if (themeMode == mode) "✓ " else "") + themeModeLabel(mode))
             }
         }
         Button(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
-            Text("Отключить приложение от роутера")
+            Text(stringResource(R.string.settings_disconnect))
         }
     }
 }
+
+@Composable
+private fun themeModeLabel(mode: ThemeMode): String = stringResource(
+    when (mode) {
+        ThemeMode.SYSTEM -> R.string.settings_theme_system
+        ThemeMode.LIGHT -> R.string.settings_theme_light
+        ThemeMode.DARK -> R.string.settings_theme_dark
+    }
+)
