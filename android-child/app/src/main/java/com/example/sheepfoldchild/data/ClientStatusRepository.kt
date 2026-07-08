@@ -22,10 +22,11 @@ class ClientStatusRepository(private val context: Context) {
         return context.clientDataStore.data.first()[KEY_ROUTER_URL]
     }
 
-    suspend fun saveRouterBaseUrl(url: String) {
-        val normalized = url.trimEnd('/')
+    suspend fun saveRouterBaseUrl(url: String): String {
+        val normalized = normalizeBaseUrl(url)
         context.clientDataStore.edit { prefs -> prefs[KEY_ROUTER_URL] = normalized }
         context.aiDataStore.edit { prefs -> prefs[KEY_ROUTER_URL] = normalized }
+        return normalized
     }
 
     /**
@@ -34,12 +35,15 @@ class ClientStatusRepository(private val context: Context) {
      */
     suspend fun fetchClientStatus(baseUrl: String): Result<ClientStatusResponse> =
         withContext(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
             try {
-                val url = URL("${baseUrl.trimEnd('/')}$ENDPOINT")
-                val conn = url.openConnection() as HttpURLConnection
+                val normalized = normalizeBaseUrl(baseUrl)
+                val url = URL("$normalized$ENDPOINT")
+                conn = url.openConnection() as HttpURLConnection
                 conn.connectTimeout = TIMEOUT_MS
                 conn.readTimeout = TIMEOUT_MS
                 conn.requestMethod = "GET"
+                conn.instanceFollowRedirects = false
                 conn.setRequestProperty("Accept", "application/json")
 
                 val code = conn.responseCode
@@ -47,7 +51,6 @@ class ClientStatusRepository(private val context: Context) {
                     ?.bufferedReader(Charsets.UTF_8)
                     ?.use { it.readText() }
                     .orEmpty()
-                conn.disconnect()
 
                 if (code !in 200..299) {
                     return@withContext Result.failure(Exception(extractError(body, code)))
@@ -62,8 +65,32 @@ class ClientStatusRepository(private val context: Context) {
                 Result.success(parsed)
             } catch (e: Exception) {
                 Result.failure(e)
+            } finally {
+                conn?.disconnect()
             }
         }
+
+    private fun normalizeBaseUrl(rawUrl: String): String {
+        val trimmed = rawUrl.trim().trimEnd('/')
+        require(trimmed.isNotBlank()) { "Адрес роутера не указан" }
+
+        val withScheme = if (
+            trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true)
+        ) {
+            trimmed
+        } else {
+            "http://$trimmed"
+        }
+
+        val parsed = URL(withScheme)
+        require(parsed.protocol == "http" || parsed.protocol == "https") {
+            "Поддерживаются только HTTP и HTTPS"
+        }
+        require(parsed.host.isNotBlank()) { "Некорректный адрес роутера" }
+
+        return parsed.toExternalForm().trimEnd('/')
+    }
 
     private fun extractError(json: String, code: Int): String {
         return try {
