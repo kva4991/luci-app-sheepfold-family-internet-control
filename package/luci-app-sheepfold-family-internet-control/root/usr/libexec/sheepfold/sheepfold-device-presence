@@ -1,0 +1,184 @@
+#!/bin/sh
+set -eu
+
+COMMAND="${1:-list}"
+STATE_DIR="/tmp/sheepfold/device-state"
+SIGNAL_DIR="/tmp/sheepfold/device-signals"
+PRESENCE_DIR="/tmp/sheepfold/device-presence"
+ONLINE_WINDOW_SECONDS=900
+
+normalize_mac() {
+        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+valid_mac() {
+        printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'
+}
+
+safe_field() {
+        printf '%s' "$1" | tr '\r\n\t' '   ' | cut -c1-256
+}
+
+read_field() {
+        file="$1"
+        key="$2"
+        [ -r "$file" ] || return 0
+        awk -F '\t' -v wanted="$key" 'index($0, wanted "\t") == 1 { print substr($0, length(wanted) + 2); exit }' \
+                "$file" 2>/dev/null || true
+}
+
+presence_file_for_mac() {
+        mac="$(normalize_mac "$1")"
+        valid_mac "$mac" || return 1
+        printf '%s/%s.tsv\n' "$PRESENCE_DIR" "$(printf '%s' "$mac" | tr ':' '_')"
+}
+
+mac_from_presence_file() {
+        basename "$1" .tsv | tr '_' ':' | tr '[:lower:]' '[:upper:]'
+}
+
+write_seen() {
+        mac="$(normalize_mac "$1")"
+        seen_at="$2"
+        ip="$(safe_field "${3:-}")"
+        source="$(safe_field "${4:-unknown}")"
+
+        valid_mac "$mac" || return 0
+        case "$seen_at" in
+                ''|*[!0-9]*) return 0 ;;
+        esac
+        [ "$seen_at" -gt 0 ] || return 0
+
+        file="$(presence_file_for_mac "$mac")"
+        current="$(read_field "$file" last_seen)"
+        case "$current" in
+                ''|*[!0-9]*) current=0 ;;
+        esac
+        [ "$seen_at" -ge "$current" ] || return 0
+
+        tmp="$file.tmp.$$"
+        umask 077
+        {
+                printf 'mac\t%s\n' "$mac"
+                printf 'last_seen\t%s\n' "$seen_at"
+                printf 'ip\t%s\n' "$ip"
+                printf 'source\t%s\n' "$source"
+        } > "$tmp"
+        chmod 600 "$tmp" 2>/dev/null || true
+        mv -f "$tmp" "$file"
+}
+
+refresh_from_detector_state() {
+        for file in "$STATE_DIR"/*.tsv; do
+                [ -r "$file" ] || continue
+                sources="$(read_field "$file" sources)"
+                case ",$sources," in
+                        *,arp,*) ;;
+                        *) continue ;;
+                esac
+
+                mac="$(mac_from_presence_file "$file")"
+                seen_at="$(read_field "$file" last_seen)"
+                ip="$(read_field "$file" ip)"
+                write_seen "$mac" "$seen_at" "$ip" arp
+        done
+}
+
+refresh_from_dhcp_signals() {
+        for file in "$SIGNAL_DIR"/*.dhcp; do
+                [ -r "$file" ] || continue
+                action="$(read_field "$file" action | tr '[:upper:]' '[:lower:]')"
+                case "$action" in
+                        del|delete|remove|release) continue ;;
+                esac
+
+                mac="$(normalize_mac "$(read_field "$file" mac)")"
+                seen_at="$(read_field "$file" observed_at)"
+                ip="$(read_field "$file" ip)"
+                write_seen "$mac" "$seen_at" "$ip" dhcp
+        done
+}
+
+refresh_from_arp() {
+        [ -r /proc/net/arp ] || return 0
+        now="$(date +%s)"
+        awk 'NR > 1 && $3 == "0x2" { print toupper($4) "\t" $1 }' /proc/net/arp |
+                while IFS="$(printf '\t')" read -r mac ip; do
+                        write_seen "$mac" "$now" "$ip" arp
+                done
+}
+
+refresh_presence() {
+        mkdir -p "$PRESENCE_DIR"
+        chmod 700 "$PRESENCE_DIR" 2>/dev/null || true
+        refresh_from_dhcp_signals
+        refresh_from_detector_state
+        refresh_from_arp
+}
+
+known_macs() {
+        tmp="/tmp/sheepfold/device-presence-macs.$$"
+        umask 077
+        : > "$tmp"
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+                mac="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
+                valid_mac "$mac" && printf '%s\n' "$mac" >> "$tmp"
+        done
+
+        for file in "$PRESENCE_DIR"/*.tsv; do
+                [ -r "$file" ] || continue
+                mac="$(mac_from_presence_file "$file")"
+                valid_mac "$mac" && printf '%s\n' "$mac" >> "$tmp"
+        done
+
+        sort -u "$tmp"
+        rm -f "$tmp"
+}
+
+print_presence() {
+        mac="$(normalize_mac "$1")"
+        valid_mac "$mac" || return 0
+        file="$(presence_file_for_mac "$mac")"
+        last_seen="$(read_field "$file" last_seen)"
+        ip="$(safe_field "$(read_field "$file" ip)")"
+        now="$(date +%s)"
+        online=0
+
+        case "$last_seen" in
+                ''|*[!0-9]*) last_seen=0 ;;
+        esac
+
+        if [ "$last_seen" -gt 0 ]; then
+                age=$((now - last_seen))
+                if [ "$age" -ge -300 ] && [ "$age" -le "$ONLINE_WINDOW_SECONDS" ]; then
+                        online=1
+                fi
+        fi
+
+        printf '%s\t%s\t%s\t%s\n' "$mac" "$last_seen" "$online" "$ip"
+}
+
+list_presence() {
+        refresh_presence
+        known_macs | while IFS= read -r mac; do
+                print_presence "$mac"
+        done
+}
+
+case "$COMMAND" in
+        refresh)
+                refresh_presence
+                ;;
+        list)
+                list_presence
+                ;;
+        show)
+                refresh_presence
+                print_presence "${2:-}"
+                ;;
+        *)
+                echo "Usage: sheepfold-device-presence [refresh|list|show <mac>]" >&2
+                exit 1
+                ;;
+esac
