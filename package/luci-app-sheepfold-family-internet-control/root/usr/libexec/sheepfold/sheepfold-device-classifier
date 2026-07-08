@@ -38,7 +38,8 @@ name_is_network_infrastructure() {
 signal_value() {
         key="$1"
         [ -r "$SIGNAL_FILE" ] || return 0
-        awk -F '\t' -v wanted="$key" '$1 == wanted { $1=""; sub(/^\t/, ""); print; exit }' "$SIGNAL_FILE" 2>/dev/null || true
+        awk -F '\t' -v wanted="$key" 'index($0, wanted "\t") == 1 { print substr($0, length(wanted) + 2); exit }' \
+                "$SIGNAL_FILE" 2>/dev/null || true
 }
 
 port_open() {
@@ -54,7 +55,7 @@ add_evidence() {
         points="$2"
 
         case ",$EVIDENCE," in
-                *,"$family",*) return 0 ;;
+                *,$family,*) return 0 ;;
         esac
 
         EVIDENCE="${EVIDENCE:+$EVIDENCE,}$family"
@@ -209,6 +210,17 @@ apply_text_result() {
                 return 0
         fi
 
+        if { [ "$family" = "dhcp" ] || [ "$family" = "owner_configured" ]; } && interactive_type "$candidate_type"; then
+                HARD_DENY=1
+                add_evidence "$family" 0
+                if [ "$family" = "owner_configured" ] || [ "$TYPE" = "smart" ]; then
+                        TYPE="$candidate_type"
+                        TYPE_CONFIDENCE="$candidate_confidence"
+                        REASON="$candidate_reason"
+                fi
+                return 0
+        fi
+
         if [ "$TYPE" = "smart" ]; then
                 TYPE="$candidate_type"
                 TYPE_CONFIDENCE="$candidate_confidence"
@@ -256,14 +268,14 @@ if [ -n "$OUI_VENDOR" ]; then
                         add_evidence oui 0
                 fi
         elif [ "$candidate_oui_type" = "$TYPE" ]; then
-                add_evidence oui 25
+                add_evidence oui 30
                 TYPE_CONFIDENCE=$((TYPE_CONFIDENCE + 4))
                 [ "$TYPE_CONFIDENCE" -le 99 ] || TYPE_CONFIDENCE=99
         elif [ "$TYPE" = "smart" ] && [ "$candidate_oui_type" != "unknown" ]; then
                 TYPE="$candidate_oui_type"
                 TYPE_CONFIDENCE=65
                 REASON="device manufacturer marker"
-                add_evidence oui 25
+                add_evidence oui 30
         fi
 fi
 
