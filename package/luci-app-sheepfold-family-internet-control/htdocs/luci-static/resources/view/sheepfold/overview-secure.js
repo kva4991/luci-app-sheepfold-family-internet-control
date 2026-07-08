@@ -2,12 +2,12 @@
 'require view.sheepfold.overview as overview';
 
 /*
- * Compatibility wrapper around the large overview view.
+ * Совместимая обёртка над основным экраном overview.
  *
- * AI configuration used to be embedded in the General settings panel. The
- * dedicated sheepfold/ai view now owns those options, including enablement,
- * per-device quotas, and OpenSSL-gated individual logs. Keeping both editors
- * visible would expose obsolete model defaults and two competing save paths.
+ * Настройки ИИ раньше находились в общей секции. Теперь ими управляет отдельный
+ * экран sheepfold/ai: там находятся включение, квоты, согласие для детского
+ * режима и проверка OpenSSL. Два редактора создавали бы конкурирующие пути
+ * сохранения и показывали устаревшие значения моделей.
  */
 var renderSettingsGeneral = overview.renderSettingsGeneral;
 
@@ -16,9 +16,10 @@ overview.renderSettingsGeneral = function() {
 	var children = Array.prototype.slice.call(node.children || []);
 
 	/*
-	 * Current General order:
-	 * 0 language, 1 port, 2 new-device policy, 3 auto-configure,
-	 * 4 updates, 5..9 legacy AI fields, 10+ remaining settings.
+	 * Порядок элементов legacy-секции:
+	 * 0 — язык, 1 — порт, 2 — политика новых устройств,
+	 * 3 — автонастройка, 4 — обновления, 5–9 — старые поля ИИ.
+	 * После полного удаления legacy-полей из overview этот блок нужно удалить.
 	 */
 	children.slice(5, 10).forEach(function(child) {
 		child.remove();
