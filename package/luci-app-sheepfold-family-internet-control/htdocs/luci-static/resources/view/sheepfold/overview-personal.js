@@ -16,6 +16,12 @@ function normalizeMac(value) {
 	return /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(value) ? value : '';
 }
 
+function macFromDeviceRow(row) {
+	var match = String(row && row.textContent || '').toUpperCase().match(/(?:[0-9A-F]{2}:){5}[0-9A-F]{2}/);
+
+	return match ? normalizeMac(match[0]) : '';
+}
+
 function ensurePersonalGroupStylesheet() {
 	var stylesheetId = 'sheepfold-personal-groups-css';
 	var assetVersion;
@@ -179,10 +185,10 @@ function reclassifyDevice(mac, button) {
 function decorateDeviceRows(root) {
 	root.querySelectorAll('.sf-device-row:not(.sf-device-head)').forEach(function(row) {
 		var cells = row.children;
-		var mac = normalizeMac(cells[4] && cells[4].textContent);
+		var mac = macFromDeviceRow(row);
 		var section = deviceSectionByMac(mac);
-		var nameCell = cells[1];
-		var actions = cells[cells.length - 1];
+		var nameCell = row.querySelector('.sf-device-name') || cells[1];
+		var actions = row.querySelector('.sf-row-actions') || cells[cells.length - 1];
 		var summary;
 		var button;
 
