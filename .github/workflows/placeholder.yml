@@ -52,7 +52,7 @@ jobs:
           test "$(printf '%s' "$mixed" | cut -f1)" = "network"
           test -z "$(printf '%s' "$mixed" | cut -f3)"
 
-          generic_router="$(sh "$detector" classify "Aqara Router" "")"
+          generic_router="$(sh "$detector" classify "Home Router" "")"
           test "$(printf '%s' "$generic_router" | cut -f1)" = "network"
           test -z "$(printf '%s' "$generic_router" | cut -f3)"
 
