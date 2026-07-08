@@ -154,10 +154,10 @@ install_dependency() {
 }
 
 apply_led_mode() {
-    profile_apply="$(profile_dir)/led/apply"
+    profile_apply_mode="$(profile_dir)/led/apply-mode"
 
-    if [ -x "$profile_apply" ]; then
-        exec "$profile_apply"
+    if [ -x "$profile_apply_mode" ]; then
+        exec "$profile_apply_mode"
     fi
 
     exec "$LEGACY" led-apply
