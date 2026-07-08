@@ -60,6 +60,31 @@ Pairing rules:
 - manual setup text next to QR should show only the minimum required connection settings;
 - pairing attempts and successful pairings must be written to the administrative action log with masking.
 
+### Обязательная последовательность безопасного сопряжения
+
+Эта последовательность является частью контракта безопасности и должна одинаково соблюдаться LuCI, CGI backend и Android-приложением:
+
+1. Учётная запись администратора сначала создаётся и сохраняется в LuCI.
+2. Одноразовый код выпускается только из аутентифицированной LuCI-сессии и только для уже существующей учётной записи администратора.
+3. Публичного CGI endpoint для выпуска кода нет. Маршрут `/pair-token` обязан возвращать `404` для всех HTTP-методов и не должен обслуживаться legacy-маршрутизатором.
+4. Android отправляет в `/pair` логин существующего администратора и одноразовый код. MAC из тела запроса не считается доверенным и не используется как источник идентичности.
+5. До проверки кода backend применяет ограничение числа попыток отдельно для устройства или его LAN-адреса.
+6. Backend проверяет существование учётной записи, совпадение кода, срок действия, отзыв и факт предыдущего использования.
+7. MAC телефона определяется самим роутером по DHCP-аренде или ARP-таблице.
+8. MAC проверяется по чёрному списку до любых записей и повторно непосредственно перед назначением административных прав.
+9. Устройство из чёрного списка не может стать административным. Сопряжение никогда не удаляет MAC из чёрного списка автоматически.
+10. Только после всех проверок устройство получает административный признак и при необходимости добавляется в белый список.
+11. Одноразовый код удаляется в той же последовательности сохранения и больше не принимается.
+12. Долгоживущий Bearer-токен возвращается Android-приложению один раз; на роутере хранится только его хэш.
+
+Инварианты, которые нельзя ослаблять при рефакторинге:
+
+- сопряжение не создаёт новые учётные записи администраторов;
+- чёрный список сильнее белого списка, групп, расписаний, временного доступа и административного статуса;
+- публичный LAN-клиент не может выпустить код сопряжения;
+- повторный запрос с уже использованным кодом не выдаёт новый Bearer-токен;
+- административные CGI endpoints требуют Bearer-токен, кроме минимального `/pair`, необходимого для первого сопряжения.
+
 During Android first setup, the app should check whether the phone is visible to the router under the real device MAC address Sheepfold will manage. If randomized/private MAC is enabled for the home Wi-Fi network, the app should guide the parent to system Wi-Fi settings instead of promising automatic changes. Pairing must not continue until router-side data confirms the real MAC for the selected admin device.
 
 Administrative action logs should record:
@@ -71,6 +96,10 @@ Administrative action logs should record:
 - result: success, failure, cancelled, or pending confirmation.
 
 Do not log administrator passwords, bot tokens, API tokens, or session IDs.
+
+## AI Assistant Access
+
+The `/ai-assistant` endpoint may be available to ordinary LAN clients only when the feature is explicitly enabled in LuCI. The router must derive the client MAC itself, deny blocklisted devices, and apply a configurable per-device request limit. Router diagnostics, program logs, Google account context, or other administrative context may be sent to an AI provider only for a request authenticated with an administrator Bearer token.
 
 ## List Conflicts
 
