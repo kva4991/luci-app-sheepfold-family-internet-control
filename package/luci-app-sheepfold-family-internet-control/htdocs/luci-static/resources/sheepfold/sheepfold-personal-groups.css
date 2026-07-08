@@ -41,3 +41,23 @@
         border-radius: 50% 50% 16% 16%;
         background: currentColor;
 }
+
+.sf-detection-evidence {
+        display: block;
+        margin-top: 3px;
+        color: #52657a;
+        font-size: 11px;
+        line-height: 1.35;
+}
+
+.sf-device-reclassify {
+        min-height: 28px;
+        padding: 5px 8px;
+        font-size: 11px;
+        white-space: nowrap;
+}
+
+.sf-device-reclassify:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+}
