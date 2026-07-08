@@ -5,6 +5,7 @@ LEGACY="/usr/libexec/sheepfold/sheepfold-api-legacy"
 PAIR="/usr/libexec/sheepfold/sheepfold-api-pair"
 STATUS="/usr/libexec/sheepfold/sheepfold-api-client-status"
 AI_GATE="/usr/libexec/sheepfold/sheepfold-ai-gate"
+AI_HANDLER="/usr/libexec/sheepfold/sheepfold-ai-handler"
 method="${REQUEST_METHOD:-GET}"
 path_info="${PATH_INFO:-}"
 
@@ -20,12 +21,31 @@ method_not_allowed() {
     exit 0
 }
 
+require_admin() {
+    bearer=""
+    case "${HTTP_AUTHORIZATION:-}" in [Bb]earer\ *) bearer="${HTTP_AUTHORIZATION#* }" ;; esac
+    if [ -z "$bearer" ] || \
+       [ "$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" 2>/dev/null || printf fail)" != ok ]; then
+        header_json "401 Unauthorized"
+        printf '{"app":"sheepfold","ok":false,"error":"auth_required","message":"Valid administrator Bearer token required."}\n'
+        exit 0
+    fi
+}
+
 run_legacy() {
     "$LEGACY" | sed '/^Access-Control-Allow-/d'
 }
 
-# Выпуск pairing-кода не является частью публичного HTTP API. Проверка идёт
-# раньше общего OPTIONS, поэтому путь не обнаруживается ни одним HTTP-методом.
+# Постоянный Bearer нельзя передавать в URL: query string попадает в журналы и историю.
+case "&${QUERY_STRING:-}&" in
+    *'&token='*)
+        header_json "400 Bad Request"
+        printf '{"app":"sheepfold","ok":false,"error":"query_token_forbidden"}\n'
+        exit 0
+        ;;
+esac
+
+# Выпуск pairing-кода не является частью публичного HTTP API.
 if [ "$path_info" = "/pair-token" ]; then
     header_json "404 Not Found"
     printf '{"app":"sheepfold","ok":false,"error":"unknown_action"}\n'
@@ -46,6 +66,11 @@ case "$path_info" in
         [ "$method" = "GET" ] || method_not_allowed
         exec "$STATUS" "${REMOTE_ADDR:-}"
         ;;
+    /router-info|/pair-status)
+        [ "$method" = "GET" ] || method_not_allowed
+        require_admin
+        run_legacy
+        ;;
     /ai-assistant)
         [ "$method" = "POST" ] || method_not_allowed
         length="${CONTENT_LENGTH:-0}"
@@ -60,7 +85,7 @@ case "$path_info" in
         if ! printf '%s' "$body" | "$AI_GATE"; then
             exit 0
         fi
-        printf '%s' "$body" | "$LEGACY" | sed '/^Access-Control-Allow-/d'
+        printf '%s' "$body" | /bin/sh "$AI_HANDLER"
         ;;
     *)
         run_legacy
