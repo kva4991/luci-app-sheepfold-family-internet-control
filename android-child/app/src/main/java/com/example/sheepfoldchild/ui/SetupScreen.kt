@@ -1,9 +1,21 @@
 package com.example.sheepfoldchild.ui
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -13,12 +25,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.sheepfoldchild.R
 
-/**
- * Экран первичной настройки — ввод адреса роутера.
- * Показывается только один раз, если адрес ещё не сохранён.
- */
 @Composable
-fun SetupScreen(onSave: (String) -> Unit) {
+fun SetupScreen(
+    errorMessage: String? = null,
+    onSave: (String) -> Unit
+) {
     var url by remember { mutableStateOf("") }
 
     Box(
@@ -36,7 +47,10 @@ fun SetupScreen(onSave: (String) -> Unit) {
                 fontSize = 24.sp,
                 textAlign = TextAlign.Center
             )
-
+            Text(
+                text = "Сначала используется HTTPS. Если он недоступен, приложение автоматически попробует HTTP только в локальной сети.",
+                textAlign = TextAlign.Center
+            )
             OutlinedTextField(
                 value = url,
                 onValueChange = { url = it },
@@ -45,7 +59,9 @@ fun SetupScreen(onSave: (String) -> Unit) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth()
             )
-
+            errorMessage?.let {
+                Text(it, color = MaterialTheme.colorScheme.error)
+            }
             Button(
                 onClick = { if (url.isNotBlank()) onSave(url.trim()) },
                 modifier = Modifier.fillMaxWidth(),
