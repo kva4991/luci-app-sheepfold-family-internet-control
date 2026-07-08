@@ -11,6 +11,7 @@ CGI_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-api-legacy)"
 CONTROL="$(path /usr/libexec/sheepfold/sheepfold-router-control)"
 CONTROL_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-router-control-legacy)"
 CLIENT_STATUS="$(path /usr/libexec/sheepfold/sheepfold-client-status-effective)"
+LED_CONTROL="$(path /usr/libexec/sheepfold/sheepfold-led-control)"
 PAIR_ACTIVATE="$(path /usr/libexec/sheepfold/sheepfold-pair-activate)"
 PAIR_DEVICE="$(path /usr/libexec/sheepfold/sheepfold-pair-device)"
 PAIR_COMMON="$(path /usr/libexec/sheepfold/sheepfold-pair-common)"
@@ -28,7 +29,7 @@ ACL="$(path /usr/share/rpcd/acl.d/luci-app-sheepfold-family-internet-control.jso
 PRIVACY_NOTICE="$(path /usr/share/sheepfold/PRIVACY_NOTICE.md)"
 
 for required in \
-    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
+    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" "$LED_CONTROL" \
     "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
@@ -38,7 +39,7 @@ done
 
 # Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно.
 for executable in \
-    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
+    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" "$LED_CONTROL" \
     "$STATUS_API" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" \
@@ -85,6 +86,12 @@ grep -q 'global_block' "$CLIENT_STATUS" || die "effective status ignores global 
 grep -q 'temporary_access_expired' "$CLIENT_STATUS" || die "effective status ignores expired temporary access"
 grep -q 'schedule_pending_evaluation' "$CLIENT_STATUS" || die "scheduled status still claims an unverified result"
 
+# LED helper может устанавливать только фиксированную зависимость для одной модели.
+grep -q 'SUPPORTED_BOARD="cudy,wr3000s-v1"' "$LED_CONTROL" || die "Cudy LED helper board guard is missing"
+grep -q 'DEPENDENCY_PACKAGE="mdio-tools"' "$LED_CONTROL" || die "Cudy LED dependency is not fixed"
+grep -q 'mdio mt7530-0 0:0x1f raw 0x21 0x0008' "$LED_CONTROL" || die "Cudy WR3000S LED command is missing"
+grep -q 'led-dependency-install' "$CONTROL" || die "LED dependency installation is not routed"
+
 # AI gate проверяет идентичность, роль, согласие и квоту серверными данными.
 grep -q 'device_identity_mismatch' "$AI_GATE" || die "AI device identity verification is missing"
 grep -q 'client_role_mismatch' "$AI_GATE" || die "AI role verification is missing"
@@ -108,7 +115,7 @@ grep -q 'sheepfold-openssl-ensure' "$ACL" || die "OpenSSL verification helper is
 grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable individual logs"
 
 for script in \
-    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
+    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" "$LED_CONTROL" \
     "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR"; do
