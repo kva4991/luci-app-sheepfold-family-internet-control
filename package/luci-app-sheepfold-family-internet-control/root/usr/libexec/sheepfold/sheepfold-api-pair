@@ -49,6 +49,24 @@ read_body() {
     dd bs=1 count="$length" 2>/dev/null || true
 }
 
+# Должен принимать тот же алфавит, который использует LuCI. Посимвольная
+# проверка предсказуема во всех версиях BusyBox и не зависит от regex-escape [].
+valid_pairing_code() {
+    code_rest="$1"
+    [ -n "$code_rest" ] || return 1
+
+    while [ -n "$code_rest" ]; do
+        code_char="${code_rest%"${code_rest#?}"}"
+        case "$code_char" in
+            [A-Za-z0-9]|'+'|'-'|'*'|'('|')'|'['|']'|'{'|'}'|'<'|'>'|'?'|'@'|'#'|'$'|'%'|'^'|'&'|':'|';'|'.'|',') ;;
+            *) return 1 ;;
+        esac
+        code_rest="${code_rest#?}"
+    done
+
+    return 0
+}
+
 attempt_identity() {
     ip="${REMOTE_ADDR:-unknown}"
     mac=""
@@ -156,12 +174,11 @@ case "$login" in *[!A-Za-z0-9_.@+-]*|'')
     exit 0
     ;;
 esac
-case "$code" in *[!A-Za-z0-9]*|'')
+if ! valid_pairing_code "$code" || [ ${#code} -lt 4 ] || [ ${#code} -gt 64 ]; then
     header_json "400 Bad Request"
     printf '{"app":"sheepfold","ok":false,"paired":false,"error":"invalid_code"}\n'
     exit 0
-    ;;
-esac
+fi
 
 status=0
 output="$(/usr/libexec/sheepfold/sheepfold-router-control pair-admin-device \
