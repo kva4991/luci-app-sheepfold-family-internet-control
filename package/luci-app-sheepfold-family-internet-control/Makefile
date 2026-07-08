@@ -192,7 +192,7 @@ fi
 install_sheepfold_cron() {
 	cron_file='/etc/crontabs/root'
 	mkdir -p /etc/crontabs
-	tmp="$$cron_file.sheepfold.$$"
+	tmp="$$cron_file.sheepfold.tmp"
 	if [ -f "$$cron_file" ]; then
 		awk '
 			/^# BEGIN SHEEPFOLD MANAGED JOBS$$/ { skip=1; next }
@@ -229,7 +229,7 @@ define Package/$(PKG_NAME)/prerm
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 cron_file='/etc/crontabs/root'
 if [ -f "$$cron_file" ]; then
-	tmp="$$cron_file.sheepfold.$$"
+	tmp="$$cron_file.sheepfold.tmp"
 	awk '
 		/^# BEGIN SHEEPFOLD MANAGED JOBS$$/ { skip=1; next }
 		/^# END SHEEPFOLD MANAGED JOBS$$/   { skip=0; next }
