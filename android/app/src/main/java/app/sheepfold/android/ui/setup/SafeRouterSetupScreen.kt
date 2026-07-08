@@ -30,9 +30,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import app.sheepfold.android.R
 import app.sheepfold.android.router.RouterConnectionRequest
 import app.sheepfold.android.router.SecureRouterConnectionManager
 import app.sheepfold.android.security.AppProtectionMode
@@ -52,6 +54,9 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val manager = remember { SecureRouterConnectionManager() }
+    val qrNotRecognizedMessage = stringResource(R.string.setup_qr_not_recognized)
+    val cameraDeniedMessage = stringResource(R.string.setup_camera_denied)
+    val connectionFailedMessage = stringResource(R.string.setup_connection_failed)
     var qrPayload by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("192.168.1.1") }
     var login by remember { mutableStateOf("") }
@@ -69,7 +74,7 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
         if (bitmap == null) return@rememberLauncherForActivityResult
         runCatching { decodeQrBitmap(bitmap) }
             .onSuccess { qrPayload = it }
-            .onFailure { errorMessage = "QR-код не распознан. Можно повторить фото или вставить данные вручную." }
+            .onFailure { errorMessage = qrNotRecognizedMessage }
     }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -77,7 +82,7 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
         if (granted) {
             cameraLauncher.launch(null)
         } else {
-            errorMessage = "Камера не разрешена. Ручное сопряжение и вставка QR-данных остаются доступными."
+            errorMessage = cameraDeniedMessage
         }
     }
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -109,7 +114,7 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
         scope.launch {
             runCatching { manager.connect(request) }
                 .onSuccess { connected = it }
-                .onFailure { errorMessage = it.message ?: "Не удалось подключиться к роутеру" }
+                .onFailure { errorMessage = it.message ?: connectionFailedMessage }
             isConnecting = false
         }
     }
@@ -121,23 +126,25 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("Подключение Sheepfold", style = MaterialTheme.typography.headlineMedium)
+        Text(stringResource(R.string.setup_connect_title), style = MaterialTheme.typography.headlineMedium)
 
         if (connected == null) {
             InfoCard(
-                title = "Разрешения Android",
-                body = if (optionalPermissions.isEmpty()) {
-                    "Обязательных разрешений для ручного сопряжения нет. Камера запрашивается только при сканировании QR-кода."
-                } else {
-                    "Уведомления и камера необязательны. После отказа ручное сопряжение продолжит работать."
-                }
+                title = stringResource(R.string.setup_permissions_title),
+                body = stringResource(
+                    if (optionalPermissions.isEmpty()) {
+                        R.string.setup_permissions_ready
+                    } else {
+                        R.string.setup_permissions_optional
+                    }
+                )
             )
             if (optionalPermissions.isNotEmpty()) {
                 OutlinedButton(
                     onClick = { permissionLauncher.launch(optionalPermissions.toTypedArray()) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Запросить разрешение на уведомления")
+                    Text(stringResource(R.string.setup_request_notifications))
                 }
             }
 
@@ -146,14 +153,14 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
                 enabled = !isConnecting,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Сфотографировать QR-код")
+                Text(stringResource(R.string.setup_take_qr_photo))
             }
             OutlinedTextField(
                 value = qrPayload,
                 onValueChange = { qrPayload = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Данные QR-кода") },
-                supportingText = { Text("После фото данные появятся здесь. Также можно вставить строку SF1|... или JSON из LuCI.") },
+                label = { Text(stringResource(R.string.setup_qr_data)) },
+                supportingText = { Text(stringResource(R.string.setup_qr_hint)) },
                 minLines = 3
             )
             Button(
@@ -165,29 +172,29 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Подключиться по QR-коду")
+                Text(stringResource(R.string.setup_connect_qr))
             }
 
-            Text("Или ручная настройка", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.setup_manual), style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = address,
                 onValueChange = { address = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Адрес роутера") },
+                label = { Text(stringResource(R.string.setup_router_address)) },
                 singleLine = true
             )
             OutlinedTextField(
                 value = login,
                 onValueChange = { login = it.filter { char -> char.isLetterOrDigit() || char in "._-@+" }.take(64) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Логин администратора") },
+                label = { Text(stringResource(R.string.setup_admin_login)) },
                 singleLine = true
             )
             OutlinedTextField(
                 value = pairingCode,
                 onValueChange = { pairingCode = it.take(64) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Временный код сопряжения") },
+                label = { Text(stringResource(R.string.setup_pairing_code)) },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true
             )
@@ -200,13 +207,15 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (isConnecting) CircularProgressIndicator() else Text("Подключиться")
+                if (isConnecting) {
+                    CircularProgressIndicator()
+                } else {
+                    Text(stringResource(R.string.setup_connect))
+                }
             }
         } else {
-            Text("Защита приложения", style = MaterialTheme.typography.headlineSmall)
-            Text(
-                "Пароль рекомендуется. Face и Fingerprint можно выбрать, но Sheepfold полагается на системную блокировку телефона и не считает эти режимы усиленной защитой."
-            )
+            Text(stringResource(R.string.protection_title), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.protection_description))
             AppProtectionMode.entries.forEach { mode ->
                 FilterChip(
                     selected = protectionMode == mode,
@@ -221,7 +230,17 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
                         secret = if (protectionMode == AppProtectionMode.PIN) it.filter(Char::isDigit).take(4) else it
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text(if (protectionMode == AppProtectionMode.PIN) "PIN" else "Пароль") },
+                    label = {
+                        Text(
+                            stringResource(
+                                if (protectionMode == AppProtectionMode.PIN) {
+                                    R.string.protection_pin
+                                } else {
+                                    R.string.protection_password_label
+                                }
+                            )
+                        )
+                    },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true
                 )
@@ -231,7 +250,7 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
                         secretRepeat = if (protectionMode == AppProtectionMode.PIN) it.filter(Char::isDigit).take(4) else it
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Повторите значение") },
+                    label = { Text(stringResource(R.string.protection_repeat)) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true
                 )
@@ -249,7 +268,7 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Завершить настройку")
+                Text(stringResource(R.string.protection_finish))
             }
         }
 
@@ -266,7 +285,7 @@ private fun decodeQrBitmap(bitmap: Bitmap): String {
     val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
     return MultiFormatReader().decode(binaryBitmap).text
         ?.takeIf { it.isNotBlank() }
-        ?: throw IllegalArgumentException("QR-код пуст")
+        ?: throw IllegalArgumentException("empty_qr")
 }
 
 @Composable
@@ -285,10 +304,13 @@ private fun InfoCard(title: String, body: String) {
     }
 }
 
-private fun modeLabel(mode: AppProtectionMode): String = when (mode) {
-    AppProtectionMode.PASSWORD -> "Пароль — рекомендуется"
-    AppProtectionMode.PIN -> "PIN-код"
-    AppProtectionMode.FACE -> "Face — не рекомендуется"
-    AppProtectionMode.FINGERPRINT -> "Fingerprint — не рекомендуется"
-    AppProtectionMode.NONE -> "Без дополнительной защиты"
-}
+@Composable
+private fun modeLabel(mode: AppProtectionMode): String = stringResource(
+    when (mode) {
+        AppProtectionMode.PASSWORD -> R.string.protection_password
+        AppProtectionMode.PIN -> R.string.protection_pin
+        AppProtectionMode.FACE -> R.string.protection_face
+        AppProtectionMode.FINGERPRINT -> R.string.protection_fingerprint
+        AppProtectionMode.NONE -> R.string.protection_none
+    }
+)
