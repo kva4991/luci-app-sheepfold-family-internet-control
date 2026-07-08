@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=116
+PKG_RELEASE:=117
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -123,7 +123,7 @@ uci -q set sheepfold.no_restrictions.allowlist_only='0'
 uci -q set sheepfold.no_restrictions.activity_log_enabled='0'
 uci -q set sheepfold.no_restrictions.description='Trusted home infrastructure devices that should not be limited unless they are blocklisted'
 uci -q get sheepfold.child_1 >/dev/null || uci -q set sheepfold.child_1='group'
-	uci -q set sheepfold.child_1.name='Первый ребёнок'
+uci -q set sheepfold.child_1.name='Первый ребёнок'
 uci -q set sheepfold.child_1.protected='0'
 uci -q set sheepfold.child_1.auto_assignable='0'
 uci -q set sheepfold.child_1.allowlist_only='0'
@@ -173,25 +173,15 @@ for helper in \
 	/usr/libexec/sheepfold/sheepfold-ai-gate \
 	/usr/libexec/sheepfold/sheepfold-key-derive \
 	/usr/libexec/sheepfold/sheepfold-openssl-ensure \
-	/usr/libexec/sheepfold/sheepfold-runtime-hardening; do
+	/usr/libexec/sheepfold/sheepfold-runtime-hardening \
+	/www/.well-known/sheepfold.json.sh; do
 	chmod 0755 "$$helper" 2>/dev/null || true
 done
 if [ "$$(uci -q get sheepfold.global.ai_individual_logs 2>/dev/null)" = "1" ]; then
 	/usr/libexec/sheepfold/sheepfold-openssl-ensure >/dev/null 2>&1 || true
 fi
-app_port="$$(uci -q get sheepfold.global.app_port 2>/dev/null || printf 5201)"
-mkdir -p /www/.well-known
-cat > /www/.well-known/sheepfold.json <<EOF
-{
-  "service": "sheepfold",
-  "name": "Sheepfold Family Internet Control",
-  "routerName": "OpenWRT Sheepfold",
-  "appPort": "$$app_port",
-  "apiPath": "/cgi-bin/sheepfold-api",
-  "apiBase": "/cgi-bin/sheepfold-api",
-  "version": "$(SHEEPFOLD_UI_ASSET_VERSION)"
-}
-EOF
+# Единый генератор валидирует порт, экранирует hostname и выполняет атомарную запись.
+/www/.well-known/sheepfold.json.sh || exit 1
 rm -f /var/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-modulecache/* 2>/dev/null || true
