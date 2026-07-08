@@ -5,12 +5,10 @@
 'require fs';
 
 /*
- * Совместимая обёртка над основным экраном overview.
+ * Совместимая обёртка над основным экраном overview
  *
- * Настройки ИИ раньше находились в общей секции. Теперь ими управляет отдельный
- * экран sheepfold/ai: там находятся включение, квоты, согласие для детского
- * режима и проверка OpenSSL. Два редактора создавали бы конкурирующие пути
- * сохранения и показывали устаревшие значения моделей.
+ * Настройки ИИ раньше находились в общей секции, теперь ими управляет отдельный
+ * экран sheepfold/ai, чтобы не создавать конкурирующие пути сохранения
  */
 var renderSettingsGeneral = overview.renderSettingsGeneral;
 var renderSettings = overview.renderSettings;
@@ -42,6 +40,16 @@ function commandErrorText(error, fallback) {
 	return String(message || fallback).trim();
 }
 
+function ensureSuccessfulCommand(result, fallback) {
+	var code = Number(result && result.code || 0);
+	var output = String(result && (result.stdout || result.stderr) || '').trim();
+
+	if (code !== 0)
+		throw new Error(output || fallback);
+
+	return result;
+}
+
 function findLedControlSelect(root) {
 	var selects = Array.prototype.slice.call(root.querySelectorAll('select'));
 
@@ -51,12 +59,16 @@ function findLedControlSelect(root) {
 	}) || null;
 }
 
+function findLedRepairInput(root) {
+	return root.querySelector('[data-sheepfold-led-repair]');
+}
+
 function continueSettingsSave(button) {
-	button.dataset.sheepfoldLedDependencyBypass = '1';
+	button.dataset.sheepfoldLedSaveBypass = '1';
 	button.click();
 }
 
-function confirmLedDependencyInstall(packageName) {
+function confirmLedDependencyInstall(packageName, boardName) {
 	return new Promise(function(resolve) {
 		var completed = false;
 
@@ -71,7 +83,11 @@ function confirmLedDependencyInstall(packageName) {
 
 		ui.showModal(_('Зависимость для управления светодиодами'), [
 			E('div', { 'class': 'cbi-section' }, [
-				E('p', {}, _('Для управления светодиодами на Cudy WR3000S будет установлен дополнительный пакет.')),
+				E('p', {}, _('Для выбранного режима управления светодиодами будет установлен дополнительный пакет.')),
+				E('p', {}, [
+					E('strong', {}, _('Модель роутера') + ': '),
+					E('code', {}, boardName || _('неизвестно'))
+				]),
 				E('p', {}, [
 					E('strong', {}, _('Пакет') + ': '),
 					E('code', {}, packageName)
@@ -122,13 +138,11 @@ function installLedDependency(packageName) {
 		]);
 
 		routerControl(['led-dependency-install']).then(function(result) {
-			var code = Number(result && result.code || 0);
-			var output = String(result && (result.stdout || result.stderr) || '').trim();
+			var output;
 
+			ensureSuccessfulCommand(result, _('Не удалось установить зависимость.'));
+			output = String(result && (result.stdout || result.stderr) || '').trim();
 			outputNode.textContent = output || packageName;
-			if (code !== 0)
-				throw new Error(output || _('Не удалось установить зависимость.'));
-
 			spinner.className = 'sf-spinner sf-spinner-done';
 			statusNode.textContent = _('Зависимость успешно установлена.');
 			closeButton.hidden = false;
@@ -140,57 +154,149 @@ function installLedDependency(packageName) {
 		}).catch(function(error) {
 			spinner.className = 'sf-spinner sf-spinner-failed';
 			statusNode.textContent = _('Не удалось установить зависимость.');
-			outputNode.textContent = commandErrorText(error, _('Не удалось установить пакет mdio-tools.'));
+			outputNode.textContent = commandErrorText(error, _('Не удалось установить требуемый пакет.'));
 			closeButton.hidden = false;
 			reject(error);
 		});
 	});
 }
 
-function attachLedDependencyCheck(root, button) {
+function prepareLedDependency(root) {
+	var ledSelect = findLedControlSelect(root);
+
+	if (!ledSelect || ledSelect.value === 'router_default')
+		return Promise.resolve();
+
+	return routerControl(['led-dependency-status']).then(function(result) {
+		var status;
+
+		ensureSuccessfulCommand(result, _('Не удалось проверить зависимость для светодиодов.'));
+		status = parseKeyValueOutput(result && result.stdout || '');
+		if (status.required !== '1' || status.installed === '1')
+			return null;
+
+		return confirmLedDependencyInstall(status.package || _('неизвестный пакет'), status.board).then(function(confirmed) {
+			if (!confirmed) {
+				ledSelect.value = 'router_default';
+				ledSelect.dispatchEvent(new Event('change', { bubbles: true }));
+				return null;
+			}
+
+			return installLedDependency(status.package || _('неизвестный пакет'));
+		});
+	});
+}
+
+function saveLedRepair(root) {
+	var input = findLedRepairInput(root);
+	var previousValue;
+	var nextValue;
+
+	if (!input || input.dataset.changed !== '1')
+		return Promise.resolve(false);
+
+	previousValue = input.dataset.initial === '1' ? '1' : '0';
+	nextValue = input.checked ? '1' : '0';
+	uci.set('sheepfold', 'global', 'router_led_repair', nextValue);
+
+	return uci.save('sheepfold').then(function() {
+		return uci.apply();
+	}).then(function() {
+		return routerControl(['led-repair-apply']);
+	}).then(function(result) {
+		ensureSuccessfulCommand(result, _('Не удалось применить исправление индикаторов.'));
+		input.dataset.initial = nextValue;
+		input.dataset.changed = '0';
+		return true;
+	}).catch(function(error) {
+		uci.set('sheepfold', 'global', 'router_led_repair', previousValue);
+		input.checked = previousValue === '1';
+		return uci.save('sheepfold').then(function() {
+			return uci.apply();
+		}).then(function() {
+			return routerControl(['led-repair-apply']).catch(function() {});
+		}).then(function() {
+			throw error;
+		});
+	});
+}
+
+function createLedRepairField() {
+	var initialValue = uci.get('sheepfold', 'global', 'router_led_repair') === '1';
+	var input = E('input', {
+		'type': 'checkbox',
+		'checked': initialValue ? 'checked' : null,
+		'disabled': 'disabled',
+		'data-sheepfold-led-repair': '1',
+		'data-initial': initialValue ? '1' : '0',
+		'data-changed': '0'
+	});
+	var hint = E('small', {}, _('Проверяется наличие исправления для этой модели роутера…'));
+	var field = E('label', { 'class': 'sf-check-field' }, [
+		input,
+		E('span', {}, _('Попробовать исправить работу индикаторов')),
+		hint
+	]);
+
+	input.addEventListener('change', function() {
+		input.dataset.changed = input.checked === (input.dataset.initial === '1') ? '0' : '1';
+	});
+
+	routerControl(['led-repair-status']).then(function(result) {
+		var status;
+
+		ensureSuccessfulCommand(result, _('Не удалось проверить исправление индикаторов.'));
+		status = parseKeyValueOutput(result && result.stdout || '');
+		if (status.available === '1') {
+			input.disabled = false;
+			hint.textContent = _('Для этой модели найдено обратимое исправление WAN-индикатора. Изменение применяется кнопкой «Сохранить настройки».');
+		} else {
+			input.disabled = true;
+			hint.textContent = _('Для этой модели специальных исправлений не найдено. Используются общие системные средства управления LED.');
+		}
+	}).catch(function(error) {
+		input.disabled = true;
+		hint.textContent = _('Не удалось проверить доступность исправления: ') + commandErrorText(error, _('неизвестная ошибка'));
+	});
+
+	return field;
+}
+
+function attachLedSaveCheck(root, button) {
 	button.addEventListener('click', function(event) {
+		var repairInput;
+		var repairChanged;
 		var ledSelect;
 
-		if (button.dataset.sheepfoldLedDependencyBypass === '1') {
-			delete button.dataset.sheepfoldLedDependencyBypass;
+		if (button.dataset.sheepfoldLedSaveBypass === '1') {
+			delete button.dataset.sheepfoldLedSaveBypass;
 			return;
 		}
 
+		repairInput = findLedRepairInput(root);
+		repairChanged = repairInput && repairInput.dataset.changed === '1';
 		ledSelect = findLedControlSelect(root);
-		if (!ledSelect || ledSelect.value === 'router_default')
+		if (!repairChanged && (!ledSelect || ledSelect.value === 'router_default'))
 			return;
 
 		event.preventDefault();
 		event.stopImmediatePropagation();
 
-		routerControl(['led-dependency-status']).then(function(result) {
-			var code = Number(result && result.code || 0);
-			var status;
+		prepareLedDependency(root).then(function() {
+			return saveLedRepair(root);
+		}).then(function(repairSaved) {
+			var coreHasChanges = !button.classList.contains('sf-action-muted');
 
-			if (code !== 0)
-				throw new Error(String(result && (result.stderr || result.stdout) || ''));
-
-			status = parseKeyValueOutput(result && result.stdout || '');
-			if (status.board !== 'cudy,wr3000s-v1' || status.required !== '1' || status.installed === '1') {
+			if (coreHasChanges) {
 				continueSettingsSave(button);
-				return null;
+				return;
 			}
 
-			return confirmLedDependencyInstall(status.package || 'mdio-tools').then(function(confirmed) {
-				if (!confirmed) {
-					ledSelect.value = 'router_default';
-					ledSelect.dispatchEvent(new Event('change', { bubbles: true }));
-					continueSettingsSave(button);
-					return null;
-				}
-
-				return installLedDependency(status.package || 'mdio-tools').then(function() {
-					continueSettingsSave(button);
-				});
-			});
+			if (repairSaved)
+				ui.addNotification(null, E('p', {}, _('Настройка исправления индикаторов сохранена.')), 'info');
 		}).catch(function(error) {
 			ui.addNotification(null, E('p', {},
-				_('Не удалось проверить или установить зависимость для светодиодов: ') +
+				_('Не удалось подготовить настройки светодиодов: ') +
 				commandErrorText(error, _('неизвестная ошибка'))), 'error');
 		});
 	}, true);
@@ -201,10 +307,9 @@ overview.renderSettingsGeneral = function() {
 	var children = Array.prototype.slice.call(node.children || []);
 
 	/*
-	 * Порядок элементов legacy-секции:
-	 * 0 — язык, 1 — порт, 2 — политика новых устройств,
-	 * 3 — автонастройка, 4 — обновления, 5–9 — старые поля ИИ.
-	 * После полного удаления legacy-полей из overview этот блок нужно удалить.
+	 * Порядок элементов legacy-секции
+	 * 0 — язык, 1 — порт, 2 — политика новых устройств
+	 * 3 — автонастройка, 4 — обновления, 5–9 — старые поля ИИ
 	 */
 	children.slice(5, 10).forEach(function(child) {
 		child.remove();
@@ -215,9 +320,14 @@ overview.renderSettingsGeneral = function() {
 
 overview.renderSettings = function() {
 	var node = renderSettings.apply(this, arguments);
+	var ledSelect = findLedControlSelect(node);
+	var ledField = ledSelect ? ledSelect.closest('label') : null;
+
+	if (ledField && ledField.parentNode)
+		ledField.parentNode.insertBefore(createLedRepairField(), ledField.nextSibling);
 
 	node.querySelectorAll('[data-settings-save]').forEach(function(button) {
-		attachLedDependencyCheck(node, button);
+		attachLedSaveCheck(node, button);
 	});
 
 	return node;
@@ -324,8 +434,8 @@ overview.renderAdmins = function() {
 	}
 
 	/*
-	 * Ручная привязка обходила серверную повторную проверку blocklist.
-	 * В secure-экране устройство становится административным только через QR.
+	 * Ручная привязка обходила серверную повторную проверку blocklist
+	 * В secure-экране устройство становится административным только через QR
 	 */
 	node.querySelectorAll('.sf-admin-row:not(.sf-admin-head) .sf-row-actions').forEach(function(actions) {
 		var buttons = actions.querySelectorAll('button');
