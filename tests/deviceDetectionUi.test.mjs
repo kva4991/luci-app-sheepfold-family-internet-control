@@ -26,6 +26,14 @@ describe('Интерфейс автоопределения устройств',
     assert.match(source, /manual_device_type/);
   });
 
+  it('не зависит от фиксированного номера MAC-колонки', () => {
+    const source = readFileSync(viewPath, 'utf8');
+
+    assert.match(source, /function macFromDeviceRow/);
+    assert.match(source, /match\(\/\(\?:\[0-9A-F\]/);
+    assert.doesNotMatch(source, /normalizeMac\(cells\[4\]/);
+  });
+
   it('имеет отдельное оформление диагностической строки и кнопки', () => {
     const source = readFileSync(cssPath, 'utf8');
 
