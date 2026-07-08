@@ -34,10 +34,31 @@ describe('Интерфейс автоопределения устройств',
     assert.doesNotMatch(source, /normalizeMac\(cells\[4\]/);
   });
 
-  it('имеет отдельное оформление диагностической строки и кнопки', () => {
+  it('показывает онлайн-плашку и точное время последнего появления', () => {
+    const source = readFileSync(viewPath, 'utf8');
+
+    assert.match(source, /device-presence/);
+    assert.match(source, /Онлайн: сейчас \(в последние 15 мин\)/);
+    assert.match(source, /Онлайн: был/);
+    assert.match(source, /sf-online-badge-row/);
+    assert.match(source, /sf-device-presence-modal-status/);
+  });
+
+  it('сортирует сначала онлайн, затем IP по возрастанию', () => {
+    const source = readFileSync(viewPath, 'utf8');
+
+    assert.match(source, /function sortDeviceRowsByPresence/);
+    assert.match(source, /return rightOnline - leftOnline/);
+    assert.match(source, /rowIpSortValue\(left\.row\) - rowIpSortValue\(right\.row\)/);
+  });
+
+  it('имеет отдельное оформление диагностики и онлайн-статуса', () => {
     const source = readFileSync(cssPath, 'utf8');
 
     assert.match(source, /\.sf-detection-evidence/);
     assert.match(source, /\.sf-device-reclassify/);
+    assert.match(source, /\.sf-online-badge/);
+    assert.match(source, /background:\s*#dff3ff/);
+    assert.match(source, /color:\s*#111/);
   });
 });
