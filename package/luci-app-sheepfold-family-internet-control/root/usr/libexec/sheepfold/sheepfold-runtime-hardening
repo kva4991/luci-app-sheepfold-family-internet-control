@@ -27,32 +27,39 @@ USB_STORAGE="$(path /usr/libexec/sheepfold/sheepfold-usb-storage)"
 WELL_KNOWN_GENERATOR="$(path /www/.well-known/sheepfold.json.sh)"
 ACL="$(path /usr/share/rpcd/acl.d/luci-app-sheepfold-family-internet-control.json)"
 PRIVACY_NOTICE="$(path /usr/share/sheepfold/PRIVACY_NOTICE.md)"
+CUDY_PROFILE="$(path /usr/share/sheepfold/router-profiles/cudy,wr3000s-v1)"
+CUDY_LED_APPLY="$CUDY_PROFILE/led/apply"
+CUDY_LED_PACKAGE="$CUDY_PROFILE/led/dependency-package"
+CUDY_LED_COMMAND="$CUDY_PROFILE/led/dependency-command"
+CUDY_FIX_INSTALL="$CUDY_PROFILE/fixLed/install"
+CUDY_FIX_UNINSTALL="$CUDY_PROFILE/fixLed/uninstall"
 
 for required in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" "$LED_CONTROL" \
     "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
-    "$ACL" "$PRIVACY_NOTICE"; do
+    "$ACL" "$PRIVACY_NOTICE" "$CUDY_LED_APPLY" "$CUDY_LED_PACKAGE" \
+    "$CUDY_LED_COMMAND" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
     [ -f "$required" ] || die "missing file $required"
 done
 
-# Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно.
+# Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно
 for executable in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" "$LED_CONTROL" \
     "$STATUS_API" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" \
-    "$WELL_KNOWN_GENERATOR" \
+    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
+    "$CUDY_LED_APPLY" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
-chmod 0644 "$PAIR_COMMON" "$ACL" "$PRIVACY_NOTICE"
+chmod 0644 "$PAIR_COMMON" "$ACL" "$PRIVACY_NOTICE" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND"
 
 mkdir -p "$(path /etc/sheepfold/tokens)"
 chmod 0700 "$(path /etc/sheepfold)" "$(path /etc/sheepfold/tokens)" 2>/dev/null || true
 
-# Публичный CGI обязан скрывать выпуск кода и защищать диагностику.
+# Публичный CGI обязан скрывать выпуск кода и защищать диагностику
 grep -q 'sheepfold-api-legacy' "$CGI" || die "public CGI does not delegate through the hardened dispatcher"
 grep -q '\[ "\$path_info" = "/pair-token" \]' "$CGI" || die "public CGI does not return 404 for pair-token"
 ! grep -q '^generate_pair_token_json()' "$CGI" || die "pair-token generator is present in public CGI"
@@ -62,7 +69,7 @@ grep -q '/router-info|/pair-status)' "$CGI" || die "diagnostic routes are not in
 grep -q 'query_token_forbidden' "$CGI" || die "Bearer token is still accepted in query string"
 grep -q 'legacy_settings_writer_disabled' "$CGI" || die "legacy untyped settings writer remains enabled"
 
-# Pairing не создаёт администратора и повторно проверяет blocklist.
+# Pairing не создаёт администратора и повторно проверяет blocklist
 grep -q 'PAIR_DEVICE=.*/sheepfold-pair-device' "$CONTROL" || die "pair-admin-device is not intercepted"
 grep -q 'PAIR_ACTIVATE=.*/sheepfold-pair-activate' "$CONTROL" || die "pairing-code activation is not intercepted"
 grep -q 'CLIENT_STATUS=.*/sheepfold-client-status-effective' "$CONTROL" || die "effective client status is not intercepted"
@@ -81,18 +88,25 @@ grep -q 'pair_store_token' "$PAIR_DEVICE" || die "successful pairing does not st
 grep -q 'pair_valid_code' "$PAIR_COMMON" || die "pairing-code alphabet validation is missing"
 grep -q 'device_id' "$PAIR_DEVICE" || die "pairing does not return stable device id"
 
-# Статус клиента учитывает blocklist, временный доступ и глобальную блокировку.
+# Статус клиента учитывает blocklist, временный доступ и глобальную блокировку
 grep -q 'global_block' "$CLIENT_STATUS" || die "effective status ignores global block"
 grep -q 'temporary_access_expired' "$CLIENT_STATUS" || die "effective status ignores expired temporary access"
 grep -q 'schedule_pending_evaluation' "$CLIENT_STATUS" || die "scheduled status still claims an unverified result"
 
-# LED helper может устанавливать только фиксированную зависимость для одной модели.
-grep -q 'SUPPORTED_BOARD="cudy,wr3000s-v1"' "$LED_CONTROL" || die "Cudy LED helper board guard is missing"
-grep -q 'DEPENDENCY_PACKAGE="mdio-tools"' "$LED_CONTROL" || die "Cudy LED dependency is not fixed"
-grep -q 'mdio mt7530-0 0:0x1f raw 0x21 0x0008' "$LED_CONTROL" || die "Cudy WR3000S LED command is missing"
-grep -q 'led-dependency-install' "$CONTROL" || die "LED dependency installation is not routed"
+# LED helper выбирает профиль по board name и сохраняет общий fallback
+grep -q 'PROFILE_ROOT="/usr/share/sheepfold/router-profiles"' "$LED_CONTROL" || die "router profile root is missing"
+grep -q 'exec "\$LEGACY" led-apply' "$LED_CONTROL" || die "generic LED fallback is missing"
+grep -q 'led-repair-status' "$CONTROL" || die "LED repair status is not routed"
+grep -q 'led-repair-apply' "$CONTROL" || die "LED repair apply is not routed"
+[ "$(cat "$CUDY_LED_PACKAGE")" = "mdio-tools" ] || die "Cudy LED dependency package is invalid"
+[ "$(cat "$CUDY_LED_COMMAND")" = "mdio" ] || die "Cudy LED dependency command is invalid"
+grep -q 'mdio mt7530-0 0:0x1f raw 0x21 0x0008' "$CUDY_LED_APPLY" || die "Cudy WR3000S LED command is missing"
+grep -q 'PREFERRED_LED="white:wan-online"' "$CUDY_FIX_INSTALL" || die "Cudy WAN online LED name is missing"
+grep -q 'system.\$SECTION.sheepfold_managed' "$CUDY_FIX_INSTALL" || die "LED fix ownership marker is missing"
+grep -q 'find_equivalent_section' "$CUDY_FIX_INSTALL" || die "LED fix does not preserve existing equivalent settings"
+grep -q 'system.\$SECTION.sheepfold_managed' "$CUDY_FIX_UNINSTALL" || die "LED fix rollback does not verify ownership"
 
-# AI gate проверяет идентичность, роль, согласие и квоту серверными данными.
+# AI gate проверяет идентичность, роль, согласие и квоту серверными данными
 grep -q 'device_identity_mismatch' "$AI_GATE" || die "AI device identity verification is missing"
 grep -q 'client_role_mismatch' "$AI_GATE" || die "AI role verification is missing"
 grep -q 'parental_consent_required' "$AI_GATE" || die "child AI parental consent is missing"
@@ -101,7 +115,7 @@ grep -q 'privileged_context_forbidden' "$AI_GATE" || die "AI privileged context 
 grep -q 'Проверенная роль: ребёнок' "$AI_HANDLER" || die "child AI prompt is missing"
 grep -q 'Обезличенное состояние роутера' "$AI_HANDLER" || die "AI diagnostics masking is missing"
 
-# Журналы и ключи должны быть транзакционными.
+# Журналы и ключи должны быть транзакционными
 grep -q 'sheepfold.log' "$ACTIVITY_LOG" || die "explicit activity-log filename format is missing"
 grep -q 'restore_staged_logs' "$ACTIVITY_LOG" || die "activity-log rollback is missing"
 ! grep -q 'mtime "+7"' "$ACTIVITY_LOG" || die "hard-coded seven-day retention remains"
@@ -109,7 +123,7 @@ grep -q '.key-derive.lock' "$KEY_DERIVE" || die "key initialization lock is miss
 grep -q 'extroot_not_implemented_safely' "$USB_STORAGE" || die "unsafe automatic extroot remains enabled"
 grep -q 'PRIVACY_NOTICE_SOURCE' "$USB_STORAGE" || die "USB privacy notice is not copied after mount"
 
-# LuCI не получает общий read/write wildcard на runtime-каталог.
+# LuCI не получает общий read/write wildcard на runtime-каталог
 ! grep -q '"/tmp/sheepfold/\*"' "$ACL" || die "broad runtime ACL wildcard remains"
 grep -q 'sheepfold-openssl-ensure' "$ACL" || die "OpenSSL verification helper is absent from LuCI ACL"
 grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable individual logs"
@@ -118,7 +132,8 @@ for script in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" "$LED_CONTROL" \
     "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR"; do
+    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
+    "$CUDY_LED_APPLY" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
     /bin/sh -n "$script" || die "shell syntax error in $script"
 done
 
