@@ -27,6 +27,7 @@ jobs:
           find "$package_root/usr/share/sheepfold/router-profiles" \
             -type f \( -name apply-mode -o -name install -o -name uninstall \) \
             -print0 | xargs -0 -n1 sh -n
+          find "$package_root/etc/hotplug.d" -type f -print0 | xargs -0 -n1 sh -n
           sh -n "$package_root/www/cgi-bin/sheepfold-api"
           sh -n "$package_root/www/.well-known/sheepfold.json.sh"
           sh -n "$package_root/etc/init.d/sheepfold"
@@ -42,31 +43,38 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          detector="package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-detector"
+          classifier="package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-classifier"
+          signal_file="$(mktemp)"
+          trap 'rm -f "$signal_file"' EXIT
 
-          openwrt="$(sh "$detector" classify "OpenWrt" "")"
+          openwrt="$(sh "$classifier" "OpenWrt" "" "" "" "00:11:22:33:44:55")"
           test "$(printf '%s' "$openwrt" | cut -f1)" = "network"
           test -z "$(printf '%s' "$openwrt" | cut -f3)"
+          test "$(printf '%s' "$openwrt" | cut -f8)" = "1"
 
-          mixed="$(sh "$detector" classify "OpenWrt alarm" "8123,445")"
+          mixed="$(sh "$classifier" "OpenWrt alarm" "8123,445" "" "" "00:11:22:33:44:55")"
           test "$(printf '%s' "$mixed" | cut -f1)" = "network"
-          test -z "$(printf '%s' "$mixed" | cut -f3)"
+          test "$(printf '%s' "$mixed" | cut -f8)" = "1"
 
-          generic_router="$(sh "$detector" classify "Home Router" "")"
-          test "$(printf '%s' "$generic_router" | cut -f1)" = "network"
-          test -z "$(printf '%s' "$generic_router" | cut -f3)"
-
-          smart_gateway="$(sh "$detector" classify "Aqara Gateway" "")"
-          test "$(printf '%s' "$smart_gateway" | cut -f1)" != "network"
-          test "$(printf '%s' "$smart_gateway" | cut -f3)" = "Без ограничений"
-
-          speaker="$(sh "$detector" classify "Yandex Station" "")"
+          speaker="$(sh "$classifier" "Yandex Station" "" "" "" "00:11:22:33:44:55")"
           test "$(printf '%s' "$speaker" | cut -f1)" = "speaker"
-          test "$(printf '%s' "$speaker" | cut -f3)" = "Без ограничений"
+          test "$(printf '%s' "$speaker" | cut -f5)" = "50"
+          test "$(printf '%s' "$speaker" | cut -f7)" = "1"
 
-          lamp="$(sh "$detector" classify "Yeelight Lamp" "")"
+          printf 'vendor_class\tYandex Station IoT\nrequested_options\t1,3,6,15,51\n' > "$signal_file"
+          confirmed_speaker="$(sh "$classifier" "Yandex Station" "" "" "$signal_file" "00:11:22:33:44:55")"
+          test "$(printf '%s' "$confirmed_speaker" | cut -f5)" -ge 80
+          test "$(printf '%s' "$confirmed_speaker" | cut -f7)" -ge 2
+          test "$(printf '%s' "$confirmed_speaker" | cut -f8)" = "0"
+
+          lamp="$(sh "$classifier" "Yeelight Lamp" "" "Yeelight Kitchen Lamp" "" "00:11:22:33:44:55")"
           test "$(printf '%s' "$lamp" | cut -f1)" = "smart_home"
-          test "$(printf '%s' "$lamp" | cut -f3)" = "Без ограничений"
+          test "$(printf '%s' "$lamp" | cut -f5)" -ge 80
+          test "$(printf '%s' "$lamp" | cut -f7)" -ge 2
+
+          printf 'vendor_class\tMSFT 5.0\nrequested_options\t1,3,6,15,31,33,43,44,46,47,119,121,249,252\n' > "$signal_file"
+          spoofed_lamp="$(sh "$classifier" "Yeelight Lamp" "" "" "$signal_file" "00:11:22:33:44:55")"
+          test "$(printf '%s' "$spoofed_lamp" | cut -f8)" = "1"
 
       - name: Validate Android XML
         shell: bash
