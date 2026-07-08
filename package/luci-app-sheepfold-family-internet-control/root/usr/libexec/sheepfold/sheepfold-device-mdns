@@ -16,21 +16,38 @@ function safe_field(value) {
         return replace(`${value ?? ""}`, /[\r\n\t\x00-\x1f\x7f]+/g, " ");
 }
 
+function append_addresses(result, value) {
+        if (type(value) == "array") {
+                for (let address in value)
+                        append_addresses(result, address);
+                return;
+        }
+
+        if (value && index(result, value) < 0)
+                push(result, value);
+}
+
 function host_addresses(host_data, hosts) {
         let result = [];
         let host_name = lc(strip_local(host_data?.host));
         let host_record = hosts?.[host_name] ?? {};
 
-        for (let address in [ host_data?.ipv4, host_record?.ipv4 ])
-                if (address && index(result, address) < 0)
-                        push(result, address);
-
+        append_addresses(result, host_data?.ipv4);
+        append_addresses(result, host_record?.ipv4);
         return result;
 }
 
+function write_snapshot(lines) {
+        writefile(TEMP, join(sort(lines), ""));
+        chmod(TEMP, 0600);
+        rename(TEMP, OUTPUT);
+}
+
 let ubus = libubus.connect();
-if (!ubus)
+if (!ubus) {
+        write_snapshot([]);
         exit(0);
+}
 
 try {
         ubus.call("umdns", "update");
@@ -44,6 +61,7 @@ try {
         browse = ubus.call("umdns", "browse", { array: true, address: true }) ?? {};
         raw_hosts = ubus.call("umdns", "hosts", { array: true }) ?? {};
 } catch (e) {
+        write_snapshot([]);
         exit(0);
 }
 
@@ -53,6 +71,7 @@ for (let name, data in raw_hosts)
 
 let lines = [];
 for (let service_name, service_data in browse) {
+        service_name = strip_local(service_name);
         for (let instance_name, host_data in service_data) {
                 if (!host_data?.host)
                         continue;
@@ -63,6 +82,4 @@ for (let service_name, service_data in browse) {
         }
 }
 
-writefile(TEMP, join(sort(lines), ""));
-chmod(TEMP, 0600);
-rename(TEMP, OUTPUT);
+write_snapshot(lines);
