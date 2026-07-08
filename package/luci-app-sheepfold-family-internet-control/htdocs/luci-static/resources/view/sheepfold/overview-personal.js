@@ -89,11 +89,22 @@ function evidenceLabel(value) {
 }
 
 function detectionSummary(section) {
-	var evidence = String(section.detection_evidence || '').split(',').filter(Boolean).map(evidenceLabel);
-	var score = parseInt(section.detection_auto_group_score || '0', 10) || 0;
-	var confidence = parseInt(section.detection_confidence || '0', 10) || 0;
-	var denied = section.detection_hard_deny === '1';
+	var evidence;
+	var score;
+	var confidence;
+	var denied;
 	var parts = [];
+
+	if (section.manual_device_type === '1')
+		return 'Тип устройства выбран вручную; автоматическое определение отключено.';
+
+	if (!section.detected_type && !section.detection_confidence && !section.detection_evidence)
+		return 'Автоматическое определение ещё не выполнено.';
+
+	evidence = String(section.detection_evidence || '').split(',').filter(Boolean).map(evidenceLabel);
+	score = parseInt(section.detection_auto_group_score || '0', 10) || 0;
+	confidence = parseInt(section.detection_confidence || '0', 10) || 0;
+	denied = section.detection_hard_deny === '1';
 
 	if (confidence)
 		parts.push('уверенность типа ' + confidence + '%');
