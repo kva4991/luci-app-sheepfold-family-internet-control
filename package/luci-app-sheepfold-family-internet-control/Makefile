@@ -2,14 +2,14 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=117
+PKG_RELEASE:=118
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
 
 LUCI_TITLE:=Sheepfold Family Internet Control
 LUCI_DESCRIPTION:=Family internet access control for OpenWRT with LuCI, Android, and bot support.
-LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +uclient-fetch +ca-bundle +uhttpd
+LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +uclient-fetch +ca-bundle +uhttpd +uhttpd-mod-tls
 
 define Package/$(PKG_NAME)/postinst
 #!/bin/sh
@@ -66,6 +66,8 @@ ensure_global_option ai_provider 'deepseek'
 ensure_global_option ai_rate_limit_requests '20'
 ensure_global_option ai_rate_limit_window_seconds '3600'
 ensure_global_option ai_individual_logs '0'
+ensure_global_option child_ai_parental_consent '0'
+ensure_global_option child_ai_consent_version 'child-ai-v1'
 ensure_global_option deepseek_model 'deepseek-chat'
 ensure_global_option deepseek_api_url 'https://api.deepseek.com/chat/completions'
 ensure_global_option deepseek_api_key ''
@@ -109,6 +111,7 @@ fi
 ensure_global_option log_retention '3d'
 ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
+ensure_global_option app_https_port '5200'
 ensure_global_option log_storage 'ram'
 ensure_global_option log_cache_path '/tmp/sheepfold/events.log'
 uci -q get sheepfold.pairing_global >/dev/null || uci -q set sheepfold.pairing_global='pairing'
@@ -175,6 +178,7 @@ for helper in \
 	/usr/libexec/sheepfold/sheepfold-api-client-status \
 	/usr/libexec/sheepfold/sheepfold-api-pair \
 	/usr/libexec/sheepfold/sheepfold-ai-gate \
+	/usr/libexec/sheepfold/sheepfold-ai-handler \
 	/usr/libexec/sheepfold/sheepfold-activity-log \
 	/usr/libexec/sheepfold/sheepfold-maintenance-window \
 	/usr/libexec/sheepfold/sheepfold-usb-storage \
@@ -187,7 +191,6 @@ done
 if [ "$$(uci -q get sheepfold.global.ai_individual_logs 2>/dev/null)" = "1" ]; then
 	/usr/libexec/sheepfold/sheepfold-openssl-ensure >/dev/null 2>&1 || true
 fi
-# Единый генератор валидирует порт, экранирует hostname и выполняет атомарную запись.
 /www/.well-known/sheepfold.json.sh || exit 1
 install_sheepfold_cron() {
 	cron_file='/etc/crontabs/root'
@@ -205,9 +208,9 @@ install_sheepfold_cron() {
 	cat >> "$$tmp" <<'EOF'
 # BEGIN SHEEPFOLD MANAGED JOBS
 5 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
-55 4 * * * /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
 10 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-usb-storage archive-push >/dev/null 2>&1
-15 4 * * * /usr/libexec/sheepfold/sheepfold-usb-storage archive-push >/dev/null 2>&1
+55 4 * * * /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
+0 5 * * * /usr/libexec/sheepfold/sheepfold-usb-storage archive-push >/dev/null 2>&1
 # END SHEEPFOLD MANAGED JOBS
 EOF
 	chmod 600 "$$tmp"
