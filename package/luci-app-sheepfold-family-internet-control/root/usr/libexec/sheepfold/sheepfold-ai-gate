@@ -50,6 +50,17 @@ mac_for_ip() {
     normalize_mac "$mac"
 }
 
+device_section_for_mac() {
+    wanted="$(normalize_mac "$1")"
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+        existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+        [ "$(normalize_mac "$existing")" = "$wanted" ] || continue
+        printf '%s\n' "$section"
+        return 0
+    done
+    return 1
+}
+
 list_has_mac() {
     wanted="$(normalize_mac "$2")"
     for existing in $(uci -q get "sheepfold.$1.mac" 2>/dev/null || true); do
@@ -66,7 +77,7 @@ is_admin_request() {
 }
 
 consume_quota() {
-    mac="$1"
+    identity="$1"
     limit="$(uci -q get sheepfold.global.ai_rate_limit_requests 2>/dev/null || printf 20)"
     window="$(uci -q get sheepfold.global.ai_rate_limit_window_seconds 2>/dev/null || printf 3600)"
     case "$limit" in ''|*[!0-9]*) limit=20 ;; esac
@@ -76,7 +87,8 @@ consume_quota() {
     [ "$window" -ge 60 ] || window=60
     [ "$window" -le 86400 ] || window=86400
 
-    id="$(printf '%s' "$mac" | tr -cd 'A-F0-9')"
+    id="$(printf '%s' "$identity" | tr -cd 'A-Za-z0-9_.-')"
+    [ -n "$id" ] || id=unknown
     file="$RATE_DIR/$id"
     lock="$file.lock"
     tries=0
@@ -114,18 +126,46 @@ body="$(cat)"
 [ "$(uci -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)" = 1 ] || \
     reject "503 Service Unavailable" ai_disabled "AI assistant is disabled on the router."
 
+requested_device_id="$(form_get deviceId "$body")"
+requested_role="$(form_get clientRole "$body")"
+requested_admin="$(form_get isAdministrator "$body")"
+consent_version="$(form_get consentVersion "$body")"
+[ -n "$requested_device_id" ] || reject "400 Bad Request" device_id_required "Device id is required."
+[ -n "$requested_role" ] || reject "400 Bad Request" client_role_required "Client role is required."
+
 admin_request=0
 is_admin_request && admin_request=1
-client_marker="${HTTP_X_SHEEPFOLD_CLIENT:-}"
-if [ "$admin_request" != 1 ] && [ "$client_marker" != "android-child-v1" ]; then
-    reject "403 Forbidden" client_header_required "A trusted Sheepfold client header is required."
-fi
-
 remote_ip="${REMOTE_ADDR:-}"
 mac="$(mac_for_ip "$remote_ip")"
 valid_mac "$mac" || reject "403 Forbidden" device_not_resolved "The router could not identify this LAN device."
 list_has_mac blocklist "$mac" && reject "403 Forbidden" device_blocklisted "Blocked devices cannot use the AI assistant."
-consume_quota "$mac" || reject "429 Too Many Requests" rate_limited "AI request limit reached for this device." "${retry_after:-3600}"
+device_section="$(device_section_for_mac "$mac" 2>/dev/null || true)"
+[ -n "$device_section" ] || reject "403 Forbidden" device_not_registered "This device is not registered in Sheepfold."
+server_device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || printf '%s' "$device_section")"
+server_admin="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
+
+if [ "$requested_device_id" != "$server_device_id" ]; then
+    reject "403 Forbidden" device_identity_mismatch "Device id does not match the LAN device."
+fi
+
+if [ "$admin_request" = 1 ]; then
+    [ "$server_admin" = 1 ] || reject "403 Forbidden" administrator_device_required "Administrator token must be used from its paired device."
+    case "$requested_role" in parent|administrator) ;;
+        *) reject "403 Forbidden" client_role_mismatch "Administrator request must use the parent role." ;;
+    esac
+    [ "$requested_admin" = 1 ] || reject "403 Forbidden" administrator_flag_mismatch "Administrator flag does not match the verified device."
+else
+    [ "${HTTP_X_SHEEPFOLD_CLIENT:-}" = "android-child-v1" ] || \
+        reject "403 Forbidden" client_header_required "A Sheepfold child client marker is required."
+    [ "$server_admin" != 1 ] || reject "403 Forbidden" client_role_mismatch "Administrator devices must use an administrator token."
+    [ "$requested_role" = child ] || reject "403 Forbidden" client_role_mismatch "Child device must use the child role."
+    [ "$requested_admin" = 0 ] || reject "403 Forbidden" administrator_flag_mismatch "Administrator flag does not match the verified device."
+    [ "$consent_version" = child-ai-v1 ] || reject "403 Forbidden" parental_consent_version_required "The current parental consent version is required."
+    [ "$(uci -q get sheepfold.global.child_ai_parental_consent 2>/dev/null || printf 0)" = 1 ] || \
+        reject "403 Forbidden" parental_consent_required "A parent must enable child AI access in Sheepfold settings."
+fi
+
+consume_quota "$server_device_id" || reject "429 Too Many Requests" rate_limited "AI request limit reached for this device." "${retry_after:-3600}"
 
 include_info="$(form_get includeInfo "$body")"
 include_logs="$(form_get includeLogs "$body")"
