@@ -19,8 +19,42 @@ return view.extend({
 			return !!String(key || '').trim();
 		};
 
+		function showOpenSslProgress() {
+			var status = E('div', { 'class': 'cbi-section' }, [
+				E('p', { 'class': 'spinning' }, _('Проверяется OpenSSL и создаётся ключевой материал. Не закрывайте страницу.'))
+			]);
+			ui.showModal(_('Настройка защищённых журналов'), [status]);
+
+			return fs.exec('/usr/libexec/sheepfold/sheepfold-openssl-ensure', []).then(function(result) {
+				if (result.code !== 0)
+					throw new Error(result.stderr || _('Проверка OpenSSL завершилась ошибкой.'));
+
+				status.replaceChildren(
+					E('p', { 'class': 'alert-message success' }, _('OpenSSL проверен, ключевой материал готов.')),
+					E('div', { 'class': 'right' }, [
+						E('button', {
+							'class': 'btn cbi-button cbi-button-positive',
+							'click': function() { ui.hideModal(); }
+						}, _('Закрыть'))
+					])
+				);
+				ui.addNotification(null, E('p', {}, _('Защищённые индивидуальные журналы настроены.')), 'info');
+			}, function(error) {
+				status.replaceChildren(
+					E('p', { 'class': 'alert-message error' }, error.message || _('Не удалось настроить OpenSSL.')),
+					E('div', { 'class': 'right' }, [
+						E('button', {
+							'class': 'btn cbi-button',
+							'click': function() { ui.hideModal(); }
+						}, _('Закрыть'))
+					])
+				);
+				throw error;
+			});
+		}
+
 		var m = new form.Map('sheepfold', _('ИИ помощник'),
-			_('Ключ провайдера хранится только на роутере. Обычные LAN-устройства могут задавать вопросы, но их запросы ограничиваются по MAC-адресу. Диагностика и журналы доступны только с токеном администратора.'));
+			_('Ключ провайдера хранится только на роутере. Роль и идентификатор устройства проверяются по данным LAN и не принимаются на доверие от клиента.'));
 		var s = m.section(form.NamedSection, 'global', 'sheepfold', _('Подключение к провайдеру'));
 		s.anonymous = true;
 
@@ -78,7 +112,7 @@ return view.extend({
 				advancedWasRendered = false;
 				return E('div', { 'class': 'cbi-section' }, [
 					E('p', { 'class': 'alert-message notice' },
-						_('Сохраните API-ключ выбранного провайдера. После сохранения эта форма автоматически покажет включение помощника, лимиты запросов и настройку индивидуальных журналов.'))
+						_('Сохраните API-ключ выбранного провайдера. После сохранения появятся включение помощника, лимиты и защищённые журналы.'))
 				]);
 			}
 			advancedWasRendered = true;
@@ -94,10 +128,19 @@ return view.extend({
 		o.default = '1';
 		o.rmempty = false;
 
+		o = s.option(form.Flag, 'child_ai_parental_consent', _('Разрешить ИИ-помощника на детских устройствах'));
+		o.default = '0';
+		o.rmempty = false;
+		o.description = _('Включайте только после разговора с ребёнком. Передаются вопрос, ограниченная история чата, проверенный ID устройства, роль и безопасный контекст текущего доступа. Диагностика роутера и журналы детскому клиенту недоступны.');
+		o.write = function(sectionId, value) {
+			uci.set('sheepfold', sectionId, 'child_ai_parental_consent', value === '1' ? '1' : '0');
+			uci.set('sheepfold', sectionId, 'child_ai_consent_version', 'child-ai-v1');
+		};
+
 		o = s.option(form.Value, 'ai_rate_limit_requests', _('Запросов на устройство'));
 		o.datatype = 'range(1,1000)';
 		o.default = '20';
-		o.description = _('Максимальное число запросов за одно окно для каждого MAC-адреса.');
+		o.description = _('Максимальное число запросов за одно окно для каждого проверенного устройства.');
 
 		o = s.option(form.Value, 'ai_rate_limit_window_seconds', _('Окно ограничения, секунд'));
 		o.datatype = 'range(60,86400)';
@@ -106,19 +149,17 @@ return view.extend({
 		o = s.option(form.Flag, 'ai_individual_logs', _('Разрешить индивидуальные журналы для ИИ'));
 		o.default = '0';
 		o.rmempty = false;
-		o.description = _('При включении роутер проверит OpenSSL и попробует установить его через opkg. Если проверка не пройдёт, настройка автоматически останется выключенной. Передача журнала всё равно требует токен администратора.');
+		o.description = _('При включении откроется окно настройки OpenSSL. Передача журнала всё равно требует токен администратора и отдельную галочку в приложении.');
 		o.write = function(sectionId, value) {
 			uci.set('sheepfold', sectionId, 'ai_individual_logs', value === '1' ? '1' : '0');
 			if (value !== '1')
 				return Promise.resolve();
 
-			return fs.exec('/usr/libexec/sheepfold/sheepfold-openssl-ensure', []).then(function(res) {
-				if (res.code === 0)
-					return;
+			return showOpenSslProgress().catch(function(error) {
 				uci.set('sheepfold', sectionId, 'ai_individual_logs', '0');
 				ui.addNotification(null, E('p', {},
 					_('OpenSSL не установлен или не прошёл проверку. Индивидуальные журналы отключены.')), 'error');
-				throw new Error(res.stderr || _('Проверка OpenSSL завершилась ошибкой.'));
+				throw error;
 			});
 		};
 
