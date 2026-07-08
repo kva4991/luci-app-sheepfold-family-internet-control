@@ -71,6 +71,10 @@ case "$path_info" in
         require_admin
         run_legacy
         ;;
+    /settings/save)
+        header_json "410 Gone"
+        printf '{"app":"sheepfold","ok":false,"error":"legacy_settings_writer_disabled","message":"Use authenticated LuCI UCI forms with typed validation."}\n'
+        ;;
     /ai-assistant)
         [ "$method" = "POST" ] || method_not_allowed
         length="${CONTENT_LENGTH:-0}"
