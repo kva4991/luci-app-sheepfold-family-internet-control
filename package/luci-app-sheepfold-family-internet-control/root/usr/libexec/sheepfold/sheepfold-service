@@ -67,6 +67,12 @@ finish_signal_change() {
         rm -f "$SIGNAL_PROCESSING_FLAG"
 }
 
+restore_signal_change() {
+        [ -e "$SIGNAL_PROCESSING_FLAG" ] || return 0
+        mv "$SIGNAL_PROCESSING_FLAG" "$SIGNAL_CHANGE_FLAG" 2>/dev/null || \
+                : > "$SIGNAL_CHANGE_FLAG"
+}
+
 case "$COMMAND" in
         run)
                 init_ram_log
@@ -104,13 +110,17 @@ case "$COMMAND" in
                                 fi
 
                                 if [ "$LEASES_STATE" != "$LAST_LEASES_STATE" ] || [ "$SIGNALS_CHANGED" = "1" ]; then
-                                        "$DETECTOR" scan changed >/dev/null 2>&1 || true
-                                        [ "$SIGNALS_CHANGED" = "1" ] && finish_signal_change
-                                        LAST_LEASES_STATE="$LEASES_STATE"
-                                        LAST_FULL_SCAN="$NOW"
+                                        if "$DETECTOR" scan changed >/dev/null 2>&1; then
+                                                [ "$SIGNALS_CHANGED" = "1" ] && finish_signal_change
+                                                LAST_LEASES_STATE="$LEASES_STATE"
+                                                LAST_FULL_SCAN="$NOW"
+                                        elif [ "$SIGNALS_CHANGED" = "1" ]; then
+                                                restore_signal_change
+                                        fi
                                 elif [ $((NOW - LAST_FULL_SCAN)) -ge "$INTERVAL" ]; then
-                                        "$DETECTOR" scan full >/dev/null 2>&1 || true
-                                        LAST_FULL_SCAN="$NOW"
+                                        if "$DETECTOR" scan full >/dev/null 2>&1; then
+                                                LAST_FULL_SCAN="$NOW"
+                                        fi
                                 fi
                         else
                                 WATCH_INTERVAL=30
