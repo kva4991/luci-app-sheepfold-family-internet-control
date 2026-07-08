@@ -4,6 +4,7 @@ set -eu
 COMMAND="${1:-run}"
 DEFAULT_RAM_LOG="/tmp/sheepfold/events.log"
 DETECTOR="/usr/libexec/sheepfold/sheepfold-device-detector"
+PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
 SCAN_LOCK="/tmp/sheepfold/device-detection.lock"
 UPDATER="/usr/libexec/sheepfold/sheepfold-updater"
 ROUTER_CONTROL="/usr/libexec/sheepfold/sheepfold-router-control"
@@ -68,7 +69,13 @@ run_detector() (
                 sleep 1
         done
         trap 'rmdir "$SCAN_LOCK" 2>/dev/null || true' EXIT HUP INT TERM
-        "$DETECTOR" "$@"
+
+        if "$DETECTOR" "$@"; then
+                [ -x "$PRESENCE" ] && "$PRESENCE" refresh >/dev/null 2>&1 || true
+                return 0
+        fi
+
+        return 1
 )
 
 consume_signal_change() {
