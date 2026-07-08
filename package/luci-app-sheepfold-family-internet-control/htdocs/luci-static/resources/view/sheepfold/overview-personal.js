@@ -6,6 +6,8 @@
 
 var renderGroups = overview.renderGroups;
 var renderUsers = overview.renderUsers;
+var presenceByMac = {};
+var presencePromise = null;
 
 function normalizedGroupName(value) {
 	return String(value || '').trim().toLowerCase();
@@ -139,6 +141,189 @@ function commandErrorText(error, fallback) {
 	return String(error.stderr || error.stdout || error.message || fallback).trim();
 }
 
+function parsePresenceOutput(text) {
+	var result = {};
+
+	String(text || '').split(/\r?\n/).forEach(function(line) {
+		var fields = line.split('\t');
+		var mac = normalizeMac(fields[0]);
+		var lastSeen;
+
+		if (!mac || fields.length < 3)
+			return;
+
+		lastSeen = parseInt(fields[1] || '0', 10) || 0;
+		result[mac] = {
+			mac: mac,
+			lastSeen: lastSeen,
+			online: fields[2] === '1',
+			ip: fields[3] || ''
+		};
+	});
+
+	return result;
+}
+
+function loadDevicePresence(force) {
+	if (force)
+		presencePromise = null;
+
+	if (presencePromise)
+		return presencePromise;
+
+	presencePromise = fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', ['device-presence', 'list']).then(function(result) {
+		var code = Number(result && result.code || 0);
+
+		if (code !== 0)
+			throw new Error(String(result && (result.stderr || result.stdout) || 'Не удалось получить статус устройств.'));
+
+		presenceByMac = parsePresenceOutput(result && result.stdout || '');
+		return presenceByMac;
+	}).catch(function() {
+		presenceByMac = {};
+		return presenceByMac;
+	});
+
+	return presencePromise;
+}
+
+function presenceForMac(mac) {
+	mac = normalizeMac(mac);
+	return presenceByMac[mac] || {
+		mac: mac,
+		lastSeen: 0,
+		online: false,
+		ip: ''
+	};
+}
+
+function padDatePart(value) {
+	return String(value).padStart(2, '0');
+}
+
+function formatLastSeen(timestamp) {
+	var date;
+
+	if (!timestamp)
+		return '';
+
+	date = new Date(timestamp * 1000);
+	if (isNaN(date.getTime()))
+		return '';
+
+	return [
+		padDatePart(date.getDate()),
+		padDatePart(date.getMonth() + 1),
+		date.getFullYear()
+	].join('.') + ' ' + padDatePart(date.getHours()) + ':' + padDatePart(date.getMinutes());
+}
+
+function presenceStatusText(presence) {
+	var lastSeenText;
+
+	if (presence.online)
+		return 'Онлайн: сейчас (в последние 15 мин)';
+
+	lastSeenText = formatLastSeen(presence.lastSeen);
+	return lastSeenText ? 'Онлайн: был ' + lastSeenText : 'Онлайн: данных пока нет';
+}
+
+function onlineBadge() {
+	return E('span', { 'class': 'sf-online-badge' }, 'онлайн');
+}
+
+function statusCellForRow(row, actions) {
+	return actions && actions.previousElementSibling ? actions.previousElementSibling : null;
+}
+
+function decoratePresenceForRow(row, mac, actions) {
+	var presence = presenceForMac(mac);
+	var statusCell = statusCellForRow(row, actions);
+	var oldRow = row.querySelector('.sf-online-badge-row');
+
+	row.setAttribute('data-sort-online', presence.online ? '1' : '0');
+	if (oldRow)
+		oldRow.remove();
+
+	if (presence.online && statusCell)
+		statusCell.appendChild(E('div', { 'class': 'sf-online-badge-row' }, onlineBadge()));
+}
+
+function rowIpSortValue(row) {
+	var value = Number(row.getAttribute('data-sort-ip'));
+
+	return isNaN(value) || value < 0 ? Number.MAX_SAFE_INTEGER : value;
+}
+
+function sortDeviceRowsByPresence(root) {
+	root.querySelectorAll('.sf-device-table').forEach(function(table) {
+		var rows = Array.prototype.slice.call(table.querySelectorAll('.sf-device-row:not(.sf-device-head)'));
+
+		rows = rows.map(function(row, index) {
+			return { row: row, index: index };
+		}).sort(function(left, right) {
+			var leftOnline = left.row.getAttribute('data-sort-online') === '1' ? 1 : 0;
+			var rightOnline = right.row.getAttribute('data-sort-online') === '1' ? 1 : 0;
+			var ipDifference;
+
+			if (leftOnline !== rightOnline)
+				return rightOnline - leftOnline;
+
+			ipDifference = rowIpSortValue(left.row) - rowIpSortValue(right.row);
+			return ipDifference || left.index - right.index;
+		});
+
+		rows.forEach(function(item) {
+			table.appendChild(item.row);
+		});
+	});
+}
+
+function openDeviceSettingsPresence(mac, attempt) {
+	var actionRows;
+	var actions;
+	var modal;
+	var text;
+	var oldStatus;
+	var statusNode;
+
+	attempt = attempt || 0;
+	actionRows = document.querySelectorAll('.sf-modal-actions');
+	actions = actionRows.length ? actionRows[actionRows.length - 1] : null;
+	modal = document.getElementById('modal_overlay') || (actions && actions.closest('.modal, .cbi-modal'));
+	text = String(modal && modal.textContent || '');
+
+	if (!actions || !modal || !/(Настройки устройства|Device settings)/i.test(text)) {
+		if (attempt < 20)
+			window.setTimeout(function() { openDeviceSettingsPresence(mac, attempt + 1); }, 50);
+		return;
+	}
+
+	oldStatus = actions.querySelector('.sf-device-presence-modal-status');
+	if (oldStatus)
+		oldStatus.remove();
+
+	statusNode = E('div', {
+		'class': 'sf-device-presence-modal-status'
+	}, presenceStatusText(presenceForMac(mac)));
+	actions.classList.add('sf-device-settings-actions');
+	actions.insertBefore(statusNode, actions.firstChild);
+}
+
+function bindSettingsPresence(mac, actions) {
+	var button = actions && actions.querySelector('.sf-icon-action-neutral');
+
+	if (!button || button.getAttribute('data-presence-bound') === '1')
+		return;
+
+	button.setAttribute('data-presence-bound', '1');
+	button.addEventListener('click', function() {
+		loadDevicePresence(true).then(function() {
+			openDeviceSettingsPresence(mac, 0);
+		});
+	});
+}
+
 function reclassifyDevice(mac, button) {
 	var spinner = E('span', { 'class': 'sf-spinner' });
 	var status = E('p', {}, 'Собираются актуальные признаки устройства…');
@@ -192,7 +377,13 @@ function decorateDeviceRows(root) {
 		var summary;
 		var button;
 
-		if (!section || !nameCell || !actions)
+		if (!mac || !nameCell || !actions)
+			return;
+
+		decoratePresenceForRow(row, mac, actions);
+		bindSettingsPresence(mac, actions);
+
+		if (!section)
 			return;
 
 		summary = detectionSummary(section);
@@ -243,6 +434,10 @@ overview.renderUsers = function() {
 
 	ensurePersonalGroupStylesheet();
 	decorateDeviceRows(node);
+	loadDevicePresence(false).then(function() {
+		decorateDeviceRows(node);
+		sortDeviceRowsByPresence(node);
+	});
 	return node;
 };
 
