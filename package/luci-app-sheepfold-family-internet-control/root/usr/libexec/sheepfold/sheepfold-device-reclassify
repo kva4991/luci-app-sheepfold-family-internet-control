@@ -1,0 +1,59 @@
+#!/bin/sh
+set -eu
+
+DETECTOR="/usr/libexec/sheepfold/sheepfold-device-detector"
+mac="$(printf '%s' "${1:-}" | tr '[:lower:]' '[:upper:]')"
+
+printf '%s' "$mac" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' || {
+        echo "invalid_mac" >&2
+        exit 2
+}
+
+section=""
+for candidate in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+        existing="$(uci -q get "sheepfold.$candidate.mac" 2>/dev/null | tr '[:lower:]' '[:upper:]' || true)"
+        if [ "$existing" = "$mac" ]; then
+                section="$candidate"
+                break
+        fi
+done
+
+[ -n "$section" ] || {
+        echo "device_not_found" >&2
+        exit 3
+}
+
+[ "$(uci -q get "sheepfold.$section.manual_device_type" 2>/dev/null || printf 0)" != "1" ] || {
+        echo "manual_device_type_locked" >&2
+        exit 4
+}
+
+for option in \
+        detected_type \
+        detection_confidence \
+        detection_reason \
+        detection_target_group \
+        detection_auto_group_score \
+        detection_evidence \
+        detection_evidence_count \
+        detection_hard_deny \
+        detection_policy_version \
+        detection_fingerprint \
+        detection_ports \
+        detection_oui_vendor \
+        detection_updated_at; do
+        uci -q delete "sheepfold.$section.$option" 2>/dev/null || true
+done
+
+uci -q commit sheepfold
+
+if [ -x "$DETECTOR" ]; then
+        "$DETECTOR" scan changed >/dev/null 2>&1 || {
+                echo "reclassification_scan_failed" >&2
+                exit 5
+        }
+fi
+
+printf 'status=reclassified\n'
+printf 'section=%s\n' "$section"
+printf 'mac=%s\n' "$mac"
