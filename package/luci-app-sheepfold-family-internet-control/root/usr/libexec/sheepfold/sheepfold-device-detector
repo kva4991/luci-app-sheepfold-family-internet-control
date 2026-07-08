@@ -5,12 +5,16 @@ COMMAND="${1:-scan}"
 CACHE_DIR="/tmp/sheepfold"
 CACHE_FILE="$CACHE_DIR/device-detection.tsv"
 RAW_FILE="$CACHE_DIR/device-detection.raw"
+STATE_DIR="$CACHE_DIR/device-state"
+SIGNAL_DIR="$CACHE_DIR/device-signals"
+DIRTY_FLAG="$CACHE_DIR/device-detection.uci-dirty"
+LAST_SCAN_FILE="$CACHE_DIR/device-detection.last-scan"
 NEW_DEVICE_ALERT_FLAG="$CACHE_DIR/new-device-alert"
 LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
+CLASSIFIER="/usr/libexec/sheepfold/sheepfold-device-classifier"
 DEFAULT_SCAN_PORTS="22,53,80,81,443,445,548,554,631,1883,3000,3001,5000,5001,5353,8000,8006,8080,8081,8123,8554,9000,9100,32400"
 NO_RESTRICTIONS_GROUP="Без ограничений"
-NETWORK_NAME_PATTERN='(^|[^a-z0-9])(openwrt|router|gateway|repeater|extender|access[ _-]?point|wireless[ _-]?ap|wi-?fi[ _-]?ap|mesh)([^a-z0-9]|$)|(^|[^a-z0-9])ap[-_][a-z0-9]'
-SMART_HOME_GATEWAY_PATTERN='thread border router|matter bridge|homekit bridge|zigbee gateway|zigbee bridge|z-wave gateway|zwave gateway|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|tradfri gateway|ikea dirigera|dirigera|hue bridge|sonoff zigbee bridge'
+POLICY_VERSION="2"
 
 global_get() {
         uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "$2"
@@ -20,12 +24,36 @@ normalize_mac() {
         printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
 }
 
+valid_mac() {
+        printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'
+}
+
 log_event() {
         if [ -x "$LOG_HELPER" ]; then
                 "$LOG_HELPER" "$*"
         else
                 logger -t sheepfold "$*"
         fi
+}
+
+mark_dirty() {
+        : > "$DIRTY_FLAG"
+}
+
+uci_set_if_changed() {
+        path="$1"
+        value="$2"
+        current="$(uci -q get "$path" 2>/dev/null || true)"
+        [ "$current" = "$value" ] && return 0
+        uci -q set "$path=$value"
+        mark_dirty
+}
+
+uci_delete_if_present() {
+        path="$1"
+        uci -q get "$path" >/dev/null 2>&1 || return 0
+        uci -q delete "$path"
+        mark_dirty
 }
 
 section_for_mac() {
@@ -48,9 +76,9 @@ ensure_device_section() {
         fi
 
         section="device_$(printf '%s' "$mac" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
-        uci -q set "sheepfold.$section=device"
-        uci -q set "sheepfold.$section.mac=$mac"
-        uci -q set "sheepfold.$section.just_detected=1"
+        uci_set_if_changed "sheepfold.$section" device
+        uci_set_if_changed "sheepfold.$section.mac" "$mac"
+        uci_set_if_changed "sheepfold.$section.just_detected" 1
         date +%s > "$NEW_DEVICE_ALERT_FLAG"
         printf '%s\n' "$section"
 }
@@ -72,75 +100,75 @@ mac_in_named_list() {
         return 1
 }
 
-text_has() {
-        printf '%s' "$1" | grep -Eiq "$2"
+signal_file_for_mac() {
+        mac="$(normalize_mac "$1")"
+        valid_mac "$mac" || return 1
+        printf '%s/%s.dhcp\n' "$SIGNAL_DIR" "$(printf '%s' "$mac" | tr ':' '_')"
 }
 
-name_is_network_infrastructure() {
-        candidate_name="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
-        [ -n "$candidate_name" ] || return 1
+static_name_for_mac() {
+        wanted="$(normalize_mac "$1")"
 
-        # Только известные шлюзы умного дома исключаются из общего слова gateway/router
-        if text_has "$candidate_name" "$SMART_HOME_GATEWAY_PATTERN"; then
-                return 1
-        fi
-
-        text_has "$candidate_name" "$NETWORK_NAME_PATTERN"
+        for section in $(uci -q show dhcp 2>/dev/null | sed -n "s/^dhcp\.\([^.=]*\)=host$/\1/p"); do
+                for configured_mac in $(uci -q get "dhcp.$section.mac" 2>/dev/null || true); do
+                        [ "$(normalize_mac "$configured_mac")" = "$wanted" ] || continue
+                        uci -q get "dhcp.$section.name" 2>/dev/null || \
+                                uci -q get "dhcp.$section.hostname" 2>/dev/null || true
+                        return 0
+                done
+        done
 }
 
-target_group_for_detected_type() {
-        # Автоматически разрешаем только устройства, через которые обычно нельзя пользоваться интернетом
-        case "$1" in
-                server|engineering|camera|smart_home|vacuum|speaker)
-                        printf '%s\n' "$NO_RESTRICTIONS_GROUP"
-                        ;;
-                *)
-                        printf '\n'
-                        ;;
-        esac
+fingerprint_signal_material() {
+        signal_file="$1"
+        [ -r "$signal_file" ] || return 0
+        awk -F '\t' '
+                $1 == "hostname" ||
+                $1 == "supplied_hostname" ||
+                $1 == "vendor_class" ||
+                $1 == "requested_options" ||
+                $1 == "user_class" ||
+                $1 == "client_id" ||
+                $1 == "mud_url" ||
+                $1 == "interface" { print }
+        ' "$signal_file" 2>/dev/null | sort
 }
 
-assign_no_restrictions_if_allowed() {
-        section="$1"
-        mac="$2"
-        ip="$3"
-        name="$4"
-        confidence="$5"
-        target_group="$6"
-        reason="$7"
-        device_type="$8"
-        min_confidence="$(global_get detector_min_no_restrictions_confidence 80)"
-        no_restrictions_auto_assign="$(global_get no_restrictions_auto_assign 1)"
-        current_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
-        auto_excluded="$(uci -q get "sheepfold.$section.no_restrictions_auto_excluded" 2>/dev/null || true)"
+build_fingerprint() {
+        mac="$1"
+        name="$2"
+        static_name="$3"
+        signal_file="$4"
+        ports="$5"
+        {
+                printf 'policy=%s\n' "$POLICY_VERSION"
+                printf 'mac=%s\n' "$(normalize_mac "$mac")"
+                printf 'name=%s\n' "$name"
+                printf 'static_name=%s\n' "$static_name"
+                printf 'ports=%s\n' "$ports"
+                fingerprint_signal_material "$signal_file"
+        } | cksum | awk '{ print $1 "-" $2 }'
+}
 
-        # Сетевое оборудование можно настроить только вручную.
-        [ "$device_type" = "network" ] && return 0
-        name_is_network_infrastructure "$name" && return 0
-
-        case "$confidence" in
-                ''|*[!0-9]*) confidence=0 ;;
-        esac
-        case "$min_confidence" in
-                ''|*[!0-9]*) min_confidence=80 ;;
-        esac
-
-        [ "$no_restrictions_auto_assign" = "1" ] || return 0
-        [ "$auto_excluded" = "1" ] && return 0
-        [ -n "$target_group" ] || return 0
-        [ "$confidence" -ge "$min_confidence" ] || return 0
-
-        # Чёрный список всегда старше любой автоматики.
-        mac_in_named_list blocklist "$mac" && return 0
-
-        case "$current_group" in
-                ""|"Не настроено"|"Not configured")
-                        uci -q set "sheepfold.$section.group=$target_group"
-                        uci -q set "sheepfold.$section.auto_group_assigned=1"
-                        uci -q set "sheepfold.$section.auto_group_reason=$reason"
-                        log_event "Устройство ${name:-$mac}, IP ${ip:-неизвестен} автоматически добавлено в группу \"$target_group\": $reason"
-                        ;;
-        esac
+write_runtime_observation() {
+        mac="$1"
+        ip="$2"
+        name="$3"
+        sources="$4"
+        now="$5"
+        mkdir -p "$STATE_DIR"
+        chmod 700 "$STATE_DIR" 2>/dev/null || true
+        file="$STATE_DIR/$(printf '%s' "$mac" | tr ':' '_').tsv"
+        tmp="$file.tmp.$$"
+        umask 077
+        {
+                printf 'last_seen\t%s\n' "$now"
+                printf 'ip\t%s\n' "$ip"
+                printf 'name\t%s\n' "$name"
+                printf 'sources\t%s\n' "$sources"
+        } > "$tmp"
+        chmod 600 "$tmp" 2>/dev/null || true
+        mv -f "$tmp" "$file"
 }
 
 append_router_devices() {
@@ -205,129 +233,60 @@ scan_ports() {
                 awk -F/ '/open/ { ports = ports (ports == "" ? "" : ",") $1 } END { print ports }'
 }
 
-classify_device() {
-        name="$1"
-        ports="$2"
-        lower="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
-        type="smart"
-        confidence=35
-        reason="lightweight router metadata"
-        target_group=""
+assign_no_restrictions_if_allowed() {
+        section="$1"
+        mac="$2"
+        ip="$3"
+        name="$4"
+        target_group="$5"
+        reason="$6"
+        auto_score="$7"
+        evidence_count="$8"
+        hard_deny="$9"
+        min_score="$(global_get detector_min_no_restrictions_confidence 80)"
+        enabled="$(global_get no_restrictions_auto_assign 1)"
+        current_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+        auto_excluded="$(uci -q get "sheepfold.$section.no_restrictions_auto_excluded" 2>/dev/null || true)"
 
-        if name_is_network_infrastructure "$name"; then
-                type="network"
-                confidence=96
-                reason="network infrastructure marker"
-        elif text_has "$lower" 'home[ -]?assistant|hassio|hass\.io|haos|openhab|adguard[ -]?home|adguardhome|file server|proxmox|truenas|freenas|openmediavault|synology|diskstation|qnap|unraid|docker host|portainer|smlight|slzb|zigbee2mqtt|zha coordinator|zigbee coordinator|zigbee gateway|zigbee bridge|matter bridge|thread border router|homekit bridge|smart home hub|smarthome hub|philips hue bridge|hue bridge|ikea dirigera|dirigera|tradfri gateway|aqara hub|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|sonoff zigbee bridge|hubitat|smartthings hub|aeotec hub|homey|fibaro home center|homematic|deconz|conbee|skyconnect|zwavejs|z-wave js|z-wave gateway|zwave gateway' ||
-             text_has "$lower" '(^|[^a-z0-9])(samba|smb|cifs|nas|pve|omv)([^a-z0-9]|$)'; then
-                type="server"
-                confidence=86
-                reason="home infrastructure name marker"
-        elif text_has "$lower" 'nvr|dvr|xvr|video recorder|videoregistrar|videonablyudenie|videonablydenie|videonabludenie|video-nablyudenie|video-nablydenie|cctv server|surveillance server|video server|ltv-rne|rvi-r|trassir|xmeye|ivms|hik-connect|smartpss|uniview|hikvision|hiwatch|hilook|dahua|beward|optimus|tantos|polyvision|hanwha|wisenet|axis|vivotek|tiandy'; then
-                type="server"
-                confidence=86
-                reason="video recorder or surveillance server name marker"
-        elif text_has "$lower" 'zont|ectostroy|ectocontrol|myheat|teplocom|xital|telemetrika|owen|saures|baxi|navien|vaillant|buderus|protherm|ariston' ||
-             text_has "$lower" '(^|[^a-z0-9])(boiler|kotel|heating|thermostat|alarm)([^a-z0-9]|$)|кот[её]л'; then
-                type="engineering"
-                confidence=86
-                reason="engineering, heating, or safety controller name marker"
-        elif text_has "$lower" 'printer|print|epson|canon|hp-|brother'; then
-                type="printer"
-                confidence=82
-                reason="printer marker"
-        elif text_has "$lower" '(^|[^a-z0-9])(ip[-_ ]?cam|webcam|camera|cam[0-9]+|cam[-_ ][0-9]+)([^a-z0-9]|$)'; then
-                type="camera"
-                confidence=82
-                reason="camera marker"
-        elif text_has "$lower" 'iphone|android|galaxy|redmi|pixel|phone'; then
-                type="phone"
-                confidence=78
-                reason="phone marker"
-        elif text_has "$lower" 'ipad|tablet|pad'; then
-                type="tablet"
-                confidence=78
-                reason="tablet marker"
-        elif text_has "$lower" 'desktop|laptop|notebook|macbook|pc-'; then
-                type="computer"
-                confidence=76
-                reason="computer marker"
-        elif text_has "$lower" 'tv|chromecast|mi box|androidtv|smarttv'; then
-                type="tv"
-                confidence=76
-                reason="TV or media marker"
-        elif text_has "$lower" 'playstation|ps4|ps5|xbox|switch|console'; then
-                type="console"
-                confidence=82
-                reason="game console marker"
-        elif text_has "$lower" 'alice|alisa|yandex[ _-]?(station|stantsiya)|яндекс[ _-]?станц|smart speaker|sonos|homepod|alexa|amazon echo|google home|sberboom|marusya'; then
-                type="speaker"
-                confidence=84
-                reason="smart speaker marker"
-        elif text_has "$lower" 'vacuum|roborock|dreame|deebot|ecovacs|irobot|roomba|miio|xiaomi-vacuum|viomi|ilife|eufy|yeedi'; then
-                type="vacuum"
-                confidence=80
-                reason="robot vacuum marker"
-        elif text_has "$lower" 'warm floor|underfloor|floor heating|heated floor|thermoregulator|терморегулятор|т[её]пл[ыо]й пол|теплый пол|тёплый пол|подогрев пола|heater relay|smart relay|relay|реле|switch module|wall switch|light switch|выключател|освещен|свет|ламп|dimmer|диммер|curtain|curtains|blind|blinds|shade|roller shade|штор|жалюзи|карниз|kettle|чайник|iron|утюг|socket|plug|розетк|tuya|ewelink|sonoff|shelly|aqara|mijia|xiaomi smart|yeelight|philips hue|nanoleaf|wled|led controller|контроллер led|контроллер света|motion sensor|датчик движения|door sensor|window sensor|датчик двери|датчик окна|leak sensor|датчик протечки|smoke sensor|датчик дыма|temperature sensor|датчик температуры|humidity sensor|датчик влажности'; then
-                type="smart_home"
-                confidence=80
-                reason="smart-home appliance, relay, sensor, or actuator marker"
-        elif text_has "$lower" '(^|[^a-z0-9])(espressif|esp8266|esp32|esp32c3|esp32-c3|esp32s3|esp32-s3|tasmota|esphome)([^a-z0-9]|$)'; then
-                type="smart_home"
-                confidence=82
-                reason="ESP smart-home device marker"
-        fi
+        case "$auto_score" in ''|*[!0-9]*) auto_score=0 ;; esac
+        case "$evidence_count" in ''|*[!0-9]*) evidence_count=0 ;; esac
+        case "$min_score" in ''|*[!0-9]*) min_score=80 ;; esac
 
-        target_group="$(target_group_for_detected_type "$type")"
+        [ "$hard_deny" = "0" ] || return 0
+        [ "$enabled" = "1" ] || return 0
+        [ "$auto_excluded" = "1" ] && return 0
+        [ -n "$target_group" ] || return 0
+        [ "$auto_score" -ge "$min_score" ] || return 0
+        [ "$evidence_count" -ge 2 ] || return 0
+        mac_in_named_list blocklist "$mac" && return 0
 
-        case ",$ports," in
-                *,8123,*)
-                        type="server"; confidence=95; reason="Home Assistant port 8123 is open"; target_group="$NO_RESTRICTIONS_GROUP" ;;
-                *,8006,*)
-                        type="server"; confidence=95; reason="Proxmox port 8006 is open"; target_group="$NO_RESTRICTIONS_GROUP" ;;
-                *,3000,*|*,3001,*)
-                        if text_has "$lower" 'adguard|grafana|server|home|nas'; then
-                                type="server"; confidence=90; reason="server-like web service port is open"; target_group="$NO_RESTRICTIONS_GROUP"
-                        fi ;;
+        case "$current_group" in
+                ""|"Не настроено"|"Not configured")
+                        uci_set_if_changed "sheepfold.$section.group" "$target_group"
+                        uci_set_if_changed "sheepfold.$section.auto_group_assigned" 1
+                        uci_set_if_changed "sheepfold.$section.auto_group_reason" "$reason"
+                        log_event "Устройство ${name:-$mac}, IP ${ip:-неизвестен} автоматически добавлено в группу \"$target_group\": $reason; score=$auto_score; evidence=$evidence_count"
+                        ;;
         esac
+}
 
-        if printf '%s' "$ports" | grep -Eq '(^|,)(445|548|2049)(,|$)'; then
-                type="server"
-                [ "$confidence" -lt 86 ] && confidence=86
-                reason="file sharing service is open"
-                target_group="$NO_RESTRICTIONS_GROUP"
+write_common_observation() {
+        section="$1"
+        mac="$2"
+        ip="$3"
+        name="$4"
+        sources="$5"
+        now="$6"
+
+        write_runtime_observation "$mac" "$ip" "$name" "$sources" "$now"
+        [ -n "$ip" ] && uci_set_if_changed "sheepfold.$section.ip" "$ip"
+        [ -n "$name" ] && [ -z "$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)" ] && \
+                uci_set_if_changed "sheepfold.$section.name" "$name"
+
+        if [ "$(uci -q get "sheepfold.$section.just_detected" 2>/dev/null || true)" = "1" ]; then
+                log_event "Обнаружено новое устройство: $mac, IP ${ip:-неизвестен}${name:+, имя $name}"
+                uci_delete_if_present "sheepfold.$section.just_detected"
         fi
-
-        if printf '%s' "$ports" | grep -Eq '(^|,)(554|8554)(,|$)' && text_has "$lower" 'nvr|dvr|recorder|video|cctv|ltv|hikvision|dahua|axis|uniview'; then
-                type="server"
-                [ "$confidence" -lt 88 ] && confidence=88
-                reason="surveillance streaming service is open"
-                target_group="$NO_RESTRICTIONS_GROUP"
-        fi
-
-        if printf '%s' "$ports" | grep -Eq '(^|,)(554|8554)(,|$)' && text_has "$lower" '(^|[^a-z0-9])(ip[-_ ]?cam|webcam|camera|cam[0-9]+|cam[-_ ][0-9]+)([^a-z0-9]|$)'; then
-                type="camera"
-                [ "$confidence" -lt 88 ] && confidence=88
-                reason="camera streaming service is open"
-                target_group="$(target_group_for_detected_type "$type")"
-        fi
-
-        if printf '%s' "$ports" | grep -Eq '(^|,)(9100|631)(,|$)'; then
-                type="printer"
-                [ "$confidence" -lt 86 ] && confidence=86
-                reason="printer service is open"
-                target_group="$(target_group_for_detected_type "$type")"
-        fi
-
-        # Имя сетевого устройства имеет максимальный приоритет над портовыми эвристиками.
-        if name_is_network_infrastructure "$name"; then
-                type="network"
-                confidence=96
-                reason="network infrastructure marker"
-                target_group=""
-        fi
-
-        printf '%s\t%s\t%s\t%s\n' "$type" "$confidence" "$target_group" "$reason"
 }
 
 write_manual_device_observation() {
@@ -339,18 +298,9 @@ write_manual_device_observation() {
         section="$(ensure_device_section "$mac")"
         device_type="$(uci -q get "sheepfold.$section.device_type" 2>/dev/null || printf unknown)"
 
-        # Ручной тип устройства всегда старше автоопределения.
-        uci -q set "sheepfold.$section.ip=$ip"
-        [ -n "$name" ] && [ -z "$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)" ] && uci -q set "sheepfold.$section.name=$name"
-        uci -q set "sheepfold.$section.detection_sources=$sources"
-        uci -q set "sheepfold.$section.detection_updated_at=$now"
-
-        if [ "$(uci -q get "sheepfold.$section.just_detected" 2>/dev/null || true)" = "1" ]; then
-                log_event "Обнаружено новое устройство: $mac, IP ${ip:-неизвестен}${name:+, имя $name}"
-                uci -q delete "sheepfold.$section.just_detected" 2>/dev/null || true
-        fi
-
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$mac" "$ip" "$name" "$device_type" "" "" "manual device type" "" >> "$CACHE_FILE"
+        write_common_observation "$section" "$mac" "$ip" "$name" "$sources" "$now"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$mac" "$ip" "$name" "$device_type" "" "" "manual device type" "" >> "$CACHE_FILE"
 }
 
 write_locked_device_observation() {
@@ -360,23 +310,17 @@ write_locked_device_observation() {
         sources="$4"
         now="$5"
         section="$(ensure_device_section "$mac")"
-        device_type="$(uci -q get "sheepfold.$section.detected_type" 2>/dev/null || uci -q get "sheepfold.$section.device_type" 2>/dev/null || printf unknown)"
+        device_type="$(uci -q get "sheepfold.$section.detected_type" 2>/dev/null || printf unknown)"
         confidence="$(uci -q get "sheepfold.$section.detection_confidence" 2>/dev/null || true)"
+        target_group="$(uci -q get "sheepfold.$section.detection_target_group" 2>/dev/null || true)"
         reason="$(uci -q get "sheepfold.$section.detection_reason" 2>/dev/null || printf 'locked confident device type')"
-        target_group="$(target_group_for_detected_type "$device_type")"
+        auto_score="$(uci -q get "sheepfold.$section.detection_auto_group_score" 2>/dev/null || printf 0)"
+        evidence="$(uci -q get "sheepfold.$section.detection_evidence" 2>/dev/null || true)"
 
-        uci -q set "sheepfold.$section.ip=$ip"
-        [ -n "$name" ] && [ -z "$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)" ] && uci -q set "sheepfold.$section.name=$name"
-        uci -q set "sheepfold.$section.detection_sources=$sources"
-        uci -q set "sheepfold.$section.detection_updated_at=$now"
-
-        if [ "$(uci -q get "sheepfold.$section.just_detected" 2>/dev/null || true)" = "1" ]; then
-                log_event "Обнаружено новое устройство: $mac, IP ${ip:-неизвестен}${name:+, имя $name}"
-                uci -q delete "sheepfold.$section.just_detected" 2>/dev/null || true
-        fi
-
-        # Закреплённый тип не запускает повторно побочные действия автонастройки.
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$mac" "$ip" "$name" "$device_type" "$confidence" "$target_group" "$reason" "" >> "$CACHE_FILE"
+        write_common_observation "$section" "$mac" "$ip" "$name" "$sources" "$now"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$mac" "$ip" "$name" "$device_type" "$confidence" "$target_group" \
+                "$reason" "" "$auto_score" "$evidence" >> "$CACHE_FILE"
 }
 
 write_detection() {
@@ -384,51 +328,67 @@ write_detection() {
         ip="$2"
         name="$3"
         sources="$4"
-        mode="$5"
-        ports="$6"
-        now="$7"
-        result="$(classify_device "$name" "$ports")"
+        ports="$5"
+        now="$6"
+        section="$(ensure_device_section "$mac")"
+        static_name="$(static_name_for_mac "$mac" || true)"
+        signal_file="$(signal_file_for_mac "$mac" || true)"
+        fingerprint="$(build_fingerprint "$mac" "$name" "$static_name" "$signal_file" "$ports")"
+        result="$("$CLASSIFIER" "$name" "$ports" "$static_name" "$signal_file" "$mac")"
         device_type="$(printf '%s' "$result" | awk -F '\t' '{ print $1 }')"
         confidence="$(printf '%s' "$result" | awk -F '\t' '{ print $2 }')"
         target_group="$(printf '%s' "$result" | awk -F '\t' '{ print $3 }')"
         reason="$(printf '%s' "$result" | awk -F '\t' '{ print $4 }')"
-        section="$(ensure_device_section "$mac")"
+        auto_score="$(printf '%s' "$result" | awk -F '\t' '{ print $5 }')"
+        evidence="$(printf '%s' "$result" | awk -F '\t' '{ print $6 }')"
+        evidence_count="$(printf '%s' "$result" | awk -F '\t' '{ print $7 }')"
+        hard_deny="$(printf '%s' "$result" | awk -F '\t' '{ print $8 }')"
+        policy_version="$(printf '%s' "$result" | awk -F '\t' '{ print $9 }')"
+        oui_vendor="$(printf '%s' "$result" | awk -F '\t' '{ print $10 }')"
+        old_fingerprint="$(uci -q get "sheepfold.$section.detection_fingerprint" 2>/dev/null || true)"
 
-        uci -q set "sheepfold.$section.ip=$ip"
-        [ -n "$name" ] && [ -z "$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)" ] && uci -q set "sheepfold.$section.name=$name"
-        uci -q set "sheepfold.$section.detected_type=$device_type"
-        uci -q set "sheepfold.$section.detection_confidence=$confidence"
-        uci -q set "sheepfold.$section.detection_reason=$reason"
-        uci -q set "sheepfold.$section.detection_sources=$sources"
-        uci -q set "sheepfold.$section.detection_ports=$ports"
-        uci -q set "sheepfold.$section.detection_updated_at=$now"
-
-        if [ "$(uci -q get "sheepfold.$section.just_detected" 2>/dev/null || true)" = "1" ]; then
-                log_event "Обнаружено новое устройство: $mac, IP ${ip:-неизвестен}${name:+, имя $name}"
-                uci -q delete "sheepfold.$section.just_detected" 2>/dev/null || true
+        write_common_observation "$section" "$mac" "$ip" "$name" "$sources" "$now"
+        uci_set_if_changed "sheepfold.$section.detected_type" "$device_type"
+        uci_set_if_changed "sheepfold.$section.detection_confidence" "$confidence"
+        uci_set_if_changed "sheepfold.$section.detection_reason" "$reason"
+        uci_set_if_changed "sheepfold.$section.detection_target_group" "$target_group"
+        uci_set_if_changed "sheepfold.$section.detection_auto_group_score" "$auto_score"
+        uci_set_if_changed "sheepfold.$section.detection_evidence" "$evidence"
+        uci_set_if_changed "sheepfold.$section.detection_evidence_count" "$evidence_count"
+        uci_set_if_changed "sheepfold.$section.detection_hard_deny" "$hard_deny"
+        uci_set_if_changed "sheepfold.$section.detection_policy_version" "$policy_version"
+        uci_set_if_changed "sheepfold.$section.detection_fingerprint" "$fingerprint"
+        uci_set_if_changed "sheepfold.$section.detection_ports" "$ports"
+        if [ -n "$oui_vendor" ]; then
+                uci_set_if_changed "sheepfold.$section.detection_oui_vendor" "$oui_vendor"
+        else
+                uci_delete_if_present "sheepfold.$section.detection_oui_vendor"
+        fi
+        if [ "$old_fingerprint" != "$fingerprint" ]; then
+                uci_set_if_changed "sheepfold.$section.detection_updated_at" "$now"
         fi
 
-        assign_no_restrictions_if_allowed "$section" "$mac" "$ip" "$name" "$confidence" "$target_group" "$reason" "$device_type"
+        assign_no_restrictions_if_allowed "$section" "$mac" "$ip" "$name" "$target_group" \
+                "$reason" "$auto_score" "$evidence_count" "$hard_deny"
 
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$mac" "$ip" "$name" "$device_type" "$confidence" "$target_group" "$reason" "$ports" >> "$CACHE_FILE"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$mac" "$ip" "$name" "$device_type" "$confidence" "$target_group" \
+                "$reason" "$ports" "$auto_score" "$evidence" >> "$CACHE_FILE"
 }
 
 scan_devices() {
         mode="$(global_get detection_mode full)"
         max_hosts="$(global_get detector_max_hosts_per_scan 16)"
-        min_device_type_confidence="$(global_get detector_min_device_type_confidence 70)"
+        min_confidence="$(global_get detector_min_device_type_confidence 70)"
         now="$(date +%s)"
         scanned=0
 
-        case "$max_hosts" in
-                ''|*[!0-9]*) max_hosts=16 ;;
-        esac
-        case "$min_device_type_confidence" in
-                ''|*[!0-9]*) min_device_type_confidence=70 ;;
-        esac
+        case "$max_hosts" in ''|*[!0-9]*) max_hosts=16 ;; esac
+        case "$min_confidence" in ''|*[!0-9]*) min_confidence=70 ;; esac
 
-        mkdir -p "$CACHE_DIR"
-        chmod 700 "$CACHE_DIR"
+        mkdir -p "$CACHE_DIR" "$STATE_DIR" "$SIGNAL_DIR"
+        chmod 700 "$CACHE_DIR" "$STATE_DIR" "$SIGNAL_DIR" 2>/dev/null || true
+        rm -f "$DIRTY_FLAG"
         append_router_devices
         : > "$CACHE_FILE"
 
@@ -443,36 +403,40 @@ scan_devices() {
                         continue
                 fi
 
+                static_name="$(static_name_for_mac "$mac" || true)"
+                signal_file="$(signal_file_for_mac "$mac" || true)"
+                stored_ports=""
+                [ -z "$section" ] || stored_ports="$(uci -q get "sheepfold.$section.detection_ports" 2>/dev/null || true)"
+                current_fingerprint="$(build_fingerprint "$mac" "$name" "$static_name" "$signal_file" "$stored_ports")"
+
                 if [ -n "$section" ]; then
                         existing_confidence="$(uci -q get "sheepfold.$section.detection_confidence" 2>/dev/null || true)"
                         existing_type="$(uci -q get "sheepfold.$section.detected_type" 2>/dev/null || true)"
-                        force_network_reclassification=0
-                        case "$existing_confidence" in
-                                ''|*[!0-9]*) existing_confidence=0 ;;
-                        esac
+                        existing_fingerprint="$(uci -q get "sheepfold.$section.detection_fingerprint" 2>/dev/null || true)"
+                        existing_policy="$(uci -q get "sheepfold.$section.detection_policy_version" 2>/dev/null || true)"
+                        case "$existing_confidence" in ''|*[!0-9]*) existing_confidence=0 ;; esac
 
-                        # Сетевой маркер исправляет даже ранее закреплённую ошибочную классификацию.
-                        if name_is_network_infrastructure "$name" && [ "$existing_type" != "network" ]; then
-                                force_network_reclassification=1
-                        fi
-
-                        # Уверенный тип не определяется заново, пока не появился сетевой запрет.
-                        if [ -n "$existing_type" ] && [ "$existing_confidence" -ge "$min_device_type_confidence" ] && [ "$force_network_reclassification" != "1" ]; then
+                        if [ -n "$existing_type" ] && [ "$existing_confidence" -ge "$min_confidence" ] && \
+                           [ "$existing_fingerprint" = "$current_fingerprint" ] && [ "$existing_policy" = "$POLICY_VERSION" ]; then
                                 write_locked_device_observation "$mac" "$ip" "$name" "$sources" "$now"
                                 continue
                         fi
                 fi
 
-                ports=""
+                ports="$stored_ports"
                 if [ "$mode" = "full" ] && [ "$scanned" -lt "$max_hosts" ]; then
                         ports="$(scan_ports "$ip" "$mode" || true)"
                         scanned=$((scanned + 1))
                 fi
-                write_detection "$mac" "$ip" "$name" "$sources" "$mode" "$ports" "$now"
+                write_detection "$mac" "$ip" "$name" "$sources" "$ports" "$now"
         done
 
-        uci -q set "sheepfold.global.detector_last_scan=$now"
-        uci -q commit sheepfold
+        printf '%s\n' "$now" > "$LAST_SCAN_FILE"
+        chmod 600 "$LAST_SCAN_FILE" 2>/dev/null || true
+        if [ -e "$DIRTY_FLAG" ]; then
+                uci -q commit sheepfold
+                rm -f "$DIRTY_FLAG"
+        fi
 }
 
 case "$COMMAND" in
@@ -483,10 +447,10 @@ case "$COMMAND" in
                 [ -r "$CACHE_FILE" ] && cat "$CACHE_FILE"
                 ;;
         classify)
-                classify_device "${2:-}" "${3:-}"
+                exec "$CLASSIFIER" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}"
                 ;;
         *)
-                echo "Usage: sheepfold-device-detector [scan|status|classify <name> [ports]]" >&2
+                echo "Usage: sheepfold-device-detector [scan|status|classify <name> [ports] [static-name] [signal-file] [mac]]" >&2
                 exit 1
                 ;;
 esac
