@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=119
+PKG_RELEASE:=120
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -91,6 +91,7 @@ ensure_global_option router_ntp_servers 'ntp1.vniiftri.ru ntp2.ntp-servers.net 3
 ensure_global_option wps_short_press_action 'router_default'
 ensure_global_option wps_long_press_action 'router_default'
 ensure_global_option router_led_control 'router_default'
+ensure_global_option router_led_repair '0'
 ensure_global_option blocked_page_enabled '1'
 ensure_global_option blocked_page_text 'Интернет временно недоступен по семейным правилам. Если это ошибка, обратитесь к родителю.'
 ensure_global_option blocked_page_port '5202'
