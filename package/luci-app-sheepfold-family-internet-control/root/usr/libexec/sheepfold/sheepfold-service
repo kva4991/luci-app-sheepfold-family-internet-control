@@ -4,6 +4,7 @@ set -eu
 COMMAND="${1:-run}"
 DEFAULT_RAM_LOG="/tmp/sheepfold/events.log"
 DETECTOR="/usr/libexec/sheepfold/sheepfold-device-detector"
+SCAN_LOCK="/tmp/sheepfold/device-detection.lock"
 UPDATER="/usr/libexec/sheepfold/sheepfold-updater"
 ROUTER_CONTROL="/usr/libexec/sheepfold/sheepfold-router-control"
 LEASES_FILE="/tmp/dhcp.leases"
@@ -58,6 +59,18 @@ handle_router_control() {
         "$ROUTER_CONTROL" blocked-page-apply >/dev/null 2>&1 || true
 }
 
+run_detector() (
+        mkdir -p /tmp/sheepfold
+        attempts=0
+        while ! mkdir "$SCAN_LOCK" 2>/dev/null; do
+                attempts=$((attempts + 1))
+                [ "$attempts" -lt 30 ] || return 1
+                sleep 1
+        done
+        trap 'rmdir "$SCAN_LOCK" 2>/dev/null || true' EXIT HUP INT TERM
+        "$DETECTOR" "$@"
+)
+
 consume_signal_change() {
         [ -e "$SIGNAL_CHANGE_FLAG" ] || return 1
         mv "$SIGNAL_CHANGE_FLAG" "$SIGNAL_PROCESSING_FLAG" 2>/dev/null
@@ -110,7 +123,7 @@ case "$COMMAND" in
                                 fi
 
                                 if [ "$LEASES_STATE" != "$LAST_LEASES_STATE" ] || [ "$SIGNALS_CHANGED" = "1" ]; then
-                                        if "$DETECTOR" scan changed >/dev/null 2>&1; then
+                                        if run_detector scan changed >/dev/null 2>&1; then
                                                 [ "$SIGNALS_CHANGED" = "1" ] && finish_signal_change
                                                 LAST_LEASES_STATE="$LEASES_STATE"
                                                 LAST_FULL_SCAN="$NOW"
@@ -118,7 +131,7 @@ case "$COMMAND" in
                                                 restore_signal_change
                                         fi
                                 elif [ $((NOW - LAST_FULL_SCAN)) -ge "$INTERVAL" ]; then
-                                        if "$DETECTOR" scan full >/dev/null 2>&1; then
+                                        if run_detector scan full >/dev/null 2>&1; then
                                                 LAST_FULL_SCAN="$NOW"
                                         fi
                                 fi
@@ -133,7 +146,7 @@ case "$COMMAND" in
                 handle_update_request
                 handle_reboot_request
                 handle_router_control
-                [ -x "$DETECTOR" ] && "$DETECTOR" scan >/dev/null 2>&1 || true
+                [ -x "$DETECTOR" ] && run_detector scan >/dev/null 2>&1 || true
                 echo "Sheepfold reload complete"
                 ;;
         *)
