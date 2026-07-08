@@ -13,56 +13,58 @@ CONTROL_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-router-control-legacy)"
 PAIR_ACTIVATE="$(path /usr/libexec/sheepfold/sheepfold-pair-activate)"
 PAIR_DEVICE="$(path /usr/libexec/sheepfold/sheepfold-pair-device)"
 PAIR_COMMON="$(path /usr/libexec/sheepfold/sheepfold-pair-common)"
+PAIR_API="$(path /usr/libexec/sheepfold/sheepfold-api-pair)"
+STATUS_API="$(path /usr/libexec/sheepfold/sheepfold-api-client-status)"
 AI_GATE="$(path /usr/libexec/sheepfold/sheepfold-ai-gate)"
-AI_POLICY="$(path /usr/libexec/sheepfold/sheepfold-ai-parenting-policy)"
+AI_HANDLER="$(path /usr/libexec/sheepfold/sheepfold-ai-handler)"
 ACTIVITY_LOG="$(path /usr/libexec/sheepfold/sheepfold-activity-log)"
 MAINTENANCE_WINDOW="$(path /usr/libexec/sheepfold/sheepfold-maintenance-window)"
 KEY_DERIVE="$(path /usr/libexec/sheepfold/sheepfold-key-derive)"
 OPENSSL_ENSURE="$(path /usr/libexec/sheepfold/sheepfold-openssl-ensure)"
 USB_STORAGE="$(path /usr/libexec/sheepfold/sheepfold-usb-storage)"
-USB_DECOY="$(path /usr/libexec/sheepfold/sheepfold-usb-decoy)"
 WELL_KNOWN_GENERATOR="$(path /www/.well-known/sheepfold.json.sh)"
 ACL="$(path /usr/share/rpcd/acl.d/luci-app-sheepfold-family-internet-control.json)"
+PRIVACY_NOTICE="$(path /usr/share/sheepfold/PRIVACY_NOTICE.md)"
 
 for required in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" \
-    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$PAIR_COMMON" "$AI_GATE" \
-    "$OPENSSL_ENSURE" "$ACL"; do
+    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" \
+    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
+    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
+    "$ACL" "$PRIVACY_NOTICE"; do
     [ -f "$required" ] || die "missing file $required"
 done
 
-# Все новые helper-скрипты создаются через Git contents API как обычные файлы.
-# Явно восстанавливаем executable bit, иначе cron и LuCI fs.exec молча не работают.
+# Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно.
 for executable in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" \
-    "$(path /usr/libexec/sheepfold/sheepfold-api-client-status)" \
-    "$(path /usr/libexec/sheepfold/sheepfold-api-pair)" \
-    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" "$AI_POLICY" \
-    "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" \
-    "$OPENSSL_ENSURE" "$USB_STORAGE" "$USB_DECOY" \
+    "$STATUS_API" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
+    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" \
     "$WELL_KNOWN_GENERATOR" \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
-    [ ! -f "$executable" ] || chmod 0755 "$executable"
+    chmod 0755 "$executable"
 done
-chmod 0644 "$PAIR_COMMON" "$ACL"
+chmod 0644 "$PAIR_COMMON" "$ACL" "$PRIVACY_NOTICE"
 
-# Постоянное хранилище содержит только хэши Bearer-токенов. Plaintext туда не
-# попадает; каталог недоступен обычным пользователям роутера.
 mkdir -p "$(path /etc/sheepfold/tokens)"
 chmod 0700 "$(path /etc/sheepfold)" "$(path /etc/sheepfold/tokens)" 2>/dev/null || true
 
+# Публичный CGI обязан скрывать выпуск кода и защищать диагностику.
 grep -q 'sheepfold-api-legacy' "$CGI" || die "public CGI does not delegate through the hardened dispatcher"
 grep -q '\[ "\$path_info" = "/pair-token" \]' "$CGI" || die "public CGI does not return 404 for pair-token"
 ! grep -q '^generate_pair_token_json()' "$CGI" || die "pair-token generator is present in public CGI"
 ! grep -q '^[[:space:]]*/pair-token)' "$CGI" || die "pair-token route is present in public CGI"
-grep -q 'sheepfold-ai-gate' "$CGI" || die "AI gate is not connected"
+grep -q 'AI_HANDLER=' "$CGI" || die "role-aware AI handler is not connected"
+grep -q '/router-info|/pair-status)' "$CGI" || die "diagnostic routes are not intercepted"
+grep -q 'query_token_forbidden' "$CGI" || die "Bearer token is still accepted in query string"
 
+# Pairing не создаёт администратора и повторно проверяет blocklist.
 grep -q 'PAIR_DEVICE=.*/sheepfold-pair-device' "$CONTROL" || die "pair-admin-device is not intercepted"
 grep -q 'PAIR_ACTIVATE=.*/sheepfold-pair-activate' "$CONTROL" || die "pairing-code activation is not intercepted"
 grep -q 'exec "\$PAIR_DEVICE"' "$CONTROL" || die "pair device helper is not executed"
 grep -q 'exec "\$PAIR_ACTIVATE"' "$CONTROL" || die "pair activation helper is not executed"
 grep -q '/etc/sheepfold/tokens' "$CONTROL" || die "persistent administrator token storage is missing"
-
 grep -q 'pair_admin_section_for_login' "$PAIR_ACTIVATE" || die "existing administrator lookup is missing"
 grep -q 'Create the account in LuCI first' "$PAIR_ACTIVATE" || die "missing-admin failure is not explicit"
 ! grep -q '=administrator' "$PAIR_ACTIVATE" || die "pair activation can create an administrator"
@@ -72,24 +74,36 @@ block_checks="$(grep -c 'pair_list_has_mac blocklist' "$PAIR_DEVICE" || true)"
 ! grep -q 'remove.*blocklist\|delete.*blocklist' "$PAIR_DEVICE" || die "pairing can mutate blocklist"
 grep -q 'pair_store_token' "$PAIR_DEVICE" || die "successful pairing does not store a token hash"
 grep -q 'pair_valid_code' "$PAIR_COMMON" || die "pairing-code alphabet validation is missing"
+grep -q 'device_id' "$PAIR_DEVICE" || die "pairing does not return stable device id"
 
-grep -q 'client_header_required' "$AI_GATE" || die "AI native-client check is missing"
+# AI gate проверяет идентичность, роль, согласие и квоту серверными данными.
+grep -q 'device_identity_mismatch' "$AI_GATE" || die "AI device identity verification is missing"
+grep -q 'client_role_mismatch' "$AI_GATE" || die "AI role verification is missing"
+grep -q 'parental_consent_required' "$AI_GATE" || die "child AI parental consent is missing"
 grep -q 'ai_rate_limit_requests' "$AI_GATE" || die "AI per-device request limit is missing"
-grep -q 'ai_rate_limit_window_seconds' "$AI_GATE" || die "AI rate-limit window is missing"
 grep -q 'privileged_context_forbidden' "$AI_GATE" || die "AI privileged context guard is missing"
+grep -q 'Проверенная роль: ребёнок' "$AI_HANDLER" || die "child AI prompt is missing"
+grep -q 'Обезличенное состояние роутера' "$AI_HANDLER" || die "AI diagnostics masking is missing"
 
+# Журналы и ключи должны быть транзакционными.
+grep -q 'sheepfold.log' "$ACTIVITY_LOG" || die "explicit activity-log filename format is missing"
+grep -q 'restore_staged_logs' "$ACTIVITY_LOG" || die "activity-log rollback is missing"
+! grep -q 'mtime "+7"' "$ACTIVITY_LOG" || die "hard-coded seven-day retention remains"
+grep -q '.key-derive.lock' "$KEY_DERIVE" || die "key initialization lock is missing"
+grep -q 'extroot_not_implemented_safely' "$USB_STORAGE" || die "unsafe automatic extroot remains enabled"
+grep -q 'PRIVACY_NOTICE_SOURCE' "$USB_STORAGE" || die "USB privacy notice is not copied after mount"
+
+# LuCI не получает общий read/write wildcard на runtime-каталог.
+! grep -q '"/tmp/sheepfold/\*"' "$ACL" || die "broad runtime ACL wildcard remains"
 grep -q 'sheepfold-openssl-ensure' "$ACL" || die "OpenSSL verification helper is absent from LuCI ACL"
 grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable individual logs"
 
 for script in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" \
-    "$(path /usr/libexec/sheepfold/sheepfold-api-client-status)" \
-    "$(path /usr/libexec/sheepfold/sheepfold-api-pair)" \
-    "$PAIR_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" \
-    "$AI_POLICY" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$USB_DECOY" \
-    "$WELL_KNOWN_GENERATOR"; do
-    [ ! -f "$script" ] || /bin/sh -n "$script" || die "shell syntax error in $script"
+    "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
+    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR"; do
+    /bin/sh -n "$script" || die "shell syntax error in $script"
 done
 
 exit 0
