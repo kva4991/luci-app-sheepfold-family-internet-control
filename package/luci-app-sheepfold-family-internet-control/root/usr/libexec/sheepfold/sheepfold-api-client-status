@@ -53,22 +53,31 @@ case "$status" in
     block|blocked|deny|denied|disabled|offline)
         internet_state=disabled
         access_mode=blocked
-        message="Интернет ограничен правилами Sheepfold."
+        case "$reason" in
+            global_block) message="Интернет отключён общей семейной блокировкой." ;;
+            blocklist) message="Устройство находится в чёрном списке." ;;
+            *) message="Интернет ограничен правилами Sheepfold." ;;
+        esac
         ;;
-    temporary|temp-access|temporary_access)
+    temporary|temp-access|temp_access|temporary_access)
         internet_state=enabled
         access_mode=temporary
         message="Действует временный доступ."
         ;;
     scheduled)
-        internet_state=enabled
+        # Пока вычислитель расписания не вернул фактический результат, нельзя
+        # сообщать ребёнку, что интернет подтверждённо включён.
+        internet_state=unknown
         access_mode=scheduled
-        message="Доступ определяется расписанием."
+        message="Доступ определяется расписанием. Обновите статус после применения правила."
         ;;
     restricted)
-        internet_state=enabled
+        internet_state=unknown
         access_mode=restricted
-        message="Доступ ограничен отдельными правилами."
+        case "$reason" in
+            temporary_access_expired) message="Временный доступ закончился; роутер применяет обычные правила." ;;
+            *) message="Доступ ограничен отдельными правилами; полный статус пока не подтверждён." ;;
+        esac
         ;;
     *)
         internet_state=unknown
@@ -76,6 +85,7 @@ case "$status" in
         case "$reason" in
             mac_not_found) message="Роутер пока не определил это устройство." ;;
             device_not_registered) message="Устройство ещё не зарегистрировано в Sheepfold." ;;
+            device_not_configured) message="Для устройства ещё не выбраны правила доступа." ;;
             *) message="Статус доступа пока неизвестен." ;;
         esac
         ;;
