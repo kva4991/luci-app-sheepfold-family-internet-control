@@ -9,7 +9,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.sheepfoldchild"
+        applicationId = "app.sheepfold.child"
         minSdk = 21
         targetSdk = 35
         versionCode = 2
