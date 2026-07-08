@@ -4,7 +4,7 @@
     "order": 65,
     "action": {
       "type": "view",
-      "path": "sheepfold/overview-secure"
+      "path": "sheepfold/overview-personal"
     },
     "depends": {
       "acl": [ "luci-app-sheepfold-family-internet-control" ]
