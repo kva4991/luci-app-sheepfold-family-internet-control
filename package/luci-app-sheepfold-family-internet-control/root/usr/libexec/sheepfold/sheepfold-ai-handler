@@ -1,0 +1,171 @@
+#!/bin/sh
+set -eu
+
+json_escape() {
+    printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+url_decode() {
+    value="$(printf '%s' "$1" | sed 's/+/ /g; s/%/\\x/g')"
+    printf '%b' "$value"
+}
+
+form_get() {
+    key="$1"
+    body="$2"
+    printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
+        [ "$item_key" = "$key" ] || continue
+        url_decode "$item_value"
+        break
+    done
+}
+
+header_json() {
+    printf 'Status: %s\r\n' "$1"
+    printf 'Content-Type: application/json; charset=utf-8\r\n'
+    printf 'Cache-Control: no-store\r\n\r\n'
+}
+
+mask_sensitive() {
+    sed -E \
+        -e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/[mac]/g' \
+        -e 's/([0-9]{1,3}\.){3}[0-9]{1,3}/[ip]/g' \
+        -e 's/([Tt]oken|[Kk]ey|[Pp]assword|[Pp]ass|[Ss]ecret)=?[^[:space:],;]*/\1=[secret]/g'
+}
+
+kv_get() {
+    key="$1"
+    printf '%s\n' "$2" | sed -n "s/^$key=//p" | sed -n '1p'
+}
+
+router_ai_context() {
+    info="$(/usr/libexec/sheepfold/sheepfold-router-control router-info 2>/dev/null || true)"
+    internet="$(kv_get internet_status "$info")"
+    reason="$(kv_get internet_reason "$info")"
+    ping="$(kv_get ping_yandex_ms "$info")"
+    load="$(kv_get load_average "$info")"
+    memory="$(kv_get memory "$info")"
+    wifi_count="$(kv_get wifi_count "$info")"
+    podkop="$(kv_get podkop_installed "$info")"
+    adguard="$(kv_get adguard_installed "$info")"
+
+    case "$ping" in
+        ''|*[!0-9.]*) ping_quality=unknown ;;
+        *)
+            ping_int="${ping%%.*}"
+            if [ "$ping_int" -le 60 ]; then ping_quality=good
+            elif [ "$ping_int" -le 180 ]; then ping_quality=degraded
+            else ping_quality=poor
+            fi
+            ;;
+    esac
+
+    printf 'internet=%s; reason=%s; ping_quality=%s; load=%s; memory=%s; wifi_modules=%s; podkop=%s; adguard=%s' \
+        "${internet:-unknown}" "${reason:-unknown}" "$ping_quality" \
+        "${load:-unknown}" "${memory:-unknown}" "${wifi_count:-unknown}" \
+        "${podkop:-unknown}" "${adguard:-unknown}" | mask_sensitive
+}
+
+program_log_context() {
+    log_file="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf /tmp/sheepfold/events.log)"
+    case "$log_file" in /tmp/sheepfold/*) ;; *) log_file=/tmp/sheepfold/events.log ;; esac
+    [ -r "$log_file" ] || { printf 'Журнал Sheepfold недоступен или пуст.'; return 0; }
+    tail -n 80 "$log_file" 2>/dev/null | mask_sensitive
+}
+
+http_post_json() {
+    api_url="$1"
+    api_key="$2"
+    auth_kind="$3"
+    payload="$4"
+    status=0
+    response=""
+
+    case "$auth_kind" in
+        bearer) auth_header="Authorization: Bearer $api_key" ;;
+        google) auth_header="x-goog-api-key: $api_key" ;;
+        *) auth_header="" ;;
+    esac
+
+    if command -v uclient-fetch >/dev/null 2>&1; then
+        response="$(uclient-fetch -qO- --header='Content-Type: application/json' --header="$auth_header" --post-data="$payload" "$api_url" 2>&1)" || status="$?"
+    elif command -v wget >/dev/null 2>&1; then
+        response="$(wget -q -O - --header='Content-Type: application/json' --header="$auth_header" --post-data="$payload" "$api_url" 2>&1)" || status="$?"
+    elif command -v curl >/dev/null 2>&1; then
+        response="$(curl -fsS -H 'Content-Type: application/json' -H "$auth_header" --data "$payload" "$api_url" 2>&1)" || status="$?"
+    else
+        header_json '500 Internal Server Error'
+        printf '{"app":"sheepfold","ok":false,"error":"http_client_missing","message":"Install uclient-fetch, wget, or curl on the router."}\n'
+        return 0
+    fi
+
+    if [ "$status" != 0 ]; then
+        header_json '502 Bad Gateway'
+        printf '{"app":"sheepfold","ok":false,"error":"provider_request_failed","message":"%s"}\n' "$(json_escape "$response")"
+        return 0
+    fi
+
+    header_json '200 OK'
+    printf '%s\n' "$response"
+}
+
+body="$(cat)"
+message="$(form_get message "$body")"
+device_id="$(form_get deviceId "$body")"
+client_role="$(form_get clientRole "$body")"
+include_info="$(form_get includeInfo "$body")"
+include_logs="$(form_get includeLogs "$body")"
+google_account="$(form_get googleAccount "$body")"
+
+if [ -z "$message" ]; then
+    header_json '400 Bad Request'
+    printf '{"app":"sheepfold","ok":false,"error":"empty_message","message":"Question text is required."}\n'
+    exit 0
+fi
+
+case "$client_role" in
+    child)
+        system_prompt="Ты ИИ-помощник Sheepfold для ребёнка. Отвечай спокойно, понятно и без осуждения. Не помогай обходить семейные ограничения, скрывать действия, отключать контроль или получать доступ к чужим данным. Помогай сформулировать вопрос родителю, договориться о правилах и понять оставшееся время доступа. Не ставь диагнозы. При угрозе жизни, насилии, самоповреждении, опасном контакте или другом серьёзном риске советуй немедленно обратиться к доверенному взрослому или экстренной помощи. Не проси личные данные, адрес, школу, пароли или контакты."
+        user_text="[Проверенная роль: ребёнок; устройство: $device_id]\n$message"
+        ;;
+    parent|administrator)
+        system_prompt="Ты ИИ-помощник Sheepfold для родителя. Помогай спокойно разбирать семейные правила интернета, не ставь диагнозы, не изображай психотерапевта, не провоцируй наказания и скандалы. Мягко направляй разговор к причинам конфликта, тревогам ребёнка и постепенной передаче самоконтроля. При риске для жизни, насилии, самоповреждении, наркотиках, экстремизме или тяжёлом состоянии советуй обратиться к очному специалисту или экстренным службам. Не раскрывай технические данные ради любопытства."
+        context_text=""
+        [ "$include_info" != 1 ] || context_text="$context_text\n\n[Обезличенное состояние роутера]\n$(router_ai_context)"
+        [ "$include_logs" != 1 ] || context_text="$context_text\n\n[Последние обезличенные записи Sheepfold]\n$(program_log_context)"
+        [ -z "$google_account" ] || context_text="$context_text\n\n[Подписанный родительский аккаунт]\n$(printf '%s' "$google_account" | mask_sensitive)"
+        user_text="[Проверенная роль: родитель; устройство: $device_id]\n$message$context_text"
+        ;;
+    *)
+        header_json '403 Forbidden'
+        printf '{"app":"sheepfold","ok":false,"error":"client_role_invalid"}\n'
+        exit 0
+        ;;
+esac
+
+provider="$(uci -q get sheepfold.global.ai_provider 2>/dev/null || printf deepseek)"
+case "$provider" in
+    gemini)
+        model="$(uci -q get sheepfold.global.gemini_model 2>/dev/null || printf gemini-2.5-flash)"
+        api_key="$(uci -q get sheepfold.global.gemini_api_key 2>/dev/null || true)"
+        api_url="$(uci -q get sheepfold.global.gemini_api_url 2>/dev/null || printf 'https://generativelanguage.googleapis.com/v1beta/models')"
+        [ -n "$api_key" ] || { header_json '400 Bad Request'; printf '{"app":"sheepfold","ok":false,"error":"gemini_api_key_missing"}\n'; exit 0; }
+        case "$api_url" in *:generateContent*) ;; *) api_url="${api_url%/}/$model:generateContent" ;; esac
+        payload="$(printf '{"systemInstruction":{"parts":[{"text":"%s"}]},"contents":[{"role":"user","parts":[{"text":"%s"}]}],"generationConfig":{"temperature":0.4}}' \
+            "$(json_escape "$system_prompt")" "$(json_escape "$user_text")")"
+        http_post_json "$api_url" "$api_key" google "$payload"
+        ;;
+    deepseek)
+        model="$(uci -q get sheepfold.global.deepseek_model 2>/dev/null || printf deepseek-chat)"
+        api_key="$(uci -q get sheepfold.global.deepseek_api_key 2>/dev/null || true)"
+        api_url="$(uci -q get sheepfold.global.deepseek_api_url 2>/dev/null || printf 'https://api.deepseek.com/chat/completions')"
+        [ -n "$api_key" ] || { header_json '400 Bad Request'; printf '{"app":"sheepfold","ok":false,"error":"deepseek_api_key_missing"}\n'; exit 0; }
+        payload="$(printf '{"model":"%s","messages":[{"role":"system","content":"%s"},{"role":"user","content":"%s"}],"temperature":0.4}' \
+            "$(json_escape "$model")" "$(json_escape "$system_prompt")" "$(json_escape "$user_text")")"
+        http_post_json "$api_url" "$api_key" bearer "$payload"
+        ;;
+    *)
+        header_json '400 Bad Request'
+        printf '{"app":"sheepfold","ok":false,"error":"provider_not_supported"}\n'
+        ;;
+esac
