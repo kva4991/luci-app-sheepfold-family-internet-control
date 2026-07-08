@@ -24,11 +24,6 @@ done
         exit 3
 }
 
-[ "$(uci -q get "sheepfold.$section.manual_device_type" 2>/dev/null || printf 0)" != "1" ] || {
-        echo "manual_device_type_locked" >&2
-        exit 4
-}
-
 acquire_lock() {
         mkdir -p /tmp/sheepfold
         attempts=0
@@ -49,6 +44,11 @@ release_lock() {
 }
 
 acquire_lock || exit 5
+
+# Нажатие «Определить заново» — явное решение владельца снова доверить тип
+# автоматическому детектору, поэтому ручную фиксацию здесь снимаем намеренно.
+uci -q set "sheepfold.$section.manual_device_type=0"
+uci -q delete "sheepfold.$section.device_type" 2>/dev/null || true
 
 for option in \
         detected_type \
