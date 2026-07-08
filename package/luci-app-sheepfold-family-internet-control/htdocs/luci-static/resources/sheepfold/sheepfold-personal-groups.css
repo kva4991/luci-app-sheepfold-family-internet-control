@@ -61,3 +61,39 @@
         cursor: not-allowed;
         opacity: 0.45;
 }
+
+.sf-online-badge-row {
+        display: block;
+        margin-top: 4px;
+        line-height: 1;
+}
+
+.sf-online-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 18px;
+        padding: 2px 7px;
+        border: 1px solid rgba(73, 151, 196, 0.22);
+        border-radius: 999px;
+        background: #dff3ff;
+        color: #111;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1.15;
+        text-transform: lowercase;
+}
+
+.sf-device-settings-actions {
+        display: flex !important;
+        align-items: center;
+        gap: 8px;
+}
+
+.sf-device-presence-modal-status {
+        margin-right: auto;
+        padding-right: 12px;
+        color: #1f2937;
+        font-size: 12px;
+        line-height: 1.35;
+        text-align: left;
+}
