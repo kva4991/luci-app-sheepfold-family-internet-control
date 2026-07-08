@@ -1,6 +1,5 @@
 #!/bin/sh
-# Генерирует /.well-known/sheepfold.json при установке и изменении app_port.
-# Android использует файл только для обнаружения локального Sheepfold-роутера.
+# Генерирует /.well-known/sheepfold.json для автоматического обнаружения.
 
 set -eu
 
@@ -9,12 +8,19 @@ json_escape() {
 }
 
 APP_PORT="$(uci -q get sheepfold.global.app_port 2>/dev/null || printf '5201')"
+HTTPS_PORT="$(uci -q get sheepfold.global.app_https_port 2>/dev/null || printf '5200')"
 case "$APP_PORT" in ''|*[!0-9]*) APP_PORT=5201 ;; esac
+case "$HTTPS_PORT" in ''|*[!0-9]*) HTTPS_PORT=5200 ;; esac
 [ "$APP_PORT" -ge 1 ] && [ "$APP_PORT" -le 65535 ] || APP_PORT=5201
+[ "$HTTPS_PORT" -ge 1 ] && [ "$HTTPS_PORT" -le 65535 ] || HTTPS_PORT=5200
 
 ROUTER_NAME="$(uci -q get system.@system[0].hostname 2>/dev/null || printf 'OpenWrt')"
 VERSION="$(uci -q get sheepfold.global.ui_asset_version 2>/dev/null || printf 'unknown')"
 API_PATH="/cgi-bin/sheepfold-api"
+TLS_AVAILABLE=false
+if [ -s /etc/uhttpd.crt ] && [ -s /etc/uhttpd.key ]; then
+    TLS_AVAILABLE=true
+fi
 
 mkdir -p /www/.well-known
 TMP="/www/.well-known/sheepfold.json.tmp.$$"
@@ -25,6 +31,9 @@ cat > "$TMP" << EOF
   "service": "sheepfold",
   "name": "Sheepfold Family Internet Control",
   "routerName": "$(json_escape "$ROUTER_NAME")",
+  "preferredTransport": "https",
+  "httpsAvailable": $TLS_AVAILABLE,
+  "httpsPort": "$HTTPS_PORT",
   "appPort": "$APP_PORT",
   "apiPath": "$API_PATH",
   "apiBase": "$API_PATH",
