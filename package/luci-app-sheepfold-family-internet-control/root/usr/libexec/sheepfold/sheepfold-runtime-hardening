@@ -16,6 +16,7 @@ DEVICE_DETECTOR="$(path /usr/libexec/sheepfold/sheepfold-device-detector)"
 DEVICE_CLASSIFIER="$(path /usr/libexec/sheepfold/sheepfold-device-classifier)"
 DEVICE_MDNS="$(path /usr/libexec/sheepfold/sheepfold-device-mdns)"
 DEVICE_MDNS_UCODE="$(path /usr/share/sheepfold/device-mdns.uc)"
+DEVICE_PRESENCE="$(path /usr/libexec/sheepfold/sheepfold-device-presence)"
 DEVICE_RECLASSIFY="$(path /usr/libexec/sheepfold/sheepfold-device-reclassify)"
 DHCP_SIGNALS="$(path /etc/hotplug.d/dhcp/90-sheepfold-device-signals)"
 LED_CONTROL="$(path /usr/libexec/sheepfold/sheepfold-led-control)"
@@ -44,12 +45,13 @@ CUDY_FIX_UNINSTALL="$CUDY_PROFILE/fixLed/uninstall"
 for required in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
-    "$DEVICE_MDNS_UCODE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
-    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" \
-    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
-    "$ACL" "$PRIVACY_NOTICE" "$CUDY_LED_APPLY_MODE" "$CUDY_LED_PACKAGE" \
-    "$CUDY_LED_COMMAND" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
+    "$DEVICE_MDNS_UCODE" "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" \
+    "$DHCP_SIGNALS" "$LED_CONTROL" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+    "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" "$AI_GATE" "$AI_HANDLER" \
+    "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" \
+    "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$ACL" "$PRIVACY_NOTICE" \
+    "$CUDY_LED_APPLY_MODE" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND" \
+    "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
     [ -f "$required" ] || die "missing file $required"
 done
 
@@ -57,11 +59,11 @@ done
 for executable in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
-    "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" "$STATUS_API" \
-    "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" "$AI_HANDLER" \
-    "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" \
-    "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$CUDY_LED_APPLY_MODE" \
-    "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
+    "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
+    "$STATUS_API" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" \
+    "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" \
+    "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
+    "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
@@ -129,6 +131,16 @@ assignment_calls="$(grep -c 'assign_no_restrictions_if_allowed "\$section"' "$DE
 ! grep -q 'revoke_unsafe_auto_assignment' "$DEVICE_DETECTOR" || die "automatic group rollback must not be present"
 grep -q 'classify <name>' "$DEVICE_DETECTOR" || die "detector regression interface is missing"
 
+# Онлайн-статус хранится только в RAM и не считает статическую запись присутствием.
+grep -q 'DEVICE_PRESENCE=.*/sheepfold-device-presence' "$CONTROL" || die "device presence is not routed"
+grep -q 'exec "\$DEVICE_PRESENCE"' "$CONTROL" || die "device presence helper is not executed"
+grep -q 'ONLINE_WINDOW_SECONDS=900' "$DEVICE_PRESENCE" || die "device online window is not fifteen minutes"
+grep -q 'refresh_from_dhcp_signals' "$DEVICE_PRESENCE" || die "DHCP presence history is missing"
+grep -q 'refresh_from_arp' "$DEVICE_PRESENCE" || die "ARP presence refresh is missing"
+grep -q '\*,arp,\*' "$DEVICE_PRESENCE" || die "static-only detector state can be treated as online"
+grep -q '"\$PRESENCE" refresh' "$SERVICE" || die "presence history is not refreshed after detection"
+! grep -q '/etc/sheepfold/device-presence' "$DEVICE_PRESENCE" || die "device presence is written to persistent flash"
+
 # Повторное определение не может менять пользовательскую политику доступа.
 grep -q 'DEVICE_RECLASSIFY=.*/sheepfold-device-reclassify' "$CONTROL" || die "device reclassification is not routed"
 grep -q 'exec "\$DEVICE_RECLASSIFY"' "$CONTROL" || die "device reclassification helper is not executed"
@@ -175,10 +187,10 @@ grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does 
 for script in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
-    "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" "$STATUS_API" \
-    "$PAIR_API" "$PAIR_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" \
-    "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" \
-    "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
+    "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
+    "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
+    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
     /bin/sh -n "$script" || die "shell syntax error in $script"
 done
