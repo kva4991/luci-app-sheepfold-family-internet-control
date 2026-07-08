@@ -23,7 +23,7 @@ jobs:
           set -euo pipefail
           package_root="package/luci-app-sheepfold-family-internet-control/root"
           find "$package_root/usr/libexec/sheepfold" \
-            -type f ! -name sheepfold-device-mdns -print0 | xargs -0 -n1 sh -n
+            -type f -print0 | xargs -0 -n1 sh -n
           find "$package_root/usr/share/sheepfold/router-profiles" \
             -type f \( -name apply-mode -o -name install -o -name uninstall \) \
             -print0 | xargs -0 -n1 sh -n
@@ -36,11 +36,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          collector="package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-mdns"
-          grep -q '^#!/usr/bin/ucode$' "$collector"
-          grep -q 'ubus.call("umdns", "browse"' "$collector"
-          grep -q 'ubus.call("umdns", "hosts"' "$collector"
-          grep -q 'write_snapshot' "$collector"
+          root="package/luci-app-sheepfold-family-internet-control/root"
+          wrapper="$root/usr/libexec/sheepfold/sheepfold-device-mdns"
+          source="$root/usr/share/sheepfold/device-mdns.uc"
+          grep -q '^#!/bin/sh$' "$wrapper"
+          grep -q 'ucode "\$UCODE_SOURCE"' "$wrapper"
+          grep -q 'ubus.call("umdns", "browse"' "$source"
+          grep -q 'ubus.call("umdns", "hosts"' "$source"
 
       - name: Validate runtime hardening invariants
         shell: bash
