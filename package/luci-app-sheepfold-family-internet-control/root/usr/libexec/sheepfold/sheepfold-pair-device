@@ -81,11 +81,29 @@ uci -q set "sheepfold.$device_section.paired_at=$now"
 uci -q set "sheepfold.$device_section.pairing_user_agent=$user_agent"
 pair_add_allowlist "$device_mac"
 
-# Чёрный список никогда не очищается автоматически. Код одноразовый.
+# Сначала фиксируем права устройства. Код пока остаётся активным, поэтому сбой
+# записи токена можно безопасно повторить без ручного выпуска нового кода.
+if ! uci -q commit sheepfold; then
+    echo "Could not save administrator device settings." >&2
+    exit 6
+fi
+
+if ! pair_store_token; then
+    echo "Could not store administrator token hash. Pairing code was not consumed." >&2
+    exit 6
+fi
+
+# Код потребляется только после надёжной записи хэша. Если финальный commit не
+# удался, удаляем хэш и возвращаем deletion delta к последнему committed коду.
 uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
 uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
-uci -q commit sheepfold
-pair_store_token
+if ! uci -q commit sheepfold; then
+    rm -f "$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH" 2>/dev/null || true
+    uci -q revert "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
+    uci -q revert "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
+    echo "Could not consume pairing code. Token was revoked; try pairing again." >&2
+    exit 6
+fi
 
 pair_log_event "Android-приложение привязало телефон администратора: $device_name, $device_mac, IP ${remote_ip:-?}, администратор $admin_name" || true
 
