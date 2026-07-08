@@ -4,7 +4,38 @@ set -eu
 LEGACY="/usr/libexec/sheepfold/sheepfold-router-control-legacy"
 PAIR_DEVICE="/usr/libexec/sheepfold/sheepfold-pair-device"
 PAIR_ACTIVATE="/usr/libexec/sheepfold/sheepfold-pair-activate"
+TOKEN_STATE_DIR="/etc/sheepfold/tokens"
+TOKEN_RUNTIME_LINK="/tmp/sheepfold/tokens"
 command="${1:-status}"
+
+ensure_token_storage() {
+    umask 077
+    mkdir -p /etc/sheepfold "$TOKEN_STATE_DIR" /tmp/sheepfold
+    chmod 700 /etc/sheepfold "$TOKEN_STATE_DIR" 2>/dev/null || true
+
+    if [ -L "$TOKEN_RUNTIME_LINK" ]; then
+        if [ "$(readlink "$TOKEN_RUNTIME_LINK" 2>/dev/null || true)" = "$TOKEN_STATE_DIR" ]; then
+            return 0
+        fi
+        rm -f "$TOKEN_RUNTIME_LINK"
+    elif [ -d "$TOKEN_RUNTIME_LINK" ]; then
+        # Мигрируем хэши, выпущенные предыдущей версией в tmpfs, прежде чем
+        # заменить каталог ссылкой на постоянное защищённое хранилище.
+        for token_file in "$TOKEN_RUNTIME_LINK"/*; do
+            [ -f "$token_file" ] || continue
+            cp -p "$token_file" "$TOKEN_STATE_DIR/" 2>/dev/null || true
+        done
+        rm -rf "$TOKEN_RUNTIME_LINK"
+    elif [ -e "$TOKEN_RUNTIME_LINK" ]; then
+        rm -f "$TOKEN_RUNTIME_LINK"
+    fi
+
+    ln -s "$TOKEN_STATE_DIR" "$TOKEN_RUNTIME_LINK"
+}
+
+# Legacy check-token ожидает /tmp/sheepfold/tokens. Постоянная директория и
+# совместимая ссылка создаются до любого делегирования, в том числе после reboot.
+ensure_token_storage
 
 case "$command" in
     pair-admin-device)
