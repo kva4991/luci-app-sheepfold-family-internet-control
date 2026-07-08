@@ -11,7 +11,10 @@ CGI_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-api-legacy)"
 CONTROL="$(path /usr/libexec/sheepfold/sheepfold-router-control)"
 CONTROL_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-router-control-legacy)"
 CLIENT_STATUS="$(path /usr/libexec/sheepfold/sheepfold-client-status-effective)"
+SERVICE="$(path /usr/libexec/sheepfold/sheepfold-service)"
 DEVICE_DETECTOR="$(path /usr/libexec/sheepfold/sheepfold-device-detector)"
+DEVICE_CLASSIFIER="$(path /usr/libexec/sheepfold/sheepfold-device-classifier)"
+DHCP_SIGNALS="$(path /etc/hotplug.d/dhcp/90-sheepfold-device-signals)"
 LED_CONTROL="$(path /usr/libexec/sheepfold/sheepfold-led-control)"
 PAIR_ACTIVATE="$(path /usr/libexec/sheepfold/sheepfold-pair-activate)"
 PAIR_DEVICE="$(path /usr/libexec/sheepfold/sheepfold-pair-device)"
@@ -37,23 +40,23 @@ CUDY_FIX_UNINSTALL="$CUDY_PROFILE/fixLed/uninstall"
 
 for required in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$DEVICE_DETECTOR" "$LED_CONTROL" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-    "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" "$AI_GATE" "$AI_HANDLER" \
-    "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" \
-    "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$ACL" "$PRIVACY_NOTICE" \
-    "$CUDY_LED_APPLY_MODE" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND" \
-    "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
+    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DHCP_SIGNALS" \
+    "$LED_CONTROL" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$PAIR_COMMON" "$PAIR_API" \
+    "$STATUS_API" "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
+    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
+    "$ACL" "$PRIVACY_NOTICE" "$CUDY_LED_APPLY_MODE" "$CUDY_LED_PACKAGE" \
+    "$CUDY_LED_COMMAND" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
     [ -f "$required" ] || die "missing file $required"
 done
 
-# Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно
+# Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно.
 for executable in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$DEVICE_DETECTOR" "$LED_CONTROL" "$STATUS_API" "$PAIR_API" \
-    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" "$AI_HANDLER" \
-    "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" \
-    "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$CUDY_LED_APPLY_MODE" \
-    "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
+    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DHCP_SIGNALS" \
+    "$LED_CONTROL" "$STATUS_API" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
+    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
+    "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
@@ -62,7 +65,7 @@ chmod 0644 "$PAIR_COMMON" "$ACL" "$PRIVACY_NOTICE" "$CUDY_LED_PACKAGE" "$CUDY_LE
 mkdir -p "$(path /etc/sheepfold/tokens)"
 chmod 0700 "$(path /etc/sheepfold)" "$(path /etc/sheepfold/tokens)" 2>/dev/null || true
 
-# Публичный CGI обязан скрывать выпуск кода и защищать диагностику
+# Публичный CGI обязан скрывать выпуск кода и защищать диагностику.
 grep -q 'sheepfold-api-legacy' "$CGI" || die "public CGI does not delegate through the hardened dispatcher"
 grep -q '\[ "\$path_info" = "/pair-token" \]' "$CGI" || die "public CGI does not return 404 for pair-token"
 ! grep -q '^generate_pair_token_json()' "$CGI" || die "pair-token generator is present in public CGI"
@@ -72,7 +75,7 @@ grep -q '/router-info|/pair-status)' "$CGI" || die "diagnostic routes are not in
 grep -q 'query_token_forbidden' "$CGI" || die "Bearer token is still accepted in query string"
 grep -q 'legacy_settings_writer_disabled' "$CGI" || die "legacy untyped settings writer remains enabled"
 
-# Pairing не создаёт администратора и повторно проверяет blocklist
+# Pairing не создаёт администратора и повторно проверяет blocklist.
 grep -q 'PAIR_DEVICE=.*/sheepfold-pair-device' "$CONTROL" || die "pair-admin-device is not intercepted"
 grep -q 'PAIR_ACTIVATE=.*/sheepfold-pair-activate' "$CONTROL" || die "pairing-code activation is not intercepted"
 grep -q 'CLIENT_STATUS=.*/sheepfold-client-status-effective' "$CONTROL" || die "effective client status is not intercepted"
@@ -91,21 +94,29 @@ grep -q 'pair_store_token' "$PAIR_DEVICE" || die "successful pairing does not st
 grep -q 'pair_valid_code' "$PAIR_COMMON" || die "pairing-code alphabet validation is missing"
 grep -q 'device_id' "$PAIR_DEVICE" || die "pairing does not return stable device id"
 
-# Статус клиента учитывает blocklist, временный доступ и глобальную блокировку
+# Статус клиента учитывает blocklist, временный доступ и глобальную блокировку.
 grep -q 'global_block' "$CLIENT_STATUS" || die "effective status ignores global block"
 grep -q 'temporary_access_expired' "$CLIENT_STATUS" || die "effective status ignores expired temporary access"
 grep -q 'schedule_pending_evaluation' "$CLIENT_STATUS" || die "scheduled status still claims an unverified result"
 
-# Детектор никогда не выдаёт сетевой инфраструктуре группу без ограничений автоматически
-grep -q 'NETWORK_NAME_PATTERN=' "$DEVICE_DETECTOR" || die "network infrastructure name guard is missing"
-grep -q 'revoke_unsafe_auto_assignment' "$DEVICE_DETECTOR" || die "unsafe automatic group rollback is missing"
-grep -q 'server|engineering|camera|smart_home|vacuum|speaker' "$DEVICE_DETECTOR" || die "safe automatic device types are incomplete"
-! grep -q 'server|network|engineering' "$DEVICE_DETECTOR" || die "network devices can still enter no-restrictions automatically"
-grep -q 'network infrastructure must be configured manually' "$DEVICE_DETECTOR" || die "network auto-assignment guard is missing"
-grep -q 'force_network_reclassification' "$DEVICE_DETECTOR" || die "locked detector mistakes cannot be corrected"
+# Автоопределение использует независимые сигналы и не повторяет побочные действия.
+grep -q 'DNSMASQ_VENDOR_CLASS' "$DHCP_SIGNALS" || die "DHCP vendor-class collection is missing"
+grep -q 'DNSMASQ_REQUESTED_OPTIONS' "$DHCP_SIGNALS" || die "DHCP option fingerprint collection is missing"
+grep -q 'device-signals.changed' "$SERVICE" || die "DHCP signal changes do not trigger detection"
+grep -q 'NETWORK_NAME_PATTERN=' "$DEVICE_CLASSIFIER" || die "network infrastructure guard is missing"
+grep -q 'POLICY_VERSION="2"' "$DEVICE_CLASSIFIER" || die "device classification policy version is missing"
+grep -q 'EVIDENCE_COUNT' "$DEVICE_CLASSIFIER" || die "independent evidence counting is missing"
+grep -q 'nmap-mac-prefixes' "$DEVICE_CLASSIFIER" || die "local OUI lookup is missing"
+grep -q '\[ "\$evidence_count" -ge 2 \]' "$DEVICE_DETECTOR" || die "automatic group assignment does not require two evidence families"
+grep -q 'detection_fingerprint' "$DEVICE_DETECTOR" || die "device fingerprint persistence is missing"
+grep -q 'detection_policy_version' "$DEVICE_DETECTOR" || die "classification policy version is not persisted"
+grep -q 'device-detection.last-scan' "$DEVICE_DETECTOR" || die "runtime last-scan state is missing"
+assignment_calls="$(grep -c 'assign_no_restrictions_if_allowed "\$section"' "$DEVICE_DETECTOR" || true)"
+[ "$assignment_calls" -eq 1 ] || die "automatic group assignment can run outside a new classification"
+! grep -q 'revoke_unsafe_auto_assignment' "$DEVICE_DETECTOR" || die "automatic group rollback must not be present"
 grep -q 'classify <name>' "$DEVICE_DETECTOR" || die "detector regression interface is missing"
 
-# LED helper выбирает профиль по board name и сохраняет общий fallback
+# LED helper выбирает профиль по board name и сохраняет общий fallback.
 grep -q 'PROFILE_ROOT="/usr/share/sheepfold/router-profiles"' "$LED_CONTROL" || die "router profile root is missing"
 grep -q '/led/apply-mode' "$LED_CONTROL" || die "explicit LED apply-mode entry point is missing"
 grep -q 'exec "\$LEGACY" led-apply' "$LED_CONTROL" || die "generic LED fallback is missing"
@@ -119,7 +130,7 @@ grep -q 'system.\$SECTION.sheepfold_managed' "$CUDY_FIX_INSTALL" || die "LED fix
 grep -q 'find_equivalent_section' "$CUDY_FIX_INSTALL" || die "LED fix does not preserve existing equivalent settings"
 grep -q 'system.\$SECTION.sheepfold_managed' "$CUDY_FIX_UNINSTALL" || die "LED fix rollback does not verify ownership"
 
-# AI gate проверяет идентичность, роль, согласие и квоту серверными данными
+# AI gate проверяет идентичность, роль, согласие и квоту серверными данными.
 grep -q 'device_identity_mismatch' "$AI_GATE" || die "AI device identity verification is missing"
 grep -q 'client_role_mismatch' "$AI_GATE" || die "AI role verification is missing"
 grep -q 'parental_consent_required' "$AI_GATE" || die "child AI parental consent is missing"
@@ -128,7 +139,7 @@ grep -q 'privileged_context_forbidden' "$AI_GATE" || die "AI privileged context 
 grep -q 'Проверенная роль: ребёнок' "$AI_HANDLER" || die "child AI prompt is missing"
 grep -q 'Обезличенное состояние роутера' "$AI_HANDLER" || die "AI diagnostics masking is missing"
 
-# Журналы и ключи должны быть транзакционными
+# Журналы и ключи должны быть транзакционными.
 grep -q 'sheepfold.log' "$ACTIVITY_LOG" || die "explicit activity-log filename format is missing"
 grep -q 'restore_staged_logs' "$ACTIVITY_LOG" || die "activity-log rollback is missing"
 ! grep -q 'mtime "+7"' "$ACTIVITY_LOG" || die "hard-coded seven-day retention remains"
@@ -136,18 +147,18 @@ grep -q '.key-derive.lock' "$KEY_DERIVE" || die "key initialization lock is miss
 grep -q 'extroot_not_implemented_safely' "$USB_STORAGE" || die "unsafe automatic extroot remains enabled"
 grep -q 'PRIVACY_NOTICE_SOURCE' "$USB_STORAGE" || die "USB privacy notice is not copied after mount"
 
-# LuCI не получает общий read/write wildcard на runtime-каталог
+# LuCI не получает общий read/write wildcard на runtime-каталог.
 ! grep -q '"/tmp/sheepfold/\*"' "$ACL" || die "broad runtime ACL wildcard remains"
 grep -q 'sheepfold-openssl-ensure' "$ACL" || die "OpenSSL verification helper is absent from LuCI ACL"
 grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable individual logs"
 
 for script in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$DEVICE_DETECTOR" "$LED_CONTROL" "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" \
-    "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" \
-    "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" \
-    "$WELL_KNOWN_GENERATOR" "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" \
-    "$CUDY_FIX_UNINSTALL"; do
+    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DHCP_SIGNALS" \
+    "$LED_CONTROL" "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$PAIR_ACTIVATE" \
+    "$PAIR_DEVICE" "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
+    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
+    "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
     /bin/sh -n "$script" || die "shell syntax error in $script"
 done
 
