@@ -1,17 +1,15 @@
 #!/bin/sh
 # sheepfold-usb-storage
 #
-# Управление USB-хранилищем для приватных логов Sheepfold.
+# Управление съёмным USB-хранилищем для приватных логов Sheepfold.
+# Разрушительные команды принимают только устройство, которое sysfs определяет
+# как removable либо как находящееся за USB-шиной. Внутренний root/overlay
+# никогда не форматируется, даже если ошибочный путь пришёл из UI или RPC.
 #
 # Схема ключа шифрования:
-#
 #   /etc/sheepfold/.kp        — случайная часть ключа (chmod 600)
 #   /etc/sheepfold/.app_salt  — отдельная случайная соль (chmod 600)
 #   FINAL_KEY                 = sha256(.kp + ":" + .app_salt)
-#
-# Оба файла создаются атомарно sheepfold-key-derive и сохраняются при
-# обновлении пакета. Если OpenSSL недоступен, шифрование завершается ошибкой:
-# незашифрованный архив никогда не маскируется расширением .enc.
 #
 # UCI (sheepfold.usb.*):
 #   device        — /dev/sda1
@@ -30,13 +28,64 @@ KEY_DERIVE="/usr/libexec/sheepfold/sheepfold-key-derive"
 RUNTIME_KEY="/tmp/sheepfold/.runtime_key"
 
 uci_get() { uci -q get "sheepfold.usb.$1" 2>/dev/null || echo "${2:-}"; }
-
+json_escape() { printf '%s' "$1" | tr '\r\n\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 is_mounted() { grep -q " ${MOUNT_POINT} " /proc/mounts 2>/dev/null; }
+
+parent_block_name() {
+    BASE_NAME="$(basename "$1")"
+    case "$BASE_NAME" in
+        sd[a-z]) printf '%s\n' "$BASE_NAME" ;;
+        sd[a-z][0-9]*) printf '%s\n' "$BASE_NAME" | sed 's/[0-9].*$//' ;;
+        mmcblk[0-9]) printf '%s\n' "$BASE_NAME" ;;
+        mmcblk[0-9]p[0-9]*) printf '%s\n' "${BASE_NAME%p*}" ;;
+        *) return 1 ;;
+    esac
+}
+
+is_system_backing_device() {
+    WANTED_PARENT="$1"
+    while read -r SOURCE TARGET _REST; do
+        case "$TARGET" in /|/overlay) ;; *) continue ;; esac
+        case "$SOURCE" in /dev/*) ;; *) continue ;; esac
+        SOURCE_PARENT="$(parent_block_name "$SOURCE" 2>/dev/null || true)"
+        [ "$SOURCE_PARENT" = "$WANTED_PARENT" ] && return 0
+    done < /proc/mounts
+
+    while read -r SOURCE _REST; do
+        case "$SOURCE" in /dev/*) ;; *) continue ;; esac
+        SOURCE_PARENT="$(parent_block_name "$SOURCE" 2>/dev/null || true)"
+        [ "$SOURCE_PARENT" = "$WANTED_PARENT" ] && return 0
+    done < /proc/swaps
+
+    return 1
+}
+
+is_safe_removable_device() {
+    DEV="$1"
+    [ -b "$DEV" ] || return 1
+    PARENT="$(parent_block_name "$DEV" 2>/dev/null || true)"
+    [ -n "$PARENT" ] || return 1
+    [ -e "/sys/class/block/$PARENT" ] || return 1
+    is_system_backing_device "$PARENT" && return 1
+
+    REMOVABLE="$(cat "/sys/class/block/$PARENT/removable" 2>/dev/null || echo 0)"
+    SYS_PATH="$(readlink -f "/sys/class/block/$PARENT" 2>/dev/null || true)"
+    [ "$REMOVABLE" = 1 ] || printf '%s' "$SYS_PATH" | grep -qi '/usb'
+}
+
+require_safe_removable_device() {
+    DEV="$1"
+    if ! is_safe_removable_device "$DEV"; then
+        printf '{"error":"unsafe_device","dev":"%s","hint":"only removable USB-backed devices are allowed"}\n' \
+            "$(json_escape "$DEV")"
+        return 1
+    fi
+}
 
 get_disk_usage_role() {
     DEV="$1"; ROLE="logs_only"
-    grep -q "$DEV" /proc/swaps 2>/dev/null && ROLE="swap_logs"
-    grep "$DEV" /proc/mounts 2>/dev/null | grep -q '/overlay' 2>/dev/null && ROLE="extroot_logs"
+    grep -q "^$DEV " /proc/swaps 2>/dev/null && ROLE="swap_logs"
+    grep "^$DEV " /proc/mounts 2>/dev/null | grep -q ' /overlay ' 2>/dev/null && ROLE="extroot_logs"
     echo "$ROLE"
 }
 
@@ -55,7 +104,6 @@ valid_key() {
     [ ${#1} -eq 64 ] && printf '%s' "$1" | grep -Eq '^[0-9a-fA-F]{64}$'
 }
 
-# Получить итоговый ключ через key-derive и кэшировать только в tmpfs.
 get_key() {
     if [ -s "$RUNTIME_KEY" ]; then
         CACHED_KEY="$(cat "$RUNTIME_KEY" 2>/dev/null || true)"
@@ -116,56 +164,65 @@ encrypt_archive() {
     printf '%s\n' "$DST"
 }
 
-# -- scan -----------------------------------------------------------------
 cmd_scan() {
     printf '['
     FIRST=1
-    for BLK in /sys/block/sd* /sys/block/mmcblk*; do
-        [ -d "$BLK" ] || continue
-        BASE=$(basename "$BLK")
-        DEV="/dev/${BASE}"
-        [ -b "$DEV" ] || continue
-        case "$BASE" in mmcblk0) continue ;; esac
-        SIZE_B=$(cat "${BLK}/size" 2>/dev/null || echo 0)
-        SIZE_GB=$(awk "BEGIN{printf \"%.1f\", $SIZE_B * 512 / 1073741824}")
-        VENDOR=$(cat "${BLK}/device/vendor" 2>/dev/null | tr -d '\n ' || echo '')
-        MODEL=$(cat  "${BLK}/device/model"  2>/dev/null | sed 's/  */ /g;s/^ //;s/ $//' || echo "$BASE")
-        IS_USB=0; readlink -f "$BLK" 2>/dev/null | grep -qi 'usb' && IS_USB=1
-        ROLE=$(get_disk_usage_role "$DEV")
+    for NODE in /sys/class/block/*; do
+        [ -e "$NODE" ] || continue
+        BASE="$(basename "$NODE")"
+        case "$BASE" in loop*|ram*|zram*|mtd*|ubiblock*|dm-*) continue ;; esac
+        DEV="/dev/$BASE"
+        is_safe_removable_device "$DEV" || continue
+
+        PARENT="$(parent_block_name "$DEV")"
+        SIZE_B="$(cat "$NODE/size" 2>/dev/null || echo 0)"
+        SIZE_GB="$(awk "BEGIN{printf \"%.1f\", $SIZE_B * 512 / 1073741824}")"
+        VENDOR="$(cat "/sys/class/block/$PARENT/device/vendor" 2>/dev/null | tr -d '\n ' || echo '')"
+        MODEL="$(cat "/sys/class/block/$PARENT/device/model" 2>/dev/null | sed 's/  */ /g;s/^ //;s/ $//' || echo "$BASE")"
+        IS_USB=0
+        readlink -f "/sys/class/block/$PARENT" 2>/dev/null | grep -qi '/usb' && IS_USB=1
+        ROLE="$(get_disk_usage_role "$DEV")"
         CURRENT=0
-        [ "$(uci_get device)" = "$DEV" ] && [ "$(uci_get enabled 0)" = "1" ] && CURRENT=1
-        [ "$FIRST" = "1" ] || printf ','
+        [ "$(uci_get device)" = "$DEV" ] && [ "$(uci_get enabled 0)" = 1 ] && CURRENT=1
+        [ "$FIRST" = 1 ] || printf ','
         FIRST=0
         printf '{"dev":"%s","vendor":"%s","model":"%s","size_gb":%s,"is_usb":%d,"role":"%s","current":%d}' \
-            "$DEV" "$VENDOR" "$MODEL" "$SIZE_GB" "$IS_USB" "$ROLE" "$CURRENT"
+            "$(json_escape "$DEV")" "$(json_escape "$VENDOR")" "$(json_escape "$MODEL")" \
+            "$SIZE_GB" "$IS_USB" "$ROLE" "$CURRENT"
     done
     printf ']\n'
 }
 
-# -- info -----------------------------------------------------------------
 cmd_info() {
     DEV="${1:-}"
-    [ -b "$DEV" ] || { printf '{"error":"not_found"}\n'; return 1; }
-    BASE=$(basename "$DEV" | sed 's/[0-9]*$//')
-    BLK="/sys/block/${BASE}"
-    SIZE_B=$(cat "${BLK}/size" 2>/dev/null || echo 0)
-    SIZE_GB=$(awk "BEGIN{printf \"%.1f\", $SIZE_B * 512 / 1073741824}")
-    VENDOR=$(cat "${BLK}/device/vendor" 2>/dev/null | tr -d '\n ' || echo '')
-    MODEL=$(cat  "${BLK}/device/model"  2>/dev/null | sed 's/  */ /g;s/^ //;s/ $//' || echo "$BASE")
-    FS=$(blkid -o value -s TYPE "$DEV" 2>/dev/null || echo '')
-    MOUNTED=0; is_mounted && grep -q "$DEV" /proc/mounts 2>/dev/null && MOUNTED=1
-    ROLE=$(get_disk_usage_role "$DEV")
-    FREE_PCT=0; [ "$MOUNTED" = 1 ] && FREE_PCT=$(get_free_pct "$MOUNT_POINT")
+    require_safe_removable_device "$DEV" || return 1
+    BASE="$(basename "$DEV")"
+    NODE="/sys/class/block/$BASE"
+    PARENT="$(parent_block_name "$DEV")"
+    SIZE_B="$(cat "$NODE/size" 2>/dev/null || echo 0)"
+    SIZE_GB="$(awk "BEGIN{printf \"%.1f\", $SIZE_B * 512 / 1073741824}")"
+    VENDOR="$(cat "/sys/class/block/$PARENT/device/vendor" 2>/dev/null | tr -d '\n ' || echo '')"
+    MODEL="$(cat "/sys/class/block/$PARENT/device/model" 2>/dev/null | sed 's/  */ /g;s/^ //;s/ $//' || echo "$BASE")"
+    FS="$(blkid -o value -s TYPE "$DEV" 2>/dev/null || echo '')"
+    MOUNTED=0
+    grep -q "^$DEV " /proc/mounts 2>/dev/null && MOUNTED=1
+    ROLE="$(get_disk_usage_role "$DEV")"
+    FREE_PCT=0; [ "$MOUNTED" = 1 ] && FREE_PCT="$(get_free_pct "$MOUNT_POINT")"
     printf '{"dev":"%s","vendor":"%s","model":"%s","size_gb":%s,"fs":"%s","mounted":%d,"free_pct":%s,"role":"%s"}\n' \
-        "$DEV" "$VENDOR" "$MODEL" "$SIZE_GB" "$FS" "$MOUNTED" "$FREE_PCT" "$ROLE"
+        "$(json_escape "$DEV")" "$(json_escape "$VENDOR")" "$(json_escape "$MODEL")" \
+        "$SIZE_GB" "$(json_escape "$FS")" "$MOUNTED" "$FREE_PCT" "$ROLE"
 }
 
-# -- format ---------------------------------------------------------------
 cmd_format() {
     DEV="${1:-}"
-    [ -b "$DEV" ] || { printf '{"error":"not_found"}\n'; return 1; }
+    require_safe_removable_device "$DEV" || return 1
     umount "$DEV" 2>/dev/null || true
     umount "$MOUNT_POINT" 2>/dev/null || true
+    grep -q "^$DEV " /proc/mounts 2>/dev/null && {
+        printf '{"error":"device_busy","dev":"%s"}\n' "$(json_escape "$DEV")"
+        return 1
+    }
+
     if command -v mkfs.ext4 >/dev/null 2>&1; then
         mkfs.ext4 -F -L sheepfold "$DEV" >/dev/null 2>&1; FS="ext4"
     elif command -v mkfs.f2fs >/dev/null 2>&1; then
@@ -175,34 +232,41 @@ cmd_format() {
     else
         printf '{"error":"no_mkfs","hint":"install kmod-fs-ext4 e2fsprogs"}\n'; return 1
     fi
-    printf '{"ok":true,"dev":"%s","fs":"%s"}\n' "$DEV" "$FS"
+    printf '{"ok":true,"dev":"%s","fs":"%s"}\n' "$(json_escape "$DEV")" "$FS"
 }
 
-# -- mount ----------------------------------------------------------------
 cmd_mount() {
     DEV="${1:-$(uci_get device)}"
-    [ -b "$DEV" ] || { printf '{"error":"device_not_found","dev":"%s"}\n' "$DEV"; return 1; }
-    is_mounted && { printf '{"ok":true,"already":true}\n'; return 0; }
+    require_safe_removable_device "$DEV" || return 1
+    if is_mounted; then
+        grep -q "^$DEV ${MOUNT_POINT} " /proc/mounts 2>/dev/null && {
+            printf '{"ok":true,"already":true}\n'; return 0;
+        }
+        printf '{"error":"mount_point_busy"}\n'
+        return 1
+    fi
     mkdir -p "$MOUNT_POINT"
-    mount "$DEV" "$MOUNT_POINT" 2>/dev/null || { printf '{"error":"mount_failed","dev":"%s"}\n' "$DEV"; return 1; }
+    mount "$DEV" "$MOUNT_POINT" 2>/dev/null || {
+        printf '{"error":"mount_failed","dev":"%s"}\n' "$(json_escape "$DEV")"; return 1;
+    }
     mkdir -p "$USB_LOG_DIR" && chmod 700 "$USB_LOG_DIR"
     printf '{"ok":true,"mount_point":"%s","log_dir":"%s"}\n' "$MOUNT_POINT" "$USB_LOG_DIR"
 }
 
-# -- umount ---------------------------------------------------------------
 cmd_umount() {
     is_mounted || { printf '{"ok":true,"already":true}\n'; return 0; }
     [ -f "$SWAP_FILE" ] && swapoff "$SWAP_FILE" 2>/dev/null || true
     rm -f "$RUNTIME_KEY" 2>/dev/null || true
-    umount "$MOUNT_POINT" 2>/dev/null && printf '{"ok":true}\n' || printf '{"error":"umount_failed"}\n'
+    umount "$MOUNT_POINT" 2>/dev/null && printf '{"ok":true}\n' || {
+        printf '{"error":"umount_failed"}\n'; return 1;
+    }
 }
 
-# -- status ---------------------------------------------------------------
 cmd_status() {
-    ENABLED=$(uci_get enabled 0)
-    DEV=$(uci_get device '')
-    ROLE=$(uci_get role logs_only)
-    ENCRYPT=$(uci_get encrypt 1)
+    ENABLED="$(uci_get enabled 0)"
+    DEV="$(uci_get device '')"
+    ROLE="$(uci_get role logs_only)"
+    ENCRYPT="$(uci_get encrypt 1)"
     KEY_READY=0
     if command -v openssl >/dev/null 2>&1 && [ -x "$KEY_DERIVE" ] && "$KEY_DERIVE" >/dev/null 2>&1; then
         KEY_READY=1
@@ -210,49 +274,59 @@ cmd_status() {
     MOUNTED=0; is_mounted && MOUNTED=1
     FREE_PCT=0; USED_KB=0; TOTAL_KB=0; ARCHIVES=0
     if [ "$MOUNTED" = 1 ]; then
-        FREE_PCT=$(get_free_pct "$MOUNT_POINT")
-        USED_KB=$(du -sk "$USB_LOG_DIR" 2>/dev/null | awk '{print $1}' || echo 0)
-        TOTAL_KB=$(df -k "$MOUNT_POINT" 2>/dev/null | awk 'NR==2{print $2}' || echo 0)
-        ARCHIVES=$(find "$USB_LOG_DIR" \( -name '*.enc' -o -name '*.tar.gz' -o -name '*.tar' \) -type f 2>/dev/null | wc -l | tr -d ' ')
+        FREE_PCT="$(get_free_pct "$MOUNT_POINT")"
+        USED_KB="$(du -sk "$USB_LOG_DIR" 2>/dev/null | awk '{print $1}' || echo 0)"
+        TOTAL_KB="$(df -k "$MOUNT_POINT" 2>/dev/null | awk 'NR==2{print $2}' || echo 0)"
+        ARCHIVES="$(find "$USB_LOG_DIR" \( -name '*.enc' -o -name '*.tar.gz' -o -name '*.tar' \) -type f 2>/dev/null | wc -l | tr -d ' ')"
     fi
     printf '{"enabled":%s,"dev":"%s","role":"%s","encrypt":%s,"key_ready":%d,"mounted":%d,"free_pct":%s,"used_kb":%s,"total_kb":%s,"archives":%s,"max_log_pct":%s}\n' \
-        "$ENABLED" "$DEV" "$ROLE" "$ENCRYPT" "$KEY_READY" "$MOUNTED" "$FREE_PCT" "$USED_KB" "$TOTAL_KB" "$ARCHIVES" "$(max_log_pct)"
+        "$ENABLED" "$(json_escape "$DEV")" "$(json_escape "$ROLE")" "$ENCRYPT" "$KEY_READY" "$MOUNTED" "$FREE_PCT" "$USED_KB" "$TOTAL_KB" "$ARCHIVES" "$(max_log_pct)"
 }
 
-# -- archive-push ---------------------------------------------------------
 cmd_archive_push() {
-    [ "$(uci_get enabled 0)" = "1" ] || return 0
+    [ "$(uci_get enabled 0)" = 1 ] || return 0
     is_mounted || cmd_mount >/dev/null || return 1
     mkdir -p "$USB_LOG_DIR"
-    MAX_PCT=$(max_log_pct)
-    USED_PCT=$(df -k "$MOUNT_POINT" 2>/dev/null | awk 'NR==2{if($2>0) printf "%d", int(($3/$2)*100); else print 100}')
-    if [ "$USED_PCT" -ge "$MAX_PCT" ]; then
-        OLDEST=$(find "$USB_LOG_DIR" -type f | sort | head -1)
-        [ -n "$OLDEST" ] && rm -f "$OLDEST" || true
-    fi
-    ENCRYPT=$(uci_get encrypt 1)
+    MAX_PCT="$(max_log_pct)"
+
+    while :; do
+        USED_PCT="$(df -k "$MOUNT_POINT" 2>/dev/null | awk 'NR==2{if($2>0) printf "%d", int(($3/$2)*100); else print 100}')"
+        [ "$USED_PCT" -lt "$MAX_PCT" ] && break
+        OLDEST="$(find "$USB_LOG_DIR" -type f 2>/dev/null | sort | head -1)"
+        [ -n "$OLDEST" ] || break
+        rm -f "$OLDEST"
+    done
+
+    ENCRYPT="$(uci_get encrypt 1)"
     PUSHED=0; ERRORS=0
     for ARC in "${RAM_ARCHIVE_DIR}"/*.tar.gz "${RAM_ARCHIVE_DIR}"/*.tar; do
         [ -f "$ARC" ] || continue
-        DEST_NAME=$(basename "$ARC")
-        if [ "$ENCRYPT" = "1" ]; then
-            ENC=$(encrypt_archive "$ARC") || { ERRORS=$((ERRORS+1)); continue; }
-            mv "$ENC" "${USB_LOG_DIR}/${DEST_NAME}.enc" && rm -f "$ARC"
+        DEST_NAME="$(basename "$ARC")"
+        if [ "$ENCRYPT" = 1 ]; then
+            ENC="$(encrypt_archive "$ARC")" || { ERRORS=$((ERRORS + 1)); continue; }
+            if mv "$ENC" "${USB_LOG_DIR}/${DEST_NAME}.enc"; then
+                rm -f "$ARC"
+            else
+                rm -f "$ENC"
+                ERRORS=$((ERRORS + 1))
+                continue
+            fi
         else
-            mv "$ARC" "${USB_LOG_DIR}/${DEST_NAME}"
+            mv "$ARC" "${USB_LOG_DIR}/${DEST_NAME}" || { ERRORS=$((ERRORS + 1)); continue; }
         fi
-        PUSHED=$((PUSHED+1))
+        PUSHED=$((PUSHED + 1))
     done
     if [ "$ERRORS" -gt 0 ]; then
-        printf '{"ok":false,"pushed":%d,"errors":%d,"error":"encryption_failed"}\n' "$PUSHED" "$ERRORS"
+        printf '{"ok":false,"pushed":%d,"errors":%d,"error":"archive_push_failed"}\n' "$PUSHED" "$ERRORS"
         return 1
     fi
     printf '{"ok":true,"pushed":%d,"errors":0}\n' "$PUSHED"
 }
 
-# -- setup-swap -----------------------------------------------------------
 cmd_setup_swap() {
-    is_mounted || cmd_mount >/dev/null || { printf '{"error":"not_mounted"}\n'; return 1; }
+    DEV="${1:-$(uci_get device)}"
+    require_safe_removable_device "$DEV" || return 1
+    is_mounted || cmd_mount "$DEV" >/dev/null || { printf '{"error":"not_mounted"}\n'; return 1; }
     mkdir -p "$(dirname "$SWAP_FILE")"
     [ -f "$SWAP_FILE" ] && swapoff "$SWAP_FILE" 2>/dev/null || true
     dd if=/dev/zero of="$SWAP_FILE" bs=1M count="$SWAP_SIZE_MB" 2>/dev/null
@@ -260,25 +334,23 @@ cmd_setup_swap() {
     printf '{"ok":true,"swap_file":"%s","size_mb":%d}\n' "$SWAP_FILE" "$SWAP_SIZE_MB"
 }
 
-# -- setup-extroot --------------------------------------------------------
 cmd_setup_extroot() {
     DEV="${1:-$(uci_get device)}"
-    [ -b "$DEV" ] || { printf '{"error":"device_not_found"}\n'; return 1; }
+    require_safe_removable_device "$DEV" || return 1
     command -v block >/dev/null 2>&1 || {
-        printf '{"error":"block_mount_missing","hint":"opkg install block-mount"}\n'; return 1
+        printf '{"error":"block_mount_missing","hint":"opkg install block-mount"}\n'; return 1;
     }
-    UUID=$(blkid -o value -s UUID "$DEV" 2>/dev/null || echo '')
+    UUID="$(blkid -o value -s UUID "$DEV" 2>/dev/null || echo '')"
     [ -n "$UUID" ] || { printf '{"error":"no_uuid","hint":"format device first"}\n'; return 1; }
-    uci -q del fstab.sheepfold_overlay 2>/dev/null || true
+    uci -q delete fstab.sheepfold_overlay 2>/dev/null || true
     uci set fstab.sheepfold_overlay=mount
     uci set fstab.sheepfold_overlay.uuid="$UUID"
     uci set fstab.sheepfold_overlay.target='/overlay'
     uci set fstab.sheepfold_overlay.enabled='1'
     uci commit fstab
-    printf '{"ok":true,"uuid":"%s","hint":"reboot_required"}\n' "$UUID"
+    printf '{"ok":true,"uuid":"%s","hint":"reboot_required"}\n' "$(json_escape "$UUID")"
 }
 
-# -- dispatcher -----------------------------------------------------------
 COMMAND="${1:-}"; shift || true
 case "$COMMAND" in
     scan)          cmd_scan ;;
@@ -288,7 +360,7 @@ case "$COMMAND" in
     umount)        cmd_umount ;;
     status)        cmd_status ;;
     archive-push)  cmd_archive_push ;;
-    setup-swap)    cmd_setup_swap ;;
+    setup-swap)    cmd_setup_swap "$@" ;;
     setup-extroot) cmd_setup_extroot "$@" ;;
     *) echo "Usage: sheepfold-usb-storage <scan|info|format|mount|umount|status|archive-push|setup-swap|setup-extroot>" >&2; exit 1 ;;
 esac
