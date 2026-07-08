@@ -51,10 +51,12 @@ write_seen() {
 
         file="$(presence_file_for_mac "$mac")"
         current="$(read_field "$file" last_seen)"
+        previous_ip="$(safe_field "$(read_field "$file" ip)")"
         case "$current" in
                 ''|*[!0-9]*) current=0 ;;
         esac
         [ "$seen_at" -ge "$current" ] || return 0
+        [ -n "$ip" ] || ip="$previous_ip"
 
         tmp="$file.tmp.$$"
         umask 077
