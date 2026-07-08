@@ -49,7 +49,7 @@ object AccessEndingScheduler {
                 context,
                 REQUEST_CODE,
                 intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                pendingIntentFlags(PendingIntent.FLAG_UPDATE_CURRENT)
             )
 
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -97,9 +97,17 @@ object AccessEndingScheduler {
             context,
             REQUEST_CODE,
             intent,
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            pendingIntentFlags(PendingIntent.FLAG_NO_CREATE)
         ) ?: return
         (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(pendingIntent)
         pendingIntent.cancel()
+    }
+
+    private fun pendingIntentFlags(baseFlags: Int): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            baseFlags or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            baseFlags
+        }
     }
 }
