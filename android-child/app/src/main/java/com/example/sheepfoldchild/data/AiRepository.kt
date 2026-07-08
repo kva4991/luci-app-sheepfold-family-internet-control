@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
+import java.net.InetAddress
 import java.net.URL
 import java.net.URLEncoder
 
@@ -19,6 +20,8 @@ class AiRepository(private val context: Context) {
         private const val AI_ENDPOINT = "/cgi-bin/sheepfold-api/ai-assistant"
         private const val TIMEOUT_MS = 30_000
         private const val CONSENT_VERSION = "child-ai-v1"
+        private const val DEFAULT_HTTPS_PORT = 5200
+        private const val DEFAULT_HTTP_PORT = 5201
     }
 
     suspend fun getRouterBaseUrl(): String? =
@@ -39,28 +42,43 @@ class AiRepository(private val context: Context) {
             )
         }
 
+        val formBody = listOf(
+            "message" to buildPrompt(question, status, history),
+            "deviceId" to deviceId,
+            "clientRole" to clientRole,
+            "isAdministrator" to if (status.isAdministrator) "1" else "0",
+            "consentVersion" to CONSENT_VERSION
+        ).joinToString("&") { (key, value) ->
+            "${encode(key)}=${encode(value)}"
+        }
+
+        var lastError: Throwable? = null
+        for (candidate in candidateBaseUrls(baseUrl)) {
+            val result = askOnce(candidate, formBody)
+            if (result.isSuccess) return@withContext result
+            lastError = result.exceptionOrNull()
+        }
+        Result.failure(lastError ?: IllegalStateException("Роутер Sheepfold недоступен"))
+    }
+
+    private fun askOnce(baseUrl: String, formBody: String): Result<String> {
         var connection: HttpURLConnection? = null
-        try {
+        return try {
             val url = URL("${baseUrl.trimEnd('/')}$AI_ENDPOINT")
+            if (url.protocol == "http" && !isPrivateLanHost(url.host)) {
+                return Result.failure(IllegalArgumentException("HTTP разрешён только для локального роутера"))
+            }
+
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.doOutput = true
             connection.connectTimeout = TIMEOUT_MS
             connection.readTimeout = TIMEOUT_MS
+            connection.instanceFollowRedirects = false
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("X-Sheepfold-Client", "android-child-v1")
-
-            val body = listOf(
-                "message" to buildPrompt(question, status, history),
-                "deviceId" to deviceId,
-                "clientRole" to clientRole,
-                "isAdministrator" to if (status.isAdministrator) "1" else "0",
-                "consentVersion" to CONSENT_VERSION
-            ).joinToString("&") { (key, value) ->
-                "${encode(key)}=${encode(value)}"
-            }
-            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { it.write(body) }
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { it.write(formBody) }
 
             val code = connection.responseCode
             val responseBody = (if (code in 200..299) connection.inputStream else connection.errorStream)
@@ -69,17 +87,71 @@ class AiRepository(private val context: Context) {
                 .orEmpty()
 
             if (code !in 200..299) {
-                return@withContext Result.failure(Exception(extractError(responseBody, code)))
+                Result.failure(Exception(extractError(responseBody, code)))
+            } else {
+                val answer = extractAnswer(responseBody)
+                if (answer.isNullOrBlank()) {
+                    Result.failure(Exception("Провайдер вернул пустой ответ"))
+                } else {
+                    Result.success(answer)
+                }
             }
-
-            val answer = extractAnswer(responseBody)
-                ?: return@withContext Result.failure(Exception("Провайдер вернул пустой ответ"))
-            Result.success(answer)
         } catch (error: Exception) {
             Result.failure(error)
         } finally {
             connection?.disconnect()
         }
+    }
+
+    private fun candidateBaseUrls(rawBaseUrl: String): List<String> {
+        val parsed = parseRouterUrl(rawBaseUrl)
+        val host = if (parsed.host.contains(':')) "[${parsed.host}]" else parsed.host
+        val path = parsed.path
+            .trimEnd('/')
+            .removeSuffix("/cgi-bin/sheepfold-api/ai-assistant")
+            .removeSuffix("/cgi-bin/sheepfold-api")
+        val explicitPort = parsed.port.takeIf { it > 0 }
+        val httpsPort = when {
+            explicitPort == DEFAULT_HTTP_PORT -> DEFAULT_HTTPS_PORT
+            explicitPort != null -> explicitPort
+            else -> DEFAULT_HTTPS_PORT
+        }
+        val httpPort = when {
+            explicitPort == DEFAULT_HTTPS_PORT -> DEFAULT_HTTP_PORT
+            explicitPort != null -> explicitPort
+            else -> DEFAULT_HTTP_PORT
+        }
+        val result = mutableListOf("https://$host:$httpsPort$path".trimEnd('/'))
+        if (isPrivateLanHost(parsed.host)) {
+            result += "http://$host:$httpPort$path".trimEnd('/')
+        }
+        return result.distinct()
+    }
+
+    private fun parseRouterUrl(rawUrl: String): URL {
+        val trimmed = rawUrl.trim().trimEnd('/')
+        require(trimmed.isNotBlank()) { "Адрес роутера не указан" }
+        val withScheme = if (
+            trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true)
+        ) trimmed else "https://$trimmed"
+        val parsed = URL(withScheme)
+        require(parsed.protocol == "http" || parsed.protocol == "https") {
+            "Поддерживаются только HTTP и HTTPS"
+        }
+        require(parsed.host.isNotBlank()) { "Некорректный адрес роутера" }
+        return parsed
+    }
+
+    private fun isPrivateLanHost(host: String): Boolean {
+        val normalized = host.trim().lowercase()
+        if (normalized == "localhost" || normalized.endsWith(".local") || normalized.endsWith(".lan")) {
+            return true
+        }
+        return runCatching {
+            val address = InetAddress.getByName(normalized)
+            address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress || address.isSiteLocalAddress
+        }.getOrDefault(false)
     }
 
     private fun encode(value: String): String =
