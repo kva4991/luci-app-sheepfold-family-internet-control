@@ -6,15 +6,13 @@
       "file": {
         "/tmp/dhcp.leases": [ "read" ],
         "/proc/net/arp": [ "read" ],
-        "/tmp/sheepfold/events.log": [ "read" ],
-        "/tmp/sheepfold/*": [ "read" ]
+        "/tmp/sheepfold/events.log": [ "read" ]
       }
     },
     "write": {
       "uci": [ "sheepfold", "dhcp", "wireless", "system" ],
       "file": {
         "/tmp/sheepfold/events.log": [ "write" ],
-        "/tmp/sheepfold/*": [ "write" ],
         "/www/.well-known/sheepfold.json": [ "write" ],
         "/etc/init.d/sheepfold": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-site-lists": [ "exec" ],
