@@ -11,19 +11,14 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-/**
- * Отправляет вопрос на фактический backend Sheepfold:
- * POST /cgi-bin/sheepfold-api/ai-assistant, application/x-www-form-urlencoded.
- *
- * Провайдер и модель выбираются только на роутере. Детское приложение не
- * запрашивает диагностику или журналы и поэтому не нуждается в токене админа.
- */
+/** Отправляет детский запрос на AI backend Sheepfold через роутер. */
 class AiRepository(private val context: Context) {
 
     companion object {
         private val KEY_ROUTER_URL = stringPreferencesKey("router_base_url")
         private const val AI_ENDPOINT = "/cgi-bin/sheepfold-api/ai-assistant"
         private const val TIMEOUT_MS = 30_000
+        private const val CONSENT_VERSION = "child-ai-v1"
     }
 
     suspend fun getRouterBaseUrl(): String? =
@@ -36,24 +31,39 @@ class AiRepository(private val context: Context) {
         status: ClientStatusData?,
         history: List<ChatMessage>
     ): Result<String> = withContext(Dispatchers.IO) {
-        var conn: HttpURLConnection? = null
+        val deviceId = status?.deviceId?.trim().orEmpty()
+        val clientRole = status?.clientRole?.trim().orEmpty()
+        if (deviceId.isBlank() || clientRole.isBlank()) {
+            return@withContext Result.failure(
+                IllegalStateException("Роутер ещё не подтвердил идентификатор и роль устройства")
+            )
+        }
+
+        var connection: HttpURLConnection? = null
         try {
             val url = URL("${baseUrl.trimEnd('/')}$AI_ENDPOINT")
-            conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.doOutput = true
-            conn.connectTimeout = TIMEOUT_MS
-            conn.readTimeout = TIMEOUT_MS
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-            conn.setRequestProperty("Accept", "application/json")
-            conn.setRequestProperty("X-Sheepfold-Client", "android-child-v1")
+            connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.connectTimeout = TIMEOUT_MS
+            connection.readTimeout = TIMEOUT_MS
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("X-Sheepfold-Client", "android-child-v1")
 
-            val prompt = buildPrompt(question, status, history)
-            val body = "message=${URLEncoder.encode(prompt, Charsets.UTF_8.name())}"
-            OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body) }
+            val body = listOf(
+                "message" to buildPrompt(question, status, history),
+                "deviceId" to deviceId,
+                "clientRole" to clientRole,
+                "isAdministrator" to if (status.isAdministrator) "1" else "0",
+                "consentVersion" to CONSENT_VERSION
+            ).joinToString("&") { (key, value) ->
+                "${encode(key)}=${encode(value)}"
+            }
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { it.write(body) }
 
-            val code = conn.responseCode
-            val responseBody = (if (code in 200..299) conn.inputStream else conn.errorStream)
+            val code = connection.responseCode
+            val responseBody = (if (code in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader(Charsets.UTF_8)
                 ?.use { it.readText() }
                 .orEmpty()
@@ -65,16 +75,19 @@ class AiRepository(private val context: Context) {
             val answer = extractAnswer(responseBody)
                 ?: return@withContext Result.failure(Exception("Провайдер вернул пустой ответ"))
             Result.success(answer)
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (error: Exception) {
+            Result.failure(error)
         } finally {
-            conn?.disconnect()
+            connection?.disconnect()
         }
     }
 
+    private fun encode(value: String): String =
+        URLEncoder.encode(value, Charsets.UTF_8.name())
+
     private fun buildPrompt(
         question: String,
-        status: ClientStatusData?,
+        status: ClientStatusData,
         history: List<ChatMessage>
     ): String {
         val result = StringBuilder()
@@ -82,30 +95,27 @@ class AiRepository(private val context: Context) {
         if (recentHistory.isNotEmpty()) {
             result.append("Предыдущий разговор:\n")
             recentHistory.forEach { message ->
-                val role = if (message.role == "assistant") "Помощник" else "Пользователь"
+                val role = if (message.role == "assistant") "Помощник" else "Ребёнок"
                 result.append(role).append(": ").append(message.content.take(800)).append('\n')
             }
             result.append('\n')
         }
-        result.append("Контекст устройства: ").append(buildClientContext(status)).append("\n\n")
-        result.append("Вопрос: ").append(question.trim())
+        result.append("Безопасный контекст доступа: ").append(buildClientContext(status)).append("\n\n")
+        result.append("Вопрос ребёнка: ").append(question.trim())
         return result.toString().take(12_000)
     }
 
     private fun extractAnswer(json: String): String? {
         val root = JSONObject(json)
-
         root.optJSONObject("data")?.optString("answer")
             ?.takeIf { it.isNotBlank() }
             ?.let { return it }
-
         root.optJSONArray("choices")
             ?.optJSONObject(0)
             ?.optJSONObject("message")
             ?.optString("content")
             ?.takeIf { it.isNotBlank() }
             ?.let { return it }
-
         root.optJSONArray("candidates")
             ?.optJSONObject(0)
             ?.optJSONObject("content")
@@ -114,33 +124,27 @@ class AiRepository(private val context: Context) {
             ?.optString("text")
             ?.takeIf { it.isNotBlank() }
             ?.let { return it }
-
         return null
     }
 
-    private fun extractError(json: String, code: Int): String {
-        return try {
-            val root = JSONObject(json)
-            root.optJSONObject("error")?.optString("message")
-                ?.takeIf { it.isNotBlank() }
-                ?: root.optString("message").takeIf { it.isNotBlank() }
-                ?: "HTTP $code"
-        } catch (_: Exception) {
-            json.takeIf { it.isNotBlank() } ?: "HTTP $code"
-        }
+    private fun extractError(json: String, code: Int): String = try {
+        val root = JSONObject(json)
+        root.optJSONObject("error")?.optString("message")
+            ?.takeIf { it.isNotBlank() }
+            ?: root.optString("message").takeIf { it.isNotBlank() }
+            ?: "HTTP $code"
+    } catch (_: Exception) {
+        json.takeIf { it.isNotBlank() } ?: "HTTP $code"
     }
 
-    private fun buildClientContext(status: ClientStatusData?): String {
-        if (status == null) return "статус неизвестен"
-        return buildString {
-            status.deviceName?.let { append("устройство $it; ") }
-            append("интернет ${status.internetState}; ")
-            status.accessMode?.let { append("режим $it; ") }
-            status.minutesRemaining?.let { append("осталось $it мин.; ") }
-            status.accessEndsAt?.let { append("изменение доступа $it; ") }
-            status.message?.let { append(it) }
-        }.trim().trimEnd(';')
-    }
+    private fun buildClientContext(status: ClientStatusData): String = buildString {
+        append("идентификатор ").append(status.deviceId).append("; ")
+        append("роль ").append(status.clientRole).append("; ")
+        append("интернет ").append(status.internetState).append("; ")
+        status.accessMode?.let { append("режим ").append(it).append("; ") }
+        status.minutesRemaining?.let { append("осталось ").append(it).append(" мин.; ") }
+        status.message?.let { append(it) }
+    }.trim().trimEnd(';')
 }
 
 data class ChatMessage(val role: String, val content: String)
