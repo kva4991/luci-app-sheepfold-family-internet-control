@@ -185,15 +185,29 @@ describe('Безопасное автоназначение устройств',
     assert.equal(isAutoAssignable(device), false);
   });
 
-  it('mDNS принтера всегда запрещает автоматическое доверие', () => {
+  it('один mDNS-признак принтера не даёт доверие, но и не включает жёсткий запрет', () => {
     const device = classify({
       name: 'office-device',
       mdnsServices: '_ipp._tcp,_printer._tcp',
     });
 
     assert.equal(device.type, 'printer');
-    assert.equal(device.hardDeny, true);
+    assert.equal(device.hardDeny, false);
+    assert.equal(device.evidenceCount, 1);
     assert.equal(isAutoAssignable(device), false);
+  });
+
+  it('два независимых принтерных признака разрешают безопасное автодоверие', () => {
+    const device = classify({
+      name: 'Office printer',
+      ports: '631,9100',
+      mdnsServices: '_ipp._tcp,_printer._tcp',
+    });
+
+    assert.equal(device.type, 'printer');
+    assert.equal(device.hardDeny, false);
+    assert.ok(device.evidenceCount >= 2);
+    assert.equal(isAutoAssignable(device), true);
   });
 
   it('считает статическое имя владельца независимым подтверждением лампы', () => {
@@ -229,10 +243,11 @@ describe('Безопасное автоназначение устройств',
     assert.doesNotMatch(source, /revoke_unsafe_auto_assignment/);
   });
 
-  it('повторное определение не меняет группу и списки доступа', () => {
+  it('повторное определение снимает ручную фиксацию, но не меняет группу и списки доступа', () => {
     const source = readFileSync(reclassifyPath, 'utf8');
 
-    assert.match(source, /manual_device_type_locked/);
+    assert.match(source, /manual_device_type=0/);
+    assert.match(source, /delete[^\n]*\.device_type/);
     assert.doesNotMatch(source, /delete[^\n]*\.group/);
     assert.doesNotMatch(source, /delete[^\n]*(allowlist|blocklist)/);
   });
