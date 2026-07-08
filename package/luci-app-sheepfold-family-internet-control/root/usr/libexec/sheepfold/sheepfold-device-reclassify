@@ -2,6 +2,7 @@
 set -eu
 
 DETECTOR="/usr/libexec/sheepfold/sheepfold-device-detector"
+SCAN_LOCK="/tmp/sheepfold/device-detection.lock"
 mac="$(printf '%s' "${1:-}" | tr '[:lower:]' '[:upper:]')"
 
 printf '%s' "$mac" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' || {
@@ -41,17 +42,40 @@ for option in \
         detection_fingerprint \
         detection_ports \
         detection_oui_vendor \
+        detection_mdns_services \
         detection_updated_at; do
         uci -q delete "sheepfold.$section.$option" 2>/dev/null || true
 done
 
 uci -q commit sheepfold
 
+acquire_lock() {
+        mkdir -p /tmp/sheepfold
+        attempts=0
+        while ! mkdir "$SCAN_LOCK" 2>/dev/null; do
+                attempts=$((attempts + 1))
+                [ "$attempts" -lt 30 ] || {
+                        echo "detector_busy" >&2
+                        return 1
+                }
+                sleep 1
+        done
+        trap 'rmdir "$SCAN_LOCK" 2>/dev/null || true' EXIT HUP INT TERM
+}
+
+release_lock() {
+        rmdir "$SCAN_LOCK" 2>/dev/null || true
+        trap - EXIT HUP INT TERM
+}
+
 if [ -x "$DETECTOR" ]; then
-        "$DETECTOR" scan changed >/dev/null 2>&1 || {
+        acquire_lock || exit 5
+        if ! "$DETECTOR" scan changed >/dev/null 2>&1; then
+                release_lock
                 echo "reclassification_scan_failed" >&2
-                exit 5
-        }
+                exit 6
+        fi
+        release_lock
 fi
 
 printf 'status=reclassified\n'
