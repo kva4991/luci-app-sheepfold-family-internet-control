@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.InetAddress
 import java.net.URL
 import java.net.URLEncoder
 
@@ -19,18 +20,35 @@ data class AiAssistantRequest(
 
 object AiAssistantClient {
     suspend fun ask(request: AiAssistantRequest): String = withContext(Dispatchers.IO) {
-        val apiUrl = "${request.connection.apiUrl.trimEnd('/')}/ai-assistant"
-        // Провайдер и модель являются настройками роутера. Android не переопределяет
-        // их значениями из старого UI и тем самым следует backend-контракту.
+        val deviceId = request.connection.deviceId
+            ?: throw IllegalStateException("Идентификатор парного устройства отсутствует")
+        var lastError: Throwable? = null
+        for (apiBase in candidateApiUrls(request.connection.apiUrl)) {
+            val result = runCatching { askOnce(request, apiBase, deviceId) }
+            if (result.isSuccess) return@withContext result.getOrThrow()
+            lastError = result.exceptionOrNull()
+        }
+        throw lastError ?: IllegalStateException("Роутер не смог получить ответ ИИ")
+    }
+
+    private fun askOnce(request: AiAssistantRequest, apiBase: String, deviceId: String): String {
+        val apiUrl = "${apiBase.trimEnd('/')}/ai-assistant"
         val body = listOf(
             "message" to request.message,
             "includeInfo" to if (request.includeRouterInfo) "1" else "0",
             "includeLogs" to if (request.includeProgramLog) "1" else "0",
-            "googleAccount" to request.googleAccount
+            "googleAccount" to request.googleAccount,
+            "deviceId" to deviceId,
+            "clientRole" to "parent",
+            "isAdministrator" to "1"
         ).joinToString("&") { (key, value) ->
             "${urlEncode(key)}=${urlEncode(value)}"
         }
-        val connection = URL(apiUrl).openConnection() as HttpURLConnection
+        val url = URL(apiUrl)
+        if (url.protocol == "http" && !isPrivateLanHost(url.host)) {
+            throw IllegalArgumentException("HTTP разрешён только для локального роутера")
+        }
+        val connection = url.openConnection() as HttpURLConnection
 
         try {
             connection.connectTimeout = 5000
@@ -42,9 +60,9 @@ object AiAssistantClient {
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("User-Agent", "Sheepfold Android")
             connection.setRequestProperty("X-Sheepfold-Client", "android-admin-v1")
-            request.connection.bearerToken?.takeIf { it.isNotBlank() }?.let { token ->
-                connection.setRequestProperty("Authorization", "Bearer $token")
-            }
+            val token = request.connection.bearerToken
+                ?: throw IllegalStateException("Административный токен отсутствует")
+            connection.setRequestProperty("Authorization", "Bearer $token")
             connection.outputStream.use { output ->
                 output.write(body.toByteArray(Charsets.UTF_8))
             }
@@ -56,7 +74,7 @@ object AiAssistantClient {
                 })
             }
 
-            extractAnswer(responseBody)
+            return extractAnswer(responseBody)
         } finally {
             connection.disconnect()
         }
@@ -67,13 +85,11 @@ object AiAssistantClient {
         if (!json.optBoolean("ok", true) && json.has("error")) {
             throw IllegalStateException(apiError(body))
         }
-
         json.optJSONObject("data")
             ?.optString("answer")
             ?.trim()
             ?.takeIf { it.isNotBlank() }
             ?.let { return it }
-
         val deepSeek = json.optJSONArray("choices")
             ?.optJSONObject(0)
             ?.optJSONObject("message")
@@ -88,7 +104,6 @@ object AiAssistantClient {
             ?.optString("text")
             .orEmpty()
             .trim()
-
         return deepSeek.ifBlank { gemini }.ifBlank {
             json.optString("output_text")
                 .ifBlank { json.optString("answer") }
@@ -114,6 +129,36 @@ object AiAssistantClient {
             connection.errorStream ?: connection.inputStream
         }
         return stream.bufferedReader(Charsets.UTF_8).use { reader -> reader.readText() }
+    }
+
+    private fun candidateApiUrls(rawApiUrl: String): List<String> {
+        val parsed = URL(rawApiUrl)
+        val host = if (parsed.host.contains(':')) "[${parsed.host}]" else parsed.host
+        val explicitPort = parsed.port.takeIf { it > 0 }
+        val httpsPort = when {
+            parsed.protocol == "https" && explicitPort != null -> explicitPort
+            explicitPort == 5201 -> 5200
+            explicitPort != null -> explicitPort
+            else -> 5200
+        }
+        val httpPort = when {
+            parsed.protocol == "http" && explicitPort != null -> explicitPort
+            explicitPort == 5200 -> 5201
+            explicitPort != null -> explicitPort
+            else -> 5201
+        }
+        val result = mutableListOf("https://$host:$httpsPort${parsed.path}")
+        if (isPrivateLanHost(parsed.host)) result += "http://$host:$httpPort${parsed.path}"
+        return result.distinct()
+    }
+
+    private fun isPrivateLanHost(host: String): Boolean {
+        val normalized = host.trim().lowercase()
+        if (normalized == "localhost" || normalized.endsWith(".local") || normalized.endsWith(".lan")) return true
+        return runCatching {
+            val address = InetAddress.getByName(normalized)
+            address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress || address.isSiteLocalAddress
+        }.getOrDefault(false)
     }
 
     private fun urlEncode(value: String): String =
