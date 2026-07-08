@@ -114,8 +114,22 @@ class RouterConnectionManager {
             connection.readTimeout = 2500
             connection.requestMethod = "GET"
             connection.instanceFollowRedirects = false
+            connection.setRequestProperty("Accept", "application/json")
             connection.connect()
-            connection.responseCode in 200..499
+
+            if (connection.responseCode !in 200..299) {
+                return@withContext false
+            }
+
+            val responseBody = connection.inputStream
+                .bufferedReader(Charsets.UTF_8)
+                .use { it.readText() }
+            val response = runCatching { JSONObject(responseBody) }.getOrNull()
+                ?: return@withContext false
+            val identifiesSheepfold = response.optString("app").equals("sheepfold", ignoreCase = true) ||
+                response.optString("service").equals("sheepfold", ignoreCase = true)
+
+            response.optBoolean("ok", false) && identifiesSheepfold
         } finally {
             connection.disconnect()
         }
@@ -141,6 +155,7 @@ class RouterConnectionManager {
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("User-Agent", "Sheepfold Android")
+            connection.setRequestProperty("X-Sheepfold-Client", "android-admin-v1")
             connection.outputStream.use { output ->
                 output.write(body.toByteArray(Charsets.UTF_8))
             }
@@ -206,12 +221,21 @@ class RouterConnectionManager {
 
     private fun normalizeRouterUrl(value: String): String {
         require(value.isNotBlank()) { "QR код не содержит адрес роутера" }
-        val withScheme = if (value.startsWith("http://") || value.startsWith("https://")) {
-            value
+        val trimmed = value.trim()
+        val withScheme = if (
+            trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true)
+        ) {
+            trimmed
         } else {
-            "http://$value"
+            "http://$trimmed"
         }
-        return withScheme.trimEnd('/')
+        val parsed = URL(withScheme)
+        require(parsed.protocol == "http" || parsed.protocol == "https") {
+            "QR код содержит неподдерживаемую схему адреса"
+        }
+        require(parsed.host.isNotBlank()) { "QR код содержит некорректный адрес роутера" }
+        return parsed.toExternalForm().trimEnd('/')
     }
 
     private fun withOptionalPort(host: String, port: String): String {
@@ -219,8 +243,14 @@ class RouterConnectionManager {
         if (trimmedPort.isBlank()) {
             return host
         }
+        require(trimmedPort.all(Char::isDigit)) { "QR код содержит некорректный порт" }
+        val numericPort = trimmedPort.toIntOrNull()
+        require(numericPort != null && numericPort in 1..65535) { "QR код содержит некорректный порт" }
 
-        val withScheme = if (host.startsWith("http://") || host.startsWith("https://")) {
+        val withScheme = if (
+            host.startsWith("http://", ignoreCase = true) ||
+            host.startsWith("https://", ignoreCase = true)
+        ) {
             host
         } else {
             "http://$host"
@@ -230,7 +260,7 @@ class RouterConnectionManager {
             return host
         }
 
-        return "${url.protocol}://${url.host}:$trimmedPort"
+        return "${url.protocol}://${url.host}:$numericPort"
     }
 
     private fun urlEncode(value: String): String =
