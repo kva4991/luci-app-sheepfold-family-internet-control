@@ -1,15 +1,56 @@
-name: Placeholder
+name: Validate Sheepfold
 
 on:
   pull_request:
   push:
     branches:
       - main
+      - editsByClaude
+
+permissions:
+  contents: read
 
 jobs:
-  validate:
+  shell-and-node:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Show repository layout
-        run: find . -maxdepth 4 -type f | sort
+
+      - name: Validate OpenWrt shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          find package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold \
+            -type f -print0 | xargs -0 -n1 sh -n
+          sh -n package/luci-app-sheepfold-family-internet-control/root/www/cgi-bin/sheepfold-api
+          sh -n package/luci-app-sheepfold-family-internet-control/root/www/.well-known/sheepfold.json.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run JavaScript tests
+        run: node --test tests/*.test.mjs
+
+  android:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - android
+          - android-child
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        run: gradle -p "${{ matrix.project }}" assembleDebug --stacktrace
