@@ -1,40 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Основной файл строк — русский язык (базовый) -->
 <resources>
     <string name="app_name">Овчарня</string>
     <string name="app_tagline">Семейный интернет-контроль</string>
 
-    <!-- Навигация -->
+    <string name="tab_control">Управление</string>
     <string name="tab_devices">Устройства</string>
     <string name="tab_schedule">Расписание</string>
     <string name="tab_ai">ИИ-помощник</string>
+    <string name="tab_info">Информация</string>
     <string name="tab_settings">Настройки</string>
 
-    <!-- Устройства -->
     <string name="devices_title">Устройства в сети</string>
-    <string name="devices_empty">Устройства не найдены</string>
+    <string name="devices_empty">Роутер не вернул зарегистрированных устройств.</string>
     <string name="device_block">Заблокировать</string>
     <string name="device_unblock">Разблокировать</string>
     <string name="device_status_online">В сети</string>
     <string name="device_status_offline">Не в сети</string>
     <string name="device_status_blocked">Заблокировано</string>
+    <string name="device_status_format">Статус: %1$s</string>
+    <string name="device_ip_format">IP: %1$s</string>
+    <string name="device_mac_format">MAC: %1$s</string>
+    <string name="device_group_format">Группа: %1$s</string>
 
-    <!-- Расписание -->
     <string name="schedule_title">Расписание доступа</string>
     <string name="schedule_add">Добавить правило</string>
     <string name="schedule_empty">Правила не настроены</string>
 
-    <!-- ИИ-помощник -->
     <string name="ai_title">ИИ-помощник</string>
+    <string name="ai_parent_title">ИИ-помощник для родителя</string>
+    <string name="ai_parent_privacy_default">По умолчанию передаётся только вопрос и проверенная роль устройства.</string>
     <string name="ai_hint">Задайте вопрос…</string>
+    <string name="ai_question">Вопрос</string>
     <string name="ai_send">Отправить</string>
+    <string name="ai_ask">Спросить</string>
+    <string name="ai_answer_failed">Не удалось получить ответ</string>
     <string name="ai_privacy_title">Конфиденциальность</string>
     <string name="ai_privacy_router">Включить данные роутера</string>
     <string name="ai_privacy_log">Включить журнал программы</string>
     <string name="ai_provider_label">Провайдер ИИ</string>
     <string name="ai_beta_label">Скоро</string>
 
-    <!-- Настройки -->
     <string name="settings_title">Настройки</string>
     <string name="settings_router_ip">IP-адрес роутера</string>
     <string name="settings_router_password">Пароль роутера</string>
@@ -45,12 +50,57 @@
     <string name="settings_language">Язык</string>
     <string name="settings_save">Сохранить</string>
     <string name="settings_saved">Настройки сохранены</string>
+    <string name="settings_disconnect">Отключить приложение от роутера</string>
 
-    <!-- Общее -->
+    <string name="setup_connect_title">Подключение Sheepfold</string>
+    <string name="setup_permissions_title">Разрешения Android</string>
+    <string name="setup_permissions_ready">Обязательных разрешений для ручного сопряжения нет. Камера запрашивается только при сканировании QR-кода.</string>
+    <string name="setup_permissions_optional">Уведомления и камера необязательны. После отказа ручное сопряжение продолжит работать.</string>
+    <string name="setup_request_notifications">Запросить разрешение на уведомления</string>
+    <string name="setup_take_qr_photo">Сфотографировать QR-код</string>
+    <string name="setup_qr_data">Данные QR-кода</string>
+    <string name="setup_qr_hint">После фото данные появятся здесь. Также можно вставить строку SF1|… или JSON из LuCI.</string>
+    <string name="setup_connect_qr">Подключиться по QR-коду</string>
+    <string name="setup_manual">Или ручная настройка</string>
+    <string name="setup_router_address">Адрес роутера</string>
+    <string name="setup_admin_login">Логин администратора</string>
+    <string name="setup_pairing_code">Временный код сопряжения</string>
+    <string name="setup_connect">Подключиться</string>
+    <string name="setup_qr_not_recognized">QR-код не распознан. Можно повторить фото или вставить данные вручную.</string>
+    <string name="setup_camera_denied">Камера не разрешена. Ручное сопряжение и вставка QR-данных остаются доступными.</string>
+    <string name="setup_connection_failed">Не удалось подключиться к роутеру</string>
+
+    <string name="protection_title">Защита приложения</string>
+    <string name="protection_description">Пароль рекомендуется. Face и Fingerprint можно выбрать, но Sheepfold полагается на системную блокировку телефона и не считает эти режимы усиленной защитой.</string>
+    <string name="protection_password">Пароль — рекомендуется</string>
+    <string name="protection_pin">PIN-код</string>
+    <string name="protection_face">Face — не рекомендуется</string>
+    <string name="protection_fingerprint">Fingerprint — не рекомендуется</string>
+    <string name="protection_none">Без дополнительной защиты</string>
+    <string name="protection_password_label">Пароль</string>
+    <string name="protection_repeat">Повторите значение</string>
+    <string name="protection_finish">Завершить настройку</string>
+    <string name="unlock_title">Разблокировка Sheepfold</string>
+    <string name="unlock_enter_pin">Введите PIN-код</string>
+    <string name="unlock_enter_password">Введите пароль</string>
+    <string name="unlock_invalid">Неверное значение</string>
+    <string name="unlock_open">Открыть</string>
+
+    <string name="router_label_format">Роутер: %1$s</string>
+    <string name="router_commands_direct">Команды выполняются непосредственно на OpenWrt-роутере.</string>
+    <string name="router_enable_internet">Включить интернет</string>
+    <string name="router_disable_internet">Отключить интернет для всех</string>
+    <string name="router_global_block_enabled">Глобальная блокировка включена на роутере</string>
+    <string name="router_internet_enabled">Интернет включён на роутере</string>
+    <string name="router_refresh_failed">Не удалось обновить данные</string>
+    <string name="router_info_title">Информация о роутере</string>
+
     <string name="action_ok">ОК</string>
     <string name="action_cancel">Отмена</string>
     <string name="action_retry">Повторить</string>
+    <string name="action_refresh">Обновить</string>
     <string name="error_connection">Ошибка подключения к роутеру</string>
     <string name="error_auth">Неверный пароль</string>
     <string name="loading">Загрузка…</string>
+    <string name="value_empty">—</string>
 </resources>
