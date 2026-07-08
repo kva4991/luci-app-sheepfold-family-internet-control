@@ -16,8 +16,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import app.sheepfold.android.R
 import app.sheepfold.android.security.AppProtectionMode
 
 @Composable
@@ -36,9 +38,15 @@ fun AppUnlockScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Разблокировка Sheepfold", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.unlock_title), style = MaterialTheme.typography.headlineSmall)
         Text(
-            if (mode == AppProtectionMode.PIN) "Введите PIN-код" else "Введите пароль",
+            stringResource(
+                if (mode == AppProtectionMode.PIN) {
+                    R.string.unlock_enter_pin
+                } else {
+                    R.string.unlock_enter_password
+                }
+            ),
             modifier = Modifier.padding(top = 10.dp, bottom = 16.dp)
         )
         OutlinedTextField(
@@ -53,7 +61,7 @@ fun AppUnlockScreen(
             isError = error
         )
         if (error) {
-            Text("Неверное значение", color = MaterialTheme.colorScheme.error)
+            Text(stringResource(R.string.unlock_invalid), color = MaterialTheme.colorScheme.error)
         }
         Button(
             enabled = secret.isNotBlank(),
@@ -64,7 +72,7 @@ fun AppUnlockScreen(
                 .fillMaxWidth()
                 .padding(top = 12.dp)
         ) {
-            Text("Открыть")
+            Text(stringResource(R.string.unlock_open))
         }
     }
 }
