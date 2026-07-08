@@ -96,42 +96,62 @@ function evidenceLabel(value) {
 	return labels[value] || value;
 }
 
-function detectionSummary(section) {
-	var evidence;
-	var score;
-	var confidence;
-	var denied;
-	var parts = [];
+function evidenceText(section) {
+	var evidence = String(section && section.detection_evidence || '')
+		.split(',')
+		.map(function(value) { return value.trim(); })
+		.filter(Boolean)
+		.map(evidenceLabel);
 
-	if (section.manual_device_type === '1')
-		return 'Тип устройства выбран вручную; автоматическое определение отключено.';
+	return evidence.length ? evidence.join(', ') : 'нет данных';
+}
 
-	if (!section.detected_type && !section.detection_confidence && !section.detection_evidence)
-		return 'Автоматическое определение ещё не выполнено.';
+function commaList(value) {
+	var items = String(value || '')
+		.split(',')
+		.map(function(item) { return item.trim(); })
+		.filter(Boolean);
 
-	evidence = String(section.detection_evidence || '').split(',').filter(Boolean).map(evidenceLabel);
-	score = parseInt(section.detection_auto_group_score || '0', 10) || 0;
-	confidence = parseInt(section.detection_confidence || '0', 10) || 0;
-	denied = section.detection_hard_deny === '1';
+	return items.length ? items.join(', ') : 'нет данных';
+}
 
-	if (confidence)
-		parts.push('уверенность типа ' + confidence + '%');
+function detectionLine(label, value) {
+	return E('div', { 'class': 'sf-device-detection-row' }, [
+		E('span', {}, label),
+		E('code', {}, String(value == null || value === '' ? 'нет данных' : value))
+	]);
+}
 
-	if (denied)
-		parts.push('автоматическое доверие запрещено');
-	else
-		parts.push('балл автодоверия ' + score + '/100');
+function detectionDetails(section) {
+	var confidence = parseInt(section && section.detection_confidence || '0', 10) || 0;
+	var score = parseInt(section && section.detection_auto_group_score || '0', 10) || 0;
+	var denied = section && section.detection_hard_deny === '1';
+	var manual = section && section.manual_device_type === '1';
+	var intro;
 
-	if (evidence.length)
-		parts.push('признаки: ' + evidence.join(', '));
+	if (!section) {
+		intro = 'Данные автоопределения появятся после первого сканирования устройства.';
+	} else if (manual) {
+		intro = 'Тип устройства выбран вручную. Кнопка «Определить заново» снимет ручную фиксацию и снова запустит автоопределение.';
+	} else if (!section.detected_type && !section.detection_confidence && !section.detection_evidence) {
+		intro = 'Автоматическое определение ещё не выполнено.';
+	} else {
+		intro = 'Здесь показано, почему Sheepfold выбрал тип устройства и разрешил либо запретил автоматическое доверие.';
+	}
 
-	if (section.detection_oui_vendor)
-		parts.push('производитель: ' + section.detection_oui_vendor);
-
-	if (section.detection_mdns_services)
-		parts.push('mDNS: ' + section.detection_mdns_services);
-
-	return parts.join('; ');
+	return E('section', { 'class': 'sf-device-detection-modal' }, [
+		E('h4', {}, 'Данные автоопределения'),
+		E('p', { 'class': 'sf-device-detection-intro' }, intro),
+		E('div', { 'class': 'sf-device-detection-grid' }, [
+			detectionLine('Уверенность типа', confidence ? confidence + '%' : 'нет данных'),
+			detectionLine('Балл автодоверия', score + '/100'),
+			detectionLine('Источники доказательств', evidenceText(section)),
+			detectionLine('Жёсткий запрет', denied ? 'да' : 'нет'),
+			detectionLine('Производитель MAC', section && section.detection_oui_vendor || 'нет данных'),
+			detectionLine('Обнаруженные mDNS-сервисы', commaList(section && section.detection_mdns_services)),
+			detectionLine('Причина определения', section && section.detection_reason || 'нет данных')
+		])
+	]);
 }
 
 function commandErrorText(error, fallback) {
@@ -279,51 +299,6 @@ function sortDeviceRowsByPresence(root) {
 	});
 }
 
-function openDeviceSettingsPresence(mac, attempt) {
-	var actionRows;
-	var actions;
-	var modal;
-	var text;
-	var oldStatus;
-	var statusNode;
-
-	attempt = attempt || 0;
-	actionRows = document.querySelectorAll('.sf-modal-actions');
-	actions = actionRows.length ? actionRows[actionRows.length - 1] : null;
-	modal = document.getElementById('modal_overlay') || (actions && actions.closest('.modal, .cbi-modal'));
-	text = String(modal && modal.textContent || '');
-
-	if (!actions || !modal || !/(Настройки устройства|Device settings)/i.test(text)) {
-		if (attempt < 20)
-			window.setTimeout(function() { openDeviceSettingsPresence(mac, attempt + 1); }, 50);
-		return;
-	}
-
-	oldStatus = actions.querySelector('.sf-device-presence-modal-status');
-	if (oldStatus)
-		oldStatus.remove();
-
-	statusNode = E('div', {
-		'class': 'sf-device-presence-modal-status'
-	}, presenceStatusText(presenceForMac(mac)));
-	actions.classList.add('sf-device-settings-actions');
-	actions.insertBefore(statusNode, actions.firstChild);
-}
-
-function bindSettingsPresence(mac, actions) {
-	var button = actions && actions.querySelector('.sf-icon-action-neutral');
-
-	if (!button || button.getAttribute('data-presence-bound') === '1')
-		return;
-
-	button.setAttribute('data-presence-bound', '1');
-	button.addEventListener('click', function() {
-		loadDevicePresence(true).then(function() {
-			openDeviceSettingsPresence(mac, 0);
-		});
-	});
-}
-
 function reclassifyDevice(mac, button) {
 	var spinner = E('span', { 'class': 'sf-spinner' });
 	var status = E('p', {}, 'Собираются актуальные признаки устройства…');
@@ -367,46 +342,98 @@ function reclassifyDevice(mac, button) {
 	});
 }
 
+function decorateDeviceSettingsModal(mac, attempt) {
+	var actionRows;
+	var actions;
+	var modal;
+	var editor;
+	var text;
+	var section;
+	var oldDetails;
+	var oldLeft;
+	var reclassifyButton;
+	var leftPanel;
+
+	attempt = attempt || 0;
+	actionRows = document.querySelectorAll('.sf-modal-actions');
+	actions = actionRows.length ? actionRows[actionRows.length - 1] : null;
+	modal = document.getElementById('modal_overlay') || (actions && actions.closest('.modal, .cbi-modal'));
+	text = String(modal && modal.textContent || '');
+
+	if (!actions || !modal || !/(Настройки устройства|Device settings)/i.test(text)) {
+		if (attempt < 20)
+			window.setTimeout(function() { decorateDeviceSettingsModal(mac, attempt + 1); }, 50);
+		return;
+	}
+
+	editor = modal.querySelector('.sf-device-editor');
+	section = deviceSectionByMac(mac);
+	oldDetails = modal.querySelector('.sf-device-detection-modal');
+	oldLeft = actions.querySelector('.sf-device-settings-left');
+
+	if (oldDetails)
+		oldDetails.remove();
+	if (oldLeft)
+		oldLeft.remove();
+	if (editor)
+		editor.appendChild(detectionDetails(section));
+
+	reclassifyButton = E('button', {
+		'class': 'sf-action sf-action-neutral sf-device-reclassify',
+		'type': 'button',
+		'data-device-reclassify': mac,
+		'disabled': section ? null : 'disabled',
+		'title': section ?
+			'Снять ручную фиксацию, собрать признаки и определить тип заново' :
+			'Сначала сохраните настройки устройства',
+		'click': function(event) {
+			event.preventDefault();
+			reclassifyDevice(mac, event.currentTarget);
+		}
+	}, 'Определить заново');
+
+	leftPanel = E('div', { 'class': 'sf-device-settings-left' }, [
+		E('div', { 'class': 'sf-device-presence-modal-status' }, presenceStatusText(presenceForMac(mac))),
+		reclassifyButton
+	]);
+	actions.classList.add('sf-device-settings-actions');
+	actions.insertBefore(leftPanel, actions.firstChild);
+}
+
+function bindSettingsModal(mac, actions) {
+	var button = actions && actions.querySelector('.sf-icon-action-neutral');
+
+	if (!button || button.getAttribute('data-presence-bound') === '1')
+		return;
+
+	button.setAttribute('data-presence-bound', '1');
+	button.addEventListener('click', function() {
+		loadDevicePresence(true).then(function() {
+			decorateDeviceSettingsModal(mac, 0);
+		});
+	});
+}
+
 function decorateDeviceRows(root) {
 	root.querySelectorAll('.sf-device-row:not(.sf-device-head)').forEach(function(row) {
 		var cells = row.children;
 		var mac = macFromDeviceRow(row);
-		var section = deviceSectionByMac(mac);
-		var nameCell = row.querySelector('.sf-device-name') || cells[1];
 		var actions = row.querySelector('.sf-row-actions') || cells[cells.length - 1];
-		var summary;
-		var button;
+		var oldEvidence = row.querySelector('.sf-detection-evidence');
+		var oldReclassify = actions && actions.querySelector('[data-device-reclassify]');
 
-		if (!mac || !nameCell || !actions)
+		if (!mac || !actions)
 			return;
+
+		// Диагностика и повторное определение больше не занимают место возле устройства:
+		// они показываются внизу окна «Настройки устройства».
+		if (oldEvidence)
+			oldEvidence.remove();
+		if (oldReclassify)
+			oldReclassify.remove();
 
 		decoratePresenceForRow(row, mac, actions);
-		bindSettingsPresence(mac, actions);
-
-		if (!section)
-			return;
-
-		summary = detectionSummary(section);
-		if (summary && !nameCell.querySelector('.sf-detection-evidence'))
-			nameCell.appendChild(E('small', { 'class': 'sf-detection-evidence' }, summary));
-
-		if (actions.querySelector('[data-device-reclassify]'))
-			return;
-
-		button = E('button', {
-			'class': 'sf-action sf-action-neutral sf-device-reclassify',
-			'type': 'button',
-			'data-device-reclassify': mac,
-			'disabled': section.manual_device_type === '1' ? 'disabled' : null,
-			'title': section.manual_device_type === '1' ?
-				'Тип выбран вручную. Сначала верните тип «Неизвестно».' :
-				'Собрать признаки и определить тип заново',
-			'click': function(event) {
-				event.preventDefault();
-				reclassifyDevice(mac, event.currentTarget);
-			}
-		}, 'Определить заново');
-		actions.appendChild(button);
+		bindSettingsModal(mac, actions);
 	});
 }
 
