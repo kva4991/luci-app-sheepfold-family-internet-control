@@ -10,6 +10,7 @@ CGI="$(path /www/cgi-bin/sheepfold-api)"
 CGI_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-api-legacy)"
 CONTROL="$(path /usr/libexec/sheepfold/sheepfold-router-control)"
 CONTROL_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-router-control-legacy)"
+CLIENT_STATUS="$(path /usr/libexec/sheepfold/sheepfold-client-status-effective)"
 PAIR_ACTIVATE="$(path /usr/libexec/sheepfold/sheepfold-pair-activate)"
 PAIR_DEVICE="$(path /usr/libexec/sheepfold/sheepfold-pair-device)"
 PAIR_COMMON="$(path /usr/libexec/sheepfold/sheepfold-pair-common)"
@@ -27,7 +28,7 @@ ACL="$(path /usr/share/rpcd/acl.d/luci-app-sheepfold-family-internet-control.jso
 PRIVACY_NOTICE="$(path /usr/share/sheepfold/PRIVACY_NOTICE.md)"
 
 for required in \
-    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" \
+    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
@@ -37,7 +38,7 @@ done
 
 # Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно.
 for executable in \
-    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" \
+    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$STATUS_API" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" \
@@ -58,12 +59,15 @@ grep -q '\[ "\$path_info" = "/pair-token" \]' "$CGI" || die "public CGI does not
 grep -q 'AI_HANDLER=' "$CGI" || die "role-aware AI handler is not connected"
 grep -q '/router-info|/pair-status)' "$CGI" || die "diagnostic routes are not intercepted"
 grep -q 'query_token_forbidden' "$CGI" || die "Bearer token is still accepted in query string"
+grep -q 'legacy_settings_writer_disabled' "$CGI" || die "legacy untyped settings writer remains enabled"
 
 # Pairing не создаёт администратора и повторно проверяет blocklist.
 grep -q 'PAIR_DEVICE=.*/sheepfold-pair-device' "$CONTROL" || die "pair-admin-device is not intercepted"
 grep -q 'PAIR_ACTIVATE=.*/sheepfold-pair-activate' "$CONTROL" || die "pairing-code activation is not intercepted"
+grep -q 'CLIENT_STATUS=.*/sheepfold-client-status-effective' "$CONTROL" || die "effective client status is not intercepted"
 grep -q 'exec "\$PAIR_DEVICE"' "$CONTROL" || die "pair device helper is not executed"
 grep -q 'exec "\$PAIR_ACTIVATE"' "$CONTROL" || die "pair activation helper is not executed"
+grep -q 'exec "\$CLIENT_STATUS"' "$CONTROL" || die "effective client status helper is not executed"
 grep -q '/etc/sheepfold/tokens' "$CONTROL" || die "persistent administrator token storage is missing"
 grep -q 'pair_admin_section_for_login' "$PAIR_ACTIVATE" || die "existing administrator lookup is missing"
 grep -q 'Create the account in LuCI first' "$PAIR_ACTIVATE" || die "missing-admin failure is not explicit"
@@ -75,6 +79,11 @@ block_checks="$(grep -c 'pair_list_has_mac blocklist' "$PAIR_DEVICE" || true)"
 grep -q 'pair_store_token' "$PAIR_DEVICE" || die "successful pairing does not store a token hash"
 grep -q 'pair_valid_code' "$PAIR_COMMON" || die "pairing-code alphabet validation is missing"
 grep -q 'device_id' "$PAIR_DEVICE" || die "pairing does not return stable device id"
+
+# Статус клиента учитывает blocklist, временный доступ и глобальную блокировку.
+grep -q 'global_block' "$CLIENT_STATUS" || die "effective status ignores global block"
+grep -q 'temporary_access_expired' "$CLIENT_STATUS" || die "effective status ignores expired temporary access"
+grep -q 'schedule_pending_evaluation' "$CLIENT_STATUS" || die "scheduled status still claims an unverified result"
 
 # AI gate проверяет идентичность, роль, согласие и квоту серверными данными.
 grep -q 'device_identity_mismatch' "$AI_GATE" || die "AI device identity verification is missing"
@@ -99,7 +108,7 @@ grep -q 'sheepfold-openssl-ensure' "$ACL" || die "OpenSSL verification helper is
 grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable individual logs"
 
 for script in \
-    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" \
+    "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR"; do
