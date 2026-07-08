@@ -13,11 +13,14 @@ data class ClientStatusResponse(
 )
 
 data class ClientStatusData(
+    val deviceId: String?,
     val deviceName: String?,
-    val internetState: String,   // "enabled" | "disabled" | "unknown"
-    val accessMode: String?,     // "allowlist" | "blocked" | "scheduled" | "temporary" | "restricted" | "unknown"
-    val accessEndsAt: String?,   // ISO-8601 или null
-    val minutesRemaining: Int?,  // null если accessEndsAt == null
+    val isAdministrator: Boolean,
+    val clientRole: String,
+    val internetState: String,
+    val accessMode: String?,
+    val accessEndsAt: String?,
+    val minutesRemaining: Int?,
     val message: String?
 )
 
