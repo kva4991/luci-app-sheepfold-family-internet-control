@@ -130,6 +130,7 @@
         font-size: 12px;
         line-height: 1.35;
         text-align: left;
+        text-transform: lowercase;
 }
 
 .sf-device-reclassify {
