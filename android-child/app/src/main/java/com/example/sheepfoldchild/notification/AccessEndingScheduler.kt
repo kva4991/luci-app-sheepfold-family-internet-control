@@ -8,6 +8,7 @@ import android.os.Build
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
+import kotlin.math.ceil
 
 /** Планирует локальное уведомление за пять минут до изменения доступа. */
 object AccessEndingScheduler {
@@ -29,16 +30,20 @@ object AccessEndingScheduler {
 
             // Компенсируем разницу часов телефона и роутера.
             val drift = nowEpochMs - serverEpochMs
-            val idealTriggerAt = endsAtEpochMs + drift - FIVE_MIN_MS
+            val localEndsAt = endsAtEpochMs + drift
+            val idealTriggerAt = localEndsAt - FIVE_MIN_MS
             val triggerAt = if (idealTriggerAt <= nowEpochMs) {
                 if (isAppInForeground) return
                 nowEpochMs + 500L
             } else {
                 idealTriggerAt
             }
+            val minutesAtTrigger = ceil(
+                ((localEndsAt - triggerAt).coerceAtLeast(0L)) / 60_000.0
+            ).toInt().coerceAtLeast(1)
 
             val intent = Intent(context, AccessEndingAlarmReceiver::class.java).apply {
-                minutesRemaining?.let { putExtra("minutes_remaining", it) }
+                putExtra("minutes_remaining", minutesAtTrigger)
             }
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
@@ -48,14 +53,21 @@ object AccessEndingScheduler {
             )
 
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAt,
-                    pendingIntent
-                )
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    !alarmManager.canScheduleExactAlarms() -> {
+                    alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                    )
+                }
+                else -> {
+                    alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                }
             }
         } catch (_: Exception) {
             // Некорректное время от старой версии роутера не должно ломать приложение.
