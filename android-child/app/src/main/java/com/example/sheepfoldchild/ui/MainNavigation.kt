@@ -56,8 +56,6 @@ fun MainNavigation(statusViewModel: ChildStatusViewModel, appContext: android.co
             }
         }
     ) { innerPadding ->
-        #if false
-        #endif
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
                 0 -> ChildStatusScreen(viewModel = statusViewModel)
