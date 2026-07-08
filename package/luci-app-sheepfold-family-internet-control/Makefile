@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=120
+PKG_RELEASE:=121
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -126,6 +126,7 @@ ensure_pairing_option attempt_window_seconds '600'
 uci -q get sheepfold.no_restrictions >/dev/null || uci -q set sheepfold.no_restrictions='group'
 uci -q set sheepfold.no_restrictions.name='Без ограничений'
 uci -q set sheepfold.no_restrictions.protected='1'
+uci -q set sheepfold.no_restrictions.personal='0'
 uci -q set sheepfold.no_restrictions.auto_assignable='1'
 uci -q set sheepfold.no_restrictions.allowlist_only='0'
 uci -q set sheepfold.no_restrictions.activity_log_enabled='0'
@@ -133,6 +134,7 @@ uci -q set sheepfold.no_restrictions.description='Trusted home infrastructure de
 uci -q get sheepfold.child_1 >/dev/null || uci -q set sheepfold.child_1='group'
 uci -q set sheepfold.child_1.name='Первый ребёнок'
 uci -q set sheepfold.child_1.protected='0'
+uci -q set sheepfold.child_1.personal='1'
 uci -q set sheepfold.child_1.auto_assignable='0'
 uci -q set sheepfold.child_1.allowlist_only='0'
 uci -q set sheepfold.child_1.activity_log_enabled='0'
@@ -182,6 +184,7 @@ for helper in \
 	/usr/libexec/sheepfold/sheepfold-ai-handler \
 	/usr/libexec/sheepfold/sheepfold-activity-log \
 	/usr/libexec/sheepfold/sheepfold-maintenance-window \
+	/usr/libexec/sheepfold/sheepfold-device-detector \
 	/usr/libexec/sheepfold/sheepfold-led-control \
 	/usr/libexec/sheepfold/sheepfold-usb-storage \
 	/usr/libexec/sheepfold/sheepfold-key-derive \
