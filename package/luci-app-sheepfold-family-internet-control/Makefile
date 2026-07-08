@@ -98,6 +98,10 @@ ensure_global_option site_blocklist_mode 'except_allowlist_admins'
 ensure_global_option site_blocklist_sources 'UT1 adult, malware, phishing, gambling, games, vpn | https://dsi.ut-capitole.fr/blacklists/index_en.php; StevenBlack hosts gambling-porn | https://github.com/StevenBlack/hosts; HaGeZi Threat Intelligence Feeds | https://github.com/hagezi/dns-blocklists; URLhaus malware URLs | https://urlhaus.abuse.ch/api/'
 ensure_global_option site_lists_update_interval 'weekly'
 ensure_global_option activity_log_enabled '0'
+ensure_global_option private_logs '0'
+ensure_global_option log_days '7'
+ensure_global_option log_max_dir_kb '0'
+ensure_global_option log_max_device_kb '0'
 if [ "$$(uci -q get sheepfold.global.domain_allowlist_for_blocklist_default_migrated 2>/dev/null)" != "1" ]; then
 	uci -q set sheepfold.global.domain_allowlist_for_blocklist='1'
 	uci -q set sheepfold.global.domain_allowlist_for_blocklist_default_migrated='1'
@@ -171,6 +175,9 @@ for helper in \
 	/usr/libexec/sheepfold/sheepfold-api-client-status \
 	/usr/libexec/sheepfold/sheepfold-api-pair \
 	/usr/libexec/sheepfold/sheepfold-ai-gate \
+	/usr/libexec/sheepfold/sheepfold-activity-log \
+	/usr/libexec/sheepfold/sheepfold-maintenance-window \
+	/usr/libexec/sheepfold/sheepfold-usb-storage \
 	/usr/libexec/sheepfold/sheepfold-key-derive \
 	/usr/libexec/sheepfold/sheepfold-openssl-ensure \
 	/usr/libexec/sheepfold/sheepfold-runtime-hardening \
@@ -182,12 +189,57 @@ if [ "$$(uci -q get sheepfold.global.ai_individual_logs 2>/dev/null)" = "1" ]; t
 fi
 # Единый генератор валидирует порт, экранирует hostname и выполняет атомарную запись.
 /www/.well-known/sheepfold.json.sh || exit 1
+install_sheepfold_cron() {
+	cron_file='/etc/crontabs/root'
+	mkdir -p /etc/crontabs
+	tmp="$$cron_file.sheepfold.$$"
+	if [ -f "$$cron_file" ]; then
+		awk '
+			/^# BEGIN SHEEPFOLD MANAGED JOBS$$/ { skip=1; next }
+			/^# END SHEEPFOLD MANAGED JOBS$$/   { skip=0; next }
+			!skip { print }
+		' "$$cron_file" > "$$tmp"
+	else
+		: > "$$tmp"
+	fi
+	cat >> "$$tmp" <<'EOF'
+# BEGIN SHEEPFOLD MANAGED JOBS
+5 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
+55 4 * * * /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
+10 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-usb-storage archive-push >/dev/null 2>&1
+15 4 * * * /usr/libexec/sheepfold/sheepfold-usb-storage archive-push >/dev/null 2>&1
+# END SHEEPFOLD MANAGED JOBS
+EOF
+	chmod 600 "$$tmp"
+	mv -f "$$tmp" "$$cron_file"
+	[ -x /etc/init.d/cron ] && /etc/init.d/cron restart >/dev/null 2>&1 || true
+}
+install_sheepfold_cron
 rm -f /var/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-modulecache/* 2>/dev/null || true
 [ -x /etc/init.d/rpcd ] && /etc/init.d/rpcd reload || true
 [ -x /etc/init.d/sheepfold ] && /etc/init.d/sheepfold enable || true
 [ -x /etc/init.d/sheepfold ] && /etc/init.d/sheepfold restart || true
+exit 0
+endef
+
+define Package/$(PKG_NAME)/prerm
+#!/bin/sh
+[ -n "$${IPKG_INSTROOT}" ] && exit 0
+cron_file='/etc/crontabs/root'
+if [ -f "$$cron_file" ]; then
+	tmp="$$cron_file.sheepfold.$$"
+	awk '
+		/^# BEGIN SHEEPFOLD MANAGED JOBS$$/ { skip=1; next }
+		/^# END SHEEPFOLD MANAGED JOBS$$/   { skip=0; next }
+		!skip { print }
+	' "$$cron_file" > "$$tmp" && {
+		chmod 600 "$$tmp"
+		mv -f "$$tmp" "$$cron_file"
+	}
+fi
+[ -x /etc/init.d/cron ] && /etc/init.d/cron restart >/dev/null 2>&1 || true
 exit 0
 endef
 
