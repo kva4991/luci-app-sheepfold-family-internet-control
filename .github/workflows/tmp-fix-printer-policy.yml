@@ -39,18 +39,8 @@ jobs:
 
           classifier = classifier_path.read_text(encoding='utf-8')
           classifier = replace_once(classifier, 'POLICY_VERSION="2"', 'POLICY_VERSION="3"', 'classifier policy version')
-          classifier = replace_once(
-              classifier,
-              'server|engineering|camera|smart_home|vacuum|speaker) return 0 ;;',
-              'server|engineering|camera|smart_home|vacuum|speaker|printer) return 0 ;;',
-              'printer eligible type',
-          )
-          classifier = replace_once(
-              classifier,
-              'network|phone|tablet|computer|tv|console|printer) return 0 ;;',
-              'network|phone|tablet|computer|tv|console) return 0 ;;',
-              'printer interactive type',
-          )
+          classifier = replace_once(classifier, 'server|engineering|camera|smart_home|vacuum|speaker) return 0 ;;', 'server|engineering|camera|smart_home|vacuum|speaker|printer) return 0 ;;', 'printer eligible type')
+          classifier = replace_once(classifier, 'network|phone|tablet|computer|tv|console|printer) return 0 ;;', 'network|phone|tablet|computer|tv|console) return 0 ;;', 'printer interactive type')
           classifier = replace_once(
               classifier,
               '''        REASON="printer mDNS service"
@@ -196,3 +186,5 @@ jobs:
           git add -A
           git commit -m 'Fix printer trust policy and device settings diagnostics'
           git push origin HEAD:editsByClaude
+
+# Second push ensures the one-shot workflow is active before it is triggered.
