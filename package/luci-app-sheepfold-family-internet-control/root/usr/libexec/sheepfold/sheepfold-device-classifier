@@ -72,14 +72,14 @@ add_evidence() {
 
 eligible_type() {
         case "$1" in
-                server|engineering|camera|smart_home|vacuum|speaker) return 0 ;;
+                server|engineering|camera|smart_home|vacuum|speaker|printer) return 0 ;;
                 *) return 1 ;;
         esac
 }
 
 interactive_type() {
         case "$1" in
-                network|phone|tablet|computer|tv|console|printer) return 0 ;;
+                network|phone|tablet|computer|tv|console) return 0 ;;
                 *) return 1 ;;
         esac
 }
@@ -291,8 +291,9 @@ if mdns_has '_ipp\._tcp|_printer\._tcp'; then
         TYPE="printer"
         TYPE_CONFIDENCE=92
         REASON="printer mDNS service"
-        HARD_DENY=1
-        add_evidence mdns 0
+        # Принтерный сервис подтверждает тип, но сам по себе не означает
+        # пользовательское устройство, которому запрещено автодоверие.
+        add_evidence mdns 45
 elif mdns_has '_home-assistant\._tcp'; then
         TYPE="server"
         [ "$TYPE_CONFIDENCE" -ge 92 ] || TYPE_CONFIDENCE=92
@@ -341,8 +342,8 @@ elif port_open 9100 || port_open 631; then
         TYPE="printer"
         [ "$TYPE_CONFIDENCE" -ge 86 ] || TYPE_CONFIDENCE=86
         REASON="printer service is open"
-        add_evidence ports 0
-        HARD_DENY=1
+        # IPP/JetDirect — независимое подтверждение принтера, не жёсткий запрет.
+        add_evidence ports 45
 fi
 
 if name_is_network_infrastructure "$NAME"; then
