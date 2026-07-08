@@ -2,10 +2,10 @@
 'use strict';
 
 import * as libubus from "ubus";
-import { writefile, rename, chmod, unlink } from "fs";
+import { writefile, rename, chmod } from "fs";
 
 const OUTPUT = "/tmp/sheepfold/device-mdns.tsv";
-const TEMP = `${OUTPUT}.tmp.${getpid()}`;
+const TEMP = "/tmp/sheepfold/device-mdns.tsv.tmp";
 
 function strip_local(name) {
         name = `${name ?? ""}`;
@@ -30,10 +30,6 @@ function host_addresses(host_data, hosts) {
 
 let ubus = libubus.connect();
 if (!ubus)
-        exit(0);
-
-let objects = ubus.list("umdns");
-if (!objects || !length(objects))
         exit(0);
 
 try {
@@ -67,7 +63,6 @@ for (let service_name, service_data in browse) {
         }
 }
 
-lines = sort(lines);
-writefile(TEMP, join(lines, ""));
+writefile(TEMP, join(sort(lines), ""));
 chmod(TEMP, 0600);
 rename(TEMP, OUTPUT);
