@@ -31,11 +31,12 @@ class SecureRouterConnectionManager {
                 .ifBlank { json.optString("routerUrl") }
                 .ifBlank { json.optString("routerAddress") }
                 .ifBlank { json.optString("host") }
+            val normalizedUrl = normalizeApiUrl(rawUrl)
             return RouterConnectionRequest(
-                apiUrl = normalizeApiUrl(rawUrl),
+                apiUrl = normalizedUrl,
                 routerName = json.optString("routerName")
                     .ifBlank { json.optString("name") }
-                    .ifBlank { URL(normalizeApiUrl(rawUrl)).host },
+                    .ifBlank { URL(normalizedUrl).host },
                 temporaryPassword = json.optString("temporaryPassword")
                     .ifBlank { json.optString("pairingToken") }
                     .ifBlank { json.optString("token") }
@@ -174,13 +175,11 @@ class SecureRouterConnectionManager {
         val path = parsed.path
         val explicitPort = parsed.port.takeIf { it > 0 }
         val httpsPort = when {
-            parsed.protocol == "https" && explicitPort != null -> explicitPort
             explicitPort == 5201 -> 5200
             explicitPort != null -> explicitPort
             else -> 5200
         }
         val httpPort = when {
-            parsed.protocol == "http" && explicitPort != null -> explicitPort
             explicitPort == 5200 -> 5201
             explicitPort != null -> explicitPort
             else -> 5201
