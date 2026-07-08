@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=121
+PKG_RELEASE:=122
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -185,11 +185,15 @@ for helper in \
 	/usr/libexec/sheepfold/sheepfold-activity-log \
 	/usr/libexec/sheepfold/sheepfold-maintenance-window \
 	/usr/libexec/sheepfold/sheepfold-device-detector \
+	/usr/libexec/sheepfold/sheepfold-device-classifier \
+	/usr/libexec/sheepfold/sheepfold-device-mdns \
+	/usr/libexec/sheepfold/sheepfold-device-reclassify \
 	/usr/libexec/sheepfold/sheepfold-led-control \
 	/usr/libexec/sheepfold/sheepfold-usb-storage \
 	/usr/libexec/sheepfold/sheepfold-key-derive \
 	/usr/libexec/sheepfold/sheepfold-openssl-ensure \
 	/usr/libexec/sheepfold/sheepfold-runtime-hardening \
+	/etc/hotplug.d/dhcp/90-sheepfold-device-signals \
 	/www/.well-known/sheepfold.json.sh; do
 	chmod 0755 "$$helper" 2>/dev/null || true
 done
