@@ -22,6 +22,7 @@ import com.example.sheepfoldchild.polling.PollingScheduler
 import com.example.sheepfoldchild.ui.MainNavigation
 import com.example.sheepfoldchild.ui.SetupScreen
 import com.example.sheepfoldchild.viewmodel.ChildStatusViewModel
+import com.example.sheepfoldchild.viewmodel.ChildUiState
 
 class MainActivity : ComponentActivity() {
 
@@ -63,7 +64,10 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 if (viewModel.routerBaseUrl.isNullOrBlank()) {
-                    SetupScreen(onSave = { url -> viewModel.saveRouterUrl(url) })
+                    SetupScreen(
+                        errorMessage = (viewModel.uiState as? ChildUiState.Error)?.message,
+                        onSave = { url -> viewModel.saveRouterUrl(url) }
+                    )
                 } else {
                     MainNavigation(statusViewModel = viewModel, appContext = appContext)
                 }
