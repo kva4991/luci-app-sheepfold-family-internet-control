@@ -1,0 +1,162 @@
+#!/bin/sh
+set -eu
+
+LEGACY="/usr/libexec/sheepfold/sheepfold-router-control-legacy"
+SUPPORTED_BOARD="cudy,wr3000s-v1"
+DEPENDENCY_PACKAGE="mdio-tools"
+INSTALL_LOCK="/tmp/sheepfold/mdio-tools-install.lock"
+
+board_name() {
+    if [ -r /tmp/sysinfo/board_name ]; then
+        cat /tmp/sysinfo/board_name
+        return 0
+    fi
+
+    if command -v ubus >/dev/null 2>&1 && command -v jsonfilter >/dev/null 2>&1; then
+        ubus -S call system board 2>/dev/null | jsonfilter -e '@.board_name' 2>/dev/null || true
+        return 0
+    fi
+
+    printf 'unknown\n'
+}
+
+is_supported_board() {
+    [ "$(board_name)" = "$SUPPORTED_BOARD" ]
+}
+
+dependency_installed() {
+    command -v mdio >/dev/null 2>&1 && \
+        opkg status "$DEPENDENCY_PACKAGE" 2>/dev/null | grep -q '^Status:.* installed'
+}
+
+print_status() {
+    current_board="$(board_name)"
+    required=0
+    installed=0
+
+    [ "$current_board" = "$SUPPORTED_BOARD" ] && required=1
+    dependency_installed && installed=1
+
+    printf 'board=%s\n' "$current_board"
+    printf 'required=%s\n' "$required"
+    printf 'installed=%s\n' "$installed"
+    printf 'package=%s\n' "$DEPENDENCY_PACKAGE"
+}
+
+acquire_install_lock() {
+    mkdir -p /tmp/sheepfold
+    attempts=0
+    while ! mkdir "$INSTALL_LOCK" 2>/dev/null; do
+        attempts=$((attempts + 1))
+        [ "$attempts" -lt 120 ] || {
+            echo "Dependency installation is already running." >&2
+            return 1
+        }
+        sleep 1
+    done
+    trap 'rmdir "$INSTALL_LOCK" 2>/dev/null || true' EXIT HUP INT TERM
+}
+
+release_install_lock() {
+    rmdir "$INSTALL_LOCK" 2>/dev/null || true
+    trap - EXIT HUP INT TERM
+}
+
+install_dependency() {
+    current_board="$(board_name)"
+    if [ "$current_board" != "$SUPPORTED_BOARD" ]; then
+        echo "mdio-tools automatic installation is allowed only for $SUPPORTED_BOARD." >&2
+        return 2
+    fi
+
+    if dependency_installed; then
+        printf 'status=already_installed\n'
+        printf 'package=%s\n' "$DEPENDENCY_PACKAGE"
+        return 0
+    fi
+
+    command -v opkg >/dev/null 2>&1 || {
+        echo "opkg is unavailable." >&2
+        return 3
+    }
+
+    acquire_install_lock
+    if ! opkg update; then
+        release_install_lock
+        echo "Could not update package lists." >&2
+        return 4
+    fi
+
+    if ! opkg install "$DEPENDENCY_PACKAGE"; then
+        release_install_lock
+        echo "Could not install $DEPENDENCY_PACKAGE." >&2
+        return 5
+    fi
+
+    if ! dependency_installed; then
+        release_install_lock
+        echo "$DEPENDENCY_PACKAGE was installed, but the mdio command is unavailable." >&2
+        return 6
+    fi
+
+    release_install_lock
+    printf 'status=installed\n'
+    printf 'package=%s\n' "$DEPENDENCY_PACKAGE"
+}
+
+apply_cudy_wr3000s() {
+    mode="$(uci -q get sheepfold.global.router_led_control 2>/dev/null || printf router_default)"
+
+    case "$mode" in
+        router_default|'')
+            # Неизвестное значение регистра для немедленного восстановления не угадываем.
+            # После возврата к router_default штатное состояние восстановится при reboot.
+            printf 'status=router_default\n'
+            ;;
+        off_forever)
+            dependency_installed || {
+                echo "$DEPENDENCY_PACKAGE is required for Cudy WR3000S LED control." >&2
+                return 7
+            }
+            mdio mt7530-0 0:0x1f raw 0x21 0x0008
+            "$LEGACY" led-apply
+            printf 'status=applied\n'
+            ;;
+        new_device_alert_until_luci_login)
+            dependency_installed || {
+                echo "$DEPENDENCY_PACKAGE is required for Cudy WR3000S LED control." >&2
+                return 7
+            }
+            "$LEGACY" led-apply
+            printf 'status=applied\n'
+            ;;
+        *)
+            echo "Unsupported LED control mode: $mode" >&2
+            return 8
+            ;;
+    esac
+}
+
+apply_led_mode() {
+    if is_supported_board; then
+        apply_cudy_wr3000s
+    else
+        exec "$LEGACY" led-apply
+    fi
+}
+
+case "${1:-}" in
+    dependency-status)
+        print_status
+        ;;
+    dependency-install)
+        install_dependency
+        ;;
+    apply)
+        apply_led_mode
+        ;;
+    *)
+        echo "Usage: sheepfold-led-control <dependency-status|dependency-install|apply>" >&2
+        exit 1
+        ;;
+esac
