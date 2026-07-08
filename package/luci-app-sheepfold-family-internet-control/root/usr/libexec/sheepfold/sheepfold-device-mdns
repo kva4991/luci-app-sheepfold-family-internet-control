@@ -1,0 +1,73 @@
+#!/usr/bin/env ucode
+'use strict';
+
+import * as libubus from "ubus";
+import { writefile, rename, chmod, unlink } from "fs";
+
+const OUTPUT = "/tmp/sheepfold/device-mdns.tsv";
+const TEMP = `${OUTPUT}.tmp.${getpid()}`;
+
+function strip_local(name) {
+        name = `${name ?? ""}`;
+        return substr(name, -6) == ".local" ? substr(name, 0, length(name) - 6) : name;
+}
+
+function safe_field(value) {
+        return replace(`${value ?? ""}`, /[\r\n\t\x00-\x1f\x7f]+/g, " ");
+}
+
+function host_addresses(host_data, hosts) {
+        let result = [];
+        let host_name = lc(strip_local(host_data?.host));
+        let host_record = hosts?.[host_name] ?? {};
+
+        for (let address in [ host_data?.ipv4, host_record?.ipv4 ])
+                if (address && index(result, address) < 0)
+                        push(result, address);
+
+        return result;
+}
+
+let ubus = libubus.connect();
+if (!ubus)
+        exit(0);
+
+let objects = ubus.list("umdns");
+if (!objects || !length(objects))
+        exit(0);
+
+try {
+        ubus.call("umdns", "update");
+} catch (e) {
+        // Текущий кеш browse всё равно может содержать полезные объявления.
+}
+
+let browse = {};
+let raw_hosts = {};
+try {
+        browse = ubus.call("umdns", "browse", { array: true, address: true }) ?? {};
+        raw_hosts = ubus.call("umdns", "hosts", { array: true }) ?? {};
+} catch (e) {
+        exit(0);
+}
+
+let hosts = {};
+for (let name, data in raw_hosts)
+        hosts[lc(strip_local(name))] = data;
+
+let lines = [];
+for (let service_name, service_data in browse) {
+        for (let instance_name, host_data in service_data) {
+                if (!host_data?.host)
+                        continue;
+
+                let host_name = strip_local(host_data.host);
+                for (let address in host_addresses(host_data, hosts))
+                        push(lines, `${safe_field(address)}\t${safe_field(service_name)}\t${safe_field(host_name)}\t${safe_field(instance_name)}\n`);
+        }
+}
+
+lines = sort(lines);
+writefile(TEMP, join(lines, ""));
+chmod(TEMP, 0600);
+rename(TEMP, OUTPUT);
