@@ -1,0 +1,61 @@
+#!/bin/sh
+
+SIGNAL_DIR="/tmp/sheepfold/device-signals"
+CHANGE_FLAG="/tmp/sheepfold/device-signals.changed"
+
+normalize_mac() {
+        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+valid_mac() {
+        printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'
+}
+
+sanitize_value() {
+        printf '%s' "$1" |
+                tr '\r\n\t' '   ' |
+                sed 's/[[:cntrl:]]//g; s/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//' |
+                cut -c1-512
+}
+
+write_field() {
+        key="$1"
+        value="$(sanitize_value "${2:-}")"
+        printf '%s\t%s\n' "$key" "$value"
+}
+
+mac="$(normalize_mac "${MACADDR:-${2:-}}")"
+valid_mac "$mac" || exit 0
+
+mkdir -p "$SIGNAL_DIR"
+chmod 700 "$SIGNAL_DIR" 2>/dev/null || true
+
+file="$SIGNAL_DIR/$(printf '%s' "$mac" | tr ':' '_').dhcp"
+tmp="$file.tmp.$$"
+user_classes="$(env 2>/dev/null | sed -n 's/^DNSMASQ_USER_CLASS[0-9]*=//p' | paste -sd ',' - 2>/dev/null || true)"
+
+umask 077
+{
+        write_field observed_at "$(date +%s)"
+        write_field action "${ACTION:-${1:-unknown}}"
+        write_field mac "$mac"
+        write_field ip "${IPADDR:-${3:-}}"
+        write_field hostname "${HOSTNAME:-${4:-}}"
+        write_field supplied_hostname "${DNSMASQ_SUPPLIED_HOSTNAME:-}"
+        write_field vendor_class "${DNSMASQ_VENDOR_CLASS:-}"
+        write_field requested_options "${DNSMASQ_REQUESTED_OPTIONS:-}"
+        write_field user_class "$user_classes"
+        write_field client_id "${DNSMASQ_CLIENT_ID:-}"
+        write_field mud_url "${DNSMASQ_MUD_URL:-}"
+        write_field interface "${DNSMASQ_INTERFACE:-${INTERFACE:-}}"
+} > "$tmp" || {
+        rm -f "$tmp"
+        exit 0
+}
+
+chmod 600 "$tmp" 2>/dev/null || true
+mv -f "$tmp" "$file"
+: > "$CHANGE_FLAG"
+chmod 600 "$CHANGE_FLAG" 2>/dev/null || true
+
+exit 0
