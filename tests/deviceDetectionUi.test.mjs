@@ -15,15 +15,22 @@ const cssPath = resolve(
 );
 
 describe('Интерфейс автоопределения устройств', () => {
-  it('показывает доказательства и безопасную команду повторного определения', () => {
+  it('показывает диагностику и повторное определение в настройках устройства', () => {
     const source = readFileSync(viewPath, 'utf8');
 
-    assert.match(source, /балл автодоверия/);
-    assert.match(source, /автоматическое доверие запрещено/);
-    assert.match(source, /DHCP-отпечаток/);
-    assert.match(source, /mDNS\/DNS-SD/);
+    assert.match(source, /Уверенность типа/);
+    assert.match(source, /Балл автодоверия/);
+    assert.match(source, /Источники доказательств/);
+    assert.match(source, /Жёсткий запрет/);
+    assert.match(source, /Производитель MAC/);
+    assert.match(source, /Обнаруженные mDNS-сервисы/);
+    assert.match(source, /sf-device-detection-modal/);
     assert.match(source, /device-reclassify/);
     assert.match(source, /manual_device_type/);
+    assert.doesNotMatch(
+      source,
+      /nameCell\.appendChild\(E\('small', \{ 'class': 'sf-detection-evidence'/,
+    );
   });
 
   it('не зависит от фиксированного номера MAC-колонки', () => {
@@ -55,7 +62,8 @@ describe('Интерфейс автоопределения устройств',
   it('имеет отдельное оформление диагностики и онлайн-статуса', () => {
     const source = readFileSync(cssPath, 'utf8');
 
-    assert.match(source, /\.sf-detection-evidence/);
+    assert.match(source, /\.sf-device-detection-modal/);
+    assert.match(source, /\.sf-device-detection-grid/);
     assert.match(source, /\.sf-device-reclassify/);
     assert.match(source, /\.sf-online-badge/);
     assert.match(source, /background:\s*#dff3ff/);
