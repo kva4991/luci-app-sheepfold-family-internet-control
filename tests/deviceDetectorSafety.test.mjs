@@ -20,6 +20,10 @@ const classifierPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-classifier',
 );
+const reclassifyPath = resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-reclassify',
+);
 const temporaryDirectories = [];
 
 afterEach(() => {
@@ -46,10 +50,11 @@ function classify({
   staticName = '',
   signalFile = '',
   mac = '00:11:22:33:44:55',
+  mdnsServices = '',
 }) {
   const result = spawnSync(
     'sh',
-    [classifierPath, name, ports, staticName, signalFile, mac],
+    [classifierPath, name, ports, staticName, signalFile, mac, mdnsServices],
     { encoding: 'utf8' },
   );
 
@@ -120,6 +125,22 @@ describe('Безопасное автоназначение устройств',
     assert.equal(isAutoAssignable(device), false);
   });
 
+  it('сетевой DHCP-признак не превращается в сервер из-за открытого порта', () => {
+    const signalFile = createSignal({
+      vendor_class: 'OpenWrt router',
+      requested_options: '1,3,6,15,51',
+    });
+    const device = classify({
+      name: 'alarm controller',
+      ports: '8123',
+      signalFile,
+    });
+
+    assert.equal(device.type, 'network');
+    assert.equal(device.hardDeny, true);
+    assert.equal(isAutoAssignable(device), false);
+  });
+
   it('не доверяет умной колонке только по hostname', () => {
     const device = classify({ name: 'Yandex Station' });
 
@@ -140,6 +161,39 @@ describe('Безопасное автоназначение устройств',
     assert.deepEqual(device.evidence.sort(), ['dhcp', 'name']);
     assert.ok(device.autoScore >= 80);
     assert.equal(isAutoAssignable(device), true);
+  });
+
+  it('считает mDNS аудиосервис независимым подтверждением колонки', () => {
+    const device = classify({
+      name: 'Yandex Station',
+      mdnsServices: '_googlecast._tcp,_raop._tcp',
+    });
+
+    assert.equal(device.type, 'speaker');
+    assert.deepEqual(device.evidence.sort(), ['mdns', 'name']);
+    assert.equal(isAutoAssignable(device), true);
+  });
+
+  it('не доверяет Chromecast только по медиасервису', () => {
+    const device = classify({
+      name: 'unknown-device',
+      mdnsServices: '_googlecast._tcp',
+    });
+
+    assert.equal(device.type, 'tv');
+    assert.equal(device.hardDeny, true);
+    assert.equal(isAutoAssignable(device), false);
+  });
+
+  it('mDNS принтера всегда запрещает автоматическое доверие', () => {
+    const device = classify({
+      name: 'office-device',
+      mdnsServices: '_ipp._tcp,_printer._tcp',
+    });
+
+    assert.equal(device.type, 'printer');
+    assert.equal(device.hardDeny, true);
+    assert.equal(isAutoAssignable(device), false);
   });
 
   it('считает статическое имя владельца независимым подтверждением лампы', () => {
@@ -173,5 +227,13 @@ describe('Безопасное автоназначение устройств',
     assert.doesNotMatch(lockedBody, /assign_no_restrictions_if_allowed/);
     assert.equal(assignmentCalls.length, 1, 'Автоназначение должно вызываться только после нового определения');
     assert.doesNotMatch(source, /revoke_unsafe_auto_assignment/);
+  });
+
+  it('повторное определение не меняет группу и списки доступа', () => {
+    const source = readFileSync(reclassifyPath, 'utf8');
+
+    assert.match(source, /manual_device_type_locked/);
+    assert.doesNotMatch(source, /delete[^\n]*\.group/);
+    assert.doesNotMatch(source, /delete[^\n]*(allowlist|blocklist)/);
   });
 });
