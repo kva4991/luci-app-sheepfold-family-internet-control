@@ -22,7 +22,7 @@ ensure_token_storage() {
         rm -f "$TOKEN_RUNTIME_LINK"
     elif [ -d "$TOKEN_RUNTIME_LINK" ]; then
         # Мигрируем хэши, выпущенные предыдущей версией в tmpfs, прежде чем
-        # заменить каталог ссылкой на постоянное защищённое хранилище.
+        # заменить каталог ссылкой на постоянное защищённое хранилище
         for token_file in "$TOKEN_RUNTIME_LINK"/*; do
             [ -f "$token_file" ] || continue
             cp -p "$token_file" "$TOKEN_STATE_DIR/" 2>/dev/null || true
@@ -65,13 +65,12 @@ check_token() {
 
 revoke_tokens() {
     # Токены не содержат обратной привязки к login, поэтому отзыв остаётся
-    # глобальным, как и в legacy-реализации. Это безопаснее частичного отзыва.
+    # глобальным, как и в legacy-реализации
     rm -f "$TOKEN_STATE_DIR"/* 2>/dev/null || true
 }
 
-# Постоянная директория и совместимая ссылка создаются до любого делегирования,
-# в том числе после reboot. Проверка токена перехвачена здесь, чтобы не допускать
-# legacy-fallback на MD5 при отсутствии SHA-256.
+# Постоянная директория и совместимая ссылка создаются до любого делегирования
+# Проверка токена перехвачена здесь, чтобы не допускать legacy-fallback на MD5
 ensure_token_storage
 
 case "$command" in
@@ -98,6 +97,12 @@ case "$command" in
         ;;
     led-dependency-install)
         exec "$LED_CONTROL" dependency-install
+        ;;
+    led-repair-status)
+        exec "$LED_CONTROL" repair-status
+        ;;
+    led-repair-apply)
+        exec "$LED_CONTROL" repair-apply
         ;;
     led-apply)
         exec "$LED_CONTROL" apply
