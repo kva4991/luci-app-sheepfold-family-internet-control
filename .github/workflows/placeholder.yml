@@ -25,7 +25,7 @@ jobs:
           find "$package_root/usr/libexec/sheepfold" \
             -type f -print0 | xargs -0 -n1 sh -n
           find "$package_root/usr/share/sheepfold/router-profiles" \
-            -type f \( -name apply -o -name install -o -name uninstall \) \
+            -type f \( -name apply-mode -o -name install -o -name uninstall \) \
             -print0 | xargs -0 -n1 sh -n
           sh -n "$package_root/www/cgi-bin/sheepfold-api"
           sh -n "$package_root/www/.well-known/sheepfold.json.sh"
@@ -37,6 +37,36 @@ jobs:
           set -euo pipefail
           package_root="package/luci-app-sheepfold-family-internet-control/root"
           sh "$package_root/usr/libexec/sheepfold/sheepfold-runtime-hardening" "$package_root"
+
+      - name: Test device classification safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          detector="package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-detector"
+
+          openwrt="$(sh "$detector" classify "OpenWrt" "")"
+          test "$(printf '%s' "$openwrt" | cut -f1)" = "network"
+          test -z "$(printf '%s' "$openwrt" | cut -f3)"
+
+          mixed="$(sh "$detector" classify "OpenWrt alarm" "8123,445")"
+          test "$(printf '%s' "$mixed" | cut -f1)" = "network"
+          test -z "$(printf '%s' "$mixed" | cut -f3)"
+
+          generic_router="$(sh "$detector" classify "Aqara Router" "")"
+          test "$(printf '%s' "$generic_router" | cut -f1)" = "network"
+          test -z "$(printf '%s' "$generic_router" | cut -f3)"
+
+          smart_gateway="$(sh "$detector" classify "Aqara Gateway" "")"
+          test "$(printf '%s' "$smart_gateway" | cut -f1)" != "network"
+          test "$(printf '%s' "$smart_gateway" | cut -f3)" = "Без ограничений"
+
+          speaker="$(sh "$detector" classify "Yandex Station" "")"
+          test "$(printf '%s' "$speaker" | cut -f1)" = "speaker"
+          test "$(printf '%s' "$speaker" | cut -f3)" = "Без ограничений"
+
+          lamp="$(sh "$detector" classify "Yeelight Lamp" "")"
+          test "$(printf '%s' "$lamp" | cut -f1)" = "smart_home"
+          test "$(printf '%s' "$lamp" | cut -f3)" = "Без ограничений"
 
       - name: Validate Android XML
         shell: bash
