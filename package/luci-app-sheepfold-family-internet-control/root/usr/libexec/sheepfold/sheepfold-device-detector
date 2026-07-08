@@ -100,29 +100,6 @@ target_group_for_detected_type() {
         esac
 }
 
-revoke_unsafe_auto_assignment() {
-        section="$1"
-        mac="$2"
-        ip="$3"
-        name="$4"
-        reason="$5"
-        current_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
-        auto_assigned="$(uci -q get "sheepfold.$section.auto_group_assigned" 2>/dev/null || true)"
-
-        [ "$auto_assigned" = "1" ] || return 0
-        case "$current_group" in
-                "$NO_RESTRICTIONS_GROUP"|"No restrictions") ;;
-                *) return 0 ;;
-        esac
-
-        uci -q delete "sheepfold.$section.group" 2>/dev/null || true
-        uci -q set "sheepfold.$section.auto_group_assigned=0"
-        uci -q delete "sheepfold.$section.auto_group_reason" 2>/dev/null || true
-        uci -q set "sheepfold.$section.auto_group_revoked_reason=$reason"
-        uci -q set "sheepfold.$section.auto_group_revoked_at=$(date +%s)"
-        log_event "Устройство ${name:-$mac}, IP ${ip:-неизвестен} удалено из группы \"$NO_RESTRICTIONS_GROUP\": $reason"
-}
-
 assign_no_restrictions_if_allowed() {
         section="$1"
         mac="$2"
@@ -137,11 +114,9 @@ assign_no_restrictions_if_allowed() {
         current_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
         auto_excluded="$(uci -q get "sheepfold.$section.no_restrictions_auto_excluded" 2>/dev/null || true)"
 
-        # Роутеры, точки доступа и другие сетевые устройства никогда не получают эту группу автоматически
-        if [ "$device_type" = "network" ] || name_is_network_infrastructure "$name"; then
-                revoke_unsafe_auto_assignment "$section" "$mac" "$ip" "$name" "network infrastructure must be configured manually"
-                return 0
-        fi
+        # Сетевое оборудование можно настроить только вручную.
+        [ "$device_type" = "network" ] && return 0
+        name_is_network_infrastructure "$name" && return 0
 
         case "$confidence" in
                 ''|*[!0-9]*) confidence=0 ;;
@@ -155,7 +130,7 @@ assign_no_restrictions_if_allowed() {
         [ -n "$target_group" ] || return 0
         [ "$confidence" -ge "$min_confidence" ] || return 0
 
-        # Чёрный список всегда старше любой автоматики
+        # Чёрный список всегда старше любой автоматики.
         mac_in_named_list blocklist "$mac" && return 0
 
         case "$current_group" in
@@ -163,8 +138,6 @@ assign_no_restrictions_if_allowed() {
                         uci -q set "sheepfold.$section.group=$target_group"
                         uci -q set "sheepfold.$section.auto_group_assigned=1"
                         uci -q set "sheepfold.$section.auto_group_reason=$reason"
-                        uci -q delete "sheepfold.$section.auto_group_revoked_reason" 2>/dev/null || true
-                        uci -q delete "sheepfold.$section.auto_group_revoked_at" 2>/dev/null || true
                         log_event "Устройство ${name:-$mac}, IP ${ip:-неизвестен} автоматически добавлено в группу \"$target_group\": $reason"
                         ;;
         esac
@@ -346,7 +319,7 @@ classify_device() {
                 target_group="$(target_group_for_detected_type "$type")"
         fi
 
-        # Имя сетевого устройства имеет максимальный приоритет над портовыми эвристиками
+        # Имя сетевого устройства имеет максимальный приоритет над портовыми эвристиками.
         if name_is_network_infrastructure "$name"; then
                 type="network"
                 confidence=96
@@ -366,7 +339,7 @@ write_manual_device_observation() {
         section="$(ensure_device_section "$mac")"
         device_type="$(uci -q get "sheepfold.$section.device_type" 2>/dev/null || printf unknown)"
 
-        # Ручной тип устройства всегда старше автоопределения
+        # Ручной тип устройства всегда старше автоопределения.
         uci -q set "sheepfold.$section.ip=$ip"
         [ -n "$name" ] && [ -z "$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)" ] && uci -q set "sheepfold.$section.name=$name"
         uci -q set "sheepfold.$section.detection_sources=$sources"
@@ -402,8 +375,7 @@ write_locked_device_observation() {
                 uci -q delete "sheepfold.$section.just_detected" 2>/dev/null || true
         fi
 
-        assign_no_restrictions_if_allowed "$section" "$mac" "$ip" "$name" "$confidence" "$target_group" "$reason" "$device_type"
-
+        # Закреплённый тип не запускает повторно побочные действия автонастройки.
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$mac" "$ip" "$name" "$device_type" "$confidence" "$target_group" "$reason" "" >> "$CACHE_FILE"
 }
 
@@ -479,12 +451,12 @@ scan_devices() {
                                 ''|*[!0-9]*) existing_confidence=0 ;;
                         esac
 
-                        # Сетевой маркер исправляет даже ранее закреплённую ошибочную классификацию
+                        # Сетевой маркер исправляет даже ранее закреплённую ошибочную классификацию.
                         if name_is_network_infrastructure "$name" && [ "$existing_type" != "network" ]; then
                                 force_network_reclassification=1
                         fi
 
-                        # Уверенный тип фиксируется, если не сработал более важный сетевой запрет
+                        # Уверенный тип не определяется заново, пока не появился сетевой запрет.
                         if [ -n "$existing_type" ] && [ "$existing_confidence" -ge "$min_device_type_confidence" ] && [ "$force_network_reclassification" != "1" ]; then
                                 write_locked_device_observation "$mac" "$ip" "$name" "$sources" "$now"
                                 continue
