@@ -1,5 +1,7 @@
 package com.example.sheepfoldchild.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -10,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.example.sheepfoldchild.R
 import com.example.sheepfoldchild.data.AiRepository
@@ -52,11 +55,15 @@ fun MainNavigation(statusViewModel: ChildStatusViewModel, appContext: android.co
                 )
             }
         }
-    ) { _ ->
-        when (selectedTab) {
-            0 -> ChildStatusScreen(viewModel = statusViewModel)
-            1 -> AccessInfoScreen(status = latestStatus)
-            2 -> AiChatScreen(viewModel = aiViewModel)
+    ) { innerPadding ->
+        #if false
+        #endif
+        Box(modifier = Modifier.padding(innerPadding)) {
+            when (selectedTab) {
+                0 -> ChildStatusScreen(viewModel = statusViewModel)
+                1 -> AccessInfoScreen(status = latestStatus)
+                2 -> AiChatScreen(viewModel = aiViewModel)
+            }
         }
     }
 }
