@@ -42,26 +42,6 @@
         background: currentColor;
 }
 
-.sf-detection-evidence {
-        display: block;
-        margin-top: 3px;
-        color: #52657a;
-        font-size: 11px;
-        line-height: 1.35;
-}
-
-.sf-device-reclassify {
-        min-height: 28px;
-        padding: 5px 8px;
-        font-size: 11px;
-        white-space: nowrap;
-}
-
-.sf-device-reclassify:disabled {
-        cursor: not-allowed;
-        opacity: 0.45;
-}
-
 .sf-online-badge-row {
         display: block;
         margin-top: 4px;
@@ -83,17 +63,99 @@
         text-transform: lowercase;
 }
 
+.sf-device-detection-modal {
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(82, 101, 122, 0.22);
+        text-align: left;
+}
+
+.sf-device-detection-modal h4 {
+        margin: 0 0 5px;
+}
+
+.sf-device-detection-intro {
+        margin: 0 0 10px;
+        color: #52657a;
+        font-size: 12px;
+        line-height: 1.4;
+}
+
+.sf-device-detection-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px 12px;
+}
+
+.sf-device-detection-row {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: 2px;
+        padding: 7px 9px;
+        border-radius: 6px;
+        background: rgba(82, 101, 122, 0.06);
+}
+
+.sf-device-detection-row > span {
+        color: #52657a;
+        font-size: 11px;
+}
+
+.sf-device-detection-row > code {
+        overflow-wrap: anywhere;
+        white-space: normal;
+        color: #111827;
+        font-size: 12px;
+}
+
 .sf-device-settings-actions {
         display: flex !important;
-        align-items: center;
+        align-items: flex-end;
         gap: 8px;
 }
 
-.sf-device-presence-modal-status {
+.sf-device-settings-left {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
         margin-right: auto;
         padding-right: 12px;
+        text-align: left;
+}
+
+.sf-device-presence-modal-status {
         color: #1f2937;
         font-size: 12px;
         line-height: 1.35;
         text-align: left;
+}
+
+.sf-device-reclassify {
+        min-height: 28px;
+        padding: 5px 8px;
+        font-size: 11px;
+        white-space: nowrap;
+}
+
+.sf-device-reclassify:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+}
+
+@media (max-width: 720px) {
+        .sf-device-detection-grid {
+                grid-template-columns: 1fr;
+        }
+
+        .sf-device-settings-actions {
+                align-items: stretch;
+                flex-wrap: wrap;
+        }
+
+        .sf-device-settings-left {
+                width: 100%;
+                margin-right: 0;
+        }
 }
