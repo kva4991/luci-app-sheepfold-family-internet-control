@@ -46,9 +46,16 @@ class ChildStatusViewModel(
 
     fun saveRouterUrl(url: String) {
         viewModelScope.launch {
-            repository.saveRouterBaseUrl(url)
-            routerBaseUrl = url
-            refresh()
+            runCatching { repository.saveRouterBaseUrl(url) }
+                .onSuccess { normalizedUrl ->
+                    routerBaseUrl = normalizedUrl
+                    refresh()
+                }
+                .onFailure { error ->
+                    uiState = ChildUiState.Error(
+                        error.message ?: context.getString(com.example.sheepfoldchild.R.string.error_generic)
+                    )
+                }
         }
     }
 
@@ -75,12 +82,15 @@ class ChildStatusViewModel(
                 }
             }.onFailure { e ->
                 val msg = when {
-                    e.message?.contains("Unable to resolve") == true ||
-                    e.message?.contains("failed to connect") == true ->
+                    e.message?.contains("Unable to resolve", ignoreCase = true) == true ||
+                    e.message?.contains("failed to connect", ignoreCase = true) == true ||
+                    e.message?.contains("Cleartext HTTP traffic", ignoreCase = true) == true ->
                         context.getString(com.example.sheepfoldchild.R.string.error_network)
-                    else -> context.getString(com.example.sheepfoldchild.R.string.error_generic)
+                    else -> e.message
+                        ?: context.getString(com.example.sheepfoldchild.R.string.error_generic)
                 }
                 uiState = ChildUiState.Error(msg)
+                AccessEndingScheduler.cancel(context)
             }
         }
     }
