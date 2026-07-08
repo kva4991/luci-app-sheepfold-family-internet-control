@@ -79,8 +79,12 @@ print_dependency_status() {
     required=0
     installed=0
 
-    [ -z "$package" ] || required=1
-    [ -z "$package" ] || dependency_installed "$package" && installed=1
+    if [ -n "$package" ]; then
+        required=1
+        if dependency_installed "$package"; then
+            installed=1
+        fi
+    fi
 
     printf 'board=%s\n' "$current_board"
     printf 'required=%s\n' "$required"
