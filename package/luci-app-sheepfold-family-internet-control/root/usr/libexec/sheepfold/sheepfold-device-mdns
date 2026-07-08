@@ -1,4 +1,4 @@
-#!/usr/bin/env ucode
+#!/usr/bin/ucode
 'use strict';
 
 import * as libubus from "ubus";
@@ -13,7 +13,7 @@ function strip_local(name) {
 }
 
 function safe_field(value) {
-        return replace(`${value ?? ""}`, /[\r\n\t\x00-\x1f\x7f]+/g, " ");
+        return substr(replace(`${value ?? ""}`, /[\r\n\t\x00-\x1f\x7f]+/g, " "), 0, 160);
 }
 
 function append_addresses(result, value) {
@@ -77,8 +77,11 @@ for (let service_name, service_data in browse) {
                         continue;
 
                 let host_name = strip_local(host_data.host);
-                for (let address in host_addresses(host_data, hosts))
+                for (let address in host_addresses(host_data, hosts)) {
+                        if (length(lines) >= 512)
+                                break;
                         push(lines, `${safe_field(address)}\t${safe_field(service_name)}\t${safe_field(host_name)}\t${safe_field(instance_name)}\n`);
+                }
         }
 }
 
