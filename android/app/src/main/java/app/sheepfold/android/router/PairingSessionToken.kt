@@ -3,18 +3,35 @@ package app.sheepfold.android.router
 import java.util.Collections
 import java.util.WeakHashMap
 
-/**
- * Bearer-токен привязан к объекту результата настройки и живёт только до его
- * сохранения в SheepfoldConnectionStore. Одноразовый pairing-код остаётся
- * отдельным полем и никогда не записывается как сессионный секрет.
- */
-private val pairingTokens = Collections.synchronizedMap(
-    WeakHashMap<RouterConnectionRequest, String>()
+/** Секреты и идентичность привязаны к объекту результата настройки до сохранения. */
+private data class PairingSessionData(
+    var bearerToken: String? = null,
+    var deviceId: String? = null
 )
 
+private val pairingSessions = Collections.synchronizedMap(
+    WeakHashMap<RouterConnectionRequest, PairingSessionData>()
+)
+
+private fun session(request: RouterConnectionRequest): PairingSessionData =
+    pairingSessions.getOrPut(request) { PairingSessionData() }
+
 var RouterConnectionRequest.bearerToken: String?
-    get() = pairingTokens[this]
+    get() = pairingSessions[this]?.bearerToken
     set(value) {
-        if (value.isNullOrBlank()) pairingTokens.remove(this)
-        else pairingTokens[this] = value
+        if (value.isNullOrBlank()) {
+            pairingSessions[this]?.bearerToken = null
+        } else {
+            session(this).bearerToken = value
+        }
+    }
+
+var RouterConnectionRequest.deviceId: String?
+    get() = pairingSessions[this]?.deviceId
+    set(value) {
+        if (value.isNullOrBlank()) {
+            pairingSessions[this]?.deviceId = null
+        } else {
+            session(this).deviceId = value
+        }
     }
