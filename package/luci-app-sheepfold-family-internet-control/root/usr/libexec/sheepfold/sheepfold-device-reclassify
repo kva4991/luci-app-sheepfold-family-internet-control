@@ -29,6 +29,27 @@ done
         exit 4
 }
 
+acquire_lock() {
+        mkdir -p /tmp/sheepfold
+        attempts=0
+        while ! mkdir "$SCAN_LOCK" 2>/dev/null; do
+                attempts=$((attempts + 1))
+                [ "$attempts" -lt 30 ] || {
+                        echo "detector_busy" >&2
+                        return 1
+                }
+                sleep 1
+        done
+        trap 'rmdir "$SCAN_LOCK" 2>/dev/null || true' EXIT HUP INT TERM
+}
+
+release_lock() {
+        rmdir "$SCAN_LOCK" 2>/dev/null || true
+        trap - EXIT HUP INT TERM
+}
+
+acquire_lock || exit 5
+
 for option in \
         detected_type \
         detection_confidence \
@@ -49,35 +70,13 @@ done
 
 uci -q commit sheepfold
 
-acquire_lock() {
-        mkdir -p /tmp/sheepfold
-        attempts=0
-        while ! mkdir "$SCAN_LOCK" 2>/dev/null; do
-                attempts=$((attempts + 1))
-                [ "$attempts" -lt 30 ] || {
-                        echo "detector_busy" >&2
-                        return 1
-                }
-                sleep 1
-        done
-        trap 'rmdir "$SCAN_LOCK" 2>/dev/null || true' EXIT HUP INT TERM
-}
-
-release_lock() {
-        rmdir "$SCAN_LOCK" 2>/dev/null || true
-        trap - EXIT HUP INT TERM
-}
-
-if [ -x "$DETECTOR" ]; then
-        acquire_lock || exit 5
-        if ! "$DETECTOR" scan changed >/dev/null 2>&1; then
-                release_lock
-                echo "reclassification_scan_failed" >&2
-                exit 6
-        fi
+if [ -x "$DETECTOR" ] && ! "$DETECTOR" scan changed >/dev/null 2>&1; then
         release_lock
+        echo "reclassification_scan_failed" >&2
+        exit 6
 fi
 
+release_lock
 printf 'status=reclassified\n'
 printf 'section=%s\n' "$section"
 printf 'mac=%s\n' "$mac"
