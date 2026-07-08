@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+SECTION="sheepfold_wan_status"
+
+restart_led_service() {
+    if [ -x /etc/init.d/led ]; then
+        /etc/init.d/led restart >/dev/null 2>&1 || /etc/init.d/led reload >/dev/null 2>&1 || true
+    fi
+}
+
+if ! uci -q get "system.$SECTION" >/dev/null 2>&1; then
+    printf 'status=not_installed\n'
+    exit 0
+fi
+
+if [ "$(uci -q get "system.$SECTION.sheepfold_managed" 2>/dev/null || printf 0)" != "1" ]; then
+    printf 'status=not_managed\n'
+    exit 0
+fi
+
+uci -q delete "system.$SECTION"
+uci -q commit system
+restart_led_service
+
+printf 'status=removed\n'
+printf 'section=%s\n' "$SECTION"
