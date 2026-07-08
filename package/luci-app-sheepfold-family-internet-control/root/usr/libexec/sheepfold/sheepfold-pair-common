@@ -1,7 +1,9 @@
 #!/bin/sh
 
 PAIR_RUNTIME_DIR="/tmp/sheepfold"
-PAIR_TOKEN_DIR="$PAIR_RUNTIME_DIR/tokens"
+# Bearer-токен должен переживать перезагрузку роутера: Android сохраняет его как
+# долгоживущий credential. В /tmp остаётся только совместимая ссылка для legacy.
+PAIR_TOKEN_DIR="/etc/sheepfold/tokens"
 PAIR_LOCK_DIR="$PAIR_RUNTIME_DIR/pairing-locks"
 PAIR_LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
 
@@ -12,6 +14,25 @@ chmod 700 "$PAIR_TOKEN_DIR" "$PAIR_LOCK_DIR" 2>/dev/null || true
 pair_normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
 pair_valid_mac() { printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
 pair_print_kv() { printf '%s=%s\n' "$1" "$(printf '%s' "$2" | tr '\r\n\t' '   ')"; }
+
+# Алфавит обязан совпадать с генератором в LuCI. Проверяем символы по одному,
+# потому что экранирование []-?^ внутри BusyBox grep/sed легко даёт разные
+# результаты на разных сборках OpenWrt.
+pair_valid_code() {
+    pair_code_rest="$1"
+    [ -n "$pair_code_rest" ] || return 1
+
+    while [ -n "$pair_code_rest" ]; do
+        pair_code_char="${pair_code_rest%"${pair_code_rest#?}"}"
+        case "$pair_code_char" in
+            [A-Za-z0-9]|'+'|'-'|'*'|'('|')'|'['|']'|'{'|'}'|'<'|'>'|'?'|'@'|'#'|'$'|'%'|'^'|'&'|':'|';'|'.'|',') ;;
+            *) return 1 ;;
+        esac
+        pair_code_rest="${pair_code_rest#?}"
+    done
+
+    return 0
+}
 
 pair_log_event() {
     if [ -x "$PAIR_LOG_HELPER" ]; then
@@ -52,7 +73,10 @@ pair_validate_login_code() {
     login="$1"
     code="$2"
     case "$login" in ''|*[!A-Za-z0-9_.@+-]*) echo "Invalid administrator login." >&2; return 2 ;; esac
-    case "$code" in ''|*[!A-Za-z0-9]*) echo "Invalid pairing code." >&2; return 2 ;; esac
+    pair_valid_code "$code" || {
+        echo "Invalid pairing code." >&2
+        return 2
+    }
     [ ${#code} -ge 4 ] && [ ${#code} -le 64 ] || {
         echo "Invalid pairing code length." >&2
         return 2
