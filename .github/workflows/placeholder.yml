@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           collector="package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-mdns"
-          grep -q '^#!/usr/bin/env ucode$' "$collector"
+          grep -q '^#!/usr/bin/ucode$' "$collector"
           grep -q 'ubus.call("umdns", "browse"' "$collector"
           grep -q 'ubus.call("umdns", "hosts"' "$collector"
           grep -q 'write_snapshot' "$collector"
