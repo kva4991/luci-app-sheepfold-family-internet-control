@@ -5,6 +5,7 @@ LEGACY="/usr/libexec/sheepfold/sheepfold-router-control-legacy"
 PAIR_DEVICE="/usr/libexec/sheepfold/sheepfold-pair-device"
 PAIR_ACTIVATE="/usr/libexec/sheepfold/sheepfold-pair-activate"
 CLIENT_STATUS="/usr/libexec/sheepfold/sheepfold-client-status-effective"
+LED_CONTROL="/usr/libexec/sheepfold/sheepfold-led-control"
 TOKEN_STATE_DIR="/etc/sheepfold/tokens"
 TOKEN_RUNTIME_LINK="/tmp/sheepfold/tokens"
 command="${1:-status}"
@@ -91,6 +92,15 @@ case "$command" in
     client-status)
         shift
         exec "$CLIENT_STATUS" "$@"
+        ;;
+    led-dependency-status)
+        exec "$LED_CONTROL" dependency-status
+        ;;
+    led-dependency-install)
+        exec "$LED_CONTROL" dependency-install
+        ;;
+    led-apply)
+        exec "$LED_CONTROL" apply
         ;;
     *)
         exec "$LEGACY" "$@"
