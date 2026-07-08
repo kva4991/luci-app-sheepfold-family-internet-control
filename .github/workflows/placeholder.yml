@@ -21,11 +21,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold \
+          package_root="package/luci-app-sheepfold-family-internet-control/root"
+          find "$package_root/usr/libexec/sheepfold" \
             -type f -print0 | xargs -0 -n1 sh -n
-          sh -n package/luci-app-sheepfold-family-internet-control/root/www/cgi-bin/sheepfold-api
-          sh -n package/luci-app-sheepfold-family-internet-control/root/www/.well-known/sheepfold.json.sh
-          sh -n package/luci-app-sheepfold-family-internet-control/root/etc/init.d/sheepfold
+          find "$package_root/usr/share/sheepfold/router-profiles" \
+            -type f \( -name apply -o -name install -o -name uninstall \) \
+            -print0 | xargs -0 -n1 sh -n
+          sh -n "$package_root/www/cgi-bin/sheepfold-api"
+          sh -n "$package_root/www/.well-known/sheepfold.json.sh"
+          sh -n "$package_root/etc/init.d/sheepfold"
+
+      - name: Validate runtime hardening invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_root="package/luci-app-sheepfold-family-internet-control/root"
+          sh "$package_root/usr/libexec/sheepfold/sheepfold-runtime-hardening" "$package_root"
 
       - name: Validate Android XML
         shell: bash
