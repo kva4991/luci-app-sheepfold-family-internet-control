@@ -7,40 +7,58 @@ object SheepfoldConnectionStore {
     private const val apiUrlKey = "routerApiUrl"
     private const val routerNameKey = "routerName"
     private const val adminLoginKey = "administratorLogin"
-    private const val bearerTokenKey = "administratorBearerToken"
+    private const val deviceIdKey = "administratorDeviceId"
+    private const val legacyBearerTokenKey = "administratorBearerToken"
     private const val googleAccountKey = "googleAccount"
 
     fun save(context: Context, request: RouterConnectionRequest) {
-        // Одноразовый QR-код никогда не сохраняется. После успешного /pair
-        // сохраняется только выданный роутером Bearer-токен администратора.
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
             .edit()
             .putString(apiUrlKey, request.apiUrl)
             .putString(routerNameKey, request.routerName)
             .putString(adminLoginKey, request.administratorLogin.orEmpty())
-            .putString(bearerTokenKey, request.bearerToken.orEmpty())
+            .putString(deviceIdKey, request.deviceId.orEmpty())
+            .remove(legacyBearerTokenKey)
             .apply()
+        SecureSecretStore.write(context, request.bearerToken)
     }
 
     fun read(context: Context): RouterConnectionRequest? {
-        val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        val apiUrl = prefs.getString(apiUrlKey, "").orEmpty()
-        if (apiUrl.isBlank()) {
-            return null
+        val preferences = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val apiUrl = preferences.getString(apiUrlKey, "").orEmpty()
+        if (apiUrl.isBlank()) return null
+
+        val legacyToken = preferences.getString(legacyBearerTokenKey, "").orEmpty()
+        if (legacyToken.isNotBlank()) {
+            SecureSecretStore.write(context, legacyToken)
+            preferences.edit().remove(legacyBearerTokenKey).apply()
         }
 
         return RouterConnectionRequest(
             apiUrl = apiUrl,
-            routerName = prefs.getString(routerNameKey, "").orEmpty().ifBlank { "router" },
-            administratorLogin = prefs.getString(adminLoginKey, "").orEmpty().ifBlank { null }
+            routerName = preferences.getString(routerNameKey, "").orEmpty().ifBlank { "router" },
+            administratorLogin = preferences.getString(adminLoginKey, "").orEmpty().ifBlank { null }
         ).also { request ->
-            request.bearerToken = prefs.getString(bearerTokenKey, "")
-                .orEmpty()
-                .ifBlank { null }
+            request.bearerToken = SecureSecretStore.read(context)
+            request.deviceId = preferences.getString(deviceIdKey, "").orEmpty().ifBlank { null }
         }
     }
 
-    fun hasConnection(context: Context): Boolean = read(context) != null
+    fun hasConnection(context: Context): Boolean = read(context)?.let { request ->
+        !request.bearerToken.isNullOrBlank() && !request.deviceId.isNullOrBlank()
+    } == true
+
+    fun clear(context: Context) {
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+            .edit()
+            .remove(apiUrlKey)
+            .remove(routerNameKey)
+            .remove(adminLoginKey)
+            .remove(deviceIdKey)
+            .remove(legacyBearerTokenKey)
+            .apply()
+        SecureSecretStore.clear(context)
+    }
 
     fun saveGoogleAccount(context: Context, account: String) {
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
