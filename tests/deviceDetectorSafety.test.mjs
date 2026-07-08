@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
@@ -24,6 +25,15 @@ function classify(name, ports = '') {
     targetGroup,
     reason,
   };
+}
+
+function functionBody(source, name, nextName) {
+  const start = source.indexOf(`${name}() {`);
+  const end = source.indexOf(`\n${nextName}() {`, start);
+
+  assert.notEqual(start, -1, `Не найдена функция ${name}`);
+  assert.notEqual(end, -1, `Не найден конец функции ${name}`);
+  return source.slice(start, end);
 }
 
 describe('Безопасное автоназначение устройств', () => {
@@ -54,5 +64,15 @@ describe('Безопасное автоназначение устройств',
 
     assert.equal(device.type, 'smart_home');
     assert.equal(device.targetGroup, 'Без ограничений');
+  });
+
+  it('не повторяет автоназначение для уже закреплённого типа', () => {
+    const source = readFileSync(detectorPath, 'utf8');
+    const lockedBody = functionBody(source, 'write_locked_device_observation', 'write_detection');
+    const assignmentCalls = source.match(/assign_no_restrictions_if_allowed\s+"\$section"/g) || [];
+
+    assert.doesNotMatch(lockedBody, /assign_no_restrictions_if_allowed/);
+    assert.equal(assignmentCalls.length, 1, 'Автоназначение должно вызываться только после нового определения');
+    assert.doesNotMatch(source, /revoke_unsafe_auto_assignment/);
   });
 });
