@@ -1,0 +1,122 @@
+#!/bin/sh
+set -eu
+
+normalize_mac() {
+    printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+valid_mac() {
+    printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'
+}
+
+print_kv() {
+    printf '%s=%s\n' "$1" "$(printf '%s' "$2" | tr '\r\n\t' '   ')"
+}
+
+mac_for_ip() {
+    client_ip="$1"
+    mac=""
+    [ ! -r /tmp/dhcp.leases ] || mac="$(awk -v ip="$client_ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases)"
+    [ -n "$mac" ] || [ ! -r /proc/net/arp ] || mac="$(awk -v ip="$client_ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp)"
+    normalize_mac "$mac"
+}
+
+device_section_for_mac() {
+    wanted="$(normalize_mac "$1")"
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+        existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+        [ "$(normalize_mac "$existing")" = "$wanted" ] || continue
+        printf '%s\n' "$section"
+        return 0
+    done
+    return 1
+}
+
+list_has_mac() {
+    list_section="$1"
+    wanted="$(normalize_mac "$2")"
+    for existing in $(uci -q get "sheepfold.$list_section.mac" 2>/dev/null || true); do
+        [ "$(normalize_mac "$existing")" = "$wanted" ] && return 0
+    done
+    return 1
+}
+
+client_ip="${1:-}"
+[ -n "$client_ip" ] || {
+    print_kv status unknown
+    print_kv reason ip_missing
+    exit 0
+}
+
+client_mac="$(mac_for_ip "$client_ip")"
+valid_mac "$client_mac" || {
+    print_kv status unknown
+    print_kv reason mac_not_found
+    exit 0
+}
+
+device_section="$(device_section_for_mac "$client_mac" 2>/dev/null || true)"
+[ -n "$device_section" ] || {
+    print_kv status unknown
+    print_kv reason device_not_registered
+    print_kv mac "$client_mac"
+    exit 0
+}
+
+raw_status="$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || printf unknown)"
+schedule_name="$(uci -q get "sheepfold.$device_section.active_schedule" 2>/dev/null || true)"
+next_change_at="$(uci -q get "sheepfold.$device_section.next_change_at" 2>/dev/null || true)"
+temp_access_until="$(uci -q get "sheepfold.$device_section.temp_access_until" 2>/dev/null || printf 0)"
+admin_device="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
+global_block="$(uci -q get sheepfold.global.block_on_boot 2>/dev/null || printf 0)"
+now="$(date +%s)"
+
+case "$temp_access_until" in ''|*[!0-9]*) temp_access_until=0 ;; esac
+
+status="$raw_status"
+reason="configured_status"
+
+# Blocklist имеет наивысший приоритет и не снимается никаким клиентским флагом.
+if list_has_mac blocklist "$client_mac" || [ "$raw_status" = blocked ] || [ "$raw_status" = block ]; then
+    status=blocked
+    reason=blocklist
+elif [ "$admin_device" = 1 ]; then
+    status=allow
+    reason=administrator_device
+elif [ "$raw_status" = temp_access ] || [ "$raw_status" = temp-access ] || [ "$raw_status" = temporary ]; then
+    if [ "$temp_access_until" -gt "$now" ]; then
+        status=temporary
+        reason=temporary_access
+        next_change_at="$temp_access_until"
+    else
+        # Просроченный временный доступ не считается разрешением, даже если detector
+        # ещё не успел удалить временную запись из allowlist.
+        status=restricted
+        reason=temporary_access_expired
+        next_change_at=""
+    fi
+elif list_has_mac allowlist "$client_mac" || [ "$raw_status" = allow ]; then
+    status=allow
+    reason=allowlist
+elif [ "$global_block" = 1 ]; then
+    status=blocked
+    reason=global_block
+elif [ "$raw_status" = scheduled ]; then
+    # Без результата вычислителя расписаний нельзя утверждать, что интернет включён.
+    status=scheduled
+    reason=schedule_pending_evaluation
+elif [ "$raw_status" = restricted ]; then
+    status=restricted
+    reason=restricted_policy
+elif [ "$raw_status" = new ] || [ "$raw_status" = unknown ] || [ -z "$raw_status" ]; then
+    status=unknown
+    reason=device_not_configured
+fi
+
+print_kv status "$status"
+print_kv reason "$reason"
+print_kv mac "$client_mac"
+print_kv device_section "$device_section"
+print_kv schedule_name "$schedule_name"
+print_kv next_change_at "$next_change_at"
+print_kv warning_before_minutes 5
