@@ -95,17 +95,15 @@ class ClientStatusRepository(private val context: Context) {
         val host = parsed.host
         val path = parsed.path
             .trimEnd('/')
-            .removeSuffix("/cgi-bin/sheepfold-api")
             .removeSuffix("/cgi-bin/sheepfold-api/client-status")
+            .removeSuffix("/cgi-bin/sheepfold-api")
         val explicitPort = parsed.port.takeIf { it > 0 }
         val httpsPort = when {
-            parsed.protocol == "https" && explicitPort != null -> explicitPort
             explicitPort == DEFAULT_HTTP_PORT -> DEFAULT_HTTPS_PORT
             explicitPort != null -> explicitPort
             else -> DEFAULT_HTTPS_PORT
         }
         val httpPort = when {
-            parsed.protocol == "http" && explicitPort != null -> explicitPort
             explicitPort == DEFAULT_HTTPS_PORT -> DEFAULT_HTTP_PORT
             explicitPort != null -> explicitPort
             else -> DEFAULT_HTTP_PORT
