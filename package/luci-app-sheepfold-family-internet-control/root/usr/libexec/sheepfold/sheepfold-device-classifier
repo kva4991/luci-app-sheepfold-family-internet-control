@@ -6,6 +6,7 @@ PORTS="${2:-}"
 STATIC_NAME="${3:-}"
 SIGNAL_FILE="${4:-}"
 MAC="${5:-}"
+MDNS_SERVICES="${6:-}"
 NO_RESTRICTIONS_GROUP="Без ограничений"
 POLICY_VERSION="2"
 NETWORK_NAME_PATTERN='(^|[^a-z0-9])(openwrt|router|gateway|repeater|extender|access[ _-]?point|wireless[ _-]?ap|wi-?fi[ _-]?ap|mesh)([^a-z0-9]|$)|(^|[^a-z0-9])ap[-_][a-z0-9]'
@@ -18,6 +19,7 @@ AUTO_SCORE=0
 EVIDENCE=""
 EVIDENCE_COUNT=0
 HARD_DENY=0
+NETWORK_DENY=0
 OUI_VENDOR=""
 
 text_has() {
@@ -44,6 +46,10 @@ signal_value() {
 
 port_open() {
         printf '%s' "$PORTS" | grep -Eq "(^|,)${1}(,|$)"
+}
+
+mdns_has() {
+        printf '%s' "$MDNS_SERVICES" | grep -Eiq "(^|,)${1}(,|$)"
 }
 
 network_port_profile() {
@@ -206,6 +212,7 @@ apply_text_result() {
                 TYPE_CONFIDENCE=96
                 REASON="$candidate_reason"
                 HARD_DENY=1
+                NETWORK_DENY=1
                 add_evidence "$family" 0
                 return 0
         fi
@@ -265,6 +272,7 @@ if [ -n "$OUI_VENDOR" ]; then
                         TYPE_CONFIDENCE=96
                         REASON="network vendor and router service profile"
                         HARD_DENY=1
+                        NETWORK_DENY=1
                         add_evidence oui 0
                 fi
         elif [ "$candidate_oui_type" = "$TYPE" ]; then
@@ -276,6 +284,37 @@ if [ -n "$OUI_VENDOR" ]; then
                 TYPE_CONFIDENCE=65
                 REASON="device manufacturer marker"
                 add_evidence oui 30
+        fi
+fi
+
+if mdns_has '_ipp\._tcp|_printer\._tcp'; then
+        TYPE="printer"
+        TYPE_CONFIDENCE=92
+        REASON="printer mDNS service"
+        HARD_DENY=1
+        add_evidence mdns 0
+elif mdns_has '_home-assistant\._tcp'; then
+        TYPE="server"
+        [ "$TYPE_CONFIDENCE" -ge 92 ] || TYPE_CONFIDENCE=92
+        REASON="Home Assistant mDNS service"
+        add_evidence mdns 40
+elif mdns_has '_hap\._tcp|_matter\._tcp|_meshcop\._udp'; then
+        if [ "$TYPE" = "smart" ]; then
+                TYPE="smart_home"
+                TYPE_CONFIDENCE=72
+                REASON="smart-home mDNS service"
+        fi
+        [ "$TYPE" != "smart_home" ] || add_evidence mdns 35
+elif mdns_has '_googlecast\._tcp|_raop\._tcp|_airplay\._tcp'; then
+        if [ "$TYPE" = "speaker" ]; then
+                add_evidence mdns 35
+                TYPE_CONFIDENCE=$((TYPE_CONFIDENCE + 4))
+        elif [ "$TYPE" = "smart" ]; then
+                TYPE="tv"
+                TYPE_CONFIDENCE=72
+                REASON="media mDNS service without appliance confirmation"
+                HARD_DENY=1
+                add_evidence mdns 0
         fi
 fi
 
@@ -307,9 +346,13 @@ elif port_open 9100 || port_open 631; then
 fi
 
 if name_is_network_infrastructure "$NAME"; then
+        NETWORK_DENY=1
+fi
+
+if [ "$NETWORK_DENY" = "1" ]; then
         TYPE="network"
         TYPE_CONFIDENCE=96
-        REASON="network infrastructure marker"
+        REASON="network infrastructure evidence"
         HARD_DENY=1
 fi
 
