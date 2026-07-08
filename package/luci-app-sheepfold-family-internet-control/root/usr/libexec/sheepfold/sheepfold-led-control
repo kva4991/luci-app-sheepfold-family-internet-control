@@ -2,9 +2,8 @@
 set -eu
 
 LEGACY="/usr/libexec/sheepfold/sheepfold-router-control-legacy"
-SUPPORTED_BOARD="cudy,wr3000s-v1"
-DEPENDENCY_PACKAGE="mdio-tools"
-INSTALL_LOCK="/tmp/sheepfold/mdio-tools-install.lock"
+PROFILE_ROOT="/usr/share/sheepfold/router-profiles"
+INSTALL_LOCK="/tmp/sheepfold/led-dependency-install.lock"
 
 board_name() {
     if [ -r /tmp/sysinfo/board_name ]; then
@@ -20,27 +19,73 @@ board_name() {
     printf 'unknown\n'
 }
 
-is_supported_board() {
-    [ "$(board_name)" = "$SUPPORTED_BOARD" ]
+safe_board_name() {
+    current_board="$(board_name)"
+    case "$current_board" in
+        ''|*[!A-Za-z0-9,._-]*)
+            printf 'unknown\n'
+            ;;
+        *)
+            printf '%s\n' "$current_board"
+            ;;
+    esac
+}
+
+profile_dir() {
+    printf '%s/%s\n' "$PROFILE_ROOT" "$(safe_board_name)"
+}
+
+read_profile_value() {
+    value_file="$(profile_dir)/$1"
+    [ -r "$value_file" ] || return 1
+    sed -n '1{s/[[:space:]]*$//;p;}' "$value_file"
+}
+
+dependency_package() {
+    package="$(read_profile_value led/dependency-package 2>/dev/null || true)"
+    case "$package" in
+        ''|*[!A-Za-z0-9+_.-]*)
+            return 1
+            ;;
+        *)
+            printf '%s\n' "$package"
+            ;;
+    esac
+}
+
+dependency_command() {
+    command_name="$(read_profile_value led/dependency-command 2>/dev/null || true)"
+    case "$command_name" in
+        ''|*[!A-Za-z0-9+_.-]*)
+            return 1
+            ;;
+        *)
+            printf '%s\n' "$command_name"
+            ;;
+    esac
 }
 
 dependency_installed() {
-    command -v mdio >/dev/null 2>&1 && \
-        opkg status "$DEPENDENCY_PACKAGE" 2>/dev/null | grep -q '^Status:.* installed'
+    package="$1"
+    command_name="$(dependency_command 2>/dev/null || true)"
+
+    opkg status "$package" 2>/dev/null | grep -q '^Status:.* installed' || return 1
+    [ -z "$command_name" ] || command -v "$command_name" >/dev/null 2>&1
 }
 
-print_status() {
-    current_board="$(board_name)"
+print_dependency_status() {
+    current_board="$(safe_board_name)"
+    package="$(dependency_package 2>/dev/null || true)"
     required=0
     installed=0
 
-    [ "$current_board" = "$SUPPORTED_BOARD" ] && required=1
-    dependency_installed && installed=1
+    [ -z "$package" ] || required=1
+    [ -z "$package" ] || dependency_installed "$package" && installed=1
 
     printf 'board=%s\n' "$current_board"
     printf 'required=%s\n' "$required"
     printf 'installed=%s\n' "$installed"
-    printf 'package=%s\n' "$DEPENDENCY_PACKAGE"
+    printf 'package=%s\n' "$package"
 }
 
 acquire_install_lock() {
@@ -63,15 +108,15 @@ release_install_lock() {
 }
 
 install_dependency() {
-    current_board="$(board_name)"
-    if [ "$current_board" != "$SUPPORTED_BOARD" ]; then
-        echo "mdio-tools automatic installation is allowed only for $SUPPORTED_BOARD." >&2
+    package="$(dependency_package 2>/dev/null || true)"
+    [ -n "$package" ] || {
+        echo "This router profile does not declare an LED dependency." >&2
         return 2
-    fi
+    }
 
-    if dependency_installed; then
+    if dependency_installed "$package"; then
         printf 'status=already_installed\n'
-        printf 'package=%s\n' "$DEPENDENCY_PACKAGE"
+        printf 'package=%s\n' "$package"
         return 0
     fi
 
@@ -87,76 +132,86 @@ install_dependency() {
         return 4
     fi
 
-    if ! opkg install "$DEPENDENCY_PACKAGE"; then
+    if ! opkg install "$package"; then
         release_install_lock
-        echo "Could not install $DEPENDENCY_PACKAGE." >&2
+        echo "Could not install $package." >&2
         return 5
     fi
 
-    if ! dependency_installed; then
+    if ! dependency_installed "$package"; then
         release_install_lock
-        echo "$DEPENDENCY_PACKAGE was installed, but the mdio command is unavailable." >&2
+        echo "$package was installed, but its required command is unavailable." >&2
         return 6
     fi
 
     release_install_lock
     printf 'status=installed\n'
-    printf 'package=%s\n' "$DEPENDENCY_PACKAGE"
-}
-
-apply_cudy_wr3000s() {
-    mode="$(uci -q get sheepfold.global.router_led_control 2>/dev/null || printf router_default)"
-
-    case "$mode" in
-        router_default|'')
-            # Неизвестное значение регистра для немедленного восстановления не угадываем.
-            # После возврата к router_default штатное состояние восстановится при reboot.
-            printf 'status=router_default\n'
-            ;;
-        off_forever)
-            dependency_installed || {
-                echo "$DEPENDENCY_PACKAGE is required for Cudy WR3000S LED control." >&2
-                return 7
-            }
-            mdio mt7530-0 0:0x1f raw 0x21 0x0008
-            "$LEGACY" led-apply
-            printf 'status=applied\n'
-            ;;
-        new_device_alert_until_luci_login)
-            dependency_installed || {
-                echo "$DEPENDENCY_PACKAGE is required for Cudy WR3000S LED control." >&2
-                return 7
-            }
-            "$LEGACY" led-apply
-            printf 'status=applied\n'
-            ;;
-        *)
-            echo "Unsupported LED control mode: $mode" >&2
-            return 8
-            ;;
-    esac
+    printf 'package=%s\n' "$package"
 }
 
 apply_led_mode() {
-    if is_supported_board; then
-        apply_cudy_wr3000s
-    else
-        exec "$LEGACY" led-apply
+    profile_apply="$(profile_dir)/led/apply"
+
+    if [ -x "$profile_apply" ]; then
+        exec "$profile_apply"
     fi
+
+    exec "$LEGACY" led-apply
+}
+
+print_repair_status() {
+    repair_dir="$(profile_dir)/fixLed"
+    available=0
+    enabled="$(uci -q get sheepfold.global.router_led_repair 2>/dev/null || printf 0)"
+
+    if [ -x "$repair_dir/install" ] && [ -x "$repair_dir/uninstall" ]; then
+        available=1
+    fi
+
+    case "$enabled" in
+        1) ;;
+        *) enabled=0 ;;
+    esac
+
+    printf 'board=%s\n' "$(safe_board_name)"
+    printf 'available=%s\n' "$available"
+    printf 'enabled=%s\n' "$enabled"
+}
+
+apply_repair() {
+    repair_dir="$(profile_dir)/fixLed"
+    enabled="$(uci -q get sheepfold.global.router_led_repair 2>/dev/null || printf 0)"
+
+    if [ ! -x "$repair_dir/install" ] || [ ! -x "$repair_dir/uninstall" ]; then
+        printf 'status=unsupported\n'
+        return 0
+    fi
+
+    if [ "$enabled" = "1" ]; then
+        exec "$repair_dir/install"
+    fi
+
+    exec "$repair_dir/uninstall"
 }
 
 case "${1:-}" in
     dependency-status)
-        print_status
+        print_dependency_status
         ;;
     dependency-install)
         install_dependency
+        ;;
+    repair-status)
+        print_repair_status
+        ;;
+    repair-apply)
+        apply_repair
         ;;
     apply)
         apply_led_mode
         ;;
     *)
-        echo "Usage: sheepfold-led-control <dependency-status|dependency-install|apply>" >&2
+        echo "Usage: sheepfold-led-control <dependency-status|dependency-install|repair-status|repair-apply|apply>" >&2
         exit 1
         ;;
 esac
