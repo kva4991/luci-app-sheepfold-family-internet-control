@@ -7,6 +7,8 @@ DETECTOR="/usr/libexec/sheepfold/sheepfold-device-detector"
 UPDATER="/usr/libexec/sheepfold/sheepfold-updater"
 ROUTER_CONTROL="/usr/libexec/sheepfold/sheepfold-router-control"
 LEASES_FILE="/tmp/dhcp.leases"
+SIGNAL_CHANGE_FLAG="/tmp/sheepfold/device-signals.changed"
+SIGNAL_PROCESSING_FLAG="/tmp/sheepfold/device-signals.processing"
 UPDATE_REQUEST_FILE="/tmp/sheepfold/update.request"
 REBOOT_REQUEST_FILE="/tmp/sheepfold/reboot.request"
 LED_ALERT_ACK_FILE="/tmp/sheepfold/new-device-alert.ack"
@@ -56,6 +58,15 @@ handle_router_control() {
         "$ROUTER_CONTROL" blocked-page-apply >/dev/null 2>&1 || true
 }
 
+consume_signal_change() {
+        [ -e "$SIGNAL_CHANGE_FLAG" ] || return 1
+        mv "$SIGNAL_CHANGE_FLAG" "$SIGNAL_PROCESSING_FLAG" 2>/dev/null
+}
+
+finish_signal_change() {
+        rm -f "$SIGNAL_PROCESSING_FLAG"
+}
+
 case "$COMMAND" in
         run)
                 init_ram_log
@@ -87,8 +98,14 @@ case "$COMMAND" in
                                         LEASES_STATE="missing"
                                 fi
 
-                                if [ "$LEASES_STATE" != "$LAST_LEASES_STATE" ]; then
+                                SIGNALS_CHANGED=0
+                                if consume_signal_change; then
+                                        SIGNALS_CHANGED=1
+                                fi
+
+                                if [ "$LEASES_STATE" != "$LAST_LEASES_STATE" ] || [ "$SIGNALS_CHANGED" = "1" ]; then
                                         "$DETECTOR" scan changed >/dev/null 2>&1 || true
+                                        [ "$SIGNALS_CHANGED" = "1" ] && finish_signal_change
                                         LAST_LEASES_STATE="$LEASES_STATE"
                                         LAST_FULL_SCAN="$NOW"
                                 elif [ $((NOW - LAST_FULL_SCAN)) -ge "$INTERVAL" ]; then
