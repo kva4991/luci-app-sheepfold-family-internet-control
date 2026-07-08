@@ -1,0 +1,318 @@
+#!/bin/sh
+set -eu
+
+NAME="${1:-}"
+PORTS="${2:-}"
+STATIC_NAME="${3:-}"
+SIGNAL_FILE="${4:-}"
+MAC="${5:-}"
+NO_RESTRICTIONS_GROUP="Без ограничений"
+POLICY_VERSION="2"
+NETWORK_NAME_PATTERN='(^|[^a-z0-9])(openwrt|router|gateway|repeater|extender|access[ _-]?point|wireless[ _-]?ap|wi-?fi[ _-]?ap|mesh)([^a-z0-9]|$)|(^|[^a-z0-9])ap[-_][a-z0-9]'
+SMART_HOME_GATEWAY_PATTERN='thread border router|matter bridge|homekit bridge|zigbee gateway|zigbee bridge|z-wave gateway|zwave gateway|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|tradfri gateway|ikea dirigera|dirigera|hue bridge|sonoff zigbee bridge'
+
+TYPE="smart"
+TYPE_CONFIDENCE=35
+REASON="lightweight router metadata"
+AUTO_SCORE=0
+EVIDENCE=""
+EVIDENCE_COUNT=0
+HARD_DENY=0
+OUI_VENDOR=""
+
+text_has() {
+        printf '%s' "$1" | grep -Eiq "$2"
+}
+
+name_is_network_infrastructure() {
+        candidate_name="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+        [ -n "$candidate_name" ] || return 1
+
+        if text_has "$candidate_name" "$SMART_HOME_GATEWAY_PATTERN"; then
+                return 1
+        fi
+
+        text_has "$candidate_name" "$NETWORK_NAME_PATTERN"
+}
+
+signal_value() {
+        key="$1"
+        [ -r "$SIGNAL_FILE" ] || return 0
+        awk -F '\t' -v wanted="$key" '$1 == wanted { $1=""; sub(/^\t/, ""); print; exit }' "$SIGNAL_FILE" 2>/dev/null || true
+}
+
+port_open() {
+        printf '%s' "$PORTS" | grep -Eq "(^|,)${1}(,|$)"
+}
+
+network_port_profile() {
+        port_open 22 && port_open 53 && { port_open 80 || port_open 443; }
+}
+
+add_evidence() {
+        family="$1"
+        points="$2"
+
+        case ",$EVIDENCE," in
+                *,"$family",*) return 0 ;;
+        esac
+
+        EVIDENCE="${EVIDENCE:+$EVIDENCE,}$family"
+        EVIDENCE_COUNT=$((EVIDENCE_COUNT + 1))
+        AUTO_SCORE=$((AUTO_SCORE + points))
+        [ "$AUTO_SCORE" -le 100 ] || AUTO_SCORE=100
+}
+
+eligible_type() {
+        case "$1" in
+                server|engineering|camera|smart_home|vacuum|speaker) return 0 ;;
+                *) return 1 ;;
+        esac
+}
+
+interactive_type() {
+        case "$1" in
+                network|phone|tablet|computer|tv|console|printer) return 0 ;;
+                *) return 1 ;;
+        esac
+}
+
+classify_text() {
+        text="$1"
+        lower="$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')"
+        detected_type="smart"
+        detected_confidence=35
+        detected_reason="lightweight router metadata"
+
+        if name_is_network_infrastructure "$text"; then
+                detected_type="network"
+                detected_confidence=96
+                detected_reason="network infrastructure marker"
+        elif text_has "$lower" 'home[ -]?assistant|hassio|hass\.io|haos|openhab|adguard[ -]?home|adguardhome|file server|proxmox|truenas|freenas|openmediavault|synology|diskstation|qnap|unraid|docker host|portainer|smlight|slzb|zigbee2mqtt|zha coordinator|zigbee coordinator|zigbee gateway|zigbee bridge|matter bridge|thread border router|homekit bridge|smart home hub|smarthome hub|philips hue bridge|hue bridge|ikea dirigera|dirigera|tradfri gateway|aqara hub|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|sonoff zigbee bridge|hubitat|smartthings hub|aeotec hub|homey|fibaro home center|homematic|deconz|conbee|skyconnect|zwavejs|z-wave js|z-wave gateway|zwave gateway' ||
+             text_has "$lower" '(^|[^a-z0-9])(samba|smb|cifs|nas|pve|omv)([^a-z0-9]|$)'; then
+                detected_type="server"
+                detected_confidence=86
+                detected_reason="home infrastructure name marker"
+        elif text_has "$lower" 'nvr|dvr|xvr|video recorder|videoregistrar|videonablyudenie|videonablydenie|videonabludenie|video-nablyudenie|video-nablydenie|cctv server|surveillance server|video server|ltv-rne|rvi-r|trassir|xmeye|ivms|hik-connect|smartpss|uniview|hikvision|hiwatch|hilook|dahua|beward|optimus|tantos|polyvision|hanwha|wisenet|axis|vivotek|tiandy'; then
+                detected_type="server"
+                detected_confidence=86
+                detected_reason="video recorder or surveillance server name marker"
+        elif text_has "$lower" 'zont|ectostroy|ectocontrol|myheat|teplocom|xital|telemetrika|owen|saures|baxi|navien|vaillant|buderus|protherm|ariston' ||
+             text_has "$lower" '(^|[^a-z0-9])(boiler|kotel|heating|thermostat|alarm)([^a-z0-9]|$)|кот[её]л'; then
+                detected_type="engineering"
+                detected_confidence=86
+                detected_reason="engineering, heating, or safety controller name marker"
+        elif text_has "$lower" 'printer|print|epson|canon|hp-|brother'; then
+                detected_type="printer"
+                detected_confidence=82
+                detected_reason="printer marker"
+        elif text_has "$lower" '(^|[^a-z0-9])(ip[-_ ]?cam|webcam|camera|cam[0-9]+|cam[-_ ][0-9]+)([^a-z0-9]|$)'; then
+                detected_type="camera"
+                detected_confidence=82
+                detected_reason="camera marker"
+        elif text_has "$lower" 'iphone|android|galaxy|redmi|pixel|phone'; then
+                detected_type="phone"
+                detected_confidence=78
+                detected_reason="phone marker"
+        elif text_has "$lower" 'ipad|tablet|pad'; then
+                detected_type="tablet"
+                detected_confidence=78
+                detected_reason="tablet marker"
+        elif text_has "$lower" 'desktop|laptop|notebook|macbook|pc-|windows|msft'; then
+                detected_type="computer"
+                detected_confidence=76
+                detected_reason="computer marker"
+        elif text_has "$lower" 'tv|chromecast|mi box|androidtv|smarttv'; then
+                detected_type="tv"
+                detected_confidence=76
+                detected_reason="TV or media marker"
+        elif text_has "$lower" 'playstation|ps4|ps5|xbox|switch|console'; then
+                detected_type="console"
+                detected_confidence=82
+                detected_reason="game console marker"
+        elif text_has "$lower" 'alice|alisa|yandex[ _-]?(station|stantsiya)|яндекс[ _-]?станц|smart speaker|sonos|homepod|alexa|amazon echo|google home|sberboom|marusya'; then
+                detected_type="speaker"
+                detected_confidence=84
+                detected_reason="smart speaker marker"
+        elif text_has "$lower" 'vacuum|roborock|dreame|deebot|ecovacs|irobot|roomba|miio|xiaomi-vacuum|viomi|ilife|eufy|yeedi'; then
+                detected_type="vacuum"
+                detected_confidence=80
+                detected_reason="robot vacuum marker"
+        elif text_has "$lower" 'warm floor|underfloor|floor heating|heated floor|thermoregulator|терморегулятор|т[её]пл[ыо]й пол|теплый пол|тёплый пол|подогрев пола|heater relay|smart relay|relay|реле|switch module|wall switch|light switch|выключател|освещен|свет|ламп|dimmer|диммер|curtain|curtains|blind|blinds|shade|roller shade|штор|жалюзи|карниз|kettle|чайник|iron|утюг|socket|plug|розетк|tuya|ewelink|sonoff|shelly|aqara|mijia|xiaomi smart|yeelight|philips hue|nanoleaf|wled|led controller|контроллер led|контроллер света|motion sensor|датчик движения|door sensor|window sensor|датчик двери|датчик окна|leak sensor|датчик протечки|smoke sensor|датчик дыма|temperature sensor|датчик температуры|humidity sensor|датчик влажности'; then
+                detected_type="smart_home"
+                detected_confidence=80
+                detected_reason="smart-home appliance, relay, sensor, or actuator marker"
+        elif text_has "$lower" '(^|[^a-z0-9])(espressif|esp8266|esp32|esp32c3|esp32-c3|esp32s3|esp32-s3|tasmota|esphome)([^a-z0-9]|$)'; then
+                detected_type="smart_home"
+                detected_confidence=82
+                detected_reason="ESP smart-home device marker"
+        fi
+
+        printf '%s\t%s\t%s\n' "$detected_type" "$detected_confidence" "$detected_reason"
+}
+
+mac_is_locally_administered() {
+        normalized="$(printf '%s' "$MAC" | tr '[:lower:]' '[:upper:]')"
+        printf '%s' "$normalized" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' || return 0
+        first_octet="${normalized%%:*}"
+        [ $((0x$first_octet & 2)) -ne 0 ]
+}
+
+lookup_oui_vendor() {
+        mac_is_locally_administered && return 0
+        prefix="$(printf '%s' "$MAC" | tr -d ':' | tr '[:lower:]' '[:upper:]' | cut -c1-6)"
+        [ "${#prefix}" -eq 6 ] || return 0
+
+        for database in /usr/share/nmap/nmap-mac-prefixes /usr/share/nmap/nmap-mac-prefixes.txt; do
+                [ -r "$database" ] || continue
+                awk -v wanted="$prefix" 'toupper($1) == wanted { $1=""; sub(/^[[:space:]]+/, ""); print; exit }' "$database"
+                return 0
+        done
+}
+
+oui_type() {
+        vendor="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+
+        if text_has "$vendor" 'synology|qnap|ixsystems|truenas'; then
+                printf 'server\n'
+        elif text_has "$vendor" 'hikvision|dahua|axis communications|uniview|vivotek|tiandy'; then
+                printf 'camera\n'
+        elif text_has "$vendor" 'roborock|dreame|ecovacs|irobot'; then
+                printf 'vacuum\n'
+        elif text_has "$vendor" 'sonos|yandex|amazon technologies|google|apple'; then
+                printf 'speaker\n'
+        elif text_has "$vendor" 'espressif|tuya|shelly|sonoff|yeelight|lumi united|aqara'; then
+                printf 'smart_home\n'
+        elif text_has "$vendor" 'mikrotik|ubiquiti|tp-link|cudy|netgear|d-link|zyxel|tenda|keenetic|gl technologies|aruba|ruckus'; then
+                printf 'network\n'
+        else
+                printf 'unknown\n'
+        fi
+}
+
+apply_text_result() {
+        result="$1"
+        family="$2"
+        points="$3"
+        candidate_type="$(printf '%s' "$result" | awk -F '\t' '{ print $1 }')"
+        candidate_confidence="$(printf '%s' "$result" | awk -F '\t' '{ print $2 }')"
+        candidate_reason="$(printf '%s' "$result" | awk -F '\t' '{ print $3 }')"
+
+        [ "$candidate_type" != "smart" ] || return 0
+
+        if [ "$candidate_type" = "network" ]; then
+                TYPE="network"
+                TYPE_CONFIDENCE=96
+                REASON="$candidate_reason"
+                HARD_DENY=1
+                add_evidence "$family" 0
+                return 0
+        fi
+
+        if [ "$TYPE" = "smart" ]; then
+                TYPE="$candidate_type"
+                TYPE_CONFIDENCE="$candidate_confidence"
+                REASON="$candidate_reason"
+                add_evidence "$family" "$points"
+                return 0
+        fi
+
+        if [ "$candidate_type" = "$TYPE" ]; then
+                add_evidence "$family" "$points"
+                [ "$candidate_confidence" -le "$TYPE_CONFIDENCE" ] || TYPE_CONFIDENCE="$candidate_confidence"
+                TYPE_CONFIDENCE=$((TYPE_CONFIDENCE + 4))
+                [ "$TYPE_CONFIDENCE" -le 99 ] || TYPE_CONFIDENCE=99
+        fi
+}
+
+name_result="$(classify_text "$NAME")"
+apply_text_result "$name_result" name 50
+
+if [ -n "$STATIC_NAME" ]; then
+        static_result="$(classify_text "$STATIC_NAME")"
+        apply_text_result "$static_result" owner_configured 40
+fi
+
+vendor_class="$(signal_value vendor_class)"
+user_class="$(signal_value user_class)"
+mud_url="$(signal_value mud_url)"
+supplied_hostname="$(signal_value supplied_hostname)"
+dhcp_text="$vendor_class $user_class $mud_url $supplied_hostname"
+
+if [ -n "$(printf '%s' "$dhcp_text" | tr -d ' ')" ]; then
+        dhcp_result="$(classify_text "$dhcp_text")"
+        apply_text_result "$dhcp_result" dhcp 35
+fi
+
+OUI_VENDOR="$(lookup_oui_vendor || true)"
+if [ -n "$OUI_VENDOR" ]; then
+        candidate_oui_type="$(oui_type "$OUI_VENDOR")"
+        if [ "$candidate_oui_type" = "network" ]; then
+                if network_port_profile || [ "$TYPE" = "network" ]; then
+                        TYPE="network"
+                        TYPE_CONFIDENCE=96
+                        REASON="network vendor and router service profile"
+                        HARD_DENY=1
+                        add_evidence oui 0
+                fi
+        elif [ "$candidate_oui_type" = "$TYPE" ]; then
+                add_evidence oui 25
+                TYPE_CONFIDENCE=$((TYPE_CONFIDENCE + 4))
+                [ "$TYPE_CONFIDENCE" -le 99 ] || TYPE_CONFIDENCE=99
+        elif [ "$TYPE" = "smart" ] && [ "$candidate_oui_type" != "unknown" ]; then
+                TYPE="$candidate_oui_type"
+                TYPE_CONFIDENCE=65
+                REASON="device manufacturer marker"
+                add_evidence oui 25
+        fi
+fi
+
+if port_open 8123; then
+        TYPE="server"
+        TYPE_CONFIDENCE=95
+        REASON="Home Assistant port 8123 is open"
+        add_evidence ports 40
+elif port_open 8006; then
+        TYPE="server"
+        TYPE_CONFIDENCE=95
+        REASON="Proxmox port 8006 is open"
+        add_evidence ports 40
+elif port_open 445 || port_open 548 || port_open 2049; then
+        TYPE="server"
+        [ "$TYPE_CONFIDENCE" -ge 86 ] || TYPE_CONFIDENCE=86
+        REASON="file sharing service is open"
+        add_evidence ports 35
+elif { port_open 554 || port_open 8554; } && { [ "$TYPE" = "camera" ] || [ "$TYPE" = "server" ]; }; then
+        [ "$TYPE_CONFIDENCE" -ge 88 ] || TYPE_CONFIDENCE=88
+        REASON="surveillance streaming service is open"
+        add_evidence ports 35
+elif port_open 9100 || port_open 631; then
+        TYPE="printer"
+        [ "$TYPE_CONFIDENCE" -ge 86 ] || TYPE_CONFIDENCE=86
+        REASON="printer service is open"
+        add_evidence ports 0
+        HARD_DENY=1
+fi
+
+if name_is_network_infrastructure "$NAME"; then
+        TYPE="network"
+        TYPE_CONFIDENCE=96
+        REASON="network infrastructure marker"
+        HARD_DENY=1
+fi
+
+if interactive_type "$TYPE"; then
+        HARD_DENY=1
+fi
+
+TARGET_GROUP=""
+if eligible_type "$TYPE"; then
+        TARGET_GROUP="$NO_RESTRICTIONS_GROUP"
+else
+        AUTO_SCORE=0
+fi
+
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$TYPE" "$TYPE_CONFIDENCE" "$TARGET_GROUP" "$REASON" \
+        "$AUTO_SCORE" "$EVIDENCE" "$EVIDENCE_COUNT" "$HARD_DENY" \
+        "$POLICY_VERSION" "$OUI_VENDOR"
