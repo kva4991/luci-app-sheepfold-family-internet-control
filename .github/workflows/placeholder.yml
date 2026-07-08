@@ -23,7 +23,7 @@ jobs:
           set -euo pipefail
           package_root="package/luci-app-sheepfold-family-internet-control/root"
           find "$package_root/usr/libexec/sheepfold" \
-            -type f -print0 | xargs -0 -n1 sh -n
+            -type f ! -name sheepfold-device-mdns -print0 | xargs -0 -n1 sh -n
           find "$package_root/usr/share/sheepfold/router-profiles" \
             -type f \( -name apply-mode -o -name install -o -name uninstall \) \
             -print0 | xargs -0 -n1 sh -n
@@ -31,6 +31,16 @@ jobs:
           sh -n "$package_root/www/cgi-bin/sheepfold-api"
           sh -n "$package_root/www/.well-known/sheepfold.json.sh"
           sh -n "$package_root/etc/init.d/sheepfold"
+
+      - name: Validate optional ucode mDNS collector
+        shell: bash
+        run: |
+          set -euo pipefail
+          collector="package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-mdns"
+          grep -q '^#!/usr/bin/env ucode$' "$collector"
+          grep -q 'ubus.call("umdns", "browse"' "$collector"
+          grep -q 'ubus.call("umdns", "hosts"' "$collector"
+          grep -q 'write_snapshot' "$collector"
 
       - name: Validate runtime hardening invariants
         shell: bash
@@ -66,6 +76,15 @@ jobs:
           test "$(printf '%s' "$confirmed_speaker" | cut -f5)" -ge 80
           test "$(printf '%s' "$confirmed_speaker" | cut -f7)" -ge 2
           test "$(printf '%s' "$confirmed_speaker" | cut -f8)" = "0"
+
+          mdns_speaker="$(sh "$classifier" "Yandex Station" "" "" "" "00:11:22:33:44:55" "_googlecast._tcp,_raop._tcp")"
+          test "$(printf '%s' "$mdns_speaker" | cut -f1)" = "speaker"
+          test "$(printf '%s' "$mdns_speaker" | cut -f5)" -ge 80
+          test "$(printf '%s' "$mdns_speaker" | cut -f7)" -ge 2
+
+          unknown_cast="$(sh "$classifier" "unknown-device" "" "" "" "00:11:22:33:44:55" "_googlecast._tcp")"
+          test "$(printf '%s' "$unknown_cast" | cut -f1)" = "tv"
+          test "$(printf '%s' "$unknown_cast" | cut -f8)" = "1"
 
           lamp="$(sh "$classifier" "Yeelight Lamp" "" "Yeelight Kitchen Lamp" "" "00:11:22:33:44:55")"
           test "$(printf '%s' "$lamp" | cut -f1)" = "smart_home"
