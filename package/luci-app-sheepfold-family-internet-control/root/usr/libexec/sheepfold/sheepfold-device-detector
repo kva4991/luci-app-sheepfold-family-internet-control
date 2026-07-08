@@ -10,7 +10,7 @@ LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
 DEFAULT_SCAN_PORTS="22,53,80,81,443,445,548,554,631,1883,3000,3001,5000,5001,5353,8000,8006,8080,8081,8123,8554,9000,9100,32400"
 NO_RESTRICTIONS_GROUP="Без ограничений"
 NETWORK_NAME_PATTERN='(^|[^a-z0-9])(openwrt|router|gateway|repeater|extender|access[ _-]?point|wireless[ _-]?ap|wi-?fi[ _-]?ap|mesh)([^a-z0-9]|$)|(^|[^a-z0-9])ap[-_][a-z0-9]'
-SMART_HOME_NETWORK_PATTERN='zigbee|z-wave|zwave|thread border router|matter bridge|homekit bridge|smart[ _-]?home|smarthome|aqara|xiaomi|mijia|tuya|tradfri|dirigera|hue bridge|sonoff'
+SMART_HOME_GATEWAY_PATTERN='thread border router|matter bridge|homekit bridge|zigbee gateway|zigbee bridge|z-wave gateway|zwave gateway|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|tradfri gateway|ikea dirigera|dirigera|hue bridge|sonoff zigbee bridge'
 
 global_get() {
         uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "$2"
@@ -80,8 +80,8 @@ name_is_network_infrastructure() {
         candidate_name="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
         [ -n "$candidate_name" ] || return 1
 
-        # Шлюзы умного дома являются конечными бытовыми устройствами, а не сетевыми роутерами
-        if text_has "$candidate_name" "$SMART_HOME_NETWORK_PATTERN"; then
+        # Только известные шлюзы умного дома исключаются из общего слова gateway/router
+        if text_has "$candidate_name" "$SMART_HOME_GATEWAY_PATTERN"; then
                 return 1
         fi
 
