@@ -27,7 +27,7 @@ fun AiChatScreen(viewModel: AiChatViewModel) {
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
 
-    // Прокручиваем к последнему сообщению
+    // Прокручиваем к последнему сообщению.
     LaunchedEffect(viewModel.messages.size) {
         if (viewModel.messages.isNotEmpty()) {
             listState.animateScrollToItem(viewModel.messages.size - 1)
@@ -46,7 +46,21 @@ fun AiChatScreen(viewModel: AiChatViewModel) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Лента сообщений
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.ai_data_notice),
+                    modifier = Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    fontSize = 13.sp
+                )
+            }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -56,8 +70,8 @@ fun AiChatScreen(viewModel: AiChatViewModel) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 12.dp)
             ) {
-                items(viewModel.messages) { msg ->
-                    MessageBubble(msg)
+                items(viewModel.messages) { message ->
+                    MessageBubble(message)
                 }
                 if (viewModel.isLoading) {
                     item {
@@ -68,14 +82,13 @@ fun AiChatScreen(viewModel: AiChatViewModel) {
                 }
             }
 
-            // Ошибка
-            viewModel.errorMessage?.let { err ->
+            viewModel.errorMessage?.let { error ->
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = err,
+                        text = error,
                         modifier = Modifier.padding(12.dp),
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         fontSize = 13.sp
@@ -83,7 +96,6 @@ fun AiChatScreen(viewModel: AiChatViewModel) {
                 }
             }
 
-            // Поле ввода
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -111,7 +123,10 @@ fun AiChatScreen(viewModel: AiChatViewModel) {
                     },
                     enabled = inputText.isNotBlank() && !viewModel.isLoading
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Отправить")
+                    Icon(
+                        Icons.Default.Send,
+                        contentDescription = stringResource(R.string.ai_chat_title)
+                    )
                 }
             }
         }
@@ -119,26 +134,28 @@ fun AiChatScreen(viewModel: AiChatViewModel) {
 }
 
 @Composable
-private fun MessageBubble(msg: ChatMessage) {
-    val isUser = msg.role == "user"
+private fun MessageBubble(message: ChatMessage) {
+    val isUser = message.role == "user"
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
         Surface(
             shape = RoundedCornerShape(
-                topStart = 16.dp, topEnd = 16.dp,
+                topStart = 16.dp,
+                topEnd = 16.dp,
                 bottomStart = if (isUser) 16.dp else 4.dp,
                 bottomEnd = if (isUser) 4.dp else 16.dp
             ),
-            color = if (isUser)
+            color = if (isUser) {
                 MaterialTheme.colorScheme.primaryContainer
-            else
-                MaterialTheme.colorScheme.surfaceVariant,
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
             modifier = Modifier.widthIn(max = 300.dp)
         ) {
             Text(
-                text = msg.content,
+                text = message.content,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 fontSize = 15.sp
             )
