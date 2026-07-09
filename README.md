@@ -6,7 +6,7 @@
 
 [Русский](README.ru.md) | English
 
-[Project presentation in Russian](docs/project-presentation.ru.md)
+[Project presentation](docs/project-presentation.md)
 
 Sheepfold is a family internet access control system for an OpenWRT router.
 
