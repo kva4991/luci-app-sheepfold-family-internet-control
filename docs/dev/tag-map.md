@@ -135,20 +135,20 @@ grep -r '§xaji0y6' .
 
 | Тег | Имя | Тип | Описание |
 |-----|-----|-----|--------|
-| `§xaji0y6` | AI_NO_DIRECT_LLM | архитектура | Android **не ходит напрямую** к LLM — все через `/cgi-bin/sheepfold-api/ai-assistant`. Тег означает: здесь реализуется или проверяется эта прослойка. |
-| `§dpbhsah` | AI_KEYSTORE | безопасность | API-ключи LLM через Android Keystore, **не в UCI**. Тег: здесь работа с хранилищем ключей. |
+| `§xaji0y6` | AI_NO_DIRECT_LLM | архитектура | Android **не ходит напрямую** к LLM — все через `/cgi-bin/sheepfold-api/ai-assistant`. Тег означает: здесь реализуется или проверяется эта прослойка. Файлы: `ai-assistant.ru.md` |
+| `§dpbhsah` | AI_KEYSTORE | безопасность | API-ключи LLM через Android Keystore, **не в UCI**. Тег: здесь работа с хранилищем ключей. Файлы: `ai-assistant.ru.md` |
 | `§y41iblj` | AI_ENDPOINT_STUB | статус | `/ai-assistant` сейчас **заглушка** — authenticated API и role-based auth не завершены. Тег: этот код зависит от заглушки и нуждается в обновлении. |
-| `§ikcidkw` | AI_MODEL_CONFIG | конфиг | Имена моделей **не зашиты в код** — в конфиге провайдера. Тег: здесь читается/записывается model ID. |
-| `§t3w5uzb` | AI_PROVIDERS_COUNTRY | конфиг | Провайдеры LLM зависят от **country profile** роутера. Тег: здесь фильтруются провайдеры по стране. |
-| `§nnhj7xv` | AI_PROMPT_REVIEW | процесс | Промпт перед production должен пройти **ревью семейного психолога**. Тег: это место связано с промптом. |
+| `§ikcidkw` | AI_MODEL_CONFIG | конфиг | Имена моделей **не зашиты в код** — в конфиге провайдера. Тег: здесь читается/записывается model ID. Файлы: `ai-assistant.ru.md` |
+| `§t3w5uzb` | AI_PROVIDERS_COUNTRY | конфиг | Провайдеры LLM зависят от **country profile** роутера. Тег: здесь фильтруются провайдеры по стране. Файлы: `ai-assistant.ru.md` |
+| `§nnhj7xv` | AI_PROMPT_REVIEW | процесс | Промпт перед production должен пройти **ревью семейного психолога**. Тег: это место связано с промптом. Файлы: `ai-assistant.ru.md` |
 
 ### Безопасность передачи данных ИИ
 
 | Тег | Имя | Тип | Описание |
 |-----|-----|-----|--------|
-| `§xthv3a3` | AI_CONTEXT_CONFIRM | UX | Перед отправкой контекста — **явное подтверждение** с preview. Тег: здесь экран/диалог подтверждения. |
-| `§zmf8mdd` | AI_ROUTER_SNAPSHOT | API | Диагностика роутера для ИИ: версия, модель, Wi-Fi, ping, uptime без паролей. Тег: здесь снимок формируется или используется. |
-| `§4v30t9n` | AI_FORBIDDEN_FIELDS | безопасность | **Запрещено автоматически:** MAC, IP, имена детей, токены, пароли, журналы. Тег: здесь фильтрация payload. |
+| `§xthv3a3` | AI_CONTEXT_CONFIRM | UX | Перед отправкой контекста — **явное подтверждение** с preview. Тег: здесь экран/диалог подтверждения. Файлы: `ai-assistant.ru.md`, `ai-context-sharing.ru.md` |
+| `§zmf8mdd` | AI_ROUTER_SNAPSHOT | API | Диагностика роутера для ИИ: версия, модель, Wi-Fi, ping, uptime без паролей. Тег: здесь снимок формируется или используется. Файлы: `ai-context-sharing.ru.md` |
+| `§4v30t9n` | AI_FORBIDDEN_FIELDS | безопасность | **Запрещено автоматически:** MAC, IP, имена детей, токены, пароли, журналы. Тег: здесь фильтрация payload. Файлы: `ai-assistant.ru.md`, `ai-context-sharing.ru.md` |
 | `§g0fn9xu` | AI_ROLE_CHILD | UX | Запросы ребёнка с `role=child`: мягкий тон, без действий родителя. Тег: здесь ролевая логика. |
 
 ---
@@ -159,9 +159,10 @@ grep -r '§xaji0y6' .
 
 | Тег | Имя | Тип | Описание |
 |-----|-----|-----|--------|
-| `§h75lxo6` | API_BEARER_TOKEN | безопасность | Каждый запрос проверяет Bearer-токен, хранящийся как HMAC-хэш. Тег: здесь проверка токена. |
-| `§qjiujv6` | API_CONFIRM_TOKEN | безопасность | reboot, update, global-block, clear-log требуют отдельный `confirm`-токен. Тег: это «опасное» действие. |
-| `§oh9sdbd` | API_NO_SECRETS_RESPONSE | безопасность | `router-info` не включает пароли, токены, MAC, имена детей. Тег: здесь формируется ответ API. |
+| `§h75lxo6` | API_BEARER_TOKEN | безопасность | Каждый запрос проверяет Bearer-токен, хранящийся как HMAC-хэш. Тег: здесь проверка токена. Файлы: `backend-design.ru.md` |
+| `§qjiujv6` | API_CONFIRM_TOKEN | безопасность | reboot, update, global-block, clear-log требуют отдельный `confirm`-токен. Тег: это «опасное» действие. Файлы: `backend-design.ru.md` |
+| `§oh9sdbd` | API_NO_SECRETS_RESPONSE | безопасность | `router-info` не включает пароли, токены, MAC, имена детей. Тег: здесь формируется ответ API. Файлы: `backend-design.ru.md` |
+| `§b5wkq2e` | API_CLIENT_STATUS_NO_TOKEN | безопасность | `/client-status` не требует Bearer-токена — идентифицирует устройство по IP из DHCP. Это исключение из общего правила токенов. Тег: здесь логика исключения или её последствия. Файлы: `backend-design.ru.md` |
 
 ---
 
@@ -171,9 +172,9 @@ grep -r '§xaji0y6' .
 
 | Тег | Имя | Описание |
 |-----|-----|--------|
-| `§84azytj` | ACCESS_PRIORITY_ORDER | Полный порядок: blocklist → allowlist → no-restrictions → global-block → temp-access → schedule → default. Тег: здесь одно из звеньев. |
-| `§xepq85j` | ACCESS_BLOCKLIST_FINAL | Blocklist **не переопределяется ничем**. Тег: здесь логика, которую можно ошибочно обойти. |
-| `§sg65kxv` | ACCESS_ALLOWLIST_BYPASS | Allowlist обходит расписания и global-block, но не blocklist. Тег: здесь bypass для allowlist. |
+| `§84azytj` | ACCESS_PRIORITY_ORDER | Полный порядок: blocklist → allowlist → no-restrictions → global-block → temp-access → schedule → default. Тег: здесь одно из звеньев. Файлы: `backend-design.ru.md` |
+| `§xepq85j` | ACCESS_BLOCKLIST_FINAL | Blocklist **не переопределяется ничем**. Тег: здесь логика, которую можно ошибочно обойти. Файлы: `backend-design.ru.md` |
+| `§sg65kxv` | ACCESS_ALLOWLIST_BYPASS | Allowlist обходит расписания и global-block, но не blocklist. Тег: здесь bypass для allowlist. Файлы: `backend-design.ru.md` |
 
 ---
 
@@ -183,8 +184,8 @@ grep -r '§xaji0y6' .
 
 | Тег | Имя | Описание |
 |-----|-----|--------|
-| `§f1t2tal` | DIAG_CHAIN | Цепочка: WAN link → route → DNS (ya.ru/gosuslugi.ru) → HTTP(S). Тег: один шаг цепочки или переход между `offline`/`limited`/`online`. |
-| `§a753lc5` | DIAG_NO_GOOGLE_DNS | Не использовать `1.1.1.1`/`8.8.8.8`/`google.com` — могут быть заблокированы в РФ. Тег: здесь выбор целей. |
+| `§f1t2tal` | DIAG_CHAIN | Цепочка: WAN link → route → DNS (ya.ru/gosuslugi.ru) → HTTP(S). Тег: один шаг цепочки или переход между `offline`/`limited`/`online`. Файлы: `backend-design.ru.md` |
+| `§a753lc5` | DIAG_NO_GOOGLE_DNS | Не использовать `1.1.1.1`/`8.8.8.8`/`google.com` — могут быть заблокированы в РФ. Тег: здесь выбор целей. Файлы: `backend-design.ru.md` |
 
 ---
 
@@ -194,9 +195,9 @@ grep -r '§xaji0y6' .
 
 | Тег | Имя | Описание |
 |-----|-----|--------|
-| `§w2pcn9t` | UCI_UNIQUE_SECTION | Уникальные имена UCI-секций: `messenger_global`, `pairing_global`, не повторно `global`. Тег: здесь UCI-секция. |
-| `§8drc11e` | LUCI_EXEC_ONLY | LuCI вызывает только `sheepfold-router-control`, не строит shell-команды динамически. Тег: точка вызова. |
-| `§rtj5pht` | LOG_RAM_MASKED | Журнал в RAM `/tmp`, MAC/IP маскируются при экспорте. Тег: запись в журнал или экспорт. |
+| `§w2pcn9t` | UCI_UNIQUE_SECTION | Уникальные имена UCI-секций: `messenger_global`, `pairing_global`, не повторно `global`. Тег: здесь UCI-секция. Файлы: `backend-design.ru.md` |
+| `§8drc11e` | LUCI_EXEC_ONLY | LuCI вызывает только `sheepfold-router-control`, не строит shell-команды динамически. Тег: точка вызова. Файлы: `backend-design.ru.md` |
+| `§rtj5pht` | LOG_RAM_MASKED | Журнал в RAM `/tmp`, MAC/IP маскируются при экспорте. Тег: запись в журнал или экспорт. Файлы: `backend-design.ru.md` |
 
 ---
 
