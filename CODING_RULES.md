@@ -515,3 +515,22 @@ gradle -p android-child assembleDebug
 - рядом действует более строгий локальный стандарт.
 
 Исключение должно быть минимальным и понятным из кода, документации или commit message.
+
+## 20. Общие shell-библиотеки Sheepfold
+
+В коде используются общие вспомогательные скрипты в `/usr/libexec/sheepfold`:
+
+- `sheepfold-lib-device` — нормализация и валидация MAC, поиск UCI-секций устройств, работа со списками MAC (allowlist/blocklist).
+- `sheepfold-lib-uci` — чтение `sheepfold.global.*`, создание и очистка UCI-секций списков, добавление/удаление MAC.
+- `sheepfold-lib-json` — экранирование JSON, HTTP-заголовки для CGI-эндпоинтов, парсинг форм и `QUERY_STRING`.
+- `sheepfold-lib-log` — делегирование в `sheepfold-log`, выбор пути RAM-лога по `sheepfold.global.log_cache_path`.
+
+Новые shell-скрипты должны использовать эти библиотеки вместо локальных дублирующих helpers, если им нужна соответствующая функциональность.
+
+## 21. Тесты для общих библиотек
+
+Для общих библиотек добавляются отдельные shell-тесты в каталоге `tests`:
+
+- `tests/test-lib-device.sh` — проверяет `normalize_mac`, `valid_mac`, создание/поиск UCI-секций устройств и работу allowlist без дубликатов.
+
+Тесты работают в отдельном `UCI_CONFIG_DIR=/tmp/sheepfold-test-uci` и не изменяют реальный `/etc/config/sheepfold`. Перед изменением соответствующих helpers необходимо обновлять и прогонять эти тесты.
