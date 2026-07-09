@@ -42,7 +42,7 @@ umask 077
         write_field action "${ACTION:-${1:-unknown}}"
         write_field mac "$mac"
         write_field ip "${IPADDR:-${3:-}}"
-        write_field hostname "${HOSTNAME:-${4:-}}"
+        write_field hostname "${4:-}"
         write_field supplied_hostname "${DNSMASQ_SUPPLIED_HOSTNAME:-}"
         write_field vendor_class "${DNSMASQ_VENDOR_CLASS:-}"
         write_field requested_options "${DNSMASQ_REQUESTED_OPTIONS:-}"
