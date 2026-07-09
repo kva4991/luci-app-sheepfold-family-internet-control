@@ -1,0 +1,137 @@
+# Russian translations for sheepfold package.
+# Copyright (C) 2026 THE sheepfold'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the sheepfold package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: sheepfold\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-09 06:43+0000\n"
+"PO-Revision-Date: 2026-07-09 06:43+0000\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:24
+msgid "Checking OpenSSL and generating key material. Do not close this page."
+msgstr "Проверяется OpenSSL и создаётся ключевой материал. Не закрывайте страницу."
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:26
+msgid "Configuring protected logs"
+msgstr "Настройка защищённых журналов"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:30
+msgid "OpenSSL check failed."
+msgstr "Проверка OpenSSL завершилась ошибкой."
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:33
+msgid "OpenSSL verified, key material is ready."
+msgstr "OpenSSL проверен, ключевой материал готов."
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:38 htdocs/luci-static/resources/view/sheepfold/ai.js:49
+msgid "Close"
+msgstr "Закрыть"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:41
+msgid "Protected per-device logs are configured."
+msgstr "Защищённые индивидуальные журналы настроены."
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:44
+msgid "Failed to configure OpenSSL."
+msgstr "Не удалось настроить OpenSSL."
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:56
+msgid "AI assistant"
+msgstr "ИИ помощник"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:57
+msgid ""
+"The provider key is stored only on the router. Role and device identity are verified from LAN data and are never "
+"trusted from the client."
+msgstr "Ключ провайдера хранится только на роутере. Роль и идентификатор устройства проверяются по данным LAN и не принимаются на доверие от клиента."
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:58
+msgid "Provider connection"
+msgstr "Подключение к провайдеру"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:61
+msgid "Provider"
+msgstr "Провайдер"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:66
+msgid "DeepSeek model"
+msgstr "Модель DeepSeek"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:71
+msgid "DeepSeek API URL"
+msgstr "API URL DeepSeek"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:75
+msgid "DeepSeek API key"
+msgstr "API-ключ DeepSeek"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:85
+msgid "Gemini model"
+msgstr "Модель Gemini"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:90
+msgid "Gemini API URL"
+msgstr "API URL Gemini"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:94
+msgid "Gemini API key"
+msgstr "API-ключ Gemini"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:104
+msgid "Access and limits"
+msgstr "Доступ и ограничения"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:115
+msgid ""
+"Save the API key for the selected provider. Once saved, the assistant toggle, limits, and protected logs will appear."
+msgstr "Сохраните API-ключ выбранного провайдера. После сохранения появятся включение помощника, лимиты и защищённые журналы."
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:127
+msgid "Enable AI assistant"
+msgstr "Включить ИИ помощника"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:131
+msgid "Allow the AI assistant on child devices"
+msgstr "Разрешить ИИ-помощника на детских устройствах"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:134
+msgid ""
+"Enable only after talking with the child. The question, a limited chat history, the verified device ID, role, and a "
+"safe summary of current access are sent. Router diagnostics and logs are not available to the child client."
+msgstr "Включайте только после разговора с ребёнком. Передаются вопрос, ограниченная история чата, проверенный ID устройства, роль и безопасный контекст текущего доступа. Диагностика роутера и журналы детскому клиенту недоступны."
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:140
+msgid "Requests per device"
+msgstr "Запросов на устройство"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:143
+msgid "Maximum number of requests per window for each verified device."
+msgstr "Максимальное число запросов за одно окно для каждого проверенного устройства."
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:145
+msgid "Rate limit window, seconds"
+msgstr "Окно ограничения, секунд"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:149
+msgid "Allow per-device logs for AI"
+msgstr "Разрешить индивидуальные журналы для ИИ"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:152
+msgid ""
+"Enabling this opens the OpenSSL setup dialog. Sending a log still requires an administrator token and a separate opt-"
+"in in the app."
+msgstr "При включении откроется окно настройки OpenSSL. Передача журнала всё равно требует токен администратора и отдельную галочку в приложении."
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js:161
+msgid "OpenSSL is not installed or failed verification. Per-device logs are disabled."
+msgstr "OpenSSL не установлен или не прошёл проверку. Индивидуальные журналы отключены."
