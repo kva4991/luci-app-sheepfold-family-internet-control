@@ -1,4 +1,5 @@
 'use strict';
+'require view';
 'require view.sheepfold.overview as overview';
 'require uci';
 'require ui';
@@ -303,19 +304,12 @@ function attachLedSaveCheck(root, button) {
 }
 
 overview.renderSettingsGeneral = function() {
-	var node = renderSettingsGeneral.apply(this, arguments);
-	var children = Array.prototype.slice.call(node.children || []);
-
 	/*
-	 * Порядок элементов legacy-секции
-	 * 0 — язык, 1 — порт, 2 — политика новых устройств
-	 * 3 — автонастройка, 4 — обновления, 5–9 — старые поля ИИ
+	 * Поля ИИ больше не вырезаем из "Общие": они вынесены во вторую строку
+	 * вкладок "Настройки". Оставляем обёртку как точку совместимости secure-view,
+	 * чтобы будущие патчи не ломали порядок наследования LuCI-представлений.
 	 */
-	children.slice(5, 10).forEach(function(child) {
-		child.remove();
-	});
-
-	return node;
+	return renderSettingsGeneral.apply(this, arguments);
 };
 
 overview.renderSettings = function() {
@@ -449,4 +443,18 @@ overview.renderAdmins = function() {
 	return node;
 };
 
-return overview;
+return view.extend({
+	load: function() {
+		return overview.load ? overview.load.apply(overview, arguments) : null;
+	},
+
+	render: function() {
+		/*
+		 * LuCI require() возвращает экземпляр view, а не constructor.
+		 * Поэтому wrapper обязан вернуть свой view.extend(), иначе LuCI падает
+		 * с "factory yields invalid constructor". Делегируем в базовый экран,
+		 * где уже переопределены нужные методы.
+		 */
+		return overview.render.apply(overview, arguments);
+	}
+});

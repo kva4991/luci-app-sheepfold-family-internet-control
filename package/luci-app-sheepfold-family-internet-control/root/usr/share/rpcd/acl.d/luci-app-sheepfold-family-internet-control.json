@@ -18,6 +18,7 @@
         "/usr/libexec/sheepfold/sheepfold-site-lists": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-telegram-bot": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-updater": [ "exec" ],
+        "/usr/libexec/sheepfold/sheepfold-usb-storage": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-router-control": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-openssl-ensure": [ "exec" ]
       }

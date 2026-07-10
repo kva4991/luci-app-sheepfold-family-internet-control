@@ -340,6 +340,46 @@ ping_average_ms() {
                 awk -F'/' '/round-trip|rtt/ { print $5; found=1 } END { if (!found) exit 1 }'
 }
 
+router_board_json() {
+        ubus -S call system board 2>/dev/null || cat /etc/board.json 2>/dev/null || true
+}
+
+router_board_field() {
+        local field="$1"
+        router_board_json | tr -d '\n' | json_string "$field" | sed -n '1p'
+}
+
+router_model_text() {
+        local value
+
+        for path in /tmp/sysinfo/model /tmp/sysinfo/board_name; do
+                if [ -r "$path" ]; then
+                        value="$(cat "$path" 2>/dev/null || true)"
+                        [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+                fi
+        done
+
+        value="$(router_board_field model)"
+        [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+
+        value="$(router_board_field board_name)"
+        [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+
+        printf unknown
+}
+
+router_firmware_description() {
+        local value
+
+        value="$(router_board_field description)"
+        [ -n "$value" ] && { printf '%s' "$value"; return 0; }
+
+        value="$(router_board_field version)"
+        [ -n "$value" ] && { printf 'OpenWrt %s' "$value"; return 0; }
+
+        printf unknown
+}
+
 lan_ports_text() {
         local ports=""
 
@@ -1118,7 +1158,7 @@ router_info() {
         ping_ms="$(ping_average_ms ya.ru 2>/dev/null || true)"
         firmware="unknown"
         release="unknown"
-        model="$(cat /tmp/sysinfo/model 2>/dev/null || cat /tmp/sysinfo/board_name 2>/dev/null || printf unknown)"
+        model="$(router_model_text)"
         kernel="$(uname -r 2>/dev/null || printf unknown)"
         sheepfold_version="$(opkg_version luci-app-sheepfold-family-internet-control)"
         podkop_version="$(package_version_any podkop luci-app-podkop || true)"
@@ -1139,6 +1179,13 @@ router_info() {
         elif [ -r /etc/openwrt_version ]; then
                 release="$(cat /etc/openwrt_version 2>/dev/null || printf unknown)"
                 firmware="OpenWrt $release"
+        else
+                # На некоторых сборках OpenWrt release-файлы урезаны, но ubus
+                # всё равно отдаёт system board. Берём описание оттуда, чтобы
+                # страница "Информация" не превращалась в набор unknown.
+                firmware="$(router_firmware_description)"
+                release="$(router_board_field version)"
+                [ -n "$release" ] || release="unknown"
         fi
 
         if [ -n "$status_json" ]; then

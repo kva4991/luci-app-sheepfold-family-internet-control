@@ -140,6 +140,32 @@ var translations = {
         'Gemini Free uses Google AI Studio free-tier limits. The API key is stored only on the router.': 'Gemini Free использует бесплатные лимиты Google AI Studio. API-ключ хранится только на роутере.',
         'Gemini API key': 'API-ключ Gemini',
         'Create the key in Google AI Studio and save it here. Free limits depend on Google account and region.': 'Создайте ключ в Google AI Studio и сохраните его здесь. Бесплатные лимиты зависят от аккаунта Google и региона.',
+        'AI assistant': 'ИИ помощник',
+        'Router memory management': 'Управление памятью роутера',
+        'USB flash drive': 'USB флешка',
+        'USB storage status': 'Статус USB-хранилища',
+        'USB storage disabled': 'USB-хранилище выключено',
+        'USB storage enabled': 'USB-хранилище включено',
+        'Selected USB device': 'Выбранная USB флешка',
+        'No USB devices found': 'USB флешки не найдены',
+        'Use USB storage for Sheepfold': 'Использовать USB-хранилище для Sheepfold',
+        'USB storage role': 'Роль USB-хранилища',
+        'Logs only': 'Только журналы',
+        'Logs and swap file': 'Журналы и swap-файл',
+        'Logs and future extroot': 'Журналы и будущий extroot',
+        'Encrypt archives on USB': 'Шифровать архивы на USB',
+        'Refresh USB devices': 'Обновить USB-устройства',
+        'Mount selected USB': 'Подключить выбранную USB флешку',
+        'Unmount USB': 'Отключить USB флешку',
+        'Move RAM archives to USB': 'Перенести архивы из RAM на USB',
+        'USB action completed.': 'USB-действие выполнено.',
+        'USB action failed.': 'USB-действие не выполнено.',
+        'Choose only a removable USB drive. Sheepfold will refuse system disks, overlay, root, and swap devices.': 'Выбирайте только съёмную USB флешку. Sheepfold отклонит системные диски, overlay, root и swap-устройства.',
+        'Mounted': 'Подключено',
+        'Not mounted': 'Не подключено',
+        'Free space': 'Свободно',
+        'Archives': 'Архивы',
+        'Key ready': 'Ключ готов',
         'Donation': 'Donation',
         'Support the project': 'Поддержать проект',
         'If Sheepfold becomes useful and you want to support development, donation links will be added here before the first public release.': 'Если Sheepfold окажется полезным и вы захотите поддержать разработку, ссылки для донатов будут добавлены здесь до первого публичного релиза.',
@@ -672,9 +698,11 @@ var tabs = [
 var settingsTabs = [
         ['info', T('Information')],
         ['general', T('General')],
+        ['ai', T('AI assistant')],
         ['integrations', T('Integrations')],
         ['messenger', T('Messenger')],
         ['emergency', T('Emergency-useful sites')],
+        ['memory', T('Router memory management')],
         ['misc', T('Misc')]
 ];
 
@@ -961,6 +989,18 @@ function actionButton(label, tone, message) {
 
 function routerControl(args) {
         return fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', args);
+}
+
+function usbStorageControl(args) {
+        return fs.exec('/usr/libexec/sheepfold/sheepfold-usb-storage', args);
+}
+
+function parseJsonOutput(text, fallback) {
+        try {
+                return JSON.parse(String(text || '').trim() || 'null') || fallback;
+        } catch (e) {
+                return fallback;
+        }
 }
 
 function parseKeyValueOutput(text) {
@@ -1254,7 +1294,12 @@ function routerInformationPanel() {
                 body.replaceChildren(T('Loading router information...'));
 
                 routerControl(['router-info']).then(function (result) {
-                        render(parseKeyValueOutput(result.stdout || ''));
+                        var values = parseKeyValueOutput(result.stdout || '');
+
+                        if (!Object.keys(values).length)
+                                throw new Error(T('Router information command returned empty output.'));
+
+                        render(values);
                 }, function (error) {
                         body.replaceChildren(E('div', { 'class': 'sf-note sf-note-warning' }, commandErrorText(error, T('Could not load router information.'))));
                 }).finally(function () {
@@ -4257,6 +4302,226 @@ function cachePathField() {
         ]);
 }
 
+function usbStatusBadge(status) {
+        var enabled = String(status.enabled || '0') === '1';
+        var mounted = String(status.mounted || '0') === '1';
+
+        return E('div', { 'class': 'sf-note ' + (mounted ? 'sf-note-success' : 'sf-note-warning') }, [
+                E('strong', {}, enabled ? T('USB storage enabled') : T('USB storage disabled')),
+                E('span', {}, ' · ' + (mounted ? T('Mounted') : T('Not mounted'))),
+                E('span', {}, status.dev ? ' · ' + status.dev : ''),
+                E('span', {}, ' · ' + T('Free space') + ': ' + String(status.free_pct || 0) + '%'),
+                E('span', {}, ' · ' + T('Archives') + ': ' + String(status.archives || 0)),
+                E('span', {}, ' · ' + T('Key ready') + ': ' + (String(status.key_ready || 0) === '1' ? T('Yes') : T('No')))
+        ]);
+}
+
+function usbDeviceLabel(device) {
+        var name = [device.vendor, device.model].filter(Boolean).join(' ').trim();
+        var size = device.size_gb != null ? ' · ' + device.size_gb + ' GB' : '';
+
+        return (device.dev || T('Unknown')) + (name ? ' · ' + name : '') + size;
+}
+
+function replaceNodeChildren(node, children) {
+        node.innerHTML = '';
+        children.forEach(function (child) {
+                node.appendChild(child);
+        });
+}
+
+function usbStorageSettingsField() {
+        var initial = {
+                enabled: safeUciGet('sheepfold', 'usb', 'enabled', '0') === '1' ? '1' : '0',
+                device: safeUciGet('sheepfold', 'usb', 'device', ''),
+                role: safeUciGet('sheepfold', 'usb', 'role', 'logs_only') || 'logs_only',
+                encrypt: safeUciGet('sheepfold', 'usb', 'encrypt', '1') === '0' ? '0' : '1'
+        };
+        var current = Object.assign({}, initial);
+        var devices = [];
+        var status = {
+                enabled: initial.enabled,
+                dev: initial.device,
+                role: initial.role,
+                encrypt: initial.encrypt,
+                mounted: 0,
+                free_pct: 0,
+                archives: 0,
+                key_ready: 0
+        };
+        var statusNode = E('div', { 'class': 'sf-usb-status' }, usbStatusBadge(status));
+        var deviceSelect = E('select', {
+                'class': 'cbi-input-select',
+                'change': function (ev) {
+                        current.device = ev.currentTarget.value;
+                        markSettingsDraftChanged();
+                }
+        });
+        var enabledSelect = E('select', {
+                'class': 'cbi-input-select',
+                'change': function (ev) {
+                        current.enabled = ev.currentTarget.value === '1' ? '1' : '0';
+                        markSettingsDraftChanged();
+                }
+        }, [
+                E('option', { 'value': '0', 'selected': current.enabled === '0' ? 'selected' : null }, T('No')),
+                E('option', { 'value': '1', 'selected': current.enabled === '1' ? 'selected' : null }, T('Yes'))
+        ]);
+        var roleSelect = E('select', {
+                'class': 'cbi-input-select',
+                'change': function (ev) {
+                        current.role = ev.currentTarget.value;
+                        markSettingsDraftChanged();
+                }
+        }, [
+                ['logs_only', T('Logs only')],
+                ['swap_logs', T('Logs and swap file')],
+                ['extroot_logs', T('Logs and future extroot')]
+        ].map(function (item) {
+                return E('option', { 'value': item[0], 'selected': current.role === item[0] ? 'selected' : null }, item[1]);
+        }));
+        var encryptSelect = E('select', {
+                'class': 'cbi-input-select',
+                'change': function (ev) {
+                        current.encrypt = ev.currentTarget.value === '1' ? '1' : '0';
+                        markSettingsDraftChanged();
+                }
+        }, [
+                E('option', { 'value': '1', 'selected': current.encrypt === '1' ? 'selected' : null }, T('Yes')),
+                E('option', { 'value': '0', 'selected': current.encrypt === '0' ? 'selected' : null }, T('No'))
+        ]);
+
+        function refreshDeviceOptions() {
+                var values = devices.slice();
+
+                if (current.device && !values.some(function (device) { return device.dev === current.device; }))
+                        values.unshift({ dev: current.device, model: T('Selected USB device') });
+
+                deviceSelect.innerHTML = '';
+                if (!values.length) {
+                        deviceSelect.appendChild(E('option', { 'value': '', 'selected': 'selected' }, T('No USB devices found')));
+                        return;
+                }
+
+                values.forEach(function (device) {
+                        deviceSelect.appendChild(E('option', {
+                                'value': device.dev || '',
+                                'selected': (device.dev || '') === current.device ? 'selected' : null
+                        }, usbDeviceLabel(device)));
+                });
+        }
+
+        function refreshStatus() {
+                return usbStorageControl(['status']).then(function (result) {
+                        status = parseJsonOutput(result && result.stdout, status);
+                        replaceNodeChildren(statusNode, [usbStatusBadge(status)]);
+                }, function () {
+                        replaceNodeChildren(statusNode, [E('div', { 'class': 'sf-note sf-note-warning' }, T('USB action failed.'))]);
+                });
+        }
+
+        function refreshDevices() {
+                return usbStorageControl(['scan']).then(function (result) {
+                        devices = parseJsonOutput(result && result.stdout, []);
+                        refreshDeviceOptions();
+                        return refreshStatus();
+                }, function () {
+                        devices = [];
+                        refreshDeviceOptions();
+                        notify(T('USB action failed.'), 'warning');
+                });
+        }
+
+        function runUsbAction(args) {
+                return usbStorageControl(args).then(function () {
+                        notify(T('USB action completed.'), 'info');
+                        return refreshDevices();
+                }, function (error) {
+                        notify(T('USB action failed.') + ' ' + commandErrorText(error, ''), 'warning');
+                });
+        }
+
+        registerSettingsSpecialSaver({
+                isChanged: function () {
+                        return !sameObjectValues(initial, current);
+                },
+                save: function () {
+                        // USB-настройки живут в отдельной секции UCI, а не в global:
+                        // так backend читает их привычным для OpenWrt способом.
+                        ensureSection('sheepfold', 'usb_storage', 'usb');
+                        uci.set('sheepfold', 'usb', 'enabled', current.enabled);
+                        uci.set('sheepfold', 'usb', 'device', current.device);
+                        uci.set('sheepfold', 'usb', 'role', current.role);
+                        uci.set('sheepfold', 'usb', 'encrypt', current.encrypt);
+                        return saveUciChanges(['sheepfold']).then(refreshStatus);
+                },
+                accept: function () {
+                        initial.enabled = current.enabled;
+                        initial.device = current.device;
+                        initial.role = current.role;
+                        initial.encrypt = current.encrypt;
+                }
+        });
+
+        refreshDevices();
+
+        return E('div', { 'class': 'sf-flat-form' }, [
+                settingsDivider(T('USB flash drive')),
+                statusNode,
+                E('div', { 'class': 'sf-grid two' }, [
+                        E('label', { 'class': 'sf-field sf-field-wide' }, [
+                                E('span', {}, T('Use USB storage for Sheepfold')),
+                                enabledSelect
+                        ]),
+                        E('label', { 'class': 'sf-field sf-field-wide' }, [
+                                E('span', {}, T('Selected USB device')),
+                                deviceSelect,
+                                E('small', {}, T('Choose only a removable USB drive. Sheepfold will refuse system disks, overlay, root, and swap devices.'))
+                        ]),
+                        E('label', { 'class': 'sf-field sf-field-wide' }, [
+                                E('span', {}, T('USB storage role')),
+                                roleSelect
+                        ]),
+                        E('label', { 'class': 'sf-field sf-field-wide' }, [
+                                E('span', {}, T('Encrypt archives on USB')),
+                                encryptSelect
+                        ])
+                ]),
+                E('div', { 'class': 'sf-toolbar' }, [
+                        E('button', {
+                                'class': 'sf-action sf-action-neutral',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        refreshDevices();
+                                }
+                        }, T('Refresh USB devices')),
+                        E('button', {
+                                'class': 'sf-action sf-action-positive',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        if (!current.device)
+                                                return notify(T('No USB devices found'), 'warning');
+                                        runUsbAction(['mount', current.device]);
+                                }
+                        }, T('Mount selected USB')),
+                        E('button', {
+                                'class': 'sf-action sf-action-neutral',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        runUsbAction(['umount']);
+                                }
+                        }, T('Unmount USB')),
+                        E('button', {
+                                'class': 'sf-action sf-action-neutral',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        runUsbAction(['archive-push']);
+                                }
+                        }, T('Move RAM archives to USB'))
+                ])
+        ]);
+}
+
 function blocklistEmergencyAccessField() {
         var value = settingValue('domain_allowlist_for_blocklist', '1') === '1' ? '1' : '0';
         var select = E('select', {
@@ -6575,6 +6840,21 @@ return view.extend({
                         ]),
                         autoConfigureDevicesField(),
                         updateCheckInstallField(),
+                        blocklistEmergencyAccessField(),
+                        globalTextareaOptionField(
+                                T('Blocked internet page text shown instead of websites'),
+                                'blocked_page_text',
+                                T('Internet is temporarily unavailable by family rules.'),
+                                T('Settings saved.'),
+                                T('Could not save settings.'),
+                                null,
+                                2
+                        )
+                ]);
+        },
+
+        renderSettingsAi: function () {
+                return E('div', { 'class': 'sf-flat-form' }, [
                         saveSelectGlobalField(T('AI provider'), 'ai_provider', 'deepseek', [
                                 ['deepseek', 'DeepSeek'],
                                 ['gemini', T('Gemini Free')]
@@ -6602,23 +6882,20 @@ return view.extend({
                                 'AIza...',
                                 T('Create the key in Google AI Studio and save it here. Free limits depend on Google account and region.'),
                                 true
-                        ),
-                        blocklistEmergencyAccessField(),
+                        )
+                ]);
+        },
+
+        renderSettingsMemory: function () {
+                return E('div', { 'class': 'sf-flat-form' }, [
+                        usbStorageSettingsField(),
+                        settingsDivider(T('Log storage')),
                         saveSelectGlobalField(T('Known offline devices cleanup'), 'offline_device_retention_days', '90', [
                                 ['30', T('30 days')],
                                 ['90', T('90 days')],
                                 ['180', T('180 days')]
                         ]),
-                        cachePathField(),
-                        globalTextareaOptionField(
-                                T('Blocked internet page text shown instead of websites'),
-                                'blocked_page_text',
-                                T('Internet is temporarily unavailable by family rules.'),
-                                T('Settings saved.'),
-                                T('Could not save settings.'),
-                                null,
-                                2
-                        )
+                        cachePathField()
                 ]);
         },
 
@@ -6696,13 +6973,15 @@ return view.extend({
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-settings-tabs-row' }, [
                                 this.renderSettingsTabs(),
-                                settingsSaveBar(true)
-                        ]),
+                        settingsSaveBar(true)
+                ]),
                         this.renderSettingsPanel('info', routerInformationPanel()),
                         this.renderSettingsPanel('general', this.renderSettingsGeneral()),
+                        this.renderSettingsPanel('ai', this.renderSettingsAi()),
                         this.renderSettingsPanel('integrations', this.renderIntegrations()),
                         this.renderSettingsPanel('messenger', this.renderBot()),
                         this.renderSettingsPanel('emergency', this.renderEmergency()),
+                        this.renderSettingsPanel('memory', this.renderSettingsMemory()),
                         this.renderSettingsPanel('misc', this.renderSettingsMisc()),
                         settingsSaveBar(false)
                 ]);

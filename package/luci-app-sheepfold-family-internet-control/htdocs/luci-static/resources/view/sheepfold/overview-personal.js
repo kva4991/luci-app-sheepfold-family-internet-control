@@ -1,9 +1,17 @@
 'use strict';
-'require view.sheepfold.overview-secure as overview';
+'require view';
+'require view.sheepfold.overview-secure as secureOverview';
+'require view.sheepfold.overview as overview';
 'require uci';
 'require ui';
 'require fs';
 
+/*
+ * secureOverview нужен как зависимость: он патчит базовый overview до того,
+ * как этот personal-wrapper добавит водяные знаки и presence-декор.
+ * Сам render ниже вызывает базовый overview, иначе personal-методы не участвуют
+ * в цепочке secure -> personal.
+ */
 var renderGroups = overview.renderGroups;
 var renderUsers = overview.renderUsers;
 var presenceByMac = {};
@@ -468,4 +476,17 @@ overview.renderUsers = function() {
 	return node;
 };
 
-return overview;
+return view.extend({
+	load: function() {
+		return overview.load ? overview.load.apply(overview, arguments) : null;
+	},
+
+	render: function() {
+		/*
+		 * Не возвращаем импортированный overview напрямую: для LuCI это уже
+		 * экземпляр, а не constructor. Рендерим базовый overview, потому что
+		 * именно на него последовательно повешены secure- и personal-правки.
+		 */
+		return overview.render.apply(overview, arguments);
+	}
+});

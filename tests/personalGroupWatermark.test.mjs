@@ -28,11 +28,22 @@ describe('Personal group watermark', () => {
       'htdocs/luci-static/resources/view/sheepfold/overview-personal.js',
     );
 
-    assert.match(source, /require view\.sheepfold\.overview-secure as overview/);
+    assert.match(source, /require view\.sheepfold\.overview-secure as secureOverview/);
     assert.match(source, /section\.personal === '1'/);
     assert.match(source, /sheepfold-personal-groups\.css/);
     assert.match(source, /ui_asset_version/);
     assert.match(source, /sf-group-person-watermark/);
+  });
+
+  it('decorates the base overview so secure wrapper delegation keeps watermarks visible', () => {
+    const source = readProjectFile(
+      'htdocs/luci-static/resources/view/sheepfold/overview-personal.js',
+    );
+
+    assert.match(source, /require view\.sheepfold\.overview-secure as secureOverview/);
+    assert.match(source, /require view\.sheepfold\.overview as overview/);
+    assert.match(source, /overview\.renderGroups = function/);
+    assert.match(source, /overview\.render\.apply\(overview, arguments\)/);
   });
 
   it('marks the default child group as personal but not the unrestricted group', () => {
