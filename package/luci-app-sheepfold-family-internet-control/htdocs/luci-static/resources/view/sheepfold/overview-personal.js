@@ -248,14 +248,16 @@ function presenceStatusText(presence) {
 	var lastSeenText;
 
 	if (presence.online)
-		return 'Онлайн: сейчас (в последние 15 мин)';
+		return _('Online: now (seen in the last 15 minutes)');
 
 	lastSeenText = formatLastSeen(presence.lastSeen);
-	return lastSeenText ? 'Онлайн: был ' + lastSeenText : 'Онлайн: данных пока нет';
+	return lastSeenText ?
+		_('Online: last seen %s').replace('%s', lastSeenText) :
+		_('Online: no presence data yet');
 }
 
 function onlineBadge() {
-	return E('span', { 'class': 'sf-online-badge' }, 'онлайн');
+	return E('span', { 'class': 'sf-online-badge' }, _('Online'));
 }
 
 function statusCellForRow(row, actions) {

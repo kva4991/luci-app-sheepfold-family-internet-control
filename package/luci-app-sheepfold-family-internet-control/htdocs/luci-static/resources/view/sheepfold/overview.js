@@ -5,6 +5,7 @@
 'require fs';
 
 var devices = [];
+var NOT_CONFIGURED_GROUP = 'Not configured';
 var defaultLogCachePath = '/tmp/sheepfold/events.log';
 var defaultSiteAllowlistSources = [
         'UT1 child | https://dsi.ut-capitole.fr/blacklists/index_en.php#child'
@@ -2031,7 +2032,7 @@ function upsertPairedAdminDevice(admin, status) {
                         name: status.device_name || mac,
                         ip: status.ip || '',
                         mac: mac,
-                        group: _('Not configured'),
+                        group: NOT_CONFIGURED_GROUP,
                         status: 'allow',
                         note: _('Admin device'),
                         adminDevice: true,
@@ -2504,7 +2505,7 @@ function listDeviceCandidateTable(targetStatus, onSelect) {
                                         E('td', {}, formattedDeviceDisplayId(device)),
                                         E('td', {}, [
                                                 E('strong', {}, device.name || _('Unknown device')),
-                                                E('small', {}, device.group || _('Not configured'))
+                                                E('small', {}, displayGroupName(device.group))
                                         ]),
                                         E('td', {}, device.ip || '-'),
                                         E('td', { 'class': 'sf-mono' }, device.mac || '-'),
@@ -2571,7 +2572,7 @@ function setDeviceBackendStatus(device, status) {
                 status,
                 device.name || device.hostname || mac,
                 device.ip || '',
-                device.group || _('Not configured'),
+                normalizeGroupName(device.group) || NOT_CONFIGURED_GROUP,
                 device.deviceType || 'smart'
         ]).then(function (result) {
                 return ensureRouterControlOk(result, _('Could not update device status.'));
@@ -2606,7 +2607,7 @@ function persistDeviceListMembership(selectedDevices, targetStatus) {
                 uci.set('sheepfold', sectionName, 'mac', mac);
                 uci.set('sheepfold', sectionName, 'name', item.name || item.hostname || mac);
                 uci.set('sheepfold', sectionName, 'ip', item.ip || '');
-                uci.set('sheepfold', sectionName, 'group', item.group || _('Not configured'));
+                uci.set('sheepfold', sectionName, 'group', normalizeGroupName(item.group) || NOT_CONFIGURED_GROUP);
                 uci.set('sheepfold', sectionName, 'device_type', item.deviceType || 'smart');
                 uci.set('sheepfold', sectionName, 'status', isAllowlist ? 'allow' : 'blocked');
 
@@ -2702,7 +2703,7 @@ function showManualDeviceModal() {
                                                 mac: mac,
                                                 name: nameField.input.value.trim() || mac,
                                                 ip: ipField.input.value.trim(),
-                                                group: _('Not configured'),
+                                                group: NOT_CONFIGURED_GROUP,
                                                 deviceType: typeField.input.value
                                         }, 'restricted').then(function () {
                                                 notify(_('Device added.'), 'info');
@@ -3085,8 +3086,8 @@ function childGroupName() {
 function normalizeGroupName(groupName) {
         var trimmed = String(groupName || '').trim();
 
-        if (!trimmed || trimmed === 'Not configured' || trimmed === 'Не настроено')
-                return trimmed;
+        if (!trimmed || trimmed === NOT_CONFIGURED_GROUP || trimmed === 'Не настроено')
+                return NOT_CONFIGURED_GROUP;
 
         if (LEGACY_GROUP_ALIASES[trimmed])
                 return defaultGroupDisplayName(LEGACY_GROUP_ALIASES[trimmed], trimmed);
@@ -3094,8 +3095,17 @@ function normalizeGroupName(groupName) {
         return trimmed;
 }
 
+function displayGroupName(groupName) {
+        var normalized = normalizeGroupName(groupName);
+
+        if (!normalized || normalized === NOT_CONFIGURED_GROUP)
+                return _('Not configured');
+
+        return normalized;
+}
+
 function sheepfoldGroupOptions() {
-        var options = [[_('Not configured'), _('Not configured')]];
+        var options = [[NOT_CONFIGURED_GROUP, _('Not configured')]];
 
         safeUciSections('sheepfold', 'group').forEach(function (section) {
                 var name = normalizeGroupName(section.name);
@@ -3126,7 +3136,7 @@ function supplementGroupedDevicesFromUci(grouped) {
                         return;
 
                 groupName = section.group ? normalizeGroupName(section.group) : '';
-                if (!groupName || groupName === _('Not configured') || groupName === 'Не настроено')
+                if (!groupName || groupName === NOT_CONFIGURED_GROUP)
                         return;
 
                 if (!grouped[groupName])
@@ -3350,7 +3360,7 @@ function createDeviceSelectionBox(options) {
                                 E('div', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
                                 E('div', { 'class': 'sf-device-name' }, [
                                         E('strong', {}, device.name),
-                                        E('small', {}, device.group)
+                                        E('small', {}, displayGroupName(device.group))
                                 ]),
                                 E('div', {}, device.ip || '-'),
                                 E('div', { 'class': 'sf-mono' }, device.mac || '-'),
@@ -3648,7 +3658,7 @@ function showGroupSettingsModal(groupName, section, onSave) {
                         var currentGroup = normalizeGroupName(deviceSection.group);
 
                         if (currentGroup === oldName || linked) {
-                                uci.set('sheepfold', deviceSection['.name'], 'group', linked ? newName : _('Not configured'));
+                                uci.set('sheepfold', deviceSection['.name'], 'group', linked ? newName : NOT_CONFIGURED_GROUP);
 
                                 if (oldName === noRestrictionsGroupName() && !linked)
                                         markNoRestrictionsAutoExcluded(deviceSection['.name']);
@@ -4047,7 +4057,7 @@ function showDeviceSettingsModal(device) {
                                                 customGroupField.input.value.trim() :
                                                 groupField.input.value;
                                         var oldGroup = normalizeGroupName(device.group);
-                                        var newGroup = normalizeGroupName(group || _('Not configured'));
+                                        var newGroup = normalizeGroupName(group || NOT_CONFIGURED_GROUP);
                                         var deviceType = typeField.input.value;
                                         var status = statusField.input.value;
                                         var configs = ['sheepfold'];
@@ -4134,7 +4144,7 @@ function deviceTable(rows, options) {
                         'data-sort-device': device.name || '',
                         'data-sort-type': type.label || '',
                         'data-sort-ip': String(ipSortValue(device.ip)),
-                        'data-sort-group': device.group || '',
+                        'data-sort-group': normalizeGroupName(device.group) || '',
                         'data-sort-status': device.status || '',
                         'data-search': [device.id, device.mac, device.hostname, device.note, type.label].join(' ')
                 }, [
@@ -4152,7 +4162,7 @@ function deviceTable(rows, options) {
                                 device.staticLease ? staticLeaseIcon() : ''
                         ]),
                         E('div', { 'class': 'sf-mono' }, device.mac),
-                        E('div', {}, device.group),
+                        E('div', {}, displayGroupName(device.group)),
                         E('div', { 'class': 'sf-status-stack' }, [
                                 device.statusBadge ? badge(device.statusBadge) : '',
                                 device.activityLogEnabled ? badge('journal') : ''
@@ -6130,7 +6140,7 @@ function applyAdminDeviceBindings(admin, selectedDevices, previousIds) {
                 uci.set('sheepfold', sectionName, 'name', device.name || mac);
                 uci.set('sheepfold', sectionName, 'ip', device.ip || '');
                 uci.set('sheepfold', sectionName, 'device_type', device.deviceType || 'phone');
-                uci.set('sheepfold', sectionName, 'group', _('Not configured'));
+                uci.set('sheepfold', sectionName, 'group', NOT_CONFIGURED_GROUP);
                 uci.set('sheepfold', sectionName, 'schedules', '');
                 uci.set('sheepfold', sectionName, 'schedule', '');
                 uci.set('sheepfold', sectionName, 'activity_log_enabled', '0');
@@ -6258,7 +6268,7 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                 var configured = configuredByMac[mac];
                 var status = configured && configured.status ? configured.status : 'new';
                 var adminDevice = configured && configured.admin_device === '1';
-                var groupName = configured && configured.group ? normalizeGroupName(configured.group) : _('Not configured');
+                var groupName = configured && configured.group ? normalizeGroupName(configured.group) : NOT_CONFIGURED_GROUP;
                 var groupSection = groupSectionByName(groupName);
                 var deviceType = configured && configured.device_type ?
                         configured.device_type :
@@ -7147,7 +7157,7 @@ return view.extend({
                         }, [
                                 E('div', { 'class': 'sf-group-head' }, [
                                         E('div', {}, [
-                                                E('h4', { 'class': 'sf-group-title' }, groupName),
+                                                E('h4', { 'class': 'sf-group-title' }, displayGroupName(groupName)),
                                                 E('strong', { 'class': 'sf-group-count' }, groupDevices.length + ' ' + _('Devices'))
                                         ]),
                                         E('div', { 'class': 'sf-row-actions' }, [

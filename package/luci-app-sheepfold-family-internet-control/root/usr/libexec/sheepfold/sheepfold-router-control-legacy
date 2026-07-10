@@ -761,7 +761,7 @@ set_device_status() {
         fi
 
         [ -n "$device_name" ]   || device_name="$device_mac"
-        [ -n "$device_group" ]  || device_group="Не настроено"
+        [ -n "$device_group" ]  || device_group="Not configured"
         [ -n "$device_type" ]   || device_type="smart"
 
         uci -q set "sheepfold.$device_section.mac=$device_mac"
@@ -862,7 +862,7 @@ pair_admin_device() {
         uci -q set "sheepfold.$device_section.ip=$remote_ip"
         uci -q set "sheepfold.$device_section.device_type=phone"
         uci -q set "sheepfold.$device_section.manual_device_type=1"
-        uci -q set "sheepfold.$device_section.group=Не настроено"
+        uci -q set "sheepfold.$device_section.group=Not configured"
         uci -q set "sheepfold.$device_section.schedules="
         uci -q set "sheepfold.$device_section.status=allow"
         uci -q set "sheepfold.$device_section.admin_device=1"

@@ -34,6 +34,7 @@ describe('Default Sheepfold groups', () => {
     assert.match(helper, /\[ -n "\$\(uci -q get sheepfold\.no_restrictions\.name/);
     assert.match(helper, /migrate_device_group_aliases/);
     assert.match(helper, /'No restrictions'\|'Без ограничений'/);
+    assert.match(helper, /'Не настроено'\)[\s\S]*Not configured/);
   });
 
   it('assigns auto-detected devices to the canonical no_restrictions group name', () => {

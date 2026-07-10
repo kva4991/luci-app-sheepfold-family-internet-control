@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,9 +8,9 @@ import { spawnSync } from 'node:child_process';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const buildScript = resolve(repoRoot, 'scripts/build-test-ipk.py');
-const testOutDir = resolve(repoRoot, '.build/test-ipk-out');
 
 function buildTestIpk() {
+  const testOutDir = mkdtempSync(join(tmpdir(), 'sheepfold-ipk-'));
   const result = spawnSync('python', [buildScript, '--out-dir', testOutDir], {
     cwd: repoRoot,
     encoding: 'utf8',

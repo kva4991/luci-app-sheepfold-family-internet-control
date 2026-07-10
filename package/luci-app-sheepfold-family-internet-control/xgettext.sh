@@ -13,6 +13,7 @@ FILES=(
     "$SRC_DIR/ai.js"
     "$SRC_DIR/overview.js"
     "$SRC_DIR/overview-secure.js"
+    "$SRC_DIR/overview-personal.js"
 )
 
 for f in "${FILES[@]}"; do

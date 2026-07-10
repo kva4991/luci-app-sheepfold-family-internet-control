@@ -57,8 +57,9 @@ describe('Интерфейс автоопределения устройств',
     const source = readFileSync(viewPath, 'utf8');
 
     assert.match(source, /device-presence/);
-    assert.match(source, /Онлайн: сейчас \(в последние 15 мин\)/);
-    assert.match(source, /Онлайн: был/);
+    assert.match(source, /Online: now \(seen in the last 15 minutes\)/);
+    assert.match(source, /Online: last seen %s/);
+    assert.match(source, /_\('Online'\)/);
     assert.match(source, /sf-online-badge-row/);
     assert.match(source, /sf-device-presence-modal-status/);
   });

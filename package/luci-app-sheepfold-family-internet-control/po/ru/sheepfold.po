@@ -1764,6 +1764,18 @@ msgstr "Одноразовая ссылка добавления"
 msgid "Online"
 msgstr "Онлайн"
 
+#: htdocs/luci-static/resources/view/sheepfold/overview-personal.js
+msgid "Online: last seen %s"
+msgstr "Онлайн: был %s"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-personal.js
+msgid "Online: no presence data yet"
+msgstr "Онлайн: данных пока нет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-personal.js
+msgid "Online: now (seen in the last 15 minutes)"
+msgstr "Онлайн: сейчас (в последние 15 мин)"
+
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
 msgid "Only devices belonging to one person can be added to this group."
 msgstr "В эту группу можно добавлять только устройства одного человека."
@@ -3071,3 +3083,131 @@ msgstr "Настройки Wi-Fi сохранены."
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
 msgid "WPS pairing window"
 msgstr "Окно WPS-подключения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "A reversible WAN indicator repair was found for this model. Apply the change with Save settings."
+msgstr "Для этой модели найдено обратимое исправление WAN-индикатора. Изменение применяется кнопкой «Сохранить настройки»."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Administrative rights cannot be granted from the general device list. Pair devices with the button next to the gear icon; blocklisted devices are unavailable. QR pairing is in administrator settings."
+msgstr "Нельзя выдавать административные права из общего списка устройств. Привязку выполняйте кнопкой рядом с шестерёнкой; устройства из чёрного списка недоступны. QR-сопряжение — в настройках администратора."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Administrator created. Open administrator settings and complete QR pairing."
+msgstr "Администратор создан. Откройте его настройки и выполните QR-сопряжение."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Administrator name"
+msgstr "Имя администратора"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "An account is created first. The phone receives administrator rights only after QR pairing with MAC, blocklist, and one-time code verification."
+msgstr "Сначала создаётся только учётная запись. Телефон получает административные права исключительно после QR-сопряжения с проверкой MAC, blocklist и одноразового кода."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Checking for a router-specific indicator repair…"
+msgstr "Проверяется наличие исправления для этой модели роутера…"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Could not apply indicator repair."
+msgstr "Не удалось применить исправление индикаторов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Could not check indicator repair."
+msgstr "Не удалось проверить исправление индикаторов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Could not check LED dependency."
+msgstr "Не удалось проверить зависимость для светодиодов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Could not check repair availability: "
+msgstr "Не удалось проверить доступность исправления: "
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Could not create administrator."
+msgstr "Не удалось создать администратора."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Could not install dependency."
+msgstr "Не удалось установить зависимость."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Could not install the required package."
+msgstr "Не удалось установить требуемый пакет."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Could not prepare LED settings: "
+msgstr "Не удалось подготовить настройки светодиодов: "
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Create"
+msgstr "Создать"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Dependency installed successfully."
+msgstr "Зависимость успешно установлена."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Indicator repair setting saved."
+msgstr "Настройка исправления индикаторов сохранена."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Install the dependency and continue saving settings?"
+msgstr "Установить зависимость и продолжить сохранение настроек?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Installing dependency"
+msgstr "Установка зависимости"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Installing dependency. Do not close this page."
+msgstr "Устанавливается зависимость. Не закрывайте страницу."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "LED control dependency"
+msgstr "Зависимость для управления светодиодами"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Login may contain only Latin letters, digits, and . _ - @ + symbols."
+msgstr "Логин может содержать только латинские буквы, цифры и символы . _ - @ +"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Name and login are required."
+msgstr "Имя и логин обязательны."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "No model-specific repairs were found. Standard system LED controls are used."
+msgstr "Для этой модели специальных исправлений не найдено. Используются общие системные средства управления LED."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Package"
+msgstr "Пакет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Preparing installation…"
+msgstr "Подготовка установки…"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "The selected LED control mode requires an additional package."
+msgstr "Для выбранного режима управления светодиодами будет установлен дополнительный пакет."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "This login is already in use."
+msgstr "Этот логин уже используется."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Try to fix indicator behavior"
+msgstr "Попробовать исправить работу индикаторов"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "unknown"
+msgstr "неизвестно"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "unknown error"
+msgstr "неизвестная ошибка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "unknown package"
+msgstr "неизвестный пакет"

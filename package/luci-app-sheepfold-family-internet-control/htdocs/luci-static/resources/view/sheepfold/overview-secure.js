@@ -80,18 +80,18 @@ function confirmLedDependencyInstall(packageName, boardName) {
 			resolve(confirmed);
 		}
 
-		ui.showModal(_('Зависимость для управления светодиодами'), [
+		ui.showModal(_('LED control dependency'), [
 			E('div', { 'class': 'cbi-section' }, [
-				E('p', {}, _('Для выбранного режима управления светодиодами будет установлен дополнительный пакет.')),
+				E('p', {}, _('The selected LED control mode requires an additional package.')),
 				E('p', {}, [
-					E('strong', {}, _('Модель роутера') + ': '),
-					E('code', {}, boardName || _('неизвестно'))
+					E('strong', {}, _('Router model') + ': '),
+					E('code', {}, boardName || _('unknown'))
 				]),
 				E('p', {}, [
-					E('strong', {}, _('Пакет') + ': '),
+					E('strong', {}, _('Package') + ': '),
 					E('code', {}, packageName)
 				]),
-				E('p', {}, _('Установить зависимость и продолжить сохранение настроек?'))
+				E('p', {}, _('Install the dependency and continue saving settings?'))
 			]),
 			E('div', { 'class': 'right sf-modal-actions' }, [
 				E('button', {
@@ -100,14 +100,14 @@ function confirmLedDependencyInstall(packageName, boardName) {
 						event.preventDefault();
 						finish(false);
 					}
-				}, _('Нет')),
+				}, _('No')),
 				E('button', {
 					'class': 'btn cbi-button cbi-button-positive',
 					'click': function(event) {
 						event.preventDefault();
 						finish(true);
 					}
-				}, _('Да'))
+				}, _('Yes'))
 			])
 		]);
 	});
@@ -116,8 +116,8 @@ function confirmLedDependencyInstall(packageName, boardName) {
 function installLedDependency(packageName) {
 	return new Promise(function(resolve, reject) {
 		var spinner = E('span', { 'class': 'sf-spinner' });
-		var statusNode = E('p', {}, _('Устанавливается зависимость. Не закрывайте страницу.'));
-		var outputNode = E('pre', { 'class': 'sf-pre' }, _('Подготовка установки…'));
+		var statusNode = E('p', {}, _('Installing dependency. Do not close this page.'));
+		var outputNode = E('pre', { 'class': 'sf-pre' }, _('Preparing installation…'));
 		var closeButton = E('button', {
 			'class': 'btn cbi-button',
 			'hidden': 'hidden',
@@ -125,9 +125,9 @@ function installLedDependency(packageName) {
 				event.preventDefault();
 				ui.hideModal();
 			}
-		}, _('Закрыть'));
+		}, _('Close'));
 
-		ui.showModal(_('Установка зависимости'), [
+		ui.showModal(_('Installing dependency'), [
 			E('div', { 'class': 'sf-update-progress' }, [
 				spinner,
 				statusNode
@@ -139,11 +139,11 @@ function installLedDependency(packageName) {
 		routerControl(['led-dependency-install']).then(function(result) {
 			var output;
 
-			ensureSuccessfulCommand(result, _('Не удалось установить зависимость.'));
+			ensureSuccessfulCommand(result, _('Could not install dependency.'));
 			output = String(result && (result.stdout || result.stderr) || '').trim();
 			outputNode.textContent = output || packageName;
 			spinner.className = 'sf-spinner sf-spinner-done';
-			statusNode.textContent = _('Зависимость успешно установлена.');
+			statusNode.textContent = _('Dependency installed successfully.');
 			closeButton.hidden = false;
 
 			window.setTimeout(function() {
@@ -152,8 +152,8 @@ function installLedDependency(packageName) {
 			}, 1000);
 		}).catch(function(error) {
 			spinner.className = 'sf-spinner sf-spinner-failed';
-			statusNode.textContent = _('Не удалось установить зависимость.');
-			outputNode.textContent = commandErrorText(error, _('Не удалось установить требуемый пакет.'));
+			statusNode.textContent = _('Could not install dependency.');
+			outputNode.textContent = commandErrorText(error, _('Could not install the required package.'));
 			closeButton.hidden = false;
 			reject(error);
 		});
@@ -169,19 +169,19 @@ function prepareLedDependency(root) {
 	return routerControl(['led-dependency-status']).then(function(result) {
 		var status;
 
-		ensureSuccessfulCommand(result, _('Не удалось проверить зависимость для светодиодов.'));
+		ensureSuccessfulCommand(result, _('Could not check LED dependency.'));
 		status = parseKeyValueOutput(result && result.stdout || '');
 		if (status.required !== '1' || status.installed === '1')
 			return null;
 
-		return confirmLedDependencyInstall(status.package || _('неизвестный пакет'), status.board).then(function(confirmed) {
+		return confirmLedDependencyInstall(status.package || _('unknown package'), status.board).then(function(confirmed) {
 			if (!confirmed) {
 				ledSelect.value = 'router_default';
 				ledSelect.dispatchEvent(new Event('change', { bubbles: true }));
 				return null;
 			}
 
-			return installLedDependency(status.package || _('неизвестный пакет'));
+			return installLedDependency(status.package || _('unknown package'));
 		});
 	});
 }
@@ -203,7 +203,7 @@ function saveLedRepair(root) {
 	}).then(function() {
 		return routerControl(['led-repair-apply']);
 	}).then(function(result) {
-		ensureSuccessfulCommand(result, _('Не удалось применить исправление индикаторов.'));
+		ensureSuccessfulCommand(result, _('Could not apply indicator repair.'));
 		input.dataset.initial = nextValue;
 		input.dataset.changed = '0';
 		return true;
@@ -230,10 +230,10 @@ function createLedRepairField() {
 		'data-initial': initialValue ? '1' : '0',
 		'data-changed': '0'
 	});
-	var hint = E('small', {}, _('Проверяется наличие исправления для этой модели роутера…'));
+	var hint = E('small', {}, _('Checking for a router-specific indicator repair…'));
 	var field = E('label', { 'class': 'sf-check-field' }, [
 		input,
-		E('span', {}, _('Попробовать исправить работу индикаторов')),
+		E('span', {}, _('Try to fix indicator behavior')),
 		hint
 	]);
 
@@ -244,18 +244,18 @@ function createLedRepairField() {
 	routerControl(['led-repair-status']).then(function(result) {
 		var status;
 
-		ensureSuccessfulCommand(result, _('Не удалось проверить исправление индикаторов.'));
+		ensureSuccessfulCommand(result, _('Could not check indicator repair.'));
 		status = parseKeyValueOutput(result && result.stdout || '');
 		if (status.available === '1') {
 			input.disabled = false;
-			hint.textContent = _('Для этой модели найдено обратимое исправление WAN-индикатора. Изменение применяется кнопкой «Сохранить настройки».');
+			hint.textContent = _('A reversible WAN indicator repair was found for this model. Apply the change with Save settings.');
 		} else {
 			input.disabled = true;
-			hint.textContent = _('Для этой модели специальных исправлений не найдено. Используются общие системные средства управления LED.');
+			hint.textContent = _('No model-specific repairs were found. Standard system LED controls are used.');
 		}
 	}).catch(function(error) {
 		input.disabled = true;
-		hint.textContent = _('Не удалось проверить доступность исправления: ') + commandErrorText(error, _('неизвестная ошибка'));
+		hint.textContent = _('Could not check repair availability: ') + commandErrorText(error, _('unknown error'));
 	});
 
 	return field;
@@ -292,11 +292,11 @@ function attachLedSaveCheck(root, button) {
 			}
 
 			if (repairSaved)
-				ui.addNotification(null, E('p', {}, _('Настройка исправления индикаторов сохранена.')), 'info');
+				ui.addNotification(null, E('p', {}, _('Indicator repair setting saved.')), 'info');
 		}).catch(function(error) {
 			ui.addNotification(null, E('p', {},
-				_('Не удалось подготовить настройки светодиодов: ') +
-				commandErrorText(error, _('неизвестная ошибка'))), 'error');
+				_('Could not prepare LED settings: ') +
+				commandErrorText(error, _('unknown error'))), 'error');
 		});
 	}, true);
 }
@@ -333,15 +333,15 @@ function showSafeAddAdministratorModal() {
 
 		errorNode.hidden = true;
 		if (!displayName || !login) {
-			showError(_('Имя и логин обязательны.'));
+			showError(_('Name and login are required.'));
 			return;
 		}
 		if (!/^[A-Za-z0-9_.@+-]{1,64}$/.test(login)) {
-			showError(_('Логин может содержать только латинские буквы, цифры и символы . _ - @ +'));
+			showError(_('Login may contain only Latin letters, digits, and . _ - @ + symbols.'));
 			return;
 		}
 		if (administratorLoginExists(login)) {
-			showError(_('Этот логин уже используется.'));
+			showError(_('This login is already in use.'));
 			return;
 		}
 
@@ -355,11 +355,11 @@ function showSafeAddAdministratorModal() {
 		uci.save('sheepfold').then(function() {
 			return uci.apply();
 		}).then(function() {
-			ui.addNotification(null, E('p', {}, _('Администратор создан. Откройте его настройки и выполните QR-сопряжение.')), 'info');
+			ui.addNotification(null, E('p', {}, _('Administrator created. Open administrator settings and complete QR pairing.')), 'info');
 			ui.hideModal();
 			window.location.reload();
 		}).catch(function(error) {
-			showError(error.message || _('Не удалось создать администратора.'));
+			showError(error.message || _('Could not create administrator.'));
 		});
 	}
 
@@ -368,28 +368,28 @@ function showSafeAddAdministratorModal() {
 			E('button', {
 				'class': 'btn cbi-button',
 				'click': ui.hideModal
-			}, _('Отмена')),
+			}, _('Cancel')),
 			E('button', {
 				'class': 'btn cbi-button cbi-button-positive',
 				'click': function(event) {
 					event.preventDefault();
 					createAdministrator();
 				}
-			}, _('Создать'))
+			}, _('Create'))
 		]);
 	}
 
-	ui.showModal(_('Добавить администратора'), [
+	ui.showModal(_('Add administrator'), [
 		E('div', { 'class': 'cbi-section' }, [
-			E('p', {}, _('Сначала создаётся только учётная запись. Телефон получает административные права исключительно после QR-сопряжения с проверкой MAC, blocklist и одноразового кода.')),
+			E('p', {}, _('An account is created first. The phone receives administrator rights only after QR pairing with MAC, blocklist, and one-time code verification.')),
 			modalActions(),
 			errorNode,
 			E('label', { 'class': 'cbi-value' }, [
-				E('span', { 'class': 'cbi-value-title' }, _('Имя администратора')),
+				E('span', { 'class': 'cbi-value-title' }, _('Administrator name')),
 				E('div', { 'class': 'cbi-value-field' }, nameInput)
 			]),
 			E('label', { 'class': 'cbi-value' }, [
-				E('span', { 'class': 'cbi-value-title' }, _('Логин')),
+				E('span', { 'class': 'cbi-value-title' }, _('Login')),
 				E('div', { 'class': 'cbi-value-field' }, loginInput)
 			])
 		]),
@@ -423,11 +423,11 @@ overview.renderAdmins = function() {
 				event.preventDefault();
 				showSafeAddAdministratorModal();
 			}
-		}, _('Добавить администратора')));
+		}, _('Add administrator')));
 	}
 
 	node.insertBefore(E('div', { 'class': 'sf-note sf-note-warning' },
-		_('Нельзя выдавать административные права из общего списка устройств. Привязку выполняйте кнопкой рядом с шестерёнкой; устройства из чёрного списка недоступны. QR-сопряжение — в настройках администратора.')),
+		_('Administrative rights cannot be granted from the general device list. Pair devices with the button next to the gear icon; blocklisted devices are unavailable. QR pairing is in administrator settings.')),
 		node.firstChild);
 
 	return node;

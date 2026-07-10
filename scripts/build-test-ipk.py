@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import tarfile
+import tempfile
 import time
 from pathlib import Path
 
@@ -385,26 +386,29 @@ def main() -> None:
     version = read_make_value("PKG_VERSION")
     release = read_make_value("PKG_RELEASE")
     out_dir = resolve_default_out_dir(args.out_dir or args.downloads_dir)
-    build_dir = ROOT_DIR / ".build" / "test-ipk-python"
+    build_root = ROOT_DIR / ".build"
+    build_root.mkdir(parents=True, exist_ok=True)
+    build_dir = Path(tempfile.mkdtemp(prefix="sheepfold-test-ipk-", dir=build_root))
     ipk = out_dir / f"{PKG_NAME}_{version}-{release}_all.ipk"
 
-    shutil.rmtree(build_dir, ignore_errors=True)
-    build_dir.mkdir(parents=True, exist_ok=True)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    debian_binary = build_dir / "debian-binary"
-    data_tar = build_dir / "data.tar.gz"
-    control_tar = build_dir / "control.tar.gz"
+    try:
+        debian_binary = build_dir / "debian-binary"
+        data_tar = build_dir / "data.tar.gz"
+        control_tar = build_dir / "control.tar.gz"
 
-    debian_binary.write_bytes(b"2.0\n")
-    write_data_tar(data_tar)
-    write_control_tar(control_tar, version, release)
+        debian_binary.write_bytes(b"2.0\n")
+        write_data_tar(data_tar)
+        write_control_tar(control_tar, version, release)
 
-    write_ipk_tar(ipk, [
-        ("debian-binary", debian_binary.read_bytes()),
-        ("data.tar.gz", data_tar.read_bytes()),
-        ("control.tar.gz", control_tar.read_bytes()),
-    ])
+        write_ipk_tar(ipk, [
+            ("debian-binary", debian_binary.read_bytes()),
+            ("data.tar.gz", data_tar.read_bytes()),
+            ("control.tar.gz", control_tar.read_bytes()),
+        ])
+    finally:
+        shutil.rmtree(build_dir, ignore_errors=True)
 
     print(ipk)
 

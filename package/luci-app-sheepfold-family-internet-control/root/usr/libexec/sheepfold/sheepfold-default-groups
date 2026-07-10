@@ -99,6 +99,9 @@ migrate_device_group_aliases() {
 			'Child number 1'|'Первый ребёнок'|'Ребёнок номер 1')
 				[ -n "$canonical_child" ] && uci -q set "sheepfold.$section.group=$canonical_child"
 				;;
+			'Не настроено')
+				uci -q set "sheepfold.$section.group=Not configured"
+				;;
 		esac
 
 		name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
