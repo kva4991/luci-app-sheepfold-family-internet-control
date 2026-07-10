@@ -89,6 +89,11 @@ if ! uci -q commit sheepfold; then
     exit 6
 fi
 
+PAIR_TOKEN_LOGIN="$login"
+PAIR_TOKEN_DEVICE_ID="$device_id"
+PAIR_TOKEN_MAC="$device_mac"
+PAIR_TOKEN_ISSUED_AT="$now"
+
 if ! pair_store_token; then
     echo "Could not store administrator token hash. Pairing code was not consumed." >&2
     exit 6

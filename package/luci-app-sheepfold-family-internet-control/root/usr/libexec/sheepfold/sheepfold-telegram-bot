@@ -57,9 +57,9 @@ fetch() {
         data="${2:-}"
 
         if [ -n "$data" ]; then
-                uclient-fetch -qO- --post-data="$data" "$url" 2>/dev/null || true
+                uclient-fetch -qO- --post-data="$data" "$url" 2>/dev/null || return 1
         else
-                uclient-fetch -qO- "$url" 2>/dev/null || true
+                uclient-fetch -qO- "$url" 2>/dev/null || return 1
         fi
 }
 
@@ -89,6 +89,7 @@ telegram_commands_json() {
 {"command":"devices","description":"Показать все устройства"},
 {"command":"internet_on","description":"Включить интернет"},
 {"command":"internet_off","description":"Отключить интернет"},
+{"command":"wifi_status","description":"Статус Wi-Fi"},
 {"command":"wifi_on","description":"Включить Wi-Fi"},
 {"command":"wifi_off","description":"Выключить Wi-Fi"},
 {"command":"support","description":"Поддержка и диагностика"},
@@ -101,8 +102,7 @@ telegram_commands_json() {
 {"command":"clear_logs","description":"Очистить журнал"},
 {"command":"update","description":"Обновить Sheepfold"},
 {"command":"reboot","description":"Перезагрузить роутер"},
-{"command":"emergency_sites","description":"Аварийно-полезные сайты"},
-{"command":"wifi_status","description":"Статус Wi-Fi"}
+{"command":"emergency_sites","description":"Аварийно-полезные сайты"}
 ]
 EOF
 }
@@ -711,7 +711,7 @@ poll_once() {
                 ''|*[!0-9]*) offset=0 ;;
         esac
 
-        response="$(fetch "https://api.telegram.org/bot${token}/getUpdates?timeout=25&limit=1&offset=${offset}")"
+        response="$(fetch "https://api.telegram.org/bot${token}/getUpdates?timeout=25&limit=1&offset=${offset}")" || return 2
         [ -n "$response" ] || return 0
 
         update_id="$(printf '%s' "$response" | parse_first_update_id)"
@@ -762,6 +762,8 @@ notify_new_log_lines() {
 }
 
 run_loop() {
+        backoff=1
+
         log "Telegram adapter loop started"
         if telegram_active && [ -n "$(telegram_token)" ]; then
                 sync_telegram_commands >/dev/null 2>&1 || true
@@ -769,7 +771,13 @@ run_loop() {
         while :; do
                 if telegram_active && [ -n "$(telegram_token)" ]; then
                         notify_new_log_lines
-                        poll_once
+                        if poll_once; then
+                                backoff=1
+                        else
+                                sleep "$backoff"
+                                backoff=$((backoff * 2))
+                                [ "$backoff" -le 60 ] || backoff=60
+                        fi
                 else
                         sleep 15
                 fi

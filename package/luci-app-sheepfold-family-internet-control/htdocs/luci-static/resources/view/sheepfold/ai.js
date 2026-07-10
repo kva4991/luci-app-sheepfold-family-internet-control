@@ -12,7 +12,9 @@ return view.extend({
 
 	render: function() {
 		var hasConfiguredProvider = function() {
-			var provider = uci.get('sheepfold', 'global', 'ai_provider') || 'deepseek';
+			var provider = uci.get('sheepfold', 'global', 'ai_provider') || 'none';
+			if (!provider || provider === 'none')
+				return false;
 			var key = provider === 'gemini'
 				? uci.get('sheepfold', 'global', 'gemini_api_key')
 				: uci.get('sheepfold', 'global', 'deepseek_api_key');
@@ -59,9 +61,10 @@ return view.extend({
 		s.anonymous = true;
 
 		var o = s.option(form.ListValue, 'ai_provider', _('Provider'));
+		o.value('none', _('Not set up'));
 		o.value('deepseek', 'DeepSeek');
 		o.value('gemini', 'Google Gemini');
-		o.default = 'deepseek';
+		o.default = 'none';
 
 		o = s.option(form.Value, 'deepseek_model', _('DeepSeek model'));
 		o.depends('ai_provider', 'deepseek');

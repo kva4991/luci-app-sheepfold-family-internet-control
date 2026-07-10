@@ -2,6 +2,12 @@
 set -eu
 
 DEFAULT_LOG="/tmp/sheepfold/events.log"
+USB_MOUNT_POINT="/mnt/sheepfold-usb"
+USB_LOG_DIR="${USB_MOUNT_POINT}/sheepfold/logs"
+YANDEX_PUSH="/usr/libexec/sheepfold/sheepfold-yandex-disk"
+YANDEX_PUSH_LOCK="/tmp/sheepfold/.yandex-push.scheduled"
+YANDEX_PUSH_STAMP="/tmp/sheepfold/.yandex-push.last"
+YANDEX_PUSH_INTERVAL=300
 MESSAGE="${*:-}"
 
 log_path() {
@@ -12,6 +18,58 @@ log_path() {
         esac
 }
 
+log_storage_backend() {
+        uci -q get sheepfold.global.log_storage 2>/dev/null || printf ram
+}
+
+mirror_to_usb() {
+        line="$1"
+
+        case "$(log_storage_backend)" in
+                usb) ;;
+                *) return 0 ;;
+        esac
+
+        grep -q " ${USB_MOUNT_POINT} " /proc/mounts 2>/dev/null || return 0
+        mkdir -p "$USB_LOG_DIR" 2>/dev/null || return 0
+        printf '%s\n' "$line" >> "${USB_LOG_DIR}/events.log"
+        chmod 600 "${USB_LOG_DIR}/events.log" 2>/dev/null || true
+}
+
+schedule_yandex_push() {
+        now=0
+        last=0
+
+        case "$(log_storage_backend)" in
+                yandex_disk) ;;
+                *) return 0 ;;
+        esac
+
+        [ -x "$YANDEX_PUSH" ] || return 0
+        [ -f "$YANDEX_PUSH_LOCK" ] && return 0
+
+        now="$(date +%s 2>/dev/null || printf 0)"
+        case "$now" in ''|*[!0-9]*) now=0 ;; esac
+
+        if [ -f "$YANDEX_PUSH_STAMP" ]; then
+                last="$(cat "$YANDEX_PUSH_STAMP" 2>/dev/null || printf 0)"
+                case "$last" in ''|*[!0-9]*) last=0 ;; esac
+        fi
+
+        if [ "$now" -gt 0 ] && [ "$last" -gt 0 ] && [ $((now - last)) -lt "$YANDEX_PUSH_INTERVAL" ]; then
+                return 0
+        fi
+
+        mkdir -p /tmp/sheepfold 2>/dev/null || true
+        : >"$YANDEX_PUSH_LOCK"
+
+        (
+                "$YANDEX_PUSH" push-events >/dev/null 2>&1 || true
+                date +%s >"$YANDEX_PUSH_STAMP" 2>/dev/null || true
+                rm -f "$YANDEX_PUSH_LOCK"
+        ) &
+}
+
 [ -n "$MESSAGE" ] || exit 0
 
 LOG_FILE="$(log_path)"
@@ -19,6 +77,10 @@ LOG_DIR="${LOG_FILE%/*}"
 mkdir -p "$LOG_DIR"
 chmod 700 "$LOG_DIR" 2>/dev/null || true
 
-printf '%s\t%s\n' "$(date '+%d.%m.%Y %H:%M:%S')" "$(printf '%s' "$MESSAGE" | tr '\r\n\t' '   ')" >> "$LOG_FILE"
+LINE="$(printf '%s\t%s' "$(date '+%d.%m.%Y %H:%M:%S')" "$(printf '%s' "$MESSAGE" | tr '\r\n\t' '   ')")"
+printf '%s\n' "$LINE" >> "$LOG_FILE"
 chmod 600 "$LOG_FILE" 2>/dev/null || true
 logger -t sheepfold "$MESSAGE" 2>/dev/null || true
+
+mirror_to_usb "$LINE"
+schedule_yandex_push

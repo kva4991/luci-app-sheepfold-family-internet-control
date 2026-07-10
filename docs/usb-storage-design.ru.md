@@ -2,6 +2,8 @@
 
 ## Статус реализации
 
+Альтернатива USB для архивирования журналов и бэкапов настроек — **Yandex Disk** (WebDAV). См. [`docs/yandex-disk-storage.ru.md`](yandex-disk-storage.ru.md). Оба backend выбираются через `sheepfold.global.log_storage` и вызываются из `sheepfold-log-storage archive-push`.
+
 CLI backend находится по пути:
 
 ```text

@@ -28,7 +28,7 @@ Already implemented locally:
 
 1. Build `.ipk` package artifacts with the repository build script.
 2. Publish/test packages through GitHub Releases manually.
-3. Ask for application language first and default to `ru`.
+3. Ask for application language first and default to `ru`; on first package install the choice is written to `/etc/sheepfold/install.language` and applied to both `sheepfold.global.language` and `luci.main.lang` (see [`docs/localization.ru.md`](localization.ru.md)).
 4. Ask for user-agreement consent.
 5. Ask whether to apply Sheepfold automatic setup and persist the intended automatic setup values when config exists.
 6. Detect existing AdGuard Home and Podkop installations.

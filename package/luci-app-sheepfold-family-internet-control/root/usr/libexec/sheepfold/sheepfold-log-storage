@@ -1,0 +1,121 @@
+#!/bin/sh
+# Единый статус и выгрузка журналов для RAM / USB / Yandex Disk.
+set -eu
+
+USB_STORAGE="/usr/libexec/sheepfold/sheepfold-usb-storage"
+YANDEX_DISK="/usr/libexec/sheepfold/sheepfold-yandex-disk"
+RAM_ARCHIVE_DIR="/tmp/sheepfold/.private/archive"
+EVENTS_LOG="/tmp/sheepfold/events.log"
+
+global_get() {
+	uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "${2:-}"
+}
+
+json_escape() {
+	printf '%s' "$1" | tr '\r\n\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+ram_status_json() {
+	free_kb=0
+	archive_count=0
+	events_kb=0
+	if [ -r /proc/meminfo ]; then
+		free_kb="$(awk '/^MemAvailable:/ { print $2; exit }' /proc/meminfo 2>/dev/null || printf 0)"
+		[ -n "$free_kb" ] || free_kb="$(awk '/^MemFree:/ { print $2; exit }' /proc/meminfo 2>/dev/null || printf 0)"
+	fi
+	case "$free_kb" in ''|*[!0-9]*) free_kb=0 ;; esac
+	archive_count="$(find "$RAM_ARCHIVE_DIR" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')"
+	[ -f "$EVENTS_LOG" ] && events_kb="$(du -k "$EVENTS_LOG" 2>/dev/null | awk '{print $1}' || printf 0)"
+	case "$events_kb" in ''|*[!0-9]*) events_kb=0 ;; esac
+
+	state="ok"
+	message="Journals are stored in RAM"
+	free_pct=100
+	if [ "$free_kb" -lt 16384 ]; then
+		state="warn"
+		message="Low router RAM for journals"
+		free_pct=15
+	elif [ "$free_kb" -lt 8192 ]; then
+		state="error"
+		message="Critically low router RAM for journals"
+		free_pct=5
+	fi
+
+	printf '{"backend":"ram","state":"%s","message":"%s","authorized":1,"used_mb":%s,"quota_mb":0,"free_pct":%s,"archive_files":%s}\n' \
+		"$state" "$(json_escape "$message")" "$((events_kb / 1024))" "$free_pct" "$archive_count"
+}
+
+usb_status_json() {
+	if [ ! -x "$USB_STORAGE" ]; then
+		printf '{"backend":"usb","state":"error","message":"USB storage helper is missing","authorized":0,"used_mb":0,"quota_mb":0,"free_pct":0}\n'
+		return 0
+	fi
+	raw="$("$USB_STORAGE" status 2>/dev/null || true)"
+	enabled="$(printf '%s' "$raw" | sed -n 's/.*"enabled":\([^,}]*\).*/\1/p')"
+	mounted="$(printf '%s' "$raw" | sed -n 's/.*"mounted":\([^,}]*\).*/\1/p')"
+	free_pct="$(printf '%s' "$raw" | sed -n 's/.*"free_pct":\([^,}]*\).*/\1/p')"
+	used_kb="$(printf '%s' "$raw" | sed -n 's/.*"used_kb":\([^,}]*\).*/\1/p')"
+	total_kb="$(printf '%s' "$raw" | sed -n 's/.*"total_kb":\([^,}]*\).*/\1/p')"
+	case "$free_pct" in ''|*[!0-9]*) free_pct=0 ;; esac
+	case "$used_kb" in ''|*[!0-9]*) used_kb=0 ;; esac
+	case "$total_kb" in ''|*[!0-9]*) total_kb=0 ;; esac
+
+	state="error"
+	message="USB flash is not configured"
+	authorized=0
+	if [ "$enabled" = "1" ]; then
+		authorized=1
+		if [ "$mounted" = "1" ]; then
+			if [ "$free_pct" -le 10 ]; then
+				state="error"
+				message="USB flash is almost full"
+			elif [ "$free_pct" -le 25 ]; then
+				state="warn"
+				message="USB flash space is running low"
+			else
+				state="ok"
+				message="USB flash is mounted and ready"
+			fi
+		else
+			message="USB flash is enabled but not mounted"
+		fi
+	fi
+
+	printf '{"backend":"usb","state":"%s","message":"%s","authorized":%s,"used_mb":%s,"quota_mb":%s,"free_pct":%s}\n' \
+		"$state" "$(json_escape "$message")" "$authorized" "$((used_kb / 1024))" "$((total_kb / 1024))" "$free_pct"
+}
+
+cmd_status() {
+	backend="$(global_get log_storage ram)"
+	case "$backend" in
+		usb) usb_status_json ;;
+		yandex_disk)
+			[ -x "$YANDEX_DISK" ] && exec "$YANDEX_DISK" status
+			printf '{"backend":"yandex_disk","state":"error","message":"Yandex Disk helper is missing","authorized":0,"used_mb":0,"quota_mb":0,"free_pct":0}\n'
+			;;
+		*) ram_status_json ;;
+	esac
+}
+
+cmd_archive_push() {
+	backend="$(global_get log_storage ram)"
+	case "$backend" in
+		usb)
+			[ -x "$USB_STORAGE" ] && "$USB_STORAGE" archive-push
+			;;
+		yandex_disk)
+			[ -x "$YANDEX_DISK" ] && "$YANDEX_DISK" archive-push
+			;;
+	esac
+}
+
+command_name="${1:-}"
+shift || true
+case "$command_name" in
+	status) cmd_status ;;
+	archive-push) cmd_archive_push ;;
+	*)
+		echo "Usage: sheepfold-log-storage <status|archive-push>" >&2
+		exit 1
+		;;
+esac

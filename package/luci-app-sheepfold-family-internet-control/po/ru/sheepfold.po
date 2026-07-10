@@ -135,3 +135,2939 @@ msgstr "При включении откроется окно настройки
 #: htdocs/luci-static/resources/view/sheepfold/ai.js:161
 msgid "OpenSSL is not installed or failed verification. Per-device logs are disabled."
 msgstr "OpenSSL не установлен или не прошёл проверку. Индивидуальные журналы отключены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "+30 min"
+msgstr "+30 мин"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "1 day"
+msgstr "1 день"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "1 GB"
+msgstr "1 ГБ"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "10 minutes"
+msgstr "10 минут"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "100 MB"
+msgstr "100 МБ"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "14 days"
+msgstr "14 дней"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "180 days"
+msgstr "180 дней"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "250 MB"
+msgstr "250 МБ"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "3 days"
+msgstr "3 дня"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "30 days"
+msgstr "30 дней"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "50 MB"
+msgstr "50 МБ"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "500 MB"
+msgstr "500 МБ"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "7 days"
+msgstr "7 дней"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "90 days"
+msgstr "90 дней"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "A blocklisted device cannot become an administrator device. Remove it from the blocklist first."
+msgstr "Устройство из чёрного списка не может стать админским. Сначала уберите его из чёрного списка."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Access and limits"
+msgstr "Доступ и лимиты"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Access mode"
+msgstr "Режим доступа"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Access to emergency-useful sites"
+msgstr "Доступ к аварийно-полезным сайтам"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Action failed."
+msgstr "Не удалось выполнить действие."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Actions"
+msgstr "Действия"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Active DHCP lease"
+msgstr "Активная аренда DHCP"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Active messenger"
+msgstr "Активный мессенджер"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices."
+msgstr ""
+"Журнал активности содержит чувствительные данные. Он не собирается для админских устройств, белого списка и чёрного списка."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Add"
+msgstr "Добавить"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "add #3 to allowlist"
+msgstr "добавить #3 в белый список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "add #3 to blocklist"
+msgstr "добавить #3 в чёрный список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Add administrator"
+msgstr "Добавить администратора"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Add device"
+msgstr "Добавить устройство"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Add device manually"
+msgstr "Добавить устройство вручную"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Add device to allowlist"
+msgstr "Добавить устройство в белый список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Add device to blocklist"
+msgstr "Добавить устройство в чёрный список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Add group"
+msgstr "Добавить группу"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Add rule"
+msgstr "Добавить правило"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Add site"
+msgstr "Добавить сайт"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Adding a new administrator requires confirmation."
+msgstr "Добавление администратора требует подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Adding allowed"
+msgstr "Разрешено добавление"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Adding devices to allowlist through the WPS button is dangerous because after pressing it, for 30 seconds any device can connect to Wi-Fi and get into the allowlist."
+msgstr ""
+"Добавление устройств в белый список через WPS кнопку опасно так как при нажатии на неё, в течении 30 секунд - любое устройство сможет подключиться к вифи и попасть в белый список."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Adding window expired"
+msgstr "Время добавления истекло"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Adds the selected device to the allowlist."
+msgstr "Добавляет выбранное устройство в белый список."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Adds the selected device to the blocklist."
+msgstr "Добавляет выбранное устройство в чёрный список."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AdGuard Home"
+msgstr "AdGuard Home"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AdGuard Home API check should use the local AdGuard Home API when credentials are configured."
+msgstr ""
+"Проверка API AdGuard Home должна использовать локальный API AdGuard Home, когда учётные данные настроены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"AdGuard Home filters DNS requests after Sheepfold allows a device. It helps block ads, trackers, and unwanted domains."
+msgstr ""
+"AdGuard Home фильтрует DNS-запросы после того, как Sheepfold разрешил устройство. Он помогает блокировать рекламу, трекеры и нежелательные домены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AdGuard Home status"
+msgstr "Статус AdGuard Home"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Admin device"
+msgstr "Админское устройство"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Admin devices"
+msgstr "Админские устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Admin name"
+msgstr "Имя"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Administrative action log. Export masks sensitive fields."
+msgstr "Журнал действий администраторов. При экспорте чувствительные поля маскируются."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Administrator accounts"
+msgstr "Учётные записи администраторов"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Administrator added."
+msgstr "Администратор добавлен."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Administrator device cannot be added to blocklist"
+msgstr "Админское устройство нельзя добавить в чёрный список."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Administrator login"
+msgstr "Логин администратора"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Administrator settings"
+msgstr "Настройки администратора"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Administrators"
+msgstr "Администраторы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "After connecting to Wi-Fi, scan this QR to request allowlist access from this phone."
+msgstr ""
+"После подключения к Wi-Fi отсканируйте этот QR с телефона, чтобы запросить добавление в белый список."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AI assistant"
+msgstr "ИИ помощник"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AI assistant model"
+msgstr "Модель ИИ-помощника"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AI context for APK"
+msgstr "Контекст для ИИ через APK"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AI provider"
+msgstr "Провайдер ИИ"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "All devices"
+msgstr "Все устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "All time"
+msgstr "За всё время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allow 07:00-20:30, block after bedtime"
+msgstr "Разрешить 07:00-20:30, блокировать после отбоя"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allow and block rules for devices and groups."
+msgstr "Правила разрешения и блокировки для устройств и групп."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allow internet by default"
+msgstr "Разрешать интернет по умолчанию"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allow only selected whitelist sources for this group"
+msgstr "Разрешить только выбранные источники белых списков для этой группы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allow per-device logs for AI"
+msgstr "Разрешить отдельные журналы устройств для ИИ"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allow the AI assistant on child devices"
+msgstr "Разрешить ИИ-помощника на детских устройствах"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allow Wi-Fi connection"
+msgstr "Дать подключиться к Wi-Fi"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allow Wi-Fi connection and add devices to allowlist (dangerous)"
+msgstr "Дать подключиться к Wi-Fi и добавить устройства в белый список (опасно)"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allowed storage for Sheepfold data"
+msgstr "Сколько разрешено хранить данных"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allowlist"
+msgstr "Белый список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Allowlist request QR"
+msgstr "QR запроса в белый список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Allows blocklisted devices to access only sites added to the emergency-useful sites list. Router access remains blocked."
+msgstr ""
+"Разрешает устройствам из чёрного списка доступ только к сайтам добавленым в список аварийно-полезные сайты. Доступ к роутеру остаётся закрытым."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Android must require the real device MAC for this home Wi-Fi network before continuing setup."
+msgstr ""
+"Android должен требовать настоящий MAC устройства для этой домашней Wi-Fi сети до продолжения настройки."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Application language"
+msgstr "Язык приложения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Application update requires confirmation."
+msgstr "Обновление приложения требует подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Applies to all Wi-Fi radios on the router. Real switching must require confirmation and be performed by the router backend."
+msgstr ""
+"Применяется ко всем Wi-Fi радиомодулям роутера. Реальное переключение должно требовать подтверждения и выполняться backend-частью роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "ARP/neighbor entry"
+msgstr "Обнаружено в ARP/neighbor"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Assign devices to administrator"
+msgstr "Назначение устройств админу"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Assigned devices"
+msgstr "Привязанные устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "At time"
+msgstr "В указанное время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Auto"
+msgstr "Авто"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Auto-assigned to No restrictions"
+msgstr "Автоматически добавлено в \"Без ограничений\""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Auto-detected"
+msgstr "Автоопределено"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Auto-detected during installation. You can change it manually if needed."
+msgstr "Автоопределено при установке. При необходимости можно изменить вручную."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Auto-disable time"
+msgstr "Время автоматического выключения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Automatic color"
+msgstr "Автоматический цвет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Automatic extroot from USB is disabled for safety. Only log archive roles are supported in this version."
+msgstr ""
+"Автоматический extroot с USB отключён из соображений безопасности. В этой версии поддерживаются только роли архива журналов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Automatic router changes must show integration-specific notes and create/export a backup before applying."
+msgstr ""
+"Автоматические изменения роутера должны показывать нюансы интеграции и создавать/экспортировать резервную копию перед применением."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Automatically configure router NTP client"
+msgstr "Автоматически настраивать NTP-клиент роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Available commands"
+msgstr "Доступные команды"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Available devices"
+msgstr "Доступные устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Band"
+msgstr "Диапазон"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Bedtime"
+msgstr "До отбоя"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Bind devices"
+msgstr "Привязать устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "block device #3"
+msgstr "заблокировать #3"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "block internet"
+msgstr "выключить интернет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Blocked internet page text shown instead of websites"
+msgstr "Текст интернет-страницы блокировки открывающейся вместо сайтов"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Blocklist"
+msgstr "Чёрный список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Blocklist changes require confirmation."
+msgstr "Изменения чёрного списка требуют подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Blocklist emergency-useful sites access"
+msgstr "Доступ пользователей из чёрного списка к \"аварийно-полезным сайтам\""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Blocklist emergency-useful sites access saved."
+msgstr "Доступ чёрного списка к аварийно-полезным сайтам сохранён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Blocklisted devices are not available for binding."
+msgstr "Устройства из чёрного списка недоступны для привязки."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API."
+msgstr "Устройства из чёрного списка не могут открывать интернет, LuCI, SSH и Sheepfold API."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Blocks the selected device."
+msgstr "Блокирует выбранное устройство."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Boosty or YooMoney for Russian-speaking users."
+msgstr "Boosty или ЮMoney для русскоязычных пользователей."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"BotFather will send a token that looks like 123456:ABC-DEF... Copy it into the Telegram bot token field. Treat this token like a password."
+msgstr ""
+"BotFather пришлёт токен похожий на 123456:ABC-DEF... Скопируйте его в поле “Токен Telegram-бота”. Относитесь к токену как к паролю."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Cache file path"
+msgstr "Путь к файлу кэша"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen."
+msgstr ""
+"Путь к файлу кэша должен начинаться с /tmp/ и содержать только буквы, цифры, точку, слэш, подчёркивание и дефис."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Cache file path saved."
+msgstr "Путь к файлу кэша сохранён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Camera"
+msgstr "Камера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Cancel"
+msgstr "Отмена"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Candidate added to allowlist. Save changes to apply."
+msgstr "Кандидат добавлен в белый список. Сохраните изменения, чтобы применить."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Channel"
+msgstr "Канал"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "checking"
+msgstr "проверяется"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Checking for updates..."
+msgstr "Идёт проверка наличия обновлений"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Checking messenger connection..."
+msgstr "Проверяется подключение к мессенджеру..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Checking storage status..."
+msgstr "Проверка статуса..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Checks and installs an update after confirmation."
+msgstr "Проверяет и устанавливает обновление после подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Child number 1"
+msgstr "Первый ребёнок"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Children"
+msgstr "Дети"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Children group"
+msgstr "Группа детей"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "clear log"
+msgstr "очистить журнал"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Clear log"
+msgstr "Очистить журнал"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Clearing logs requires confirmation."
+msgstr "Очистка журнала требует подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Clears the administrative log after confirmation."
+msgstr "Очищает административный журнал после подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Click to restart the 30 second window."
+msgstr "Нажмите, чтобы снова запустить окно на 30 секунд."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Close"
+msgstr "Закрыть"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Commands"
+msgstr "Доступные команды"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Computer"
+msgstr "Компьютер"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Configure"
+msgstr "Настроить"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Configure group"
+msgstr "Настроить группу"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Configured in Sheepfold"
+msgstr "Настроено в Sheepfold"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Confirmation will be available in"
+msgstr "Подтверждение будет доступно через"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Connect QR"
+msgstr "QR подключения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Connected after quick add started."
+msgstr "Подключились после запуска быстрого добавления."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Connection check failed."
+msgstr "Не удалось проверить подключение."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Copy that chat ID into the Telegram admin chat ID field and save settings again."
+msgstr "Скопируйте этот chat ID в поле “Chat ID родителя-администратора” и снова сохраните настройки."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not add device."
+msgstr "Не удалось добавить устройство."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "could not check"
+msgstr "не удалось проверить"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not clear log."
+msgstr "Не удалось очистить журнал."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not create group."
+msgstr "Не удалось создать группу."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not delete group."
+msgstr "Не удалось удалить группу."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not load router information."
+msgstr "Не удалось загрузить информацию о роутере."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not queue router reboot request."
+msgstr "Не удалось создать заявку на перезагрузку роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not queue update request."
+msgstr "Не удалось создать заявку на обновление."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not read import file."
+msgstr "Не удалось прочитать файл импорта."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not read storage status."
+msgstr "Не удалось получить статус хранилища."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not remove device from list."
+msgstr "Не удалось удалить устройство из списка."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save blocklist emergency-useful sites access."
+msgstr "Не удалось сохранить доступ чёрного списка к аварийно-полезным сайтам."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save cache file path."
+msgstr "Не удалось сохранить путь к файлу кэша."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save device settings."
+msgstr "Не удалось сохранить настройки устройства."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save group."
+msgstr "Не удалось сохранить группу."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save LED setting."
+msgstr "Не удалось сохранить настройку светодиодов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save messenger settings."
+msgstr "Не удалось сохранить настройки мессенджера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save new device automatic setup."
+msgstr "Не удалось сохранить автонастройку новых устройств."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save port."
+msgstr "Не удалось сохранить порт."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save router time settings."
+msgstr "Не удалось сохранить настройки времени роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save settings."
+msgstr "Не удалось сохранить настройки."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save site blacklist mode."
+msgstr "Не удалось сохранить режим чёрного списка сайтов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save site blacklist sources."
+msgstr "Не удалось сохранить источники чёрного списка сайтов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save site list update interval."
+msgstr "Не удалось сохранить период обновления списков сайтов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save update check policy."
+msgstr "Не удалось сохранить настройку проверки обновлений."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save whitelist sources."
+msgstr "Не удалось сохранить источники белых списков."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save Wi-Fi automation settings."
+msgstr "Не удалось сохранить настройки автоматического Wi-Fi."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save WPS action."
+msgstr "Не удалось сохранить действие кнопки WPS."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Could not send test Telegram message. Check bot token, chat ID, internet access on the router, and that Telegram is selected as the active messenger."
+msgstr ""
+"Не удалось отправить тестовое сообщение Telegram. Проверьте токен бота, chat ID, доступ роутера в интернет и что Telegram выбран активным мессенджером."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Country"
+msgstr "Страна"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Create a bot through BotFather, paste the bot token, send any message to the bot from the parent account, then enter that chat ID here."
+msgstr ""
+"Создайте бота через BotFather, вставьте токен, отправьте боту любое сообщение с аккаунта родителя, затем укажите здесь chat ID этого диалога."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Create a VK community, enable messages, create an access token for community messages, then enter the community ID and the VK user ID of the parent whose commands are allowed."
+msgstr ""
+"Создайте сообщество VK, включите сообщения, создайте ключ доступа для сообщений сообщества, затем укажите ID сообщества и VK ID родителя, команды которого разрешены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Create permanent DHCP lease"
+msgstr "Создать постоянную аренду DHCP"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Create the key in DeepSeek Platform and save it here. It is stored only on the router."
+msgstr "Создайте ключ в DeepSeek Platform и сохраните его здесь. Он хранится только на роутере."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Create the key in Google AI Studio and save it here. Free limits depend on Google account and region."
+msgstr ""
+"Создайте ключ в Google AI Studio и сохраните его здесь. Бесплатные лимиты зависят от аккаунта Google и региона."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Current router time"
+msgstr "Текущее время роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Current Sheepfold version"
+msgstr "Текущая версия Sheepfold"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "current version"
+msgstr "текущая версия"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Custom"
+msgstr "Своя"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Custom period"
+msgstr "С - по"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "DeepSeek API key"
+msgstr "API-ключ DeepSeek"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "DeepSeek requests are sent from the router. The Android app does not store the API key."
+msgstr "Запросы DeepSeek отправляются с роутера. Android-приложение не хранит API-ключ."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Default bedtime"
+msgstr "Время отбоя по умолчанию"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Default export is readable JSON without secrets."
+msgstr "Экспорт по умолчанию — читаемый JSON без секретов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Defines how often Sheepfold should check for and install updates after confirmation."
+msgstr "Определяет, как часто Sheepfold должен проверять и устанавливать обновления (после подтверждения)."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Delete"
+msgstr "Удалить"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Delete group"
+msgstr "Удалить группу"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Delete site"
+msgstr "Удалить сайт"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Delete this site?"
+msgstr "Удалить этот сайт?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Description"
+msgstr "Описание"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Detected automatically from router leases, ARP/neighbor data, and static DHCP leases."
+msgstr "Обнаруживаются автоматически из аренд DHCP, ARP/neighbor-данных и постоянных аренд DHCP."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Detection confidence"
+msgstr "Уверенность автоопределения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Detection source"
+msgstr "Источник обнаружения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device"
+msgstr "Устройство"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device added to allowlist."
+msgstr "Устройство добавлено в белый список."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device added to blocklist."
+msgstr "Устройство добавлено в чёрный список."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device added."
+msgstr "Устройство добавлено."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device bindings saved."
+msgstr "Привязка устройств сохранена."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device name"
+msgstr "Название устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device removed from allowlist."
+msgstr "Устройство удалено из белого списка."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device removed from blocklist."
+msgstr "Устройство удалено из чёрного списка."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device settings"
+msgstr "Настройки устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device settings saved."
+msgstr "Настройки устройства сохранены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device type"
+msgstr "Тип устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Devices"
+msgstr "Устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Devices in this group will be limited to domains from the selected whitelist sources and manually allowed emergency-useful sites."
+msgstr ""
+"Устройства этой группы будут ограничены доменами из выбранных источников белых списков и вручную разрешёнными аварийно-полезными сайтами."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "disable internet"
+msgstr "отключить интернет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "disable Wi-Fi"
+msgstr "выключить Wi-Fi"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Disable Wi-Fi"
+msgstr "Отключить Wi-Fi"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Disable Wi-Fi automatically"
+msgstr "Выключать Wi-Fi автоматически"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Disabled"
+msgstr "Выключено"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Do not add broad yandex.ru by default: it can open video, music, games, feeds, and other non-emergency services."
+msgstr ""
+"Не добавляйте yandex.ru целиком в аварийно-полезные сайты. Это не только поиск: через общий домен и связанные сервисы могут открываться видео, музыка, игры, новости, ленты рекомендаций и другие развлечения. Для аварийного доступа лучше добавлять только узкие и понятные адреса, например ya.ru для поиска или конкретный сервис, который действительно нужен."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Donation"
+msgstr "Donation"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Driver/type"
+msgstr "Драйвер/тип"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Edit site"
+msgstr "Редактировать сайт"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Editable list for necessary services during restricted access."
+msgstr "Редактируемый список необходимых сервисов при ограниченном доступе."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "emergency-useful sites"
+msgstr "аварийно-полезные сайты"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Emergency-useful sites"
+msgstr "Аварийно-полезные сайты"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Emergency-useful sites are a small editable list of necessary services that may stay available during restricted access."
+msgstr ""
+"Аварийно-полезные сайты — это редактируемый белый список необходимых сервисов,  которые могут оставаться доступными при ограничении интернета на роутере (при добавлении пользователя в чёрный список или выключении у него доступа в интернет)."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Emergency-useful sites for blocklisted devices are disabled and still do not open router access."
+msgstr ""
+"Выключен доступ к \"аварийно-полезным сайтам\" для чёрного списка (это не открывает доступ к роутеру)."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Emergency-useful sites for blocklisted devices are enabled and still do not open router access."
+msgstr ""
+"Включен доступ к \"аварийно-полезным сайтам\" для чёрного списка (но доступ к роутеру всё-равно закрыт)."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enable activity journal for all devices in this group"
+msgstr "Включить журнал активности для всех устройств этой группы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enable activity journal for this device"
+msgstr "Включить журнал активности для этого устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enable AI assistant"
+msgstr "Включить ИИ-помощника"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Enable only after talking with the child. The child client never receives router diagnostics or admin logs."
+msgstr ""
+"Включайте только после разговора с ребёнком. Детский клиент не получает диагностику роутера и админ-журналы."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "enable Wi-Fi"
+msgstr "включить Wi-Fi"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enable Wi-Fi automatically"
+msgstr "Включать Wi-Fi автоматически"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enabled"
+msgstr "Включен"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enabled for everyone"
+msgstr "Включить для всех"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enabled for everyone except allowlist and administrators"
+msgstr "Включить для всех кроме белого списка и админов"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enabling protected per-device logs runs an OpenSSL check on the router."
+msgstr "Включение защищённых журналов по устройствам запускает проверку OpenSSL на роутере."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Encrypt USB archive"
+msgstr "Шифровать архив на USB"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Encrypted full backup"
+msgstr "Зашифрованный полный бэкап"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "End of day"
+msgstr "До конца дня"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Engineering device"
+msgstr "Инженерное устройство"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "English"
+msgstr "Английский"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enter a port from 1 to 65535."
+msgstr "Введите порт от 1 до 65535."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enter a unique bot username. It must end with bot, for example my_sheepfold_home_bot."
+msgstr ""
+"Введите уникальное имя пользователя бота. Оно должно заканчиваться на bot, например my_sheepfold_home_bot."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enter a valid MAC address."
+msgstr "Введите корректный MAC-адрес."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enter a visible bot name, for example Sheepfold Home. This name is shown in Telegram."
+msgstr "Введите видимое имя бота, например Sheepfold Home. Это имя будет видно в Telegram."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Every 3 days"
+msgstr "Раз в 3 дня"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Every day"
+msgstr "Раз в день"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Every month"
+msgstr "Раз в месяц"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Every week"
+msgstr "Раз в неделю"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Example: /dev/sda1. Sheepfold accepts only explicitly confirmed removable devices."
+msgstr "Пример: /dev/sda1. Sheepfold принимает только явно подтверждённые съёмные устройства."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Existing permanent DHCP lease will be updated, not removed."
+msgstr "Существующая постоянная аренда DHCP будет обновлена, а не удалена."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Export"
+msgstr "Экспорт"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Export all settings and user list"
+msgstr "Экспорт всех настроек и списка пользователей"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Export and update"
+msgstr "Экспорт и обновление"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Export log"
+msgstr "Экспорт журнала"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Export masked"
+msgstr "Экспорт"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Export mode"
+msgstr "Режим экспорта"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Export period"
+msgstr "Период экспорта"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Export selected period"
+msgstr "Экспортировать"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Family-facing shortcut for common OpenWRT wireless settings."
+msgstr "Упрощённый семейный доступ к основным настройкам Wi-Fi OpenWRT."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "From"
+msgstr "С"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Full automatic setup"
+msgstr "Полная автонастройка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Full mode can use port checks when available. Reduced mode avoids heavy checks but still can automatically add confidently detected home infrastructure devices to No restrictions."
+msgstr ""
+"Полный режим может использовать проверку портов, если она доступна. Урезанная автонастройка избегает тяжёлых проверок, но тоже может автоматически добавлять уверенно распознанные домашние инфраструктурные устройства в группу \"Без ограничений\"."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Game console"
+msgstr "Игровая приставка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Gemini API key"
+msgstr "API-ключ Gemini"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Gemini Free"
+msgstr "Gemini Free"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Gemini Free uses Google AI Studio free-tier limits. The API key is stored only on the router."
+msgstr "Gemini Free использует бесплатные лимиты Google AI Studio. API-ключ хранится только на роутере."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "General"
+msgstr "Общие"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "GitHub Sponsors for international audience;"
+msgstr "GitHub Sponsors для международной аудитории;"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Global block disabled by owner"
+msgstr "Глобальная блокировка выключена владельцем"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Global block would be disabled after confirmation."
+msgstr "Глобальная блокировка будет выключена после подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Global block would block every device except allowlist."
+msgstr "Глобальная блокировка заблокирует все устройства, кроме белого списка."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "grant +30 minutes"
+msgstr "дать +30 минут"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Grants temporary access to the selected device."
+msgstr "Выдаёт выбранному устройству временный доступ."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group"
+msgstr "Группа"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group color"
+msgstr "Цвет группы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group created."
+msgstr "Группа создана."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group deleted."
+msgstr "Группа удалена."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group devices"
+msgstr "Устройства группы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group editor is not implemented in this visual test build."
+msgstr "Редактор групп пока не реализован в этой тестовой сборке."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group name"
+msgstr "Название группы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group name is required."
+msgstr "Название группы обязательно."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group saved."
+msgstr "Группа сохранена."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group schedules"
+msgstr "Расписания группы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Group settings"
+msgstr "Настройки группы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Groups"
+msgstr "Группы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Groups collect devices so schedules and access rules can be applied to several devices at once."
+msgstr ""
+"Группы объединяют устройства, чтобы расписания и правила доступа можно было применять сразу к нескольким устройствам."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Guests"
+msgstr "Гости"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "help"
+msgstr "помощь"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Hide secret"
+msgstr "Скрыть секрет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Hide temporary password"
+msgstr "Скрыть временный пароль"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Home devices can use the router as their local time server."
+msgstr "Домашние устройства смогут использовать роутер как локальный сервер времени."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Hostname"
+msgstr "Имя в сети"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "I understand the risk, continue"
+msgstr "Я понимаю риск, продолжить"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "ID"
+msgstr "ID"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"If Sheepfold becomes useful and you want to support development, donation links will be added here before the first public release."
+msgstr ""
+"Если Sheepfold окажется полезным и вы захотите поддержать разработку, ссылки для донатов будут добавлены здесь до первого публичного релиза."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Import"
+msgstr "Импорт"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Import all settings and user list"
+msgstr "Импорт всех настроек и списка пользователей"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Import and export"
+msgstr "Импорт и экспорт"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Import file checked. Applying imported settings will be added after backend import confirmation is implemented."
+msgstr ""
+"Файл импорта проверен. Применение импортированных настроек будет добавлено после реализации backend-подтверждения импорта."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Import file format is not recognized."
+msgstr "Формат файла импорта не распознан."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Import requires confirmation."
+msgstr "Импорт требует подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Information"
+msgstr "Информация"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Install Sheepfold update now?"
+msgstr "Установить обновление Sheepfold сейчас?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Installed"
+msgstr "Установлен"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Integration setup must show planned changes, create an export, and require confirmation before applying."
+msgstr ""
+"Настройка интеграции должна показать план изменений, создать экспорт и потребовать подтверждение перед применением."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Integration status"
+msgstr "Статус интеграций"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Integrations"
+msgstr "Интеграции"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Internet connection status"
+msgstr "Статус интернет-соединения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Internet disabled"
+msgstr "Интернет отключен"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Internet enabled"
+msgstr "Интернет включен"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Internet is temporarily unavailable by family rules."
+msgstr "Интернет временно недоступен по семейным правилам."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Invalid MAC address"
+msgstr "Неверный MAC-адрес."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "IP address"
+msgstr "IP-адрес"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Irkutsk time"
+msgstr "Иркутское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Journal"
+msgstr "Журнал"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Kaliningrad time"
+msgstr "Калининградское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Kamchatka time"
+msgstr "Камчатское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Keep the bot private. Do not publish its token, do not add it to public groups, and do not give the token to children."
+msgstr ""
+"Держите бота приватным. Не публикуйте токен, не добавляйте бота в публичные группы и не передавайте токен детям."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Kernel version"
+msgstr "Версия ядра"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Known offline devices cleanup"
+msgstr "Очистка логов устройств офлайн"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Krasnoyarsk time"
+msgstr "Красноярское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "LAN ports"
+msgstr "LAN-порты"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Last hour"
+msgstr "За последний час"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Last week"
+msgstr "За неделю"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "LED behavior depends on the router model and available OpenWrt LED triggers."
+msgstr "Поведение светодиодов зависит от модели роутера и доступных OpenWrt LED-триггеров."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "LED setting saved."
+msgstr "Настройка светодиодов сохранена."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Limited"
+msgstr "Ограничено"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Load average"
+msgstr "Средняя нагрузка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Loading router information..."
+msgstr "Загружаю информацию о роутере..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Log cleared."
+msgstr "Журнал очищен."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Log is empty."
+msgstr "Журнал пуст."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Log retention on router"
+msgstr "Срок хранения журналов на роутере"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Log storage location"
+msgstr "Где хранить журналы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Login"
+msgstr "Логин"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Logs"
+msgstr "Журнал"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Logs only"
+msgstr "Только журналы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "MAC address"
+msgstr "MAC-адрес"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "MAC address is required."
+msgstr "MAC-адрес обязателен."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Magadan time"
+msgstr "Магаданское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Make router an NTP server for LAN"
+msgstr "Делать роутер NTP-сервером для LAN"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Manual MAC-based add form is not implemented in this visual test build."
+msgstr "Ручное добавление по MAC пока не реализовано в этой визуальной сборке."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Manual setup"
+msgstr "Ручная настройка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Masked log export has been saved."
+msgstr "Экспорт журнала с маскированием сохранён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Memory"
+msgstr "Память"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Messenger"
+msgstr "Мессенджер"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Messenger connection status"
+msgstr "Статус подключения мессенджера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Messenger disabled."
+msgstr "Мессенджер выключен."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Messenger integration lets approved parents receive notifications and control Sheepfold with short commands when they are away from home."
+msgstr ""
+"Интеграция с мессенджером позволяет одобренным родителям получать уведомления и управлять Sheepfold короткими командами вне дома."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Messenger settings saved."
+msgstr "Настройки мессенджера сохранены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Messenger settings were sent to the router, but the router still reports another active messenger. Reinstall the latest Sheepfold package and check UCI config."
+msgstr ""
+"Настройки мессенджера отправлены на роутер, но роутер всё ещё сообщает другой активный мессенджер. Установите последний пакет Sheepfold и проверьте UCI-конфиг."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Messenger status will be checked after saving settings or sending a test message."
+msgstr "Статус будет проверен после сохранения настроек или отправки тестового сообщения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "minute ago"
+msgstr "минуту назад"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "minutes ago"
+msgstr "минут назад"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Misc"
+msgstr "Разное"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Mode"
+msgstr "Режим"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Mode notes"
+msgstr "Нюансы режима"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Module"
+msgstr "Модуль"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "more devices hidden"
+msgstr "ещё устройств скрыто"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Moscow time"
+msgstr "Московское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Name"
+msgstr "Название"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Name and login are required."
+msgstr "Имя и логин обязательны."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Network"
+msgstr "Сеть"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Network device"
+msgstr "Сетевое устройство"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Never"
+msgstr "Никогда"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "New"
+msgstr "Новое"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "New device automatic setup"
+msgstr "Автонастройка новых устройств"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "New device automatic setup saved."
+msgstr "Автонастройка новых устройств сохранена."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "New device behavior"
+msgstr "Поведение для новых устройств"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "New device detected: #4, DC:A6:32:EC:00:19, IP 192.168.1.98"
+msgstr "Обнаружено новое устройство: #4, DC:A6:32:EC:00:19, IP 192.168.1.98"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "New device LED alert until LuCI login"
+msgstr "Сигнал светодиодами о новом устройстве до входа в LuCI"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Newly connected devices"
+msgstr "Только что подключившиеся устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No"
+msgstr "Нет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No active Wi-Fi networks were found in the router wireless config."
+msgstr "В конфигурации wireless роутера не найдены активные Wi-Fi сети."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No devices"
+msgstr "Нет устройств"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No devices available to add."
+msgstr "Нет устройств, доступных для добавления."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No devices found in DHCP leases, ARP, or static DHCP leases yet."
+msgstr "В арендах DHCP, ARP и постоянных арендах DHCP пока нет устройств."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No devices selected"
+msgstr "Устройства не выбраны"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No groups yet. Assign devices to groups in device settings."
+msgstr "Групп пока нет. Назначьте устройства в группы в настройках устройства."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No log entries for selected period."
+msgstr "За выбранный период записей журнала нет."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No response"
+msgstr "Нет ответа"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No response from Telegram server."
+msgstr "От сервера Telegram нет ответа."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No response from VK server."
+msgstr "От сервера VK нет ответа."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No restrictions"
+msgstr "Без ограничений"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No settings changes to save."
+msgstr "Нет изменений настроек для сохранения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No updates available. Installed version is already current."
+msgstr "Обновлений нет. Установленная версия уже актуальна."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "None"
+msgstr "Нет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Not configured"
+msgstr "Не настроено"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Not installed"
+msgstr "Не установлен"
+
+#: htdocs/luci-static/resources/view/sheepfold/ai.js
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Not set up"
+msgstr "Не установлено"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "NTP servers"
+msgstr "NTP-серверы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Official Telegram guide"
+msgstr "Официальная инструкция Telegram"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Offline"
+msgstr "Офлайн"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Omsk time"
+msgstr "Омское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Once a week"
+msgstr "Раз в неделю"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"One server per line. Default for Russia: ntp1.vniiftri.ru, ntp2.ntp-servers.net, 3.openwrt.pool.ntp.org."
+msgstr ""
+"Один сервер на строку. По умолчанию для России: ntp1.vniiftri.ru, ntp2.ntp-servers.net, 3.openwrt.pool.ntp.org."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"One source per line: name | URL. Use updateable external sources instead of manually maintaining a huge list."
+msgstr ""
+"Один источник на строку: название | URL. Используйте обновляемые внешние источники, а не ручное ведение огромного списка."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "One-time allowlist link"
+msgstr "Одноразовая ссылка добавления"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Online"
+msgstr "Онлайн"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Only devices belonging to one person can be added to this group."
+msgstr "В эту группу можно добавлять только устройства одного человека."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Open network"
+msgstr "Открытая сеть"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Open router password page"
+msgstr "Открыть страницу пароля роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Open Telegram and find the official @BotFather account. Check the username carefully: @BotFather."
+msgstr "Откройте Telegram и найдите официальный аккаунт @BotFather. Внимательно проверьте имя: @BotFather."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Open the created bot from the parent Telegram account and send any message to it. If the chat ID field is empty, Sheepfold will reply with your chat ID."
+msgstr ""
+"Откройте созданного бота с Telegram-аккаунта родителя и отправьте ему любое сообщение. Если поле chat ID пустое, Sheepfold ответит вашим chat ID."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "OpenSSL check failed. Per-device AI logs stay disabled."
+msgstr "Проверка OpenSSL не прошла. Отдельные журналы ИИ остаются выключенными."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "OpenWRT release"
+msgstr "Релиз OpenWRT"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Other actions"
+msgstr "Другие действия"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "outdated"
+msgstr "устаревшая"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "package outdated"
+msgstr "устаревший"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "package up to date"
+msgstr "актуален"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Overlay storage"
+msgstr "Память overlay"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Owner granted +30 minutes to Child tablet"
+msgstr "Владелец дал +30 минут устройству \"Планшет ребёнка\""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Pairing"
+msgstr "Сопряжение"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Pairing code"
+msgstr "Код сопряжения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Pairing settings"
+msgstr "Настройки сопряжения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Parents"
+msgstr "Родители"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Password"
+msgstr "Пароль"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Path"
+msgstr "Путь"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Permanent DHCP lease"
+msgstr "Постоянная аренда DHCP"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Permanent IP lease"
+msgstr "Постоянная аренда IP"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Personal group"
+msgstr "Личная группа"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Phone"
+msgstr "Телефон"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Ping to ya.ru"
+msgstr "Пинг до ya.ru"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "responds"
+msgstr "отвечает"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "does not respond"
+msgstr "не отвечает"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "ping"
+msgstr "пинг"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Podkop"
+msgstr "Podkop"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Podkop has no stable Sheepfold-facing API yet; detect package/service state and show conservative notes."
+msgstr ""
+"У Podkop пока нет стабильного API для Sheepfold; определяйте пакет/службу и показывайте осторожные подсказки."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Podkop routes already allowed traffic according to its own routing rules. Sheepfold must not overwrite Podkop routing."
+msgstr ""
+"Podkop маршрутизирует уже разрешённый трафик по своим правилам. Sheepfold не должен перезаписывать маршрутизацию Podkop."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Podkop status"
+msgstr "Статус Podkop"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Application port"
+msgstr "Порт приложения"
+
+msgid "Port"
+msgstr "Порт"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Port saved. Sheepfold service restart was requested. Android can discover the new port through the router discovery file."
+msgstr ""
+"Порт сохранён. Запрошен перезапуск сервиса Sheepfold. Android сможет узнать новый порт через файл обнаружения на роутере."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Possible options:"
+msgstr "Возможные варианты:"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Prepare integration settings"
+msgstr "Подготовить настройки интеграции"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Press Start or send /start."
+msgstr "Нажмите Start или отправьте команду /start."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Press the test message button. If everything is correct, the bot will send a message from the router."
+msgstr "Нажмите кнопку тестового сообщения. Если всё настроено правильно, бот пришлёт сообщение от роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Printer"
+msgstr "Принтер"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Protected group cannot be deleted."
+msgstr "Защищённую группу нельзя удалить."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "QR payload"
+msgstr "Данные QR"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Quick add to allowlist"
+msgstr "Быстрое добавление в белый список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Quick allowlist add"
+msgstr "Быстрое добавление в белый список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Quick mode only collects candidates. A parent still presses Add for every device."
+msgstr ""
+"Быстрый режим только собирает кандидатов. Родитель всё равно нажимает \"Добавить\" для каждого устройства."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "RAM, router operational memory, cleared on reboot (recommended)"
+msgstr "RAM — оперативная память роутера, очищается при перезагрузке (рекомендуется)"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Rate limit window, seconds"
+msgstr "Окно лимита, секунды"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Readable JSON without secrets"
+msgstr "Читаемый JSON без секретов"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Real router wireless settings are loaded from OpenWRT UCI."
+msgstr "Реальные настройки Wi-Fi загружаются из OpenWRT UCI."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "reboot router"
+msgstr "перезагрузить роутер"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Reboot router"
+msgstr "Перезагрузить роутер"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Reboot router now?"
+msgstr "Перезагрузить роутер сейчас?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Reboots the router after confirmation."
+msgstr "Перезагружает роутер после подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Recommended chain: Sheepfold -> AdGuard Home -> Podkop."
+msgstr "Рекомендуемая цепочка: Sheepfold -> AdGuard Home -> Podkop."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Reduced automatic setup"
+msgstr "Урезанная автонастройка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Refresh information"
+msgstr "Обновить информацию"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Remove device from allowlist?"
+msgstr "Удалить устройство из белого списка?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Remove device from blocklist?"
+msgstr "Удалить устройство из чёрного списка?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Remove from allowlist"
+msgstr "Удалить из белого списка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Remove from blocklist"
+msgstr "Удалить из чёрного списка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Removes blocking from the selected device."
+msgstr "Снимает блокировку с выбранного устройства."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Requests per device"
+msgstr "Запросов на устройство"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Restrict until configured"
+msgstr "Ограничивать до настройки"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Restricted"
+msgstr "Ограничено"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Robot vacuum"
+msgstr "Робот-пылесос"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Root folder on disk for Sheepfold"
+msgstr "Корневая папка на диске для Sheepfold"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Root password is not set. Sheepfold settings must stay locked until the router password is configured."
+msgstr "Root-пароль не задан. Настройки Sheepfold должны быть заблокированы до установки пароля роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router address"
+msgstr "Адрес роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router command timed out."
+msgstr "Команда роутера не ответила вовремя."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router default behavior"
+msgstr "Функционал роутера по умолчанию"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Router diagnostics returned empty data. Try Refresh or run sheepfold-router-control router-info on the router."
+msgstr ""
+"Диагностика роутера вернула пустой ответ. Нажмите «Обновить» или выполните на роутере: sheepfold-router-control router-info."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router firmware version"
+msgstr "Версия прошивки роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router information"
+msgstr "Информация о роутере"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router LED control"
+msgstr "Управление светодиодами роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router LEDs"
+msgstr "Светодиоды роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router memory management"
+msgstr "Управление памятью роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router model"
+msgstr "Модель роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router reboot request queued."
+msgstr "Заявка на перезагрузку роутера создана."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router reboot requires confirmation."
+msgstr "Перезагрузка роутера требует подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router reports active messenger:"
+msgstr "Роутер сообщает активный мессенджер:"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router root password check"
+msgstr "Проверка root-пароля роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router storage"
+msgstr "Память роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router time and NTP"
+msgstr "Время роутера и NTP"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router time settings saved."
+msgstr "Настройки времени роутера сохранены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router timezone"
+msgstr "Часовой пояс роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router uptime"
+msgstr "Время работы роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Russian"
+msgstr "Русский"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Russian phrases like \"help\", \"status\", \"show all devices\", \"turn internet off\", and \"support\" also work. Dangerous commands require confirmation. Commands are accepted only from the allowed user ID configured on the router."
+msgstr ""
+"Русские фразы вроде «помощь», «статус», «показать все устройства», «отключить интернет» и «саппорт» тоже работают. Опасные команды требуют подтверждения. Команды принимаются только от разрешённого ID пользователя, указанного в настройках роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Samara time"
+msgstr "Самарское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Save"
+msgstr "Сохранить"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Save changes. This visual build does not use a separate Apply button."
+msgstr "Сохранить изменения. В этой визуальной сборке отдельная кнопка \"Применить\" не используется."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Save router time settings"
+msgstr "Сохранить настройки времени роутера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Save settings"
+msgstr "Сохранить настройки"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Save the API key for the selected provider before enabling the assistant and protected logs."
+msgstr "Сначала сохраните API-ключ выбранного провайдера, затем включайте помощника и защищённые журналы."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Scan this QR code in the Android app for quick setup."
+msgstr "Отсканируйте этот QR-код в Android-приложении для быстрой настройки."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Scan this QR code with the Android app to connect it to this router."
+msgstr "Отсканируйте QR-код Android-приложением, чтобы подключить его к этому роутеру."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Scan to connect to this Wi-Fi network."
+msgstr "Отсканируйте для подключения к этой Wi-Fi сети."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Scan Wi-Fi QR, then add newly connected devices manually."
+msgstr "Отсканируйте QR Wi-Fi, затем вручную добавьте только что подключившиеся устройства."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Schedule conflict"
+msgstr "Конфликт расписаний"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Schedule editor is not implemented in this visual test build."
+msgstr "Редактор расписаний пока не реализован в этой визуальной сборке."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Scheduled"
+msgstr "По расписанию"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Schedules"
+msgstr "Расписания"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "School days"
+msgstr "Учебные дни"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Search by name, IP, MAC, or ID"
+msgstr "Поиск по имени, IP, MAC или ID"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Search by name, IP, or MAC"
+msgstr "Поиск по имени, IP или MAC"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "seconds"
+msgstr "секунд"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "seconds ago"
+msgstr "секунд назад"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Security"
+msgstr "Защита"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Seen"
+msgstr "Обнаружено"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Select"
+msgstr "Выбрать"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Select administrator devices"
+msgstr "Выберите устройства администратора"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Select Telegram as the active messenger and save settings in Sheepfold."
+msgstr "Выберите Telegram активным мессенджером и сохраните настройки Sheepfold."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Selected administrator devices can manage Sheepfold."
+msgstr "Выбранные устройства смогут управлять программой."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Selected devices are shown first."
+msgstr "Выбранные устройства показаны сверху."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Selected schedules may conflict with each other. Saving is allowed, but review the rules carefully."
+msgstr ""
+"Выбранные расписания могут конфликтовать между собой. Сохранение разрешено, но внимательно проверьте правила."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Send /newbot and follow BotFather questions."
+msgstr "Отправьте /newbot и ответьте на вопросы BotFather."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Send test Telegram message"
+msgstr "Отправить тестовое сообщение Telegram"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Server"
+msgstr "Сервер"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Server IP address"
+msgstr "IP адрес сервера"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Settings"
+msgstr "Настройки"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Settings export saved."
+msgstr "Экспорт настроек сохранён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Settings have unsaved changes. Press Save to apply them."
+msgstr "В настройках есть несохранённые изменения. Нажмите \"Сохранить\", чтобы применить их."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Settings saved successfully."
+msgstr "Настройки успешно сохранены"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Settings saved."
+msgstr "Настройки сохранены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored."
+msgstr ""
+"Sheepfold принимает команды мессенджера только от указанного здесь администратора. Остальные пользователи игнорируются."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Sheepfold API URL"
+msgstr "URL API Sheepfold"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Sheepfold blocks/allows devices before AdGuard Home DNS filtering."
+msgstr "Sheepfold разрешает/блокирует устройства до DNS-фильтрации AdGuard Home."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Sheepfold Family Internet Control"
+msgstr "Sheepfold : контроль доступа в интернет для семьи"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Sheepfold must not overwrite Podkop-managed routing, Dnsmasq, nftables, or sing-box state."
+msgstr ""
+"Sheepfold не должен перезаписывать маршрутизацию, Dnsmasq, nftables или sing-box, которыми управляет Podkop."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Sheepfold uploads journals, rotated archives and configuration backups within this limit."
+msgstr "Sheepfold выгружает журналы, архивы ротации и резервные копии настроек в пределах этого лимита."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Sheepfold will write NTP servers and time settings to OpenWRT system config."
+msgstr "Sheepfold запишет NTP-серверы и настройки времени в системный конфиг OpenWRT."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Sheepfold works alone."
+msgstr "Sheepfold работает самостоятельно."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "show all devices"
+msgstr "показать все устройства"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "show log"
+msgstr "показать журнал"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Show secret"
+msgstr "Показать секрет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Show temporary password"
+msgstr "Показать временный пароль"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "show Wi-Fi status"
+msgstr "показать состояние Wi-Fi"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Shows all detected devices with Sheepfold IDs."
+msgstr "Показывает все найденные устройства с ID Sheepfold."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Shows available commands."
+msgstr "Показывает доступные команды."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Shows configured emergency-useful sites."
+msgstr "Показывает настроенные аварийно-полезные сайты."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Shows recent administrative log entries."
+msgstr "Показывает последние записи административного журнала."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Shows Sheepfold and router status."
+msgstr "Показывает состояние Sheepfold и роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Shows what to prepare before asking for support."
+msgstr "Показывает, что подготовить перед обращением в поддержку."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Shows whether Wi-Fi is enabled."
+msgstr "Показывает, включён ли Wi-Fi."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site blacklist"
+msgstr "Чёрный список сайтов"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site blacklist mode saved."
+msgstr "Режим чёрного списка сайтов сохранён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site blacklist sources"
+msgstr "Источники чёрного списка сайтов"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site blacklist sources saved."
+msgstr "Источники чёрного списка сайтов сохранены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site deleted."
+msgstr "Сайт удалён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site list sources"
+msgstr "Источники списков сайтов"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site list update from allowlist and blocklist sources"
+msgstr "Обновление списков сайтов из белых и чёрных списков"
+
+msgid "Site list update"
+msgstr "Обновление списков сайтов"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site list update interval saved."
+msgstr "Период обновления списков сайтов сохранён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site saved."
+msgstr "Сайт сохранён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site URL is required."
+msgstr "URL адрес сайта обязателен."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Smart device"
+msgstr "Умное устройство"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Smart home"
+msgstr "Умный дом"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Smart speaker"
+msgstr "Умная колонка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "SSID"
+msgstr "SSID"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Starting update..."
+msgstr "Запуск обновления..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Static DHCP lease"
+msgstr "Постоянная аренда DHCP"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Static DHCP lease, currently online"
+msgstr "Постоянная аренда DHCP, сейчас в сети"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Static lease requires an IP address."
+msgstr "Для постоянной аренды нужен IP-адрес."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "status"
+msgstr "статус"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Status"
+msgstr "Статус"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Step-by-step Telegram setup"
+msgstr "Пошаговая настройка Telegram"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Store journals in RAM to protect router flash memory. USB can archive rotated logs when a safe removable drive is configured."
+msgstr ""
+"Храните журналы в RAM, чтобы не изнашивать flash роутера. USB может архивировать ротированные журналы, если подключён безопасный съёмный носитель."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Store journals in RAM to protect router flash memory. USB or Yandex Disk can archive rotated logs and configuration backups when configured."
+msgstr ""
+"Храните журналы в RAM, чтобы не изнашивать flash роутера. USB или Yandex Disk могут архивировать ротированные журналы и резервные копии настроек, если настроены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Stored on the router."
+msgstr "Хранится на роутере."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "support"
+msgstr "поддержка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Support the project"
+msgstr "Поддержать проект"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Swap and logs"
+msgstr "Swap и журналы"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Tablet"
+msgstr "Планшет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Telegram admin chat ID"
+msgstr "Chat ID родителя-администратора"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Telegram bot token"
+msgstr "Токен Telegram-бота"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"Telegram commands: /start, /help, /status, /devices, /internet_on, /internet_off, /wifi_on, /wifi_off, /support, /grant_time, /block_device, /unblock_device, /allowlist_add, /blocklist_add, /logs, /clear_logs, /update, /reboot, /emergency_sites, /wifi_status. Russian phrases like \"помощь\", \"статус\", \"показать все устройства\", \"отключить интернет\", and \"саппорт\" also work. Dangerous commands require confirmation. Commands are accepted only from the entered chat ID."
+msgstr ""
+"Команды Telegram: /start, /help, /status, /devices, /internet_on, /internet_off, /wifi_on, /wifi_off, /support, /grant_time, /block_device, /unblock_device, /allowlist_add, /blocklist_add, /logs, /clear_logs, /update, /reboot, /emergency_sites, /wifi_status. Русские фразы вроде «помощь», «статус», «показать все устройства», «отключить интернет» и «саппорт» тоже работают. Опасные команды требуют подтверждения. Команды принимаются только от разрешённого ID пользователя, указанного в настройках роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Telegram connected."
+msgstr "Telegram подключён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Telegram setup short note"
+msgstr ""
+"Создайте отдельного Telegram-бота для Sheepfold, вставьте токен и привяжите chat ID родителя. Sheepfold использует исходящее подключение к Telegram, поэтому роутеру не нужен публичный адрес."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Temporary access"
+msgstr "Временный доступ"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Temporary access requires confirmation."
+msgstr "Временный доступ требует подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Temporary access would require confirmation."
+msgstr "Временный доступ потребует подтверждения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Temporary password"
+msgstr "Временный пароль"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Test Telegram message sent."
+msgstr "Тестовое сообщение Telegram отправлено."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"The Android app can request this diagnostics snapshot from /cgi-bin/sheepfold-api/router-info and show it to the parent before sending it to an AI provider. It does not include Wi-Fi passwords, bot tokens, child names, MAC addresses, or device lists."
+msgstr ""
+"Android-приложение может запросить этот диагностический снимок через /cgi-bin/sheepfold-api/router-info и показать его родителю перед отправкой ИИ-провайдеру. Здесь нет паролей Wi-Fi, токенов ботов, имён детей, MAC-адресов и списков устройств."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The Android app sends AI requests to the router; the router calls the selected provider."
+msgstr "Android-приложение отправляет ИИ-запросы на роутер, а роутер вызывает выбранного провайдера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The cache file should be stored under /tmp/ so it does not wear router flash memory."
+msgstr "Файлу кэша лучше лежать внутри /tmp/, чтобы не изнашивал flash-память роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The log is stored in RAM and is cleared after router reboot. Export masks sensitive fields."
+msgstr "Журнал очищается после перезагрузки роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The UI must prevent adding the same MAC to allowlist and blocklist."
+msgstr "Интерфейс должен запрещать добавление одного MAC одновременно в белый и чёрный список."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "These devices are never blocked by global blocking or schedules."
+msgstr "Эти устройства не блокируются глобальной блокировкой и расписаниями."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "This action is a visual prototype only."
+msgstr "Это действие работает только как визуальная заглушка."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"This device is already in the allowlist. Remove it from the allowlist before adding it to the blocklist."
+msgstr "Это устройство уже в белом списке. Сначала уберите его из белого списка, потом добавляйте в чёрный."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"This device is already in the blocklist. Remove it from the blocklist before adding it to the allowlist."
+msgstr "Это устройство уже в чёрном списке. Сначала уберите его из чёрного списка, потом добавляйте в белый."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "This group already exists."
+msgstr "Такая группа уже существует."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "This group cannot be deleted while devices are assigned to it."
+msgstr "Эту группу нельзя удалить, пока к ней привязаны устройства."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "This login is already used."
+msgstr "Этот логин уже используется."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "This site will be removed from the emergency-useful list."
+msgstr "Этот сайт будет удалён из списка аварийно-полезных сайтов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "To"
+msgstr "По"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Token lifetime"
+msgstr "Срок действия токена"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Traffic order: Sheepfold -> AdGuard Home -> Podkop."
+msgstr "Порядок трафика: Sheepfold -> AdGuard Home -> Podkop."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Turn off all LEDs permanently"
+msgstr "Отключить навсегда все светодиоды"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Turns global blocking off."
+msgstr "Выключает глобальную блокировку."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Turns on global blocking for everyone except the allowlist."
+msgstr "Включает глобальную блокировку для всех, кроме белого списка."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Turns router Wi-Fi off; use carefully."
+msgstr "Выключает Wi-Fi на роутере; используйте осторожно."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Turns router Wi-Fi on."
+msgstr "Включает Wi-Fi на роутере."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "TV"
+msgstr "Телевизор"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "TV / media"
+msgstr "ТВ / медиа"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Type"
+msgstr "Тип"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "unblock device #3"
+msgstr "разблокировать #3"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "unblock internet"
+msgstr "включить интернет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Unknown"
+msgstr "Неизвестно"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Unknown device"
+msgstr "Неизвестное устройство"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Unknown device type"
+msgstr "Неизвестный тип"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "up to date"
+msgstr "актуальная"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "update app"
+msgstr "обновить приложение"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update app"
+msgstr "Обновить приложение"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update check and installation"
+msgstr "Проверка обновления и его установка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update check policy saved."
+msgstr "Настройка проверки обновлений сохранена."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update completed. Refresh LuCI if the interface still shows old files."
+msgstr "Обновление завершено. Обновите LuCI, если интерфейс всё ещё показывает старые файлы."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update failed."
+msgstr "Обновление не удалось."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update failed. See log above."
+msgstr "Обновление не удалось. Смотрите журнал выше."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update finished successfully."
+msgstr "Обновление успешно завершено."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update is running. Waiting for router response..."
+msgstr "Обновление выполняется. Ждём ответ роутера..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update log is empty yet."
+msgstr "Журнал обновления пока пуст."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update result"
+msgstr "Результат обновления"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Update started. Do not close this page until the result appears."
+msgstr "Обновление запущено. Не закрывайте страницу до появления результата."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "URL address"
+msgstr "URL адрес"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "USB flash drive"
+msgstr "USB-флешка"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "USB flash settings"
+msgstr "Настройки USB-флешки"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "USB partition device path"
+msgstr "Путь к разделу USB"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "USB role"
+msgstr "Роль USB-носителя"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Use an app password from Yandex ID security settings."
+msgstr "Используйте пароль приложения из настроек безопасности Яндекс ID."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Use custom group"
+msgstr "Использовать свою группу"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Use the real device MAC for this home Wi-Fi network."
+msgstr "Для этой домашней Wi-Fi сети используйте настоящий MAC устройства."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Use together with"
+msgstr "Использование совместно с"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Use USB flash for Sheepfold"
+msgstr "Использовать USB-флешку для Sheepfold"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Used by Android app and pairing QR codes."
+msgstr "Используется Android-приложением и QR-кодами подключения."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Used by the \"until bedtime\" quick action."
+msgstr "Используется кнопкой быстрого доступа \"до отбоя\"."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "User lists"
+msgstr "Списки пользователей"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "User management"
+msgstr "Управление пользователями"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Visual test build. Router rules and persistence are not active yet."
+msgstr "Визуальная тестовая сборка. Правила роутера и сохранение настроек пока не активны."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "VK admin user ID"
+msgstr "VK ID родителя-администратора"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "VK community access token"
+msgstr "Ключ доступа сообщества VK"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "VK community ID"
+msgstr "ID сообщества VK"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "VK connected."
+msgstr "VK подключён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Vladivostok time"
+msgstr "Владивостокское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"When a device is assigned to an administrator, Sheepfold removes it from ordinary groups and schedules, disables activity logging for it, and adds it to the allowlist."
+msgstr ""
+"При назначении устройства администратору Sheepfold убирает его из обычных групп и расписаний, отключает для него журнал активности и добавляет устройство в белый список."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"When a new device connects, router LEDs will turn on. After a successful LuCI password login or after any admin views the new-device notification on the phone, restore the router default LED behavior immediately."
+msgstr ""
+"Когда подключилось новое устройство, светодиоды на роутере зажгуться. После успешного входа в LuCI с паролем или после просмотра уведомления о новом устройстве на телефоне любым админом сразу верните дефолтное поведение светодиодов роутера."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"When Wi-Fi turns off, you will not be able to turn it back on from a phone connected only by Wi-Fi. Configure messenger control or a WPS button action so you can enable Wi-Fi outside the schedule if needed."
+msgstr ""
+"Когда Wi-Fi отключится, с телефона, подключённого только по Wi-Fi, вы уже не сможете включить его обратно. Заранее настройте управление через мессенджер или действие кнопки WPS, чтобы при необходимости включить Wi-Fi вне расписания."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid ""
+"While WPS connection is allowed, all router LEDs should blink using the 1010000 pattern for 30 seconds. One tick is half a second."
+msgstr ""
+"Пока разрешено WPS-подключение, все светодиоды роутера должны мигать паттерном 1010000 в течение 30 секунд. Один тик — полсекунды."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Whitelist sources"
+msgstr "Источники белых списков"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Whitelist sources saved."
+msgstr "Источники белых списков сохранены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Wi-Fi access QR"
+msgstr "QR подключения к Wi-Fi"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Wi-Fi auto-disable warning"
+msgstr "Предупреждение об автоматическом выключении Wi-Fi"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Wi-Fi automation settings saved."
+msgstr "Настройки автоматического Wi-Fi сохранены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Wi-Fi MAC check"
+msgstr "Проверка MAC Wi-Fi"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Wi-Fi modules"
+msgstr "Wi-Fi модули"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Wi-Fi settings"
+msgstr "Настройки Wi-Fi"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "WPS action saved."
+msgstr "Действие кнопки WPS сохранено."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "WPS button"
+msgstr "Кнопка WPS"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "WPS long button press"
+msgstr "Долгое нажатие кнопки WPS"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "WPS short button press"
+msgstr "Короткое нажатие кнопки WPS"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Yakutsk time"
+msgstr "Якутское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Yandex Disk"
+msgstr "Yandex Disk"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Yandex Disk login"
+msgstr "Логин Yandex Disk"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Yandex Disk password"
+msgstr "Пароль Yandex Disk"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Yandex Disk settings"
+msgstr "Настройки Yandex Disk"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Yekaterinburg time"
+msgstr "Екатеринбургское время"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Yes"
+msgstr "Да"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "All messages"
+msgstr "Все сообщения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Filter"
+msgstr "Фильтр"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Test Yandex Disk login"
+msgstr "Проверить вход в Yandex Disk"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Show files on disk"
+msgstr "Показать файлы на диске"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Restore latest configuration backup"
+msgstr "Восстановить последний бэкап настроек"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Testing Yandex Disk login..."
+msgstr "Проверка входа в Yandex Disk..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Loading file list from Yandex Disk..."
+msgstr "Загрузка списка файлов с Yandex Disk..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Yandex Disk file list updated."
+msgstr "Список файлов Yandex Disk обновлён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Restoring configuration from Yandex Disk..."
+msgstr "Восстановление настроек с Yandex Disk..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Refresh sync status"
+msgstr "Обновить статус синхронизации"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Last Yandex Disk sync:"
+msgstr "Последняя синхронизация с Yandex Disk:"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No sync to Yandex Disk yet."
+msgstr "Синхронизация с Yandex Disk ещё не выполнялась."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not read Yandex Disk sync status."
+msgstr "Не удалось прочитать статус синхронизации Yandex Disk."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Latest backup"
+msgstr "Последний бэкап"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Restore configuration backup"
+msgstr "Восстановить бэкап настроек"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Restore Sheepfold settings from configuration backup %s on Yandex Disk?"
+msgstr "Восстановить настройки Sheepfold из бэкапа %s на Yandex Disk?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "just now"
+msgstr "только что"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "min ago"
+msgstr "мин назад"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "h ago"
+msgstr "ч назад"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "d ago"
+msgstr "дн назад"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Grant temporary internet access to %s for %s minutes?"
+msgstr "Выдать временный доступ в интернет устройству %s на %s мин?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Temporary access duration is invalid."
+msgstr "Некорректная длительность временного доступа."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not grant temporary access."
+msgstr "Не удалось выдать временный доступ."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Temporary access granted."
+msgstr "Временный доступ выдан."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Logs on Yandex Disk"
+msgstr "Журналы на Yandex Disk"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Configuration backups on Yandex Disk"
+msgstr "Резервные копии настроек на Yandex Disk"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not read Yandex Disk file list."
+msgstr "Не удалось прочитать список файлов на Yandex Disk."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Yandex Disk login works."
+msgstr "Вход в Yandex Disk работает."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Yandex Disk login failed."
+msgstr "Не удалось войти в Yandex Disk."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Restore Sheepfold settings from the latest configuration backup on Yandex Disk?"
+msgstr "Восстановить настройки Sheepfold из последней резервной копии на Yandex Disk?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Configuration restored from Yandex Disk:"
+msgstr "Настройки восстановлены с Yandex Disk:"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not restore configuration from Yandex Disk."
+msgstr "Не удалось восстановить настройки с Yandex Disk."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not save Wi-Fi settings."
+msgstr "Не удалось сохранить настройки Wi-Fi."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device added manually"
+msgstr "Устройство добавлено вручную"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device added to allowlist"
+msgstr "Устройство добавлено в белый список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device added to blocklist"
+msgstr "Устройство добавлено в чёрный список"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device auto-assigned to a group"
+msgstr "Устройство автоматически добавлено в группу"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Global internet block toggled"
+msgstr "Глобальная блокировка интернета"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Message type"
+msgstr "Тип сообщения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "New device detected"
+msgstr "Обнаружено новое устройство"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No log entries match the current filters."
+msgstr "Нет записей журнала по текущим фильтрам."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Reset filters"
+msgstr "Сбросить фильтры"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router internet lost"
+msgstr "У роутера пропал интернет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router internet restored"
+msgstr "Интернет на роутере восстановлен"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Router settings access blocked"
+msgstr "Попытка открыть настройки роутера заблокирована"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The log is stored in RAM for fast viewing and is cleared after router reboot. When USB flash or Yandex Disk is configured, events are mirrored there too. Export masks sensitive fields."
+msgstr "Журнал хранится в оперативной памяти для быстрого просмотра и очищается после перезагрузки роутера. При подключённой флешке или Yandex Disk события также дублируются туда. Экспорт маскирует чувствительные поля."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Wi-Fi disabled by Sheepfold"
+msgstr "Wi-Fi отключён Sheepfold"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Wi-Fi enabled by Sheepfold"
+msgstr "Wi-Fi включён Sheepfold"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Wi-Fi settings saved."
+msgstr "Настройки Wi-Fi сохранены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "WPS pairing window"
+msgstr "Окно WPS-подключения"

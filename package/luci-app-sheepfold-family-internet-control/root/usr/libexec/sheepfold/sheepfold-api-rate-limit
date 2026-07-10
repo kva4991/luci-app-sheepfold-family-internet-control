@@ -1,0 +1,69 @@
+#!/bin/sh
+# Лёгкий лимит частоты HTTP-запросов к Sheepfold API по IP клиента.
+# Хранит счётчики в /tmp — без базы данных и заметной нагрузки на роутер.
+set -eu
+
+RATE_DIR="/tmp/sheepfold/api-rate-limit"
+
+sanitize_client_id() {
+	printf '%s' "$1" | tr -c 'A-Za-z0-9._:-' '_'
+}
+
+rate_limit_check() {
+	bucket="$1"
+	client_id="$2"
+	limit="$3"
+	window="$4"
+	now count window_start safe_id file line
+
+	case "$limit" in
+		''|*[!0-9]*) return 0 ;;
+	esac
+	case "$window" in
+		''|*[!0-9]*) window=60 ;;
+	esac
+	[ "$limit" -gt 0 ] || return 0
+
+	client_id="${client_id:-unknown}"
+	safe_id="$(sanitize_client_id "$client_id")"
+	mkdir -p "$RATE_DIR" 2>/dev/null || return 0
+	chmod 700 "$RATE_DIR" 2>/dev/null || true
+
+	file="$RATE_DIR/${bucket}_${safe_id}"
+	now="$(date +%s)"
+	count=0
+	window_start=0
+
+	if [ -r "$file" ]; then
+		line="$(head -1 "$file" 2>/dev/null || true)"
+		count="${line%%	*}"
+		window_start="${line#*	}"
+		case "$count" in ''|*[!0-9]*) count=0 ;; esac
+		case "$window_start" in ''|*[!0-9]*) window_start=0 ;; esac
+	fi
+
+	if [ "$window_start" -le 0 ] || [ $((now - window_start)) -ge "$window" ]; then
+		printf '%s\t%s\n' "1" "$now" >"$file"
+		chmod 600 "$file" 2>/dev/null || true
+		return 0
+	fi
+
+	if [ "$count" -ge "$limit" ]; then
+		return 1
+	fi
+
+	count=$((count + 1))
+	printf '%s\t%s\n' "$count" "$window_start" >"$file"
+	chmod 600 "$file" 2>/dev/null || true
+	return 0
+}
+
+command_name="${1:-}"
+shift || true
+case "$command_name" in
+	check) rate_limit_check "$1" "$2" "$3" "$4" ;;
+	*)
+		echo "Usage: sheepfold-api-rate-limit check <bucket> <client_id> <limit> <window_seconds>" >&2
+		exit 1
+		;;
+esac

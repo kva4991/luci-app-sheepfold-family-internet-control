@@ -99,6 +99,7 @@
 | [`docs/country-profiles.ru.md`](country-profiles.ru.md) | Страновые профили |
 | [`docs/voice-assistants.ru.md`](voice-assistants.ru.md) | Голосовые ассистенты |
 | [`docs/usb-storage-design.ru.md`](usb-storage-design.ru.md) | USB-хранилище |
+| [`docs/yandex-disk-storage.ru.md`](yandex-disk-storage.ru.md) | Yandex Disk: WebDAV, зеркалирование журнала, бэкапы, LuCI |
 | [`docs/development-ideas.md`](development-ideas.md) | Идеи для будущих версий |
 | [`docs/project-presentation.ru.md`](project-presentation.ru.md) | Презентация проекта |
 

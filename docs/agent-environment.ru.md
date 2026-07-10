@@ -137,14 +137,16 @@ bash -lc 'set -euo pipefail; package_root="package/luci-app-sheepfold-family-int
 На Windows используй Python/PowerShell сборщик, а не ручной tar/ar.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build-test-ipk.ps1 -NoDownloadsCopy
+powershell -ExecutionPolicy Bypass -File scripts\build-test-ipk.ps1
 ```
 
 Готовый пакет появляется в:
 
 ```powershell
-dist\
+C:\Users\User\Downloads\
 ```
+
+Сборщик пишет `.ipk` **сразу** в Downloads (`%USERPROFILE%\Downloads`), без каталога `dist\` в репозитории. Для другого пути: `python scripts/build-test-ipk.py --out-dir D:\artifacts`.
 
 Правильный `.ipk` для OpenWRT `opkg` здесь является gzip-tar архивом с файлами:
 
@@ -157,17 +159,36 @@ dist\
 Проверка структуры:
 
 ```powershell
-python -c "from pathlib import Path; import tarfile; p=next(Path('dist').glob('luci-app-sheepfold-family-internet-control_*_all.ipk')); print(p); tf=tarfile.open(p,'r:gz'); print('\n'.join(tf.getnames()))"
-```
-
-После сборки скопируй пакет в Downloads для ручной установки через LuCI. В Codex sandbox это обычно требует отдельного разрешённого `Copy-Item`:
-
-```powershell
-$ipk = Get-ChildItem -LiteralPath dist -Filter "luci-app-sheepfold-family-internet-control_*_all.ipk" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-Copy-Item -LiteralPath $ipk.FullName -Destination "$env:USERPROFILE\Downloads\" -Force
+python -c "from pathlib import Path; import os, tarfile; d=Path(os.environ['USERPROFILE'])/'Downloads'; p=sorted(d.glob('luci-app-sheepfold-family-internet-control_*_all.ipk'))[-1]; print(p); tf=tarfile.open(p,'r:gz'); print('\n'.join(tf.getnames()))"
 ```
 
 Не коммить `.ipk`.
+
+### Права на helper-скрипты в тестовом IPK
+
+Все файлы в `usr/libexec/sheepfold/` должны попадать в `.ipk` с режимом **0755**, и `postinst` после установки снова делает `find … -exec chmod 0755`. Иначе LuCI получит `Permission denied` при вызове `sheepfold-router-control` → `sheepfold-router-control-legacy` (вкладка «Информация о роутере», белые списки и т.д.).
+
+Проверка: `node --test tests/testIpkPermissions.test.mjs`.
+
+Быстрый обход на уже установленном роутере:
+
+```sh
+find /usr/libexec/sheepfold -type f -exec chmod 0755 {} +
+```
+
+### LuCI i18n в тестовом IPK
+
+Тестовый сборщик **обязан** включать скомпилированный русский каталог:
+
+```text
+/usr/lib/lua/luci/i18n/sheepfold.ru.lmo
+```
+
+Компиляция: `scripts/po2lmo.py` из `po/ru/sheepfold.po` (вызывается из `scripts/build-test-ipk.py`). Без этого файла на роутере LuCI покажет английские msgid из `_()`, даже при `Application language = Russian`.
+
+Проверка: `node --test tests/testIpkI18n.test.mjs`.
+
+Подробнее о двух параметрах языка (LuCI vs Sheepfold): [`docs/localization.ru.md`](localization.ru.md).
 
 ## Версия пакета
 
@@ -236,6 +257,8 @@ docs/live-router-testing.ru.md
 Не запускай write/hardware тесты на семейном рабочем роутере без явного согласия владельца, backup UCI и нужных флагов окружения.
 
 ## Что недавно оказалось важным
+
+Полный реестр операционных мелочей: [`docs/agent-gotchas.ru.md`](agent-gotchas.ru.md).
 
 - `sheepfold-service` должен реагировать на изменение DHCP-аренд быстро, но не запускать тяжёлый nmap-скан на каждое DHCP-событие.
 - Контрольный полный проход автообнаружения по умолчанию раз в 15 минут.

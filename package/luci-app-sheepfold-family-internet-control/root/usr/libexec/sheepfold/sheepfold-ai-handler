@@ -143,7 +143,7 @@ case "$client_role" in
         ;;
 esac
 
-provider="$(uci -q get sheepfold.global.ai_provider 2>/dev/null || printf deepseek)"
+provider="$(uci -q get sheepfold.global.ai_provider 2>/dev/null || true)"
 case "$provider" in
     gemini)
         model="$(uci -q get sheepfold.global.gemini_model 2>/dev/null || printf gemini-2.5-flash)"

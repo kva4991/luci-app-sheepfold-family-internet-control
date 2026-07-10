@@ -1,6 +1,6 @@
 param(
     [string]$OutDir,
-    [string]$DownloadsDir,
+    [string]$DownloadsDir = $(if ($env:USERPROFILE) { Join-Path $env:USERPROFILE 'Downloads' } else { 'C:\Users\User\Downloads' }),
     [switch]$NoDownloadsCopy
 )
 

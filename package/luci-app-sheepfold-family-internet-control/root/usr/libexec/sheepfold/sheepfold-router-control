@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+. /usr/libexec/sheepfold/sheepfold-token-common
+
 LEGACY="/usr/libexec/sheepfold/sheepfold-router-control-legacy"
 PAIR_DEVICE="/usr/libexec/sheepfold/sheepfold-pair-device"
 PAIR_ACTIVATE="/usr/libexec/sheepfold/sheepfold-pair-activate"
@@ -23,8 +25,6 @@ ensure_token_storage() {
         fi
         rm -f "$TOKEN_RUNTIME_LINK"
     elif [ -d "$TOKEN_RUNTIME_LINK" ]; then
-        # Мигрируем хэши, выпущенные предыдущей версией в tmpfs, прежде чем
-        # заменить каталог ссылкой на постоянное защищённое хранилище
         for token_file in "$TOKEN_RUNTIME_LINK"/*; do
             [ -f "$token_file" ] || continue
             cp -p "$token_file" "$TOKEN_STATE_DIR/" 2>/dev/null || true
@@ -50,37 +50,77 @@ sha256_value() {
 
 check_token() {
     bearer="${1:-}"
+    client_device_id="${2:-}"
+    client_mac="${3:-}"
+    token_file hash now
+
     [ -n "$bearer" ] || { printf 'fail\n'; return 0; }
 
     for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$/\1/p'); do
         login="$(uci -q get "sheepfold.$section.login" 2>/dev/null || true)"
         [ -n "$login" ] || continue
         hash="$(sha256_value "$login:$bearer")" || { printf 'fail\n'; return 0; }
-        if [ -f "$TOKEN_STATE_DIR/$hash" ]; then
+        token_file="$TOKEN_STATE_DIR/$hash"
+        [ -f "$token_file" ] || continue
+        now="$(date +%s)"
+        if token_bound_file_valid "$token_file" "$client_device_id" "$client_mac" "$now"; then
             printf 'ok\n'
             return 0
         fi
+        printf 'fail\n'
+        return 0
     done
 
     printf 'fail\n'
 }
 
 revoke_tokens() {
-    # Токены не содержат обратной привязки к login, поэтому отзыв остаётся
-    # глобальным, как и в legacy-реализации
-    rm -f "$TOKEN_STATE_DIR"/* 2>/dev/null || true
+    login="${1:-}"
+    token_file file_login
+
+    if [ -z "$login" ]; then
+        rm -f "$TOKEN_STATE_DIR"/* 2>/dev/null || true
+        return 0
+    fi
+
+    for token_file in "$TOKEN_STATE_DIR"/*; do
+        [ -f "$token_file" ] || continue
+        if token_file_is_legacy "$token_file"; then
+            continue
+        fi
+        file_login="$(token_file_get "$token_file" login)"
+        [ "$file_login" = "$login" ] || continue
+        rm -f "$token_file" 2>/dev/null || true
+    done
 }
 
-# Постоянная директория и совместимая ссылка создаются до любого делегирования
-# Проверка токена перехвачена здесь, чтобы не допускать legacy-fallback на MD5
+revoke_device_tokens() {
+    device_id="${1:-}"
+    token_file file_device_id
+
+    [ -n "$device_id" ] || return 1
+    for token_file in "$TOKEN_STATE_DIR"/*; do
+        [ -f "$token_file" ] || continue
+        if token_file_is_legacy "$token_file"; then
+            continue
+        fi
+        file_device_id="$(token_file_get "$token_file" device_id)"
+        [ "$file_device_id" = "$device_id" ] || continue
+        rm -f "$token_file" 2>/dev/null || true
+    done
+}
+
 ensure_token_storage
 
 case "$command" in
     check-token)
-        check_token "${2:-}"
+        check_token "${2:-}" "${3:-}" "${4:-}"
         ;;
     revoke-tokens)
-        revoke_tokens
+        revoke_tokens "${2:-}"
+        ;;
+    revoke-device-tokens)
+        revoke_device_tokens "${2:-}"
         ;;
     pair-admin-device)
         shift

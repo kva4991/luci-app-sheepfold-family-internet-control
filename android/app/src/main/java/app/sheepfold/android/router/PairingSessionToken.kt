@@ -6,7 +6,9 @@ import java.util.WeakHashMap
 /** Секреты и идентичность привязаны к объекту результата настройки до сохранения. */
 private data class PairingSessionData(
     var bearerToken: String? = null,
-    var deviceId: String? = null
+    var deviceId: String? = null,
+    var deviceMac: String? = null,
+    var tlsPinSha256: String? = null
 )
 
 private val pairingSessions = Collections.synchronizedMap(
@@ -33,5 +35,25 @@ var RouterConnectionRequest.deviceId: String?
             pairingSessions[this]?.deviceId = null
         } else {
             session(this).deviceId = value
+        }
+    }
+
+var RouterConnectionRequest.deviceMac: String?
+    get() = pairingSessions[this]?.deviceMac
+    set(value) {
+        if (value.isNullOrBlank()) {
+            pairingSessions[this]?.deviceMac = null
+        } else {
+            session(this).deviceMac = value
+        }
+    }
+
+var RouterConnectionRequest.tlsPinSha256: String?
+    get() = pairingSessions[this]?.tlsPinSha256
+    set(value) {
+        if (value.isNullOrBlank()) {
+            pairingSessions[this]?.tlsPinSha256 = null
+        } else {
+            session(this).tlsPinSha256 = value
         }
     }

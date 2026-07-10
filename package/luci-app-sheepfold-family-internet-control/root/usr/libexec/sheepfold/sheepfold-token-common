@@ -1,0 +1,93 @@
+#!/bin/sh
+# Общие функции хранения и проверки административных Bearer-токенов.
+
+token_normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+
+token_valid_mac() { printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
+
+token_file_get() {
+	file="$1"
+	key="$2"
+	[ -r "$file" ] || return 1
+	sed -n "s/^${key}=//p" "$file" | sed -n '1p'
+}
+
+token_file_is_legacy() {
+	file="$1"
+	[ -r "$file" ] || return 1
+	[ ! -s "$file" ] && return 0
+	token_file_get "$file" login >/dev/null 2>&1 || return 0
+	return 1
+}
+
+token_write_bound_file() {
+	dir="$1"
+	hash="$2"
+	login="$3"
+	device_id="$4"
+	mac="$5"
+	issued_at="$6"
+	expires_at="$7"
+	tmp="$dir/$hash.tmp.$$"
+
+	{
+		printf 'login=%s\n' "$login"
+		printf 'device_id=%s\n' "$device_id"
+		printf 'mac=%s\n' "$(token_normalize_mac "$mac")"
+		printf 'issued_at=%s\n' "$issued_at"
+		printf 'expires_at=%s\n' "$expires_at"
+	} >"$tmp"
+	chmod 600 "$tmp"
+	mv -f "$tmp" "$dir/$hash"
+}
+
+token_device_is_admin_paired() {
+	wanted_id="$1"
+	wanted_mac="$(token_normalize_mac "$2")"
+	section device_id mac admin
+
+	token_valid_mac "$wanted_mac" || return 1
+	[ -n "$wanted_id" ] || return 1
+	for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+		device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || printf '%s' "$section")"
+		mac="$(token_normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
+		admin="$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)"
+		[ "$admin" = 1 ] || continue
+		[ "$device_id" = "$wanted_id" ] || continue
+		[ "$mac" = "$wanted_mac" ] || continue
+		return 0
+	done
+	return 1
+}
+
+token_bound_file_valid() {
+	file="$1"
+	client_device_id="$2"
+	client_mac="$3"
+	now="${4:-$(date +%s)}"
+	login device_id mac issued_at expires_at normalized_client_mac
+
+	[ -n "$client_device_id" ] || return 1
+	normalized_client_mac="$(token_normalize_mac "$client_mac")"
+	token_valid_mac "$normalized_client_mac" || return 1
+
+	if token_file_is_legacy "$file"; then
+		token_device_is_admin_paired "$client_device_id" "$normalized_client_mac"
+		return $?
+	fi
+
+	login="$(token_file_get "$file" login)"
+	device_id="$(token_file_get "$file" device_id)"
+	mac="$(token_file_get "$file" mac)"
+	issued_at="$(token_file_get "$file" issued_at)"
+	expires_at="$(token_file_get "$file" expires_at)"
+
+	[ -n "$login" ] && [ -n "$device_id" ] && [ -n "$mac" ] || return 1
+	token_valid_mac "$mac" || return 1
+	case "$issued_at" in ''|*[!0-9]*) issued_at=0 ;; esac
+	case "$expires_at" in ''|*[!0-9]*) expires_at=0 ;; esac
+	[ "$expires_at" -le 0 ] || [ "$now" -le "$expires_at" ] || return 1
+	[ "$client_device_id" = "$device_id" ] || return 1
+	[ "$normalized_client_mac" = "$mac" ] || return 1
+	token_device_is_admin_paired "$device_id" "$mac"
+}

@@ -100,10 +100,12 @@ personal_group_for_device() {
 }
 
 is_admin_request() {
+    device_id="$1"
+    mac="$2"
     bearer=""
     case "${HTTP_AUTHORIZATION:-}" in [Bb]earer\ *) bearer="${HTTP_AUTHORIZATION#* }" ;; esac
     [ -n "$bearer" ] || return 1
-    [ "$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" 2>/dev/null || printf fail)" = ok ]
+    [ "$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" "$device_id" "$mac" 2>/dev/null || printf fail)" = ok ]
 }
 
 consume_quota() {
@@ -163,11 +165,14 @@ consent_version="$(form_get consentVersion "$body")"
 [ -n "$requested_device_id" ] || reject "400 Bad Request" device_id_required "Device id is required."
 [ -n "$requested_role" ] || reject "400 Bad Request" client_role_required "Client role is required."
 
-admin_request=0
-is_admin_request && admin_request=1
 remote_ip="${REMOTE_ADDR:-}"
 mac="$(mac_for_ip "$remote_ip")"
 valid_mac "$mac" || reject "403 Forbidden" device_not_resolved "The router could not identify this LAN device."
+
+admin_request=0
+if is_admin_request "$requested_device_id" "$mac"; then
+    admin_request=1
+fi
 list_has_mac blocklist "$mac" && reject "403 Forbidden" device_blocklisted "Blocked devices cannot use the AI assistant."
 device_section="$(device_section_for_mac "$mac" 2>/dev/null || true)"
 [ -n "$device_section" ] || reject "403 Forbidden" device_not_registered "This device is not registered in Sheepfold."

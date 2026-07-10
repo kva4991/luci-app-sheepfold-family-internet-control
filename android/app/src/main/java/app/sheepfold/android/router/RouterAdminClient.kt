@@ -3,9 +3,8 @@ package app.sheepfold.android.router
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.InetAddress
 import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 import java.net.URLEncoder
 
 data class RouterDevice(
@@ -90,10 +89,9 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
         form: Map<String, String>
     ): JSONObject {
         val url = URL("${apiBase.trimEnd('/')}$path")
-        if (url.protocol == "http" && !isPrivateLanHost(url.host)) {
-            throw IllegalArgumentException("HTTP разрешён только для локального роутера")
-        }
-        val http = url.openConnection() as HttpURLConnection
+        val tlsPin = connection.tlsPinSha256
+            ?: throw IllegalStateException("Отпечаток TLS роутера не сохранён. Выполните сопряжение заново.")
+        val (http, _) = RouterHttps.open(url, tlsPin, allowTrustOnFirstUse = false)
         try {
             http.connectTimeout = 5000
             http.readTimeout = 15000
@@ -103,7 +101,13 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
             http.setRequestProperty("X-Sheepfold-Client", "android-admin-v1")
             val bearer = connection.bearerToken
                 ?: throw IllegalStateException("Административный токен отсутствует")
+            val deviceId = connection.deviceId
+                ?: throw IllegalStateException("Идентификатор парного устройства отсутствует")
+            val deviceMac = connection.deviceMac
+                ?: throw IllegalStateException("MAC парного устройства отсутствует. Выполните сопряжение заново.")
             http.setRequestProperty("Authorization", "Bearer $bearer")
+            http.setRequestProperty("X-Sheepfold-Device-Id", deviceId)
+            http.setRequestProperty("X-Sheepfold-Device-Mac", deviceMac)
             if (method == "POST") {
                 val body = form.entries.joinToString("&") { (key, value) ->
                     "${encode(key)}=${encode(value)}"
@@ -143,24 +147,7 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
             explicitPort != null -> explicitPort
             else -> 5200
         }
-        val httpPort = when {
-            parsed.protocol == "http" && explicitPort != null -> explicitPort
-            explicitPort == 5200 -> 5201
-            explicitPort != null -> explicitPort
-            else -> 5201
-        }
-        val result = mutableListOf("https://$host:$httpsPort${parsed.path}")
-        if (isPrivateLanHost(parsed.host)) result += "http://$host:$httpPort${parsed.path}"
-        return result.distinct()
-    }
-
-    private fun isPrivateLanHost(host: String): Boolean {
-        val normalized = host.trim().lowercase()
-        if (normalized == "localhost" || normalized.endsWith(".local") || normalized.endsWith(".lan")) return true
-        return runCatching {
-            val address = InetAddress.getByName(normalized)
-            address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress || address.isSiteLocalAddress
-        }.getOrDefault(false)
+        return listOf("https://$host:$httpsPort${parsed.path}")
     }
 
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())

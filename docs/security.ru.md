@@ -62,6 +62,8 @@ admin_device + allowlist + стабильный device_id
 10. Попытки `/pair` ограничиваются по фактическому LAN-устройству.
 11. `deviceId` создаётся и возвращается сервером, а не выбирается клиентом.
 12. Ручная привязка устройств в secure LuCI отключена; права выдаются через QR-поток.
+13. Файл токена в `/etc/sheepfold/tokens/` хранит `login`, `device_id`, `mac`, `issued_at`, `expires_at` (plaintext Bearer на диске не пишется).
+14. Admin API принимает Bearer только вместе с `X-Sheepfold-Device-Id` и `X-Sheepfold-Device-Mac`, совпадающими с записью токена и парным admin-устройством в UCI.
 
 ## ИИ-помощник
 
@@ -139,23 +141,22 @@ REMOTE_ADDR -> MAC -> UCI device -> server deviceId/admin_device
 - Автоматический extroot отключён до реализации копирования overlay, проверки и rollback.
 - Swap проверяет свободное место, создаётся атомарно и восстанавливается при запуске Sheepfold.
 
-## HTTPS-first и HTTP fallback
+## HTTPS и Android
 
 Sheepfold поднимает отдельный uhttpd listener:
 
-- HTTPS по умолчанию: порт `5200`;
-- HTTP compatibility fallback: порт `5201`.
+- HTTPS: порт `5200` (основной для Android admin);
+- HTTP: порт `5201` (совместимость LuCI/legacy; admin APK **не** использует cleartext).
 
-Android-клиенты:
+Android admin (0.1.0-155+):
 
-1. всегда пробуют HTTPS первым;
-2. используют HTTP только для loopback, link-local, private LAN, `.lan` и `.local` адресов;
-3. не переходят на HTTP для произвольного внешнего хоста;
-4. сохраняют рабочий endpoint, но при следующих проверках снова предпочитают HTTPS.
+1. только HTTPS, `cleartextTrafficPermitted="false"`;
+2. TLS pin (TOFU при первом успешном `/pair`, хранится в приложении);
+3. Bearer-запросы с заголовками привязки устройства (см. инварианты 13–14).
 
-Если системный сертификат uhttpd не доверен Android, HTTPS-запрос завершится ошибкой проверки и клиент применит LAN HTTP fallback. Следующий этап безопасности — передача fingerprint через аутентифицированный QR и certificate pinning. До реализации pinning запрещено доверять любому самоподписанному сертификату.
+Android child: только HTTPS, без admin Bearer.
 
-API не должен открываться на WAN. Глобальная Android cleartext-конфигурация компенсируется обязательной проверкой private-LAN адреса в каждом сетевом клиенте; новые клиенты без такой проверки добавлять запрещено.
+API не должен открываться на WAN.
 
 ## Публичные маршруты
 

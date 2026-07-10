@@ -4,9 +4,16 @@ import gzip
 import io
 import os
 import shutil
+import sys
 import tarfile
 import time
 from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from po2lmo import compile_po
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -46,22 +53,28 @@ def add_directory(tar: tarfile.TarFile, name: str) -> None:
     tar.addfile(info)
 
 
-def add_tree(tar: tarfile.TarFile, source: Path, target_prefix: str) -> None:
-    executable_paths = {
-        "./etc/init.d/sheepfold",
-        "./etc/uci-defaults/50_luci-sheepfold",
-        "./etc/hotplug.d/button/90-sheepfold-wps",
-        "./usr/libexec/sheepfold/sheepfold-service",
-        "./usr/libexec/sheepfold/sheepfold-device-detector",
-        "./usr/libexec/sheepfold/sheepfold-log",
-        "./usr/libexec/sheepfold/sheepfold-telegram-bot",
-        "./usr/libexec/sheepfold/sheepfold-updater",
-        "./usr/libexec/sheepfold/sheepfold-router-control",
-        "./usr/libexec/sheepfold/sheepfold-site-lists",
-        "./www/cgi-bin/sheepfold-blocked",
-        "./www/cgi-bin/sheepfold-api",
-    }
+def ensure_tar_directories(tar: tarfile.TarFile, target_path: str) -> None:
+    parts = target_path.strip("./").split("/")
+    current = "."
+    for part in parts[:-1]:
+        current = f"{current}/{part}"
+        add_directory(tar, current)
 
+
+def is_executable_ipk_target(target: str) -> bool:
+    executable_prefixes = (
+        "./etc/init.d/",
+        "./etc/uci-defaults/",
+        "./etc/hotplug.d/",
+        "./usr/libexec/sheepfold/",
+        "./www/cgi-bin/",
+    )
+    if any(target.startswith(prefix) for prefix in executable_prefixes):
+        return True
+    return target == "./www/.well-known/sheepfold.json.sh"
+
+
+def add_tree(tar: tarfile.TarFile, source: Path, target_prefix: str) -> None:
     for path in sorted(source.rglob("*")):
         rel = path.relative_to(source).as_posix()
         target = f"./{target_prefix.rstrip('/')}/{rel}" if target_prefix else f"./{rel}"
@@ -71,7 +84,7 @@ def add_tree(tar: tarfile.TarFile, source: Path, target_prefix: str) -> None:
             add_directory(tar, target)
             continue
 
-        mode = 0o755 if target in executable_paths else 0o644
+        mode = 0o755 if is_executable_ipk_target(target) else 0o644
         add_bytes(tar, target, path.read_bytes(), mode)
 
 
@@ -101,10 +114,56 @@ Priority: optional
 Installed-Size: 10240
 Description: Visual test build of Sheepfold Family Internet Control LuCI app.
 """.encode("utf-8")
-    conffiles = b"/etc/config/sheepfold\n"
+    preinst = b"""#!/bin/sh
+[ -n "${IPKG_INSTROOT}" ] && exit 0
+case "$1" in
+        upgrade|install)
+                if [ -s /etc/config/sheepfold ]; then
+                        mkdir -p /etc/sheepfold/migrations
+                        cp /etc/config/sheepfold /etc/sheepfold/migrations/sheepfold.config.pre-upgrade
+                        chmod 600 /etc/sheepfold/migrations/sheepfold.config.pre-upgrade 2>/dev/null || true
+                fi
+                ;;
+esac
+exit 0
+"""
 
     postinst = f"""#!/bin/sh
 [ -n "${{IPKG_INSTROOT}}" ] && exit 0
+cleanup_opkg_conffile_artifacts() {{
+        for leftover in /etc/config/sheepfold-opkg /etc/config/sheepfold-opkg.old; do
+                [ -e "$leftover" ] || continue
+                rm -f "$leftover"
+        done
+}}
+cleanup_stale_update_artifacts() {{
+        rm -f /tmp/sheepfold/update/*.ipk /tmp/sheepfold/update/sheepfold-config-before-update 2>/dev/null || true
+}}
+recover_sheepfold_config() {{
+        mkdir -p /etc/config /etc/sheepfold/migrations
+        if [ -s /etc/config/sheepfold ]; then
+                return 0
+        fi
+        for candidate in \\
+                /etc/sheepfold/migrations/sheepfold.config.pre-upgrade \\
+                /etc/config/sheepfold-opkg \\
+                /etc/config/sheepfold-opkg.old \\
+                /tmp/sheepfold/update/sheepfold-config-before-update; do
+                if [ -s "$candidate" ]; then
+                        cp "$candidate" /etc/config/sheepfold
+                        chmod 600 /etc/config/sheepfold 2>/dev/null || true
+                        return 0
+                fi
+        done
+        if [ -r /usr/share/sheepfold/sheepfold.uci.defaults ]; then
+                cp /usr/share/sheepfold/sheepfold.uci.defaults /etc/config/sheepfold
+        else
+                : > /etc/config/sheepfold
+        fi
+        chmod 600 /etc/config/sheepfold 2>/dev/null || true
+}}
+recover_sheepfold_config
+cleanup_stale_update_artifacts
 repair_sheepfold_uci_sections() {{
         mkdir -p /etc/config
         [ -e /etc/config/sheepfold ] || : > /etc/config/sheepfold
@@ -178,16 +237,18 @@ ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
 ensure_global_option log_storage 'ram'
 ensure_global_option log_cache_path '/tmp/sheepfold/events.log'
-uci -q get sheepfold.no_restrictions >/dev/null || uci -q set sheepfold.no_restrictions='group'
-uci -q set sheepfold.no_restrictions.name='Без ограничений'
-uci -q set sheepfold.no_restrictions.protected='1'
-uci -q set sheepfold.no_restrictions.auto_assignable='1'
-uci -q set sheepfold.no_restrictions.description='Trusted home infrastructure devices that should not be limited unless they are blocklisted'
-uci -q get sheepfold.child_1 >/dev/null || uci -q set sheepfold.child_1='group'
-uci -q set sheepfold.child_1.name='Первый ребёнок'
-uci -q set sheepfold.child_1.protected='0'
-uci -q set sheepfold.child_1.auto_assignable='0'
-uci -q set sheepfold.child_1.description='Default first child group'
+[ -x /usr/libexec/sheepfold/sheepfold-default-groups ] && /usr/libexec/sheepfold/sheepfold-default-groups apply
+if [ "$(uci -q get sheepfold.global.luci_language_synced 2>/dev/null)" != "1" ]; then
+        lang="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
+        case "$lang" in
+                en|ru) ;;
+                *) lang=ru ;;
+        esac
+        uci -q get luci.main >/dev/null 2>&1 || uci -q set luci.main=core
+        uci -q set luci.main.lang="$lang"
+        uci -q set sheepfold.global.luci_language_synced='1'
+        uci -q commit luci 2>/dev/null || true
+fi
 detect_installed() {{
         pkg="$1"
         init="$2"
@@ -217,7 +278,14 @@ if [ "$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null)" != "
 fi
 uci -q set sheepfold.global.ui_asset_version='{version}-{release}'
 uci -q commit sheepfold
-chmod 0755 /usr/libexec/sheepfold/sheepfold-site-lists 2>/dev/null || true
+find /usr/libexec/sheepfold -type f -exec chmod 0755 {{}} + 2>/dev/null || true
+for helper in \\
+        /etc/hotplug.d/dhcp/90-sheepfold-device-signals \\
+        /www/.well-known/sheepfold.json.sh \\
+        /www/cgi-bin/sheepfold-api \\
+        /www/cgi-bin/sheepfold-blocked; do
+        [ -e "$helper" ] && chmod 0755 "$helper" 2>/dev/null || true
+done
 app_port="$(uci -q get sheepfold.global.app_port 2>/dev/null || printf 5201)"
 mkdir -p /www/.well-known
 cat > /www/.well-known/sheepfold.json <<EOF
@@ -242,14 +310,29 @@ exit 0
 
     with open_gzip_tar(path) as tar:
         add_bytes(tar, "./control", control, 0o644)
-        add_bytes(tar, "./conffiles", conffiles, 0o644)
+        add_bytes(tar, "./preinst", preinst, 0o755)
         add_bytes(tar, "./postinst", postinst, 0o755)
+
+
+def bundled_i18n_files() -> list[tuple[str, bytes, int]]:
+    files: list[tuple[str, bytes, int]] = []
+    po_path = PKG_DIR / "po/ru/sheepfold.po"
+    if po_path.is_file():
+        files.append((
+            "./usr/lib/lua/luci/i18n/sheepfold.ru.lmo",
+            compile_po(po_path),
+            0o644,
+        ))
+    return files
 
 
 def write_data_tar(path: Path) -> None:
     with open_gzip_tar(path) as tar:
         add_tree(tar, PKG_DIR / "root", "")
         add_tree(tar, PKG_DIR / "htdocs", "www")
+        for target, data, mode in bundled_i18n_files():
+            ensure_tar_directories(tar, target)
+            add_bytes(tar, target, data, mode)
 
 
 def write_ipk_tar(path: Path, members: list[tuple[str, bytes]]) -> None:
@@ -265,19 +348,43 @@ def resolve_downloads_dir(value: str | None) -> Path | None:
         return Path(os.environ["USERPROFILE"]) / "Downloads"
     if os.environ.get("HOME"):
         return Path(os.environ["HOME"]) / "Downloads"
-    return None
+    # Фолбэк для Windows-рабочей станции владельца проекта
+    return Path(r"C:\Users\User\Downloads")
+
+
+def resolve_default_out_dir(explicit: str | None) -> Path:
+    if explicit:
+        return Path(explicit)
+    downloads = resolve_downloads_dir(None)
+    if downloads:
+        downloads.mkdir(parents=True, exist_ok=True)
+        return downloads
+    fallback = ROOT_DIR / ".build" / "ipk-output"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out-dir", default=str(ROOT_DIR / "dist"))
-    parser.add_argument("--downloads-dir")
-    parser.add_argument("--no-downloads-copy", action="store_true")
+    parser.add_argument(
+        "--out-dir",
+        default=None,
+        help="Каталог для .ipk (по умолчанию: Downloads пользователя)",
+    )
+    parser.add_argument(
+        "--downloads-dir",
+        help="Устаревший алиас для --out-dir",
+    )
+    parser.add_argument(
+        "--no-downloads-copy",
+        action="store_true",
+        help="Устаревший флаг: копия в Downloads больше не нужна, сборка сразу в out-dir",
+    )
     args = parser.parse_args()
 
     version = read_make_value("PKG_VERSION")
     release = read_make_value("PKG_RELEASE")
-    out_dir = Path(args.out_dir)
+    out_dir = resolve_default_out_dir(args.out_dir or args.downloads_dir)
     build_dir = ROOT_DIR / ".build" / "test-ipk-python"
     ipk = out_dir / f"{PKG_NAME}_{version}-{release}_all.ipk"
 
@@ -300,13 +407,6 @@ def main() -> None:
     ])
 
     print(ipk)
-
-    if not args.no_downloads_copy:
-        downloads_dir = resolve_downloads_dir(args.downloads_dir)
-        if downloads_dir and downloads_dir.is_dir():
-            target = downloads_dir / ipk.name
-            shutil.copy2(ipk, target)
-            print(target)
 
 
 if __name__ == "__main__":

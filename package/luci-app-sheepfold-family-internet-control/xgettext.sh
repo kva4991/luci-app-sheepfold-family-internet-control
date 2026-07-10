@@ -2,12 +2,7 @@
 set -euo pipefail
 
 # Извлекает msgid из _('...') во view-файлах LuCI JS и обновляет po/templates/sheepfold.pot.
-# По образцу itdoginfo/podkop (luci-app-podkop/xgettext.sh).
-#
-# Пока покрывает только модули, переведённые на стандартный _() (см. CODING_RULES.md,
-# раздел 8.2). overview.js и его обёртки (overview-secure.js, overview-personal.js)
-# всё ещё используют переходный словарь T() и не участвуют в извлечении, пока не
-# будут перенесены на _() по одному модулю за раз.
+# По образцу itdoginfo/podkop (luci-app-podkop/xgettext.sh); см. CODING_RULES.md, раздел 8.2.
 
 SRC_DIR="htdocs/luci-static/resources/view/sheepfold"
 OUT_POT="po/templates/sheepfold.pot"
@@ -16,6 +11,8 @@ WIDTH=120
 
 FILES=(
     "$SRC_DIR/ai.js"
+    "$SRC_DIR/overview.js"
+    "$SRC_DIR/overview-secure.js"
 )
 
 for f in "${FILES[@]}"; do

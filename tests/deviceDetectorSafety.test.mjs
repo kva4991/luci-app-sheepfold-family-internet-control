@@ -233,13 +233,23 @@ describe('Безопасное автоназначение устройств',
     assert.equal(isAutoAssignable(device), false);
   });
 
-  it('не повторяет автоназначение для уже закреплённого типа', () => {
+  it('не использует метку источника arp как имя устройства', () => {
+    const source = readFileSync(detectorPath, 'utf8');
+
+    assert.match(source, /\$3 == "0x2"/);
+    assert.match(source, /print \$4 "\\t" \$1 "\\t\*\\tarp"/);
+    assert.match(source, /is_reserved_device_name/);
+    assert.match(source, /\$3 !~ \/[\^]\(arp\|dhcp\|static\)/);
+  });
+
+  it('повторяет автоназначение для закреплённого типа, если группа ещё не назначена', () => {
     const source = readFileSync(detectorPath, 'utf8');
     const lockedBody = functionBody(source, 'write_locked_device_observation', 'write_detection');
     const assignmentCalls = source.match(/assign_no_restrictions_if_allowed\s+"\$section"/g) || [];
 
-    assert.doesNotMatch(lockedBody, /assign_no_restrictions_if_allowed/);
-    assert.equal(assignmentCalls.length, 1, 'Автоназначение должно вызываться только после нового определения');
+    assert.match(lockedBody, /assign_no_restrictions_if_allowed/);
+    assert.equal(assignmentCalls.length, 2, 'Автоназначение должно вызываться и после закреплённого определения');
+    assert.match(source, /device_group_unassigned/);
     assert.doesNotMatch(source, /revoke_unsafe_auto_assignment/);
   });
 

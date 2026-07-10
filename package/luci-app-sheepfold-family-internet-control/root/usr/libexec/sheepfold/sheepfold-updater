@@ -195,6 +195,8 @@ install_update() {
         say installing_package
         opkg install "$PACKAGE_FILE"
 
+        rm -f "$PACKAGE_FILE" "${WORK_DIR}/sheepfold-config-before-update" 2>/dev/null || true
+
         say reloading_service
         [ -x /etc/init.d/sheepfold ] && /etc/init.d/sheepfold restart || true
         [ -x /etc/init.d/rpcd ] && /etc/init.d/rpcd reload || true

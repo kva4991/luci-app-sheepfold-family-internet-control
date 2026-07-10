@@ -6,8 +6,10 @@ PAIR="/usr/libexec/sheepfold/sheepfold-api-pair"
 STATUS="/usr/libexec/sheepfold/sheepfold-api-client-status"
 AI_GATE="/usr/libexec/sheepfold/sheepfold-ai-gate"
 AI_HANDLER="/usr/libexec/sheepfold/sheepfold-ai-handler"
+RATE_LIMIT="/usr/libexec/sheepfold/sheepfold-api-rate-limit"
 method="${REQUEST_METHOD:-GET}"
 path_info="${PATH_INFO:-}"
+client_ip="${REMOTE_ADDR:-unknown}"
 
 header_json() {
     printf 'Status: %s\r\n' "$1"
@@ -21,11 +23,27 @@ method_not_allowed() {
     exit 0
 }
 
+rate_limit_exceeded() {
+    header_json "429 Too Many Requests" "60"
+    printf '{"app":"sheepfold","ok":false,"error":"rate_limited","message":"Too many requests from this client. Try again later."}\n'
+    exit 0
+}
+
+enforce_rate_limit() {
+    bucket="$1"
+    limit="$2"
+    window="$3"
+    [ -x "$RATE_LIMIT" ] || return 0
+    "$RATE_LIMIT" check "$bucket" "$client_ip" "$limit" "$window" || rate_limit_exceeded
+}
+
 require_admin() {
     bearer=""
+    client_device_id="${HTTP_X_SHEEPFOLD_DEVICE_ID:-}"
+    client_device_mac="${HTTP_X_SHEEPFOLD_DEVICE_MAC:-}"
     case "${HTTP_AUTHORIZATION:-}" in [Bb]earer\ *) bearer="${HTTP_AUTHORIZATION#* }" ;; esac
     if [ -z "$bearer" ] || \
-       [ "$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" 2>/dev/null || printf fail)" != ok ]; then
+       [ "$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" "$client_device_id" "$client_device_mac" 2>/dev/null || printf fail)" != ok ]; then
         header_json "401 Unauthorized"
         printf '{"app":"sheepfold","ok":false,"error":"auth_required","message":"Valid administrator Bearer token required."}\n'
         exit 0
@@ -60,14 +78,17 @@ fi
 case "$path_info" in
     /pair)
         [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit pair 12 60
         exec "$PAIR"
         ;;
     /client-status)
         [ "$method" = "GET" ] || method_not_allowed
+        enforce_rate_limit client_status 120 60
         exec "$STATUS" "${REMOTE_ADDR:-}"
         ;;
     /router-info|/pair-status)
         [ "$method" = "GET" ] || method_not_allowed
+        enforce_rate_limit admin_read 120 60
         require_admin
         run_legacy
         ;;
@@ -77,6 +98,7 @@ case "$path_info" in
         ;;
     /ai-assistant)
         [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit ai_assistant 30 60
         length="${CONTENT_LENGTH:-0}"
         case "$length" in ''|*[!0-9]*) length=0 ;; esac
         if [ "$length" -gt 16384 ]; then
@@ -92,6 +114,7 @@ case "$path_info" in
         printf '%s' "$body" | /bin/sh "$AI_HANDLER"
         ;;
     *)
+        enforce_rate_limit api_write 90 60
         run_legacy
         ;;
 esac

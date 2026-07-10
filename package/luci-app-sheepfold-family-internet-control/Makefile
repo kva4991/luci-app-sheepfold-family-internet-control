@@ -2,14 +2,29 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=128
+PKG_RELEASE:=157
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
 
 LUCI_TITLE:=Sheepfold Family Internet Control
 LUCI_DESCRIPTION:=Family internet access control for OpenWRT with LuCI, Android, and bot support.
-LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +uclient-fetch +ca-bundle +uhttpd +uhttpd-mod-tls
+LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +uclient-fetch +ca-bundle +uhttpd +uhttpd-mod-tls +curl
+
+define Package/$(PKG_NAME)/preinst
+#!/bin/sh
+[ -n "$${IPKG_INSTROOT}" ] && exit 0
+case "$$1" in
+	upgrade|install)
+		if [ -s /etc/config/sheepfold ]; then
+			mkdir -p /etc/sheepfold/migrations
+			cp /etc/config/sheepfold /etc/sheepfold/migrations/sheepfold.config.pre-upgrade
+			chmod 600 /etc/sheepfold/migrations/sheepfold.config.pre-upgrade 2>/dev/null || true
+		fi
+		;;
+esac
+exit 0
+endef
 
 define Package/$(PKG_NAME)/postinst
 #!/bin/sh
@@ -18,6 +33,40 @@ if [ -f "$$hardener" ]; then
 	/bin/sh "$$hardener" "$${IPKG_INSTROOT}" || exit 1
 fi
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
+cleanup_opkg_conffile_artifacts() {
+	for leftover in /etc/config/sheepfold-opkg /etc/config/sheepfold-opkg.old; do
+		[ -e "$$leftover" ] || continue
+		rm -f "$$leftover"
+	done
+}
+cleanup_stale_update_artifacts() {
+	rm -f /tmp/sheepfold/update/*.ipk /tmp/sheepfold/update/sheepfold-config-before-update 2>/dev/null || true
+}
+recover_sheepfold_config() {
+	mkdir -p /etc/config /etc/sheepfold/migrations
+	if [ -s /etc/config/sheepfold ]; then
+		return 0
+	fi
+	for candidate in \
+		/etc/sheepfold/migrations/sheepfold.config.pre-upgrade \
+		/etc/config/sheepfold-opkg \
+		/etc/config/sheepfold-opkg.old \
+		/tmp/sheepfold/update/sheepfold-config-before-update; do
+		if [ -s "$$candidate" ]; then
+			cp "$$candidate" /etc/config/sheepfold
+			chmod 600 /etc/config/sheepfold 2>/dev/null || true
+			return 0
+		fi
+	done
+	if [ -r /usr/share/sheepfold/sheepfold.uci.defaults ]; then
+		cp /usr/share/sheepfold/sheepfold.uci.defaults /etc/config/sheepfold
+	else
+		: > /etc/config/sheepfold
+	fi
+	chmod 600 /etc/config/sheepfold 2>/dev/null || true
+}
+recover_sheepfold_config
+cleanup_stale_update_artifacts
 repair_sheepfold_uci_sections() {
 	mkdir -p /etc/config
 	[ -e /etc/config/sheepfold ] || : > /etc/config/sheepfold
@@ -62,7 +111,7 @@ ensure_global_option detector_nmap_host_timeout_seconds '20'
 ensure_global_option update_check_install_mode 'weekly'
 ensure_global_option active_messenger 'none'
 ensure_global_option ai_enabled '0'
-ensure_global_option ai_provider 'deepseek'
+ensure_global_option ai_provider 'none'
 ensure_global_option ai_rate_limit_requests '20'
 ensure_global_option ai_rate_limit_window_seconds '3600'
 ensure_global_option ai_individual_logs '0'
@@ -123,22 +172,47 @@ ensure_pairing_option() {
 }
 ensure_pairing_option max_attempts '10'
 ensure_pairing_option attempt_window_seconds '600'
-uci -q get sheepfold.no_restrictions >/dev/null || uci -q set sheepfold.no_restrictions='group'
-uci -q set sheepfold.no_restrictions.name='Без ограничений'
-uci -q set sheepfold.no_restrictions.protected='1'
-uci -q set sheepfold.no_restrictions.personal='0'
-uci -q set sheepfold.no_restrictions.auto_assignable='1'
-uci -q set sheepfold.no_restrictions.allowlist_only='0'
-uci -q set sheepfold.no_restrictions.activity_log_enabled='0'
-uci -q set sheepfold.no_restrictions.description='Trusted home infrastructure devices that should not be limited unless they are blocklisted'
-uci -q get sheepfold.child_1 >/dev/null || uci -q set sheepfold.child_1='group'
-uci -q set sheepfold.child_1.name='Первый ребёнок'
-uci -q set sheepfold.child_1.protected='0'
-uci -q set sheepfold.child_1.personal='1'
-uci -q set sheepfold.child_1.auto_assignable='0'
-uci -q set sheepfold.child_1.allowlist_only='0'
-uci -q set sheepfold.child_1.activity_log_enabled='0'
-uci -q set sheepfold.child_1.description='Default first child group'
+ensure_named_section() {
+	name="$$1"
+	type="$$2"
+	uci -q get "sheepfold.$$name" >/dev/null 2>&1 || uci -q set "sheepfold.$$name=$$type"
+}
+ensure_named_section allowlist list
+ensure_named_section blocklist list
+ensure_named_section domain_allowlist list
+ensure_named_section adguard integration
+ensure_named_section podkop integration
+ensure_named_section messenger_global messenger
+ensure_named_section export_global export
+ensure_named_section wifi_control_global wifi_control
+ensure_named_section usb usb
+ensure_named_section cloud yandex_disk
+ensure_yandex_option() {
+	option="$$1"
+	value="$$2"
+	[ -n "$$(uci -q get sheepfold.cloud.$$option 2>/dev/null)" ] || uci -q set sheepfold.cloud.$$option="$$value"
+}
+ensure_yandex_option login ''
+ensure_yandex_option password ''
+ensure_yandex_option root_folder '/sheepfold'
+ensure_yandex_option quota_mb '500'
+ensure_yandex_option authorized '0'
+uci -q get sheepfold.owner >/dev/null || uci -q set sheepfold.owner=administrator
+[ -n "$$(uci -q get sheepfold.owner.login 2>/dev/null)" ] || uci -q set sheepfold.owner.login='SuperParent'
+[ -n "$$(uci -q get sheepfold.owner.role 2>/dev/null)" ] || uci -q set sheepfold.owner.role='owner'
+[ -n "$$(uci -q get sheepfold.owner.password_setup_required 2>/dev/null)" ] || uci -q set sheepfold.owner.password_setup_required='1'
+[ -x /usr/libexec/sheepfold/sheepfold-default-groups ] && /usr/libexec/sheepfold/sheepfold-default-groups apply
+if [ "$$(uci -q get sheepfold.global.luci_language_synced 2>/dev/null)" != "1" ]; then
+	lang="$$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
+	case "$$lang" in
+		en|ru) ;;
+		*) lang=ru ;;
+	esac
+	uci -q get luci.main >/dev/null 2>&1 || uci -q set luci.main=core
+	uci -q set luci.main.lang="$$lang"
+	uci -q set sheepfold.global.luci_language_synced='1'
+	uci -q commit luci 2>/dev/null || true
+fi
 log_cache_path="$$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf '%s' /tmp/sheepfold/events.log)"
 case "$$log_cache_path" in
 	/tmp/sheepfold/*) ;;
@@ -176,27 +250,13 @@ if [ "$$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null)" != 
 fi
 uci -q set sheepfold.global.ui_asset_version='$(SHEEPFOLD_UI_ASSET_VERSION)'
 uci -q commit sheepfold
+find /usr/libexec/sheepfold -type f -exec chmod 0755 {} + 2>/dev/null || true
 for helper in \
-	/usr/libexec/sheepfold/sheepfold-site-lists \
-	/usr/libexec/sheepfold/sheepfold-api-client-status \
-	/usr/libexec/sheepfold/sheepfold-api-pair \
-	/usr/libexec/sheepfold/sheepfold-ai-gate \
-	/usr/libexec/sheepfold/sheepfold-ai-handler \
-	/usr/libexec/sheepfold/sheepfold-activity-log \
-	/usr/libexec/sheepfold/sheepfold-maintenance-window \
-	/usr/libexec/sheepfold/sheepfold-device-detector \
-	/usr/libexec/sheepfold/sheepfold-device-classifier \
-	/usr/libexec/sheepfold/sheepfold-device-mdns \
-	/usr/libexec/sheepfold/sheepfold-device-presence \
-	/usr/libexec/sheepfold/sheepfold-device-reclassify \
-	/usr/libexec/sheepfold/sheepfold-led-control \
-	/usr/libexec/sheepfold/sheepfold-usb-storage \
-	/usr/libexec/sheepfold/sheepfold-key-derive \
-	/usr/libexec/sheepfold/sheepfold-openssl-ensure \
-	/usr/libexec/sheepfold/sheepfold-runtime-hardening \
 	/etc/hotplug.d/dhcp/90-sheepfold-device-signals \
-	/www/.well-known/sheepfold.json.sh; do
-	chmod 0755 "$$helper" 2>/dev/null || true
+	/www/.well-known/sheepfold.json.sh \
+	/www/cgi-bin/sheepfold-api \
+	/www/cgi-bin/sheepfold-blocked; do
+	[ -e "$$helper" ] && chmod 0755 "$$helper" 2>/dev/null || true
 done
 if [ "$$(uci -q get sheepfold.global.ai_individual_logs 2>/dev/null)" = "1" ]; then
 	/usr/libexec/sheepfold/sheepfold-openssl-ensure >/dev/null 2>&1 || true
@@ -218,9 +278,9 @@ install_sheepfold_cron() {
 	cat >> "$$tmp" <<'EOF'
 # BEGIN SHEEPFOLD MANAGED JOBS
 5 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
-10 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-usb-storage archive-push >/dev/null 2>&1
+10 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-log-storage archive-push >/dev/null 2>&1
 55 4 * * * /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
-0 5 * * * /usr/libexec/sheepfold/sheepfold-usb-storage archive-push >/dev/null 2>&1
+0 5 * * * /usr/libexec/sheepfold/sheepfold-log-storage archive-push >/dev/null 2>&1
 # END SHEEPFOLD MANAGED JOBS
 EOF
 	chmod 600 "$$tmp"
@@ -234,6 +294,8 @@ rm -f /tmp/luci-modulecache/* 2>/dev/null || true
 [ -x /etc/init.d/rpcd ] && /etc/init.d/rpcd reload || true
 [ -x /etc/init.d/sheepfold ] && /etc/init.d/sheepfold enable || true
 [ -x /etc/init.d/sheepfold ] && /etc/init.d/sheepfold restart || true
+cleanup_opkg_conffile_artifacts
+cleanup_stale_update_artifacts
 exit 0
 endef
 
@@ -254,10 +316,6 @@ if [ -f "$$cron_file" ]; then
 fi
 [ -x /etc/init.d/cron ] && /etc/init.d/cron restart >/dev/null 2>&1 || true
 exit 0
-endef
-
-define Package/$(PKG_NAME)/conffiles
-/etc/config/sheepfold
 endef
 
 include $(TOPDIR)/feeds/luci/luci.mk

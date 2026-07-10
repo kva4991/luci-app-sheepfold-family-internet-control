@@ -2,7 +2,7 @@
   "luci-app-sheepfold-family-internet-control": {
     "description": "Grant access to Sheepfold Family Internet Control",
     "read": {
-      "uci": [ "sheepfold", "dhcp", "wireless", "system" ],
+      "uci": [ "sheepfold", "dhcp", "wireless", "system", "luci" ],
       "file": {
         "/tmp/dhcp.leases": [ "read" ],
         "/proc/net/arp": [ "read" ],
@@ -10,7 +10,7 @@
       }
     },
     "write": {
-      "uci": [ "sheepfold", "dhcp", "wireless", "system" ],
+      "uci": [ "sheepfold", "dhcp", "wireless", "system", "luci" ],
       "file": {
         "/tmp/sheepfold/events.log": [ "write" ],
         "/www/.well-known/sheepfold.json": [ "write" ],
@@ -19,6 +19,8 @@
         "/usr/libexec/sheepfold/sheepfold-telegram-bot": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-updater": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-usb-storage": [ "exec" ],
+        "/usr/libexec/sheepfold/sheepfold-yandex-disk": [ "exec" ],
+        "/usr/libexec/sheepfold/sheepfold-log-storage": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-router-control": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-openssl-ensure": [ "exec" ]
       }

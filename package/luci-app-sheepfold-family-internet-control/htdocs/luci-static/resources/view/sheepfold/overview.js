@@ -37,6 +37,16 @@ var admins = [
 ];
 
 var logEntries = [];
+var logViewFilters = {
+        from: '',
+        to: '',
+        ip: '',
+        mac: '',
+        deviceName: '',
+        phrase: ''
+};
+var wifiNetworkEditors = [];
+var wifiIsSaving = false;
 
 var rootPasswordIsSet = true;
 // Настройки на этой странице сначала живут в черновике, а не сразу пишутся в UCI.
@@ -45,677 +55,52 @@ var rootPasswordIsSet = true;
 var settingsDraft = {};
 var settingsSpecialSavers = [];
 var settingsIsSaving = false;
-
-var translations = {
-        'All devices': 'Все устройства',
-        'User lists': 'Списки пользователей',
-        'User management': 'Управление пользователями',
-        'Allowlist': 'Белый список',
-        'Blocklist': 'Чёрный список',
-        'Schedules': 'Расписания',
-        'Groups': 'Группы',
-        'Group devices': 'Устройства группы',
-        'Add group': 'Добавить группу',
-        'Delete group': 'Удалить группу',
-        'Configure group': 'Настроить группу',
-        'Group settings': 'Настройки группы',
-        'Group name': 'Название группы',
-        'Group color': 'Цвет группы',
-        'Automatic color': 'Автоматический цвет',
-        'Group schedules': 'Расписания группы',
-        'Assigned devices': 'Привязанные устройства',
-        'Allow only selected whitelist sources for this group': 'Разрешить только выбранные источники белых списков для этой группы',
-        'Devices in this group will be limited to domains from the selected whitelist sources and manually allowed emergency-useful sites.': 'Устройства этой группы будут ограничены доменами из выбранных источников белых списков и вручную разрешёнными аварийно-полезными сайтами.',
-        'Enable activity journal for all devices in this group': 'Включить журнал активности для всех устройств этой группы',
-        'Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices.': 'Журнал активности содержит чувствительные данные. Он не собирается для админских устройств, белого списка и чёрного списка.',
-        'Schedule conflict': 'Конфликт расписаний',
-        'Selected schedules may conflict with each other. Saving is allowed, but review the rules carefully.': 'Выбранные расписания могут конфликтовать между собой. Сохранение разрешено, но внимательно проверьте правила.',
-        'Confirmation will be available in': 'Подтверждение будет доступно через',
-        'I understand the risk, continue': 'Я понимаю риск, продолжить',
-        'Group saved.': 'Группа сохранена.',
-        'Group created.': 'Группа создана.',
-        'Could not create group.': 'Не удалось создать группу.',
-        'Could not save group.': 'Не удалось сохранить группу.',
-        'Group name is required.': 'Название группы обязательно.',
-        'This group already exists.': 'Такая группа уже существует.',
-        'more devices hidden': 'ещё устройств скрыто',
-        'Group deleted.': 'Группа удалена.',
-        'Could not delete group.': 'Не удалось удалить группу.',
-        'This group cannot be deleted while devices are assigned to it.': 'Эту группу нельзя удалить, пока к ней привязаны устройства.',
-        'Protected group cannot be deleted.': 'Защищённую группу нельзя удалить.',
-        'No groups yet. Assign devices to groups in device settings.': 'Групп пока нет. Назначьте устройства в группы в настройках устройства.',
-        'Groups collect devices so schedules and access rules can be applied to several devices at once.': 'Группы объединяют устройства, чтобы расписания и правила доступа можно было применять сразу к нескольким устройствам.',
-        'Group editor is not implemented in this visual test build.': 'Редактор групп пока не реализован в этой тестовой сборке.',
-        'Emergency-useful sites': 'Аварийно-полезные сайты',
-        'Wi-Fi': 'Wi-Fi',
-        'Integrations': 'Интеграции',
-        'Messenger': 'Мессенджер',
-        'Administrators': 'Администраторы',
-        'Logs': 'Журнал',
-        'Settings': 'Настройки',
-        'Information': 'Информация',
-        'Router information': 'Информация о роутере',
-        'Refresh information': 'Обновить информацию',
-        'Loading router information...': 'Загружаю информацию о роутере...',
-        'Could not load router information.': 'Не удалось загрузить информацию о роутере.',
-        'Current router time': 'Текущее время роутера',
-        'Current Sheepfold version': 'Текущая версия Sheepfold',
-        'Internet connection status': 'Статус интернет-соединения',
-        'Ping to ya.ru': 'Пинг до ya.ru',
-        'Router firmware version': 'Версия прошивки роутера',
-        'OpenWRT release': 'Релиз OpenWRT',
-        'Kernel version': 'Версия ядра',
-        'Router model': 'Модель роутера',
-        'Router uptime': 'Время работы роутера',
-        'Load average': 'Средняя нагрузка',
-        'Memory': 'Память',
-        'LAN ports': 'LAN-порты',
-        'Podkop': 'Podkop',
-        'AdGuard Home': 'AdGuard Home',
-        'Wi-Fi modules': 'Wi-Fi модули',
-        'Module': 'Модуль',
-        'Band': 'Диапазон',
-        'Channel': 'Канал',
-        'Driver/type': 'Драйвер/тип',
-        'Path': 'Путь',
-        'Country': 'Страна',
-        'Mode': 'Режим',
-        'Enabled': 'Включен',
-        'Disabled': 'Выключен',
-        'Installed': 'Установлен',
-        'Not installed': 'Не установлен',
-        'Online': 'Онлайн',
-        'Offline': 'Офлайн',
-        'Limited': 'Ограничено',
-        'Unknown': 'Неизвестно',
-        'AI context for APK': 'Контекст для ИИ через APK',
-        'The Android app can request this diagnostics snapshot from /cgi-bin/sheepfold-api/router-info and show it to the parent before sending it to an AI provider. It does not include Wi-Fi passwords, bot tokens, child names, MAC addresses, or device lists.': 'Android-приложение может запросить этот диагностический снимок через /cgi-bin/sheepfold-api/router-info и показать его родителю перед отправкой ИИ-провайдеру. Здесь нет паролей Wi-Fi, токенов ботов, имён детей, MAC-адресов и списков устройств.',
-        'AI assistant model': 'Модель ИИ-помощника',
-        'AI provider': 'Провайдер ИИ',
-        'Gemini Free': 'Gemini Free',
-        'The Android app sends AI requests to the router; the router calls the selected provider.': 'Android-приложение отправляет ИИ-запросы на роутер, а роутер вызывает выбранного провайдера.',
-        'DeepSeek requests are sent from the router. The Android app does not store the API key.': 'Запросы DeepSeek отправляются с роутера. Android-приложение не хранит API-ключ.',
-        'DeepSeek API key': 'API-ключ DeepSeek',
-        'Create the key in DeepSeek Platform and save it here. It is stored only on the router.': 'Создайте ключ в DeepSeek Platform и сохраните его здесь. Он хранится только на роутере.',
-        'Gemini Free uses Google AI Studio free-tier limits. The API key is stored only on the router.': 'Gemini Free использует бесплатные лимиты Google AI Studio. API-ключ хранится только на роутере.',
-        'Gemini API key': 'API-ключ Gemini',
-        'Create the key in Google AI Studio and save it here. Free limits depend on Google account and region.': 'Создайте ключ в Google AI Studio и сохраните его здесь. Бесплатные лимиты зависят от аккаунта Google и региона.',
-        'AI assistant': 'ИИ помощник',
-        'Router memory management': 'Управление памятью роутера',
-        'USB flash drive': 'USB флешка',
-        'USB storage status': 'Статус USB-хранилища',
-        'USB storage disabled': 'USB-хранилище выключено',
-        'USB storage enabled': 'USB-хранилище включено',
-        'Selected USB device': 'Выбранная USB флешка',
-        'No USB devices found': 'USB флешки не найдены',
-        'Use USB storage for Sheepfold': 'Использовать USB-хранилище для Sheepfold',
-        'USB storage role': 'Роль USB-хранилища',
-        'Logs only': 'Только журналы',
-        'Logs and swap file': 'Журналы и swap-файл',
-        'Logs and future extroot': 'Журналы и будущий extroot',
-        'Encrypt archives on USB': 'Шифровать архивы на USB',
-        'Refresh USB devices': 'Обновить USB-устройства',
-        'Mount selected USB': 'Подключить выбранную USB флешку',
-        'Unmount USB': 'Отключить USB флешку',
-        'Move RAM archives to USB': 'Перенести архивы из RAM на USB',
-        'USB action completed.': 'USB-действие выполнено.',
-        'USB action failed.': 'USB-действие не выполнено.',
-        'Choose only a removable USB drive. Sheepfold will refuse system disks, overlay, root, and swap devices.': 'Выбирайте только съёмную USB флешку. Sheepfold отклонит системные диски, overlay, root и swap-устройства.',
-        'Mounted': 'Подключено',
-        'Not mounted': 'Не подключено',
-        'Free space': 'Свободно',
-        'Archives': 'Архивы',
-        'Key ready': 'Ключ готов',
-        'Donation': 'Donation',
-        'Support the project': 'Поддержать проект',
-        'If Sheepfold becomes useful and you want to support development, donation links will be added here before the first public release.': 'Если Sheepfold окажется полезным и вы захотите поддержать разработку, ссылки для донатов будут добавлены здесь до первого публичного релиза.',
-        'Possible options:': 'Возможные варианты:',
-        'GitHub Sponsors for international audience;': 'GitHub Sponsors для международной аудитории;',
-        'Boosty or YooMoney for Russian-speaking users.': 'Boosty или ЮMoney для русскоязычных пользователей.',
-        'Misc': 'Разное',
-        'Site list sources': 'Источники списков сайтов',
-        'Whitelist sources': 'Источники белых списков',
-        'One source per line: name | URL. Use updateable external sources instead of manually maintaining a huge list.': 'Один источник на строку: название | URL. Используйте обновляемые внешние источники, а не ручное ведение огромного списка.',
-        'Site blacklist': 'Чёрный список сайтов',
-        'Site blacklist sources': 'Источники чёрного списка сайтов',
-        'Disabled': 'Выключено',
-        'Enabled for everyone': 'Включить для всех',
-        'Enabled for everyone except allowlist and administrators': 'Включить для всех кроме белого списка и админов',
-        'Site blacklist mode saved.': 'Режим чёрного списка сайтов сохранён.',
-        'Could not save site blacklist mode.': 'Не удалось сохранить режим чёрного списка сайтов.',
-        'Site list update': 'Обновление списков сайтов',
-        'Every day': 'Каждый день',
-        'Every 3 days': 'Раз в 3 дня',
-        'Once a week': 'Раз в неделю',
-        'Site list update interval saved.': 'Период обновления списков сайтов сохранён.',
-        'Could not save site list update interval.': 'Не удалось сохранить период обновления списков сайтов.',
-        'Whitelist sources saved.': 'Источники белых списков сохранены.',
-        'Could not save whitelist sources.': 'Не удалось сохранить источники белых списков.',
-        'Site blacklist sources saved.': 'Источники чёрного списка сайтов сохранены.',
-        'Could not save site blacklist sources.': 'Не удалось сохранить источники чёрного списка сайтов.',
-        'Journal': 'Журнал',
-        'Scheduled': 'По расписанию',
-        'Restricted': 'Ограничено',
-        'New': 'Новое',
-        'This action is a visual prototype only.': 'Это действие работает только как визуальная заглушка.',
-        'Configure': 'Настроить',
-        'Device settings': 'Настройки устройства',
-        'Device settings saved.': 'Настройки устройства сохранены.',
-        'Could not save device settings.': 'Не удалось сохранить настройки устройства.',
-        'Enable activity journal for this device': 'Включить журнал активности для этого устройства',
-        'This device is already in the blocklist. Remove it from the blocklist before adding it to the allowlist.': 'Это устройство уже в чёрном списке. Сначала уберите его из чёрного списка, потом добавляйте в белый.',
-        'This device is already in the allowlist. Remove it from the allowlist before adding it to the blocklist.': 'Это устройство уже в белом списке. Сначала уберите его из белого списка, потом добавляйте в чёрный.',
-        'Permanent DHCP lease': 'Постоянная аренда DHCP',
-        'Permanent IP lease': 'Постоянная аренда IP',
-        'Create permanent DHCP lease': 'Создать постоянную аренду DHCP',
-        'Existing permanent DHCP lease will be updated, not removed.': 'Существующая постоянная аренда DHCP будет обновлена, а не удалена.',
-        'Static lease requires an IP address.': 'Для постоянной аренды нужен IP-адрес.',
-        'Device name': 'Имя устройства',
-        'Hostname': 'Имя в сети',
-        'Detection source': 'Источник обнаружения',
-        'Detection confidence': 'Уверенность автоопределения',
-        'Unknown device type': 'Неизвестный тип',
-        'Auto-detected': 'Автоопределено',
-        'Auto-assigned to No restrictions': 'Автоматически добавлено в "Без ограничений"',
-        'Parents': 'Родители',
-        'Children': 'Дети',
-        'Child number 1': 'Первый ребёнок',
-        'TV / media': 'ТВ / медиа',
-        'Guests': 'Гости',
-        'No restrictions': 'Без ограничений',
-        'Custom': 'Своя',
-        'Use custom group': 'Использовать свою группу',
-        'Access mode': 'Режим доступа',
-        'ID': 'ID',
-        'Bind devices': 'Привязать устройства',
-        'Assign devices to administrator': 'Назначение устройств админу',
-        'Select administrator devices': 'Выберите устройства администратора',
-        'Selected administrator devices can manage Sheepfold.': 'Выбранные устройства смогут управлять программой.',
-        'Blocklisted devices are not available for binding.': 'Устройства из чёрного списка недоступны для привязки.',
-        'When a device is assigned to an administrator, Sheepfold removes it from ordinary groups and schedules, disables activity logging for it, and adds it to the allowlist.': 'При назначении устройства администратору Sheepfold убирает его из обычных групп и расписаний, отключает для него журнал активности и добавляет устройство в белый список.',
-        'A blocklisted device cannot become an administrator device. Remove it from the blocklist first.': 'Устройство из чёрного списка не может стать админским. Сначала уберите его из чёрного списка.',
-        'Selected devices are shown first.': 'Выбранные устройства показаны сверху.',
-        'No devices selected': 'Устройства не выбраны',
-        'No devices': 'Нет устройств',
-        'Device bindings saved.': 'Привязка устройств сохранена.',
-        'Admin device': 'Админское устройство',
-        'Pairing': 'Сопряжение',
-        'Pairing settings': 'Настройки сопряжения',
-        'Scan this QR code with the Android app to connect it to this router.': 'Отсканируйте QR-код Android-приложением, чтобы подключить его к этому роутеру.',
-        'Manual setup': 'Ручная настройка',
-        'Router address': 'Адрес роутера',
-        'Server IP address': 'IP адрес сервера',
-        'Port': 'Порт',
-        'Used by Android app and pairing QR codes.': 'Используется Android-приложением и QR-кодами подключения.',
-        'Port saved. Sheepfold service restart was requested. Android can discover the new port through the router discovery file.': 'Порт сохранён. Запрошен перезапуск сервиса Sheepfold. Android сможет узнать новый порт через файл обнаружения на роутере.',
-        'Could not save port.': 'Не удалось сохранить порт.',
-        'Enter a port from 1 to 65535.': 'Введите порт от 1 до 65535.',
-        'Administrator settings': 'Настройки администратора',
-        'Admin name': 'Имя',
-        'Temporary password': 'Временный пароль',
-        'Show temporary password': 'Показать временный пароль',
-        'Hide temporary password': 'Скрыть временный пароль',
-        'Show secret': 'Показать секрет',
-        'Hide secret': 'Скрыть секрет',
-        'Scan this QR code in the Android app for quick setup.': 'Отсканируйте этот QR-код в Android-приложении для быстрой настройки.',
-        'Sheepfold API URL': 'URL API Sheepfold',
-        'Administrator login': 'Логин администратора',
-        'Pairing code': 'Код сопряжения',
-        'QR payload': 'Данные QR',
-        'Token lifetime': 'Срок действия токена',
-        '10 minutes': '10 минут',
-        'Wi-Fi MAC check': 'Проверка MAC Wi-Fi',
-        'Use the real device MAC for this home Wi-Fi network.': 'Для этой домашней Wi-Fi сети используйте настоящий MAC устройства.',
-        'Android must require the real device MAC for this home Wi-Fi network before continuing setup.': 'Android должен требовать настоящий MAC устройства для этой домашней Wi-Fi сети до продолжения настройки.',
-        'Close': 'Закрыть',
-        '+30 min': '+30 мин',
-        'Temporary access would require confirmation.': 'Временный доступ потребует подтверждения.',
-        'Device': 'Устройство',
-        'Type': 'Тип',
-        'Device type': 'Тип устройства',
-        'Phone': 'Телефон',
-        'Tablet': 'Планшет',
-        'Computer': 'Компьютер',
-        'TV': 'Телевизор',
-        'Game console': 'Игровая приставка',
-        'Printer': 'Принтер',
-        'Camera': 'Камера',
-        'Server': 'Сервер',
-        'Smart speaker': 'Умная колонка',
-        'Robot vacuum': 'Робот-пылесос',
-        'Smart home': 'Умный дом',
-        'Engineering device': 'Инженерное устройство',
-        'Smart device': 'Умное устройство',
-        'Network device': 'Сетевое устройство',
-        'IP address': 'IP-адрес',
-        'MAC address': 'MAC-адрес',
-        'Group': 'Группа',
-        'Status': 'Статус',
-        'Actions': 'Действия',
-        'Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.': 'Обнаруживаются автоматически из аренд DHCP, ARP/neighbor-данных и постоянных аренд DHCP.',
-        'No devices found in DHCP leases, ARP, or static DHCP leases yet.': 'В арендах DHCP, ARP и постоянных арендах DHCP пока нет устройств.',
-        'Unknown device': 'Неизвестное устройство',
-        'Not configured': 'Не настроено',
-        'Active DHCP lease': 'Активная аренда DHCP',
-        'ARP/neighbor entry': 'Обнаружено в ARP/neighbor',
-        'Static DHCP lease': 'Постоянная аренда DHCP',
-        'Static DHCP lease, currently online': 'Постоянная аренда DHCP, сейчас в сети',
-        'Configured in Sheepfold': 'Настроено в Sheepfold',
-        'Search by name, IP, or MAC': 'Поиск по имени, IP или MAC',
-        'Search by name, IP, MAC, or ID': 'Поиск по имени, IP, MAC или ID',
-        'Manual MAC-based add form is not implemented in this visual test build.': 'Ручное добавление по MAC пока не реализовано в этой визуальной сборке.',
-        'Add device manually': 'Добавить устройство вручную',
-        'Device name': 'Название устройства',
-        'Device added.': 'Устройство добавлено.',
-        'These devices are never blocked by global blocking or schedules.': 'Эти устройства не блокируются глобальной блокировкой и расписаниями.',
-        'Add device': 'Добавить устройство',
-        'Add device to allowlist': 'Добавить устройство в белый список',
-        'Add device to blocklist': 'Добавить устройство в чёрный список',
-        'Remove from allowlist': 'Удалить из белого списка',
-        'Remove from blocklist': 'Удалить из чёрного списка',
-        'Remove device from allowlist?': 'Удалить устройство из белого списка?',
-        'Remove device from blocklist?': 'Удалить устройство из чёрного списка?',
-        'Available devices': 'Доступные устройства',
-        'Select': 'Выбрать',
-        'No devices available to add.': 'Нет устройств, доступных для добавления.',
-        'MAC address is required.': 'MAC-адрес обязателен.',
-        'Enter a valid MAC address.': 'Введите корректный MAC-адрес.',
-        'Device added to allowlist.': 'Устройство добавлено в белый список.',
-        'Device added to blocklist.': 'Устройство добавлено в чёрный список.',
-        'Device removed from allowlist.': 'Устройство удалено из белого списка.',
-        'Device removed from blocklist.': 'Устройство удалено из чёрного списка.',
-        'Could not remove device from list.': 'Не удалось удалить устройство из списка.',
-        'Could not add device.': 'Не удалось добавить устройство.',
-        'Action failed.': 'Не удалось выполнить действие.',
-        'Administrator device cannot be added to blocklist': 'Админское устройство нельзя добавить в чёрный список.',
-        'Invalid MAC address': 'Неверный MAC-адрес.',
-        'The UI must prevent adding the same MAC to allowlist and blocklist.': 'Интерфейс должен запрещать добавление одного MAC одновременно в белый и чёрный список.',
-        'Quick add to allowlist': 'Быстрое добавление в белый список',
-        'Quick allowlist add': 'Быстрое добавление в белый список',
-        'Scan Wi-Fi QR, then add newly connected devices manually.': 'Отсканируйте QR Wi-Fi, затем вручную добавьте только что подключившиеся устройства.',
-        'Wi-Fi access QR': 'QR подключения к Wi-Fi',
-        'Allowlist request QR': 'QR запроса в белый список',
-        'After connecting to Wi-Fi, scan this QR to request allowlist access from this phone.': 'После подключения к Wi-Fi отсканируйте этот QR с телефона, чтобы запросить добавление в белый список.',
-        'One-time allowlist link': 'Одноразовая ссылка добавления',
-        'Newly connected devices': 'Только что подключившиеся устройства',
-        'Adding allowed': 'Разрешено добавление',
-        'Adding window expired': 'Время добавления истекло',
-        'Click to restart the 30 second window.': 'Нажмите, чтобы снова запустить окно на 30 секунд.',
-        'Connected after quick add started.': 'Подключились после запуска быстрого добавления.',
-        'Seen': 'Обнаружено',
-        'seconds': 'секунд',
-        'seconds ago': 'секунд назад',
-        'minute ago': 'минуту назад',
-        'minutes ago': 'минут назад',
-        'Add': 'Добавить',
-        'Candidate added to allowlist. Save changes to apply.': 'Кандидат добавлен в белый список. Сохраните изменения, чтобы применить.',
-        'Quick mode only collects candidates. A parent still presses Add for every device.': 'Быстрый режим только собирает кандидатов. Родитель всё равно нажимает "Добавить" для каждого устройства.',
-        'Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API.': 'Устройства из чёрного списка не могут открывать интернет, LuCI, SSH и Sheepfold API.',
-        'Blocklist changes require confirmation.': 'Изменения чёрного списка требуют подтверждения.',
-        'Emergency-useful sites for blocklisted devices are enabled and still do not open router access.': 'Включен доступ к "аварийно-полезным сайтам" для чёрного списка (но доступ к роутеру всё-равно закрыт).',
-        'Emergency-useful sites for blocklisted devices are disabled and still do not open router access.': 'Выключен доступ к "аварийно-полезным сайтам" для чёрного списка (это не открывает доступ к роутеру).',
-        'Blocklist emergency-useful sites access': 'Доступ пользователей из чёрного списка к "аварийно-полезным сайтам"',
-        'Allows blocklisted devices to access only sites added to the emergency-useful sites list. Router access remains blocked.': 'Разрешает устройствам из чёрного списка доступ только к сайтам добавленым в список аварийно-полезные сайты. Доступ к роутеру остаётся закрытым.',
-        'Blocklist emergency-useful sites access saved.': 'Доступ чёрного списка к аварийно-полезным сайтам сохранён.',
-        'Could not save blocklist emergency-useful sites access.': 'Не удалось сохранить доступ чёрного списка к аварийно-полезным сайтам.',
-        'Yes': 'Да',
-        'No': 'Нет',
-        'Allow and block rules for devices and groups.': 'Правила разрешения и блокировки для устройств и групп.',
-        'Add rule': 'Добавить правило',
-        'Schedule editor is not implemented in this visual test build.': 'Редактор расписаний пока не реализован в этой визуальной сборке.',
-        'School days': 'Учебные дни',
-        'Children group': 'Группа детей',
-        'Allow 07:00-20:30, block after bedtime': 'Разрешить 07:00-20:30, блокировать после отбоя',
-        'Temporary access': 'Временный доступ',
-        'End of day': 'До конца дня',
-        'Bedtime': 'До отбоя',
-        'Temporary access requires confirmation.': 'Временный доступ требует подтверждения.',
-        'Default bedtime': 'Время отбоя по умолчанию',
-        'Used by the "until bedtime" quick action.': 'Используется кнопкой быстрого доступа "до отбоя".',
-        'Access to emergency-useful sites': 'Доступ к аварийно-полезным сайтам',
-        'Editable list for necessary services during restricted access.': 'Редактируемый список необходимых сервисов при ограниченном доступе.',
-        'Emergency-useful sites are a small editable list of necessary services that may stay available during restricted access.': 'Аварийно-полезные сайты — это редактируемый белый список необходимых сервисов,  которые могут оставаться доступными при ограничении интернета на роутере (при добавлении пользователя в чёрный список или выключении у него доступа в интернет).',
-        'Add site': 'Добавить сайт',
-        'Edit site': 'Редактировать сайт',
-        'Delete site': 'Удалить сайт',
-        'Site URL is required.': 'URL адрес сайта обязателен.',
-        'Site saved.': 'Сайт сохранён.',
-        'Site deleted.': 'Сайт удалён.',
-        'Delete this site?': 'Удалить этот сайт?',
-        'This site will be removed from the emergency-useful list.': 'Этот сайт будет удалён из списка аварийно-полезных сайтов.',
-        'Delete': 'Удалить',
-        'URL address': 'URL адрес',
-        'Name': 'Название',
-        'Description': 'Описание',
-        'Cancel': 'Отмена',
-        'Do not add broad yandex.ru by default: it can open video, music, games, feeds, and other non-emergency services.': 'Не добавляйте yandex.ru целиком в аварийно-полезные сайты. Это не только поиск: через общий домен и связанные сервисы могут открываться видео, музыка, игры, новости, ленты рекомендаций и другие развлечения. Для аварийного доступа лучше добавлять только узкие и понятные адреса, например ya.ru для поиска или конкретный сервис, который действительно нужен.',
-        'Family-facing shortcut for common OpenWRT wireless settings.': 'Упрощённый семейный доступ к основным настройкам Wi-Fi OpenWRT.',
-        'Connect QR': 'QR подключения',
-        'Scan to connect to this Wi-Fi network.': 'Отсканируйте для подключения к этой Wi-Fi сети.',
-        'Real router wireless settings are loaded from OpenWRT UCI.': 'Реальные настройки Wi-Fi загружаются из OpenWRT UCI.',
-        'No active Wi-Fi networks were found in the router wireless config.': 'В конфигурации wireless роутера не найдены активные Wi-Fi сети.',
-        'Network': 'Сеть',
-        'Open network': 'Открытая сеть',
-        'SSID': 'SSID',
-        'Password': 'Пароль',
-        'Security': 'Защита',
-        'Channel': 'Канал',
-        'Auto': 'Авто',
-        'Use together with': 'Использование совместно с',
-        'None': 'Нет',
-        'Traffic order: Sheepfold -> AdGuard Home -> Podkop.': 'Порядок трафика: Sheepfold -> AdGuard Home -> Podkop.',
-        'Automatic router changes must show integration-specific notes and create/export a backup before applying.': 'Автоматические изменения роутера должны показывать нюансы интеграции и создавать/экспортировать резервную копию перед применением.',
-        'Integration status': 'Статус интеграций',
-        'AdGuard Home status': 'Статус AdGuard Home',
-        'AdGuard Home filters DNS requests after Sheepfold allows a device. It helps block ads, trackers, and unwanted domains.': 'AdGuard Home фильтрует DNS-запросы после того, как Sheepfold разрешил устройство. Он помогает блокировать рекламу, трекеры и нежелательные домены.',
-        'AdGuard Home API check should use the local AdGuard Home API when credentials are configured.': 'Проверка API AdGuard Home должна использовать локальный API AdGuard Home, когда учётные данные настроены.',
-        'Podkop status': 'Статус Podkop',
-        'Podkop routes already allowed traffic according to its own routing rules. Sheepfold must not overwrite Podkop routing.': 'Podkop маршрутизирует уже разрешённый трафик по своим правилам. Sheepfold не должен перезаписывать маршрутизацию Podkop.',
-        'Podkop has no stable Sheepfold-facing API yet; detect package/service state and show conservative notes.': 'У Podkop пока нет стабильного API для Sheepfold; определяйте пакет/службу и показывайте осторожные подсказки.',
-        'Prepare integration settings': 'Подготовить настройки интеграции',
-        'Integration setup must show planned changes, create an export, and require confirmation before applying.': 'Настройка интеграции должна показать план изменений, создать экспорт и потребовать подтверждение перед применением.',
-        'Mode notes': 'Нюансы режима',
-        'Sheepfold works alone.': 'Sheepfold работает самостоятельно.',
-        'Sheepfold blocks/allows devices before AdGuard Home DNS filtering.': 'Sheepfold разрешает/блокирует устройства до DNS-фильтрации AdGuard Home.',
-        'Sheepfold must not overwrite Podkop-managed routing, Dnsmasq, nftables, or sing-box state.': 'Sheepfold не должен перезаписывать маршрутизацию, Dnsmasq, nftables или sing-box, которыми управляет Podkop.',
-        'Recommended chain: Sheepfold -> AdGuard Home -> Podkop.': 'Рекомендуемая цепочка: Sheepfold -> AdGuard Home -> Podkop.',
-        'Active messenger': 'Активный мессенджер',
-        'Messenger integration lets approved parents receive notifications and control Sheepfold with short commands when they are away from home.': 'Интеграция с мессенджером позволяет одобренным родителям получать уведомления и управлять Sheepfold короткими командами вне дома.',
-        'Disabled': 'Выключено',
-        'Messenger settings saved.': 'Настройки мессенджера сохранены.',
-        'Could not save messenger settings.': 'Не удалось сохранить настройки мессенджера.',
-        'Messenger settings were sent to the router, but the router still reports another active messenger. Reinstall the latest Sheepfold package and check UCI config.': 'Настройки мессенджера отправлены на роутер, но роутер всё ещё сообщает другой активный мессенджер. Установите последний пакет Sheepfold и проверьте UCI-конфиг.',
-        'Router reports active messenger:': 'Роутер сообщает активный мессенджер:',
-        'Messenger connection status': 'Статус подключения мессенджера',
-        'Messenger status will be checked after saving settings or sending a test message.': 'Статус будет проверен после сохранения настроек или отправки тестового сообщения.',
-        'Checking messenger connection...': 'Проверяется подключение к мессенджеру...',
-        'Messenger disabled.': 'Мессенджер выключен.',
-        'Connection check failed.': 'Не удалось проверить подключение.',
-        'Telegram connected.': 'Telegram подключён.',
-        'VK connected.': 'VK подключён.',
-        'No response from Telegram server.': 'От сервера Telegram нет ответа.',
-        'No response from VK server.': 'От сервера VK нет ответа.',
-        'Stored on the router.': 'Хранится на роутере.',
-        'VK community access token': 'Ключ доступа сообщества VK',
-        'VK community ID': 'ID сообщества VK',
-        'VK admin user ID': 'VK ID родителя-администратора',
-        'Telegram bot token': 'Токен Telegram-бота',
-        'Telegram admin chat ID': 'Chat ID родителя-администратора',
-        'Create a VK community, enable messages, create an access token for community messages, then enter the community ID and the VK user ID of the parent whose commands are allowed.': 'Создайте сообщество VK, включите сообщения, создайте ключ доступа для сообщений сообщества, затем укажите ID сообщества и VK ID родителя, команды которого разрешены.',
-        'Create a bot through BotFather, paste the bot token, send any message to the bot from the parent account, then enter that chat ID here.': 'Создайте бота через BotFather, вставьте токен, отправьте боту любое сообщение с аккаунта родителя, затем укажите здесь chat ID этого диалога.',
-        'Telegram setup short note': 'Создайте отдельного Telegram-бота для Sheepfold, вставьте токен и привяжите chat ID родителя. Sheepfold использует исходящее подключение к Telegram, поэтому роутеру не нужен публичный адрес.',
-        'Step-by-step Telegram setup': 'Пошаговая настройка Telegram',
-        'Open Telegram and find the official @BotFather account. Check the username carefully: @BotFather.': 'Откройте Telegram и найдите официальный аккаунт @BotFather. Внимательно проверьте имя: @BotFather.',
-        'Press Start or send /start.': 'Нажмите Start или отправьте команду /start.',
-        'Send /newbot and follow BotFather questions.': 'Отправьте /newbot и ответьте на вопросы BotFather.',
-        'Enter a visible bot name, for example Sheepfold Home. This name is shown in Telegram.': 'Введите видимое имя бота, например Sheepfold Home. Это имя будет видно в Telegram.',
-        'Enter a unique bot username. It must end with bot, for example my_sheepfold_home_bot.': 'Введите уникальное имя пользователя бота. Оно должно заканчиваться на bot, например my_sheepfold_home_bot.',
-        'BotFather will send a token that looks like 123456:ABC-DEF... Copy it into the Telegram bot token field. Treat this token like a password.': 'BotFather пришлёт токен похожий на 123456:ABC-DEF... Скопируйте его в поле “Токен Telegram-бота”. Относитесь к токену как к паролю.',
-        'Select Telegram as the active messenger and save settings in Sheepfold.': 'Выберите Telegram активным мессенджером и сохраните настройки Sheepfold.',
-        'Open the created bot from the parent Telegram account and send any message to it. If the chat ID field is empty, Sheepfold will reply with your chat ID.': 'Откройте созданного бота с Telegram-аккаунта родителя и отправьте ему любое сообщение. Если поле chat ID пустое, Sheepfold ответит вашим chat ID.',
-        'Copy that chat ID into the Telegram admin chat ID field and save settings again.': 'Скопируйте этот chat ID в поле “Chat ID родителя-администратора” и снова сохраните настройки.',
-        'Press the test message button. If everything is correct, the bot will send a message from the router.': 'Нажмите кнопку тестового сообщения. Если всё настроено правильно, бот пришлёт сообщение от роутера.',
-        'Keep the bot private. Do not publish its token, do not add it to public groups, and do not give the token to children.': 'Держите бота приватным. Не публикуйте токен, не добавляйте бота в публичные группы и не передавайте токен детям.',
-        'Official Telegram guide': 'Официальная инструкция Telegram',
-        'Available commands': 'Доступные команды',
-        'Telegram commands: /start, /help, /status, /devices, /internet_on, /internet_off, /wifi_on, /wifi_off, /support, /grant_time, /block_device, /unblock_device, /allowlist_add, /blocklist_add, /logs, /clear_logs, /update, /reboot, /emergency_sites, /wifi_status. Russian phrases like "помощь", "статус", "показать все устройства", "отключить интернет", and "саппорт" also work. Dangerous commands require confirmation. Commands are accepted only from the entered chat ID.': 'Команды Telegram: /start, /help, /status, /devices, /internet_on, /internet_off, /wifi_on, /wifi_off, /support, /grant_time, /block_device, /unblock_device, /allowlist_add, /blocklist_add, /logs, /clear_logs, /update, /reboot, /emergency_sites, /wifi_status. Русские фразы вроде «помощь», «статус», «показать все устройства», «отключить интернет» и «саппорт» тоже работают. Опасные команды требуют подтверждения. Команды принимаются только от разрешённого ID пользователя, указанного в настройках роутера.',
-        'Russian phrases like "help", "status", "show all devices", "turn internet off", and "support" also work. Dangerous commands require confirmation. Commands are accepted only from the allowed user ID configured on the router.': 'Русские фразы вроде «помощь», «статус», «показать все устройства», «отключить интернет» и «саппорт» тоже работают. Опасные команды требуют подтверждения. Команды принимаются только от разрешённого ID пользователя, указанного в настройках роутера.',
-        'Send test Telegram message': 'Отправить тестовое сообщение Telegram',
-        'Test Telegram message sent.': 'Тестовое сообщение Telegram отправлено.',
-        'Could not send test Telegram message. Check bot token, chat ID, internet access on the router, and that Telegram is selected as the active messenger.': 'Не удалось отправить тестовое сообщение Telegram. Проверьте токен бота, chat ID, доступ роутера в интернет и что Telegram выбран активным мессенджером.',
-        'Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.': 'Sheepfold принимает команды мессенджера только от указанного здесь администратора. Остальные пользователи игнорируются.',
-        'Administrator accounts': 'Учётные записи администраторов',
-        'Add administrator': 'Добавить администратора',
-        'Adding a new administrator requires confirmation.': 'Добавление администратора требует подтверждения.',
-        'Administrator added.': 'Администратор добавлен.',
-        'Name and login are required.': 'Имя и логин обязательны.',
-        'This login is already used.': 'Этот логин уже используется.',
-        'Admin name': 'Имя',
-        'Login': 'Логин',
-        'Admin devices': 'Админские устройства',
-        'Commands': 'Доступные команды',
-        'show all devices': 'показать все устройства',
-        'block internet': 'выключить интернет',
-        'unblock internet': 'включить интернет',
-        'grant +30 minutes': 'дать +30 минут',
-        'show Wi-Fi status': 'показать состояние Wi-Fi',
-        'enable Wi-Fi': 'включить Wi-Fi',
-        'disable Wi-Fi': 'выключить Wi-Fi',
-        'help': 'помощь',
-        'disable internet': 'отключить интернет',
-        'block device #3': 'заблокировать #3',
-        'unblock device #3': 'разблокировать #3',
-        'add #3 to allowlist': 'добавить #3 в белый список',
-        'add #3 to blocklist': 'добавить #3 в чёрный список',
-        'show log': 'показать журнал',
-        'clear log': 'очистить журнал',
-        'update app': 'обновить приложение',
-        'reboot router': 'перезагрузить роутер',
-        'emergency-useful sites': 'аварийно-полезные сайты',
-        'support': 'поддержка',
-        'status': 'статус',
-        'Shows all detected devices with Sheepfold IDs.': 'Показывает все найденные устройства с ID Sheepfold.',
-        'Turns on global blocking for everyone except the allowlist.': 'Включает глобальную блокировку для всех, кроме белого списка.',
-        'Turns global blocking off.': 'Выключает глобальную блокировку.',
-        'Grants temporary access to the selected device.': 'Выдаёт выбранному устройству временный доступ.',
-        'Shows whether Wi-Fi is enabled.': 'Показывает, включён ли Wi-Fi.',
-        'Turns router Wi-Fi on.': 'Включает Wi-Fi на роутере.',
-        'Turns router Wi-Fi off; use carefully.': 'Выключает Wi-Fi на роутере; используйте осторожно.',
-        'Blocks the selected device.': 'Блокирует выбранное устройство.',
-        'Removes blocking from the selected device.': 'Снимает блокировку с выбранного устройства.',
-        'Adds the selected device to the allowlist.': 'Добавляет выбранное устройство в белый список.',
-        'Adds the selected device to the blocklist.': 'Добавляет выбранное устройство в чёрный список.',
-        'Shows recent administrative log entries.': 'Показывает последние записи административного журнала.',
-        'Clears the administrative log after confirmation.': 'Очищает административный журнал после подтверждения.',
-        'Checks and installs an update after confirmation.': 'Проверяет и устанавливает обновление после подтверждения.',
-        'Reboots the router after confirmation.': 'Перезагружает роутер после подтверждения.',
-        'Shows configured emergency-useful sites.': 'Показывает настроенные аварийно-полезные сайты.',
-        'Shows available commands.': 'Показывает доступные команды.',
-        'Shows what to prepare before asking for support.': 'Показывает, что подготовить перед обращением в поддержку.',
-        'Shows Sheepfold and router status.': 'Показывает состояние Sheepfold и роутера.',
-        'Administrative action log. Export masks sensitive fields.': 'Журнал действий администраторов. При экспорте чувствительные поля маскируются.',
-        'Clear log': 'Очистить журнал',
-        'Clearing logs requires confirmation.': 'Очистка журнала требует подтверждения.',
-        'Log cleared.': 'Журнал очищен.',
-        'Could not clear log.': 'Не удалось очистить журнал.',
-        'Log is empty.': 'Журнал пуст.',
-        'The log is stored in RAM and is cleared after router reboot. Export masks sensitive fields.': 'Журнал очищается после перезагрузки роутера.',
-        'Cache file path': 'Путь к файлу кэша',
-        'The cache file should be stored under /tmp/ so it does not wear router flash memory.': 'Файлу кэша лучше лежать внутри /tmp/, чтобы не изнашивал flash-память роутера.',
-        'Cache file path saved.': 'Путь к файлу кэша сохранён.',
-        'Could not save cache file path.': 'Не удалось сохранить путь к файлу кэша.',
-        'Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen.': 'Путь к файлу кэша должен начинаться с /tmp/ и содержать только буквы, цифры, точку, слэш, подчёркивание и дефис.',
-        'Export masked': 'Экспорт',
-        'Masked log export has been saved.': 'Экспорт журнала с маскированием сохранён.',
-        'Export log': 'Экспорт журнала',
-        'Export period': 'Период экспорта',
-        'Last hour': 'За последний час',
-        'Last week': 'За неделю',
-        'Custom period': 'С - по',
-        'All time': 'За всё время',
-        'From': 'С',
-        'To': 'По',
-        'Export selected period': 'Экспортировать',
-        'No log entries for selected period.': 'За выбранный период записей журнала нет.',
-        'Owner granted +30 minutes to Child tablet': 'Владелец дал +30 минут устройству "Планшет ребёнка"',
-        'New device detected: #4, DC:A6:32:EC:00:19, IP 192.168.1.98': 'Обнаружено новое устройство: #4, DC:A6:32:EC:00:19, IP 192.168.1.98',
-        'Global block disabled by owner': 'Глобальная блокировка выключена владельцем',
-        'General': 'Общие',
-        'Application language': 'Язык приложения',
-        'Russian': 'Русский',
-        'English': 'Английский',
-        'New device behavior': 'Поведение для новых устройств',
-        'Allow internet by default': 'Разрешать интернет по умолчанию',
-        'Restrict until configured': 'Ограничивать до настройки',
-        'New device automatic setup': 'Автонастройка новых устройств',
-        'Full automatic setup': 'Полная автонастройка',
-        'Reduced automatic setup': 'Урезанная автонастройка',
-        'Full mode can use port checks when available. Reduced mode avoids heavy checks but still can automatically add confidently detected home infrastructure devices to No restrictions.': 'Полный режим может использовать проверку портов, если она доступна. Урезанная автонастройка избегает тяжёлых проверок, но тоже может автоматически добавлять уверенно распознанные домашние инфраструктурные устройства в группу "Без ограничений".',
-        'New device automatic setup saved.': 'Автонастройка новых устройств сохранена.',
-        'Could not save new device automatic setup.': 'Не удалось сохранить автонастройку новых устройств.',
-        'Update check and installation': 'Проверка обновления и его установка',
-        'Every day': 'Раз в день',
-        'Every week': 'Раз в неделю',
-        'Every month': 'Раз в месяц',
-        'Never': 'Никогда',
-        'Update check policy saved.': 'Настройка проверки обновлений сохранена.',
-        'Could not save update check policy.': 'Не удалось сохранить настройку проверки обновлений.',
-        'Defines how often Sheepfold should check for and install updates after confirmation.': 'Определяет, как часто Sheepfold должен проверять и устанавливать обновления (после подтверждения).',
-        'Enable Wi-Fi automatically': 'Включать Wi-Fi автоматически',
-        'Disable Wi-Fi automatically': 'Выключать Wi-Fi автоматически',
-        'At time': 'В указанное время',
-        'Wi-Fi auto-disable warning': 'Предупреждение об автоматическом выключении Wi-Fi',
-        'When Wi-Fi turns off, you will not be able to turn it back on from a phone connected only by Wi-Fi. Configure messenger control or a WPS button action so you can enable Wi-Fi outside the schedule if needed.': 'Когда Wi-Fi отключится, с телефона, подключённого только по Wi-Fi, вы уже не сможете включить его обратно. Заранее настройте управление через мессенджер или действие кнопки WPS, чтобы при необходимости включить Wi-Fi вне расписания.',
-        'Auto-disable time': 'Время автоматического выключения',
-        'Confirmation will be available in': 'Подтверждение будет доступно через',
-        'I understand the risk, continue': 'Я понимаю риск, продолжить',
-        'Wi-Fi automation settings saved.': 'Настройки автоматического Wi-Fi сохранены.',
-        'Could not save Wi-Fi automation settings.': 'Не удалось сохранить настройки автоматического Wi-Fi.',
-        'Applies to all Wi-Fi radios on the router. Real switching must require confirmation and be performed by the router backend.': 'Применяется ко всем Wi-Fi радиомодулям роутера. Реальное переключение должно требовать подтверждения и выполняться backend-частью роутера.',
-        'Router time and NTP': 'Время роутера и NTP',
-        'Make router an NTP server for LAN': 'Делать роутер NTP-сервером для LAN',
-        'Home devices can use the router as their local time server.': 'Домашние устройства смогут использовать роутер как локальный сервер времени.',
-        'Automatically configure router NTP client': 'Автоматически настраивать NTP-клиент роутера',
-        'Sheepfold will write NTP servers and time settings to OpenWRT system config.': 'Sheepfold запишет NTP-серверы и настройки времени в системный конфиг OpenWRT.',
-        'Router timezone': 'Часовой пояс роутера',
-        'NTP servers': 'NTP-серверы',
-        'One server per line. Default for Russia: ntp1.vniiftri.ru, ntp2.ntp-servers.net, 3.openwrt.pool.ntp.org.': 'Один сервер на строку. По умолчанию для России: ntp1.vniiftri.ru, ntp2.ntp-servers.net, 3.openwrt.pool.ntp.org.',
-        'Save router time settings': 'Сохранить настройки времени роутера',
-        'Router time settings saved.': 'Настройки времени роутера сохранены.',
-        'Could not save router time settings.': 'Не удалось сохранить настройки времени роутера.',
-        'Moscow time': 'Московское время',
-        'Kaliningrad time': 'Калининградское время',
-        'Samara time': 'Самарское время',
-        'Yekaterinburg time': 'Екатеринбургское время',
-        'Omsk time': 'Омское время',
-        'Krasnoyarsk time': 'Красноярское время',
-        'Irkutsk time': 'Иркутское время',
-        'Yakutsk time': 'Якутское время',
-        'Vladivostok time': 'Владивостокское время',
-        'Magadan time': 'Магаданское время',
-        'Kamchatka time': 'Камчатское время',
-        'WPS short button press': 'Короткое нажатие кнопки WPS',
-        'WPS long button press': 'Долгое нажатие кнопки WPS',
-        'Router default behavior': 'Функционал роутера по умолчанию',
-        'Allow Wi-Fi connection': 'Дать подключиться к Wi-Fi',
-        'Allow Wi-Fi connection and add devices to allowlist (dangerous)': 'Дать подключиться к Wi-Fi и добавить устройства в белый список (опасно)',
-        'Disable Wi-Fi': 'Отключить Wi-Fi',
-        'WPS action saved.': 'Действие кнопки WPS сохранено.',
-        'Could not save WPS action.': 'Не удалось сохранить действие кнопки WPS.',
-        'Adding devices to allowlist through the WPS button is dangerous because after pressing it, for 30 seconds any device can connect to Wi-Fi and get into the allowlist.': 'Добавление устройств в белый список через WPS кнопку опасно так как при нажатии на неё, в течении 30 секунд - любое устройство сможет подключиться к вифи и попасть в белый список.',
-        'While WPS connection is allowed, all router LEDs should blink using the 1010000 pattern for 30 seconds. One tick is half a second.': 'Пока разрешено WPS-подключение, все светодиоды роутера должны мигать паттерном 1010000 в течение 30 секунд. Один тик — полсекунды.',
-        'Router LED control': 'Управление светодиодами роутера',
-        'Turn off all LEDs permanently': 'Отключить навсегда все светодиоды',
-        'New device LED alert until LuCI login': 'Сигнал светодиодами о новом устройстве до входа в LuCI',
-        'LED setting saved.': 'Настройка светодиодов сохранена.',
-        'Could not save LED setting.': 'Не удалось сохранить настройку светодиодов.',
-        'LED behavior depends on the router model and available OpenWrt LED triggers.': 'Поведение светодиодов зависит от модели роутера и доступных OpenWrt LED-триггеров.',
-        'When a new device connects, router LEDs will turn on. After a successful LuCI password login or after any admin views the new-device notification on the phone, restore the router default LED behavior immediately.': 'Когда подключилось новое устройство, светодиоды на роутере зажгуться. После успешного входа в LuCI с паролем или после просмотра уведомления о новом устройстве на телефоне любым админом сразу верните дефолтное поведение светодиодов роутера.',
-        'Wi-Fi settings': 'Настройки Wi-Fi',
-        'WPS button': 'Кнопка WPS',
-        'Router LEDs': 'Светодиоды роутера',
-        'Other actions': 'Другие действия',
-        'Known offline devices cleanup': 'Очистка логов устройств офлайн',
-        '30 days': '30 дней',
-        '90 days': '90 дней',
-        '180 days': '180 дней',
-        'Export and update': 'Экспорт и обновление',
-        'Import and export': 'Импорт и экспорт',
-        'Export mode': 'Режим экспорта',
-        'Readable JSON without secrets': 'Читаемый JSON без секретов',
-        'Encrypted full backup': 'Зашифрованный полный бэкап',
-        'Blocked internet page text shown instead of websites': 'Текст интернет-страницы блокировки открывающейся вместо сайтов',
-        'Internet is temporarily unavailable by family rules.': 'Интернет временно недоступен по семейным правилам.',
-        'Update app': 'Обновить приложение',
-        'current version': 'текущая версия',
-        'checking': 'проверяется',
-        'up to date': 'актуальная',
-        'outdated': 'устаревшая',
-        'could not check': 'не удалось проверить',
-        'Application update requires confirmation.': 'Обновление приложения требует подтверждения.',
-        'Install Sheepfold update now?': 'Установить обновление Sheepfold сейчас?',
-        'Update started. Do not close this page until the result appears.': 'Обновление запущено. Не закрывайте страницу до появления результата.',
-        'Update result': 'Результат обновления',
-        'Starting update...': 'Запуск обновления...',
-        'Checking for updates...': 'Идёт проверка наличия обновлений',
-        'Update is running. Waiting for router response...': 'Обновление выполняется. Ждём ответ роутера...',
-        'Update log is empty yet.': 'Журнал обновления пока пуст.',
-        'Update finished successfully.': 'Обновление успешно завершено.',
-        'Update completed. Refresh LuCI if the interface still shows old files.': 'Обновление завершено. Обновите LuCI, если интерфейс всё ещё показывает старые файлы.',
-        'Update failed.': 'Обновление не удалось.',
-        'Update failed. See log above.': 'Обновление не удалось. Смотрите журнал выше.',
-        'No updates available. Installed version is already current.': 'Обновлений нет. Установленная версия уже актуальна.',
-        'Could not queue update request.': 'Не удалось создать заявку на обновление.',
-        'Reboot router': 'Перезагрузить роутер',
-        'Router reboot requires confirmation.': 'Перезагрузка роутера требует подтверждения.',
-        'Reboot router now?': 'Перезагрузить роутер сейчас?',
-        'Router reboot request queued.': 'Заявка на перезагрузку роутера создана.',
-        'Could not queue router reboot request.': 'Не удалось создать заявку на перезагрузку роутера.',
-        'Sheepfold Family Internet Control': 'Sheepfold : контроль доступа в интернет для семьи',
-        'Visual test build. Router rules and persistence are not active yet.': 'Визуальная тестовая сборка. Правила роутера и сохранение настроек пока не активны.',
-        'Internet disabled': 'Интернет отключен',
-        'Global block would block every device except allowlist.': 'Глобальная блокировка заблокирует все устройства, кроме белого списка.',
-        'Internet enabled': 'Интернет включен',
-        'Global block would be disabled after confirmation.': 'Глобальная блокировка будет выключена после подтверждения.',
-        'Export': 'Экспорт',
-        'Default export is readable JSON without secrets.': 'Экспорт по умолчанию — читаемый JSON без секретов.',
-        'Import': 'Импорт',
-        'Import all settings and user list': 'Импорт всех настроек и списка пользователей',
-        'Export all settings and user list': 'Экспорт всех настроек и списка пользователей',
-        'Import requires confirmation.': 'Импорт требует подтверждения.',
-        'Settings export saved.': 'Экспорт настроек сохранён.',
-        'Could not read import file.': 'Не удалось прочитать файл импорта.',
-        'Import file checked. Applying imported settings will be added after backend import confirmation is implemented.': 'Файл импорта проверен. Применение импортированных настроек будет добавлено после реализации backend-подтверждения импорта.',
-        'Import file format is not recognized.': 'Формат файла импорта не распознан.',
-        'Devices': 'Устройства',
-        'Save': 'Сохранить',
-        'Save settings': 'Сохранить настройки',
-        'Settings saved.': 'Настройки сохранены.',
-        'Settings saved successfully.': 'Настройки успешно сохранены',
-        'Could not save settings.': 'Не удалось сохранить настройки.',
-        'No settings changes to save.': 'Нет изменений настроек для сохранения.',
-        'Settings have unsaved changes. Press Save to apply them.': 'В настройках есть несохранённые изменения. Нажмите "Сохранить", чтобы применить их.',
-        'Save changes. This visual build does not use a separate Apply button.': 'Сохранить изменения. В этой визуальной сборке отдельная кнопка "Применить" не используется.',
-        'Router root password check': 'Проверка root-пароля роутера',
-        'Root password is not set. Sheepfold settings must stay locked until the router password is configured.': 'Root-пароль не задан. Настройки Sheepfold должны быть заблокированы до установки пароля роутера.',
-        'Open router password page': 'Открыть страницу пароля роутера',
-        'Auto-detected during installation. You can change it manually if needed.': 'Автоопределено при установке. При необходимости можно изменить вручную.'
+var routerInfoState = {
+        status: 'idle',
+        values: null,
+        error: null,
+        pending: null,
+        listeners: []
 };
 
-function T(text) {
-        return translations[text] || text;
+var tabs = [
+        ['users', _('User lists')],
+        ['management', _('User management')],
+        ['wifi', _('Wi-Fi')],
+        ['logs', _('Logs')],
+        ['settings', _('Settings')],
+        ['donation', _('Donation')]
+];
+
+var settingsTabsPrimary = [
+        ['info', _('Information')],
+        ['general', _('General')],
+        ['integrations', _('Integrations')],
+        ['messenger', _('Messenger')],
+        ['emergency', _('Emergency-useful sites')],
+        ['misc', _('Misc')]
+];
+
+var settingsTabsSecondary = [
+        ['ai', _('AI assistant')],
+        ['storage', _('Router memory management')]
+];
+
+function isKnownSettingsTab(tab) {
+        return settingsTabsPrimary.some(function (item) { return item[0] === tab; }) ||
+                settingsTabsSecondary.some(function (item) { return item[0] === tab; });
 }
 
-var tabs = [
-        ['users', T('User lists')],
-        ['management', T('User management')],
-        ['wifi', T('Wi-Fi')],
-        ['logs', T('Logs')],
-        ['settings', T('Settings')],
-        ['donation', T('Donation')]
-];
-
-var settingsTabs = [
-        ['info', T('Information')],
-        ['general', T('General')],
-        ['ai', T('AI assistant')],
-        ['integrations', T('Integrations')],
-        ['messenger', T('Messenger')],
-        ['emergency', T('Emergency-useful sites')],
-        ['memory', T('Router memory management')],
-        ['misc', T('Misc')]
-];
-
 var userListTabs = [
-        ['devices', T('All devices')],
-        ['allowlist', T('Allowlist')],
-        ['blocklist', T('Blocklist')]
+        ['devices', _('All devices')],
+        ['allowlist', _('Allowlist')],
+        ['blocklist', _('Blocklist')]
 ];
 
 var managementTabs = [
-        ['schedules', T('Schedules')],
-        ['groups', T('Groups')],
-        ['admins', T('Administrators')]
+        ['schedules', _('Schedules')],
+        ['groups', _('Groups')],
+        ['admins', _('Administrators')]
 ];
 
 function notify(message, level) {
@@ -783,6 +168,20 @@ function setSettingsDraftOption(option, value) {
         markSettingsDraftChanged();
 }
 
+function setSettingsDraftSectionOption(section, option, value) {
+        settingsDraft[section + '.' + option] = String(value == null ? '' : value);
+        markSettingsDraftChanged();
+}
+
+function sectionSettingValue(section, option, defaultValue) {
+        var key = section + '.' + option;
+
+        if (hasOwn(settingsDraft, key))
+                return settingsDraft[key];
+
+        return safeUciGet('sheepfold', section, option, defaultValue || '');
+}
+
 function setSettingsDraftOptions(options) {
         Object.keys(options).forEach(function (option) {
                 settingsDraft[option] = String(options[option] == null ? '' : options[option]);
@@ -822,12 +221,27 @@ function validateSettingsDraft(options) {
         var portNumber;
 
         if (hasOwn(options, 'log_cache_path') && !validRamCachePath(options.log_cache_path))
-                throw new Error(T('Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen.'));
+                throw new Error(_('Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen.'));
 
         if (hasOwn(options, 'app_port')) {
                 portNumber = parseInt(options.app_port, 10);
                 if (!options.app_port || String(portNumber) !== String(options.app_port) || portNumber < 1 || portNumber > 65535)
-                        throw new Error(T('Enter a port from 1 to 65535.'));
+                        throw new Error(_('Enter a port from 1 to 65535.'));
+        }
+
+        if (hasOwn(options, 'usb.device') && options['usb.device'] && !/^\/dev\/[A-Za-z0-9._-]+$/.test(options['usb.device']))
+                throw new Error(_('USB partition device path') + ': /dev/...');
+
+        if (hasOwn(options, 'ai_rate_limit_requests')) {
+                portNumber = parseInt(options.ai_rate_limit_requests, 10);
+                if (!options.ai_rate_limit_requests || String(portNumber) !== String(options.ai_rate_limit_requests) || portNumber < 1 || portNumber > 1000)
+                        throw new Error(_('Requests per device') + ': 1–1000');
+        }
+
+        if (hasOwn(options, 'ai_rate_limit_window_seconds')) {
+                portNumber = parseInt(options.ai_rate_limit_window_seconds, 10);
+                if (!options.ai_rate_limit_window_seconds || String(portNumber) !== String(options.ai_rate_limit_window_seconds) || portNumber < 60 || portNumber > 86400)
+                        throw new Error(_('Rate limit window, seconds') + ': 60–86400');
         }
 }
 
@@ -851,6 +265,24 @@ function applySettingsSideEffects(options) {
                         return fs.exec('/etc/init.d/sheepfold', ['restart']).catch(function () {});
                 });
 
+        if (hasOwn(options, 'ai_individual_logs') && options.ai_individual_logs === '1')
+                chain = chain.then(function () {
+                        return fs.exec('/usr/libexec/sheepfold/sheepfold-openssl-ensure', []).then(function (result) {
+                                if (result.code !== 0)
+                                        throw new Error(_('OpenSSL check failed. Per-device AI logs stay disabled.'));
+                        });
+                });
+
+        if (hasOwn(options, 'language'))
+                chain = chain.then(function () {
+                        return new Promise(function (resolve) {
+                                window.setTimeout(function () {
+                                        window.location.reload();
+                                        resolve();
+                                }, 600);
+                        });
+                });
+
         return chain;
 }
 
@@ -861,7 +293,7 @@ function saveSettingsNow() {
         });
 
         if (!Object.keys(options).length && !specialSavers.length) {
-                notify(T('No settings changes to save.'), 'info');
+                notify(_('No settings changes to save.'), 'info');
                 return Promise.resolve();
         }
 
@@ -896,9 +328,9 @@ function saveSettingsNow() {
                         if (saver.accept)
                                 saver.accept();
                 });
-                notifyCentered(T('Settings saved successfully.'));
+                notifyCentered(_('Settings saved successfully.'));
         }, function (error) {
-                notify(T('Could not save settings.') + ' ' + commandErrorText(error, ''), 'warning');
+                notify(_('Could not save settings.') + ' ' + commandErrorText(error, ''), 'warning');
                 return Promise.reject(error);
         }).finally(function () {
                 settingsIsSaving = false;
@@ -912,7 +344,7 @@ function settingsSaveBar(top) {
                         'class': 'sf-settings-dirty-note',
                         'data-settings-dirty-note': '1',
                         'hidden': 'hidden'
-                }, T('Settings have unsaved changes. Press Save to apply them.')),
+                }, _('Settings have unsaved changes. Press Save to apply them.')),
                 E('button', {
                         'class': 'sf-action sf-action-positive sf-action-nowrap',
                         'data-settings-save': '1',
@@ -939,7 +371,7 @@ function settingsSaveBar(top) {
 
                                 saveSettingsNow();
                         }
-                }, T('Save settings'))
+                }, _('Save settings'))
         ]);
 }
 
@@ -950,17 +382,50 @@ function acknowledgeNewDeviceLedAlert(source) {
         fs.write('/tmp/sheepfold/new-device-alert.ack', String(source || 'luci') + '\n').catch(function () {});
 }
 
+var NEW_DEVICE_BADGE_SECONDS = 86400;
+
 function badge(status) {
         var labels = {
-                allow: T('Allowlist'),
-                blocked: T('Blocklist'),
-                scheduled: T('Scheduled'),
-                restricted: T('Restricted'),
-                new: T('New'),
-                journal: T('Journal')
+                allow: _('Allowlist'),
+                blocked: _('Blocklist'),
+                scheduled: _('Scheduled'),
+                restricted: _('Restricted'),
+                new: _('New'),
+                journal: _('Journal')
         };
 
         return E('span', { 'class': 'sf-badge sf-badge-' + status }, labels[status] || status);
+}
+
+function deviceFirstSeenAt(configured) {
+        var firstSeen = configured && configured.first_seen_at ? parseInt(configured.first_seen_at, 10) : 0;
+
+        if (firstSeen > 0)
+                return firstSeen;
+
+        if (configured && configured.detection_updated_at)
+                return parseInt(configured.detection_updated_at, 10) || 0;
+
+        return 0;
+}
+
+function deviceShowsNewBadge(configured, status) {
+        if (status !== 'new')
+                return false;
+
+        var firstSeen = deviceFirstSeenAt(configured);
+
+        if (!firstSeen)
+                return true;
+
+        return (Math.floor(Date.now() / 1000) - firstSeen) < NEW_DEVICE_BADGE_SECONDS;
+}
+
+function deviceStatusBadge(status, configured) {
+        if (status === 'allow' || status === 'blocked' || status === 'scheduled' || status === 'restricted')
+                return status;
+
+        return deviceShowsNewBadge(configured, status) ? 'new' : '';
 }
 
 function metric(label, value, tone, handler) {
@@ -982,7 +447,7 @@ function actionButton(label, tone, message) {
                 'class': 'sf-action sf-action-' + tone,
                 'click': function (ev) {
                         ev.preventDefault();
-                        notify(message || T('This action is a visual prototype only.'), tone === 'danger' ? 'warning' : 'info');
+                        notify(message || _('This action is a visual prototype only.'), tone === 'danger' ? 'warning' : 'info');
                 }
         }, label);
 }
@@ -991,16 +456,14 @@ function routerControl(args) {
         return fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', args);
 }
 
-function usbStorageControl(args) {
-        return fs.exec('/usr/libexec/sheepfold/sheepfold-usb-storage', args);
-}
+function ensureRouterControlOk(result, fallback) {
+        var code = Number(result && result.code || 0);
+        var output = String(result && (result.stdout || result.stderr) || '').trim();
 
-function parseJsonOutput(text, fallback) {
-        try {
-                return JSON.parse(String(text || '').trim() || 'null') || fallback;
-        } catch (e) {
-                return fallback;
-        }
+        if (code !== 0)
+                throw new Error(output || fallback || _('Action failed.'));
+
+        return result;
 }
 
 function parseKeyValueOutput(text) {
@@ -1017,14 +480,119 @@ function parseKeyValueOutput(text) {
 }
 
 function commandErrorText(error, fallback) {
-        var text = fallback || T('Action failed.');
+        var text = fallback || _('Action failed.');
 
         if (error) {
                 text = error.stderr || error.stdout || error.message || text;
-                text = String(text).trim() || fallback || T('Action failed.');
+                text = String(text).trim() || fallback || _('Action failed.');
         }
 
-        return T(text);
+        return text;
+}
+
+function formatPingMs(value) {
+        value = String(value == null ? '' : value).trim();
+
+        if (!value || value === 'timeout')
+                return _('No response');
+
+        return value + ' ms';
+}
+
+function formatInternetProbeLine(host, pingMs) {
+        var pingValue = String(pingMs == null ? '' : pingMs).trim();
+
+        if (!pingValue || pingValue === 'timeout')
+                return host + ' ' + _('does not respond');
+
+        return host + ' ' + _('responds') + ' (' + _('ping') + ' ' + pingValue + ')';
+}
+
+function internetStatusDetails(values) {
+        var status = translatedStatus(values.internet_status);
+        var reason = String(values.internet_reason || '').trim();
+        var lines = [
+                status,
+                formatInternetProbeLine('ya.ru', values.ping_ya_ru_ms || values.ping_yandex_ms),
+                formatInternetProbeLine('google.com', values.ping_google_com_ms),
+                formatInternetProbeLine('youtube.com', values.ping_youtube_com_ms)
+        ];
+
+        if (reason && values.internet_status !== 'online')
+                lines.splice(1, 0, reason);
+
+        return E('div', { 'class': 'sf-info-multiline' }, lines.map(function (line) {
+                return E('div', {}, line);
+        }));
+}
+
+function routerInfoHasData(values) {
+        if (!values)
+                return false;
+
+        return !!(
+                values.sheepfold_version ||
+                values.current_time ||
+                values.router_model ||
+                values.firmware_version ||
+                values.openwrt_release ||
+                values.internet_status ||
+                values.storage_space
+        );
+}
+
+function notifyRouterInfoListeners() {
+        routerInfoState.listeners.slice().forEach(function (listener) {
+                listener();
+        });
+}
+
+function routerControlWithTimeout(args, timeoutMs) {
+        var timeout = timeoutMs || 20000;
+
+        return Promise.race([
+                routerControl(args),
+                new Promise(function (_resolve, reject) {
+                        window.setTimeout(function () {
+                                reject(new Error(_('Router command timed out.')));
+                        }, timeout);
+                })
+        ]);
+}
+
+function loadRouterInformation(force) {
+        if (routerInfoState.pending && !force)
+                return routerInfoState.pending;
+
+        routerInfoState.status = 'loading';
+        routerInfoState.error = null;
+        notifyRouterInfoListeners();
+
+        routerInfoState.pending = routerControlWithTimeout(['router-info']).then(function (result) {
+                var code = Number(result && result.code || 0);
+                var values = parseKeyValueOutput(result.stdout || '');
+
+                if (code !== 0)
+                        throw new Error(commandErrorText(result, _('Could not load router information.')));
+
+                if (!routerInfoHasData(values))
+                        throw new Error(_('Router diagnostics returned empty data. Try Refresh or run sheepfold-router-control router-info on the router.'));
+
+                routerInfoState.values = values;
+                routerInfoState.status = 'ready';
+                routerInfoState.error = null;
+                notifyRouterInfoListeners();
+                return values;
+        }).catch(function (error) {
+                routerInfoState.status = 'error';
+                routerInfoState.error = commandErrorText(error, _('Could not load router information.'));
+                notifyRouterInfoListeners();
+                return Promise.reject(error);
+        }).finally(function () {
+                routerInfoState.pending = null;
+        });
+
+        return routerInfoState.pending;
 }
 
 function rebootRouterButton() {
@@ -1033,16 +601,16 @@ function rebootRouterButton() {
                 'click': function (ev) {
                         ev.preventDefault();
 
-                        if (!window.confirm(T('Reboot router now?')))
+                        if (!window.confirm(_('Reboot router now?')))
                                 return;
 
                         fs.write('/tmp/sheepfold/reboot.request', String(Date.now()) + '\n').then(function () {
-                                notify(T('Router reboot request queued.'), 'warning');
+                                notify(_('Router reboot request queued.'), 'warning');
                         }, function () {
-                                notify(T('Could not queue router reboot request.'), 'warning');
+                                notify(_('Could not queue router reboot request.'), 'warning');
                         });
                 }
-        }, T('Reboot router'));
+        }, _('Reboot router'));
 }
 
 function updateAppButton() {
@@ -1058,14 +626,14 @@ function updateAppButton() {
 
                         ev.preventDefault();
 
-                        if (!window.confirm(T('Install Sheepfold update now?')))
+                        if (!window.confirm(_('Install Sheepfold update now?')))
                                 return;
 
                         button.disabled = true;
 
                         spinner = E('span', { 'class': 'sf-spinner' });
-                        statusNode = E('p', {}, T('Update started. Do not close this page until the result appears.'));
-                        outputNode = E('pre', { 'class': 'sf-pre' }, T('Starting update...'));
+                        statusNode = E('p', {}, _('Update started. Do not close this page until the result appears.'));
+                        outputNode = E('pre', { 'class': 'sf-pre' }, _('Starting update...'));
 
                         function closeModal() {
                                 pollingActive = false;
@@ -1096,32 +664,32 @@ function updateAppButton() {
                                         var status = String(values[0] || '').trim();
                                         var log = String(values[1] || '').trim();
 
-                                        outputNode.textContent = log || T('Update log is empty yet.');
+                                        outputNode.textContent = log || _('Update log is empty yet.');
 
                                         if (status === 'ok') {
-                                                finishUpdate('sf-spinner-done', T('Update completed. Refresh LuCI if the interface still shows old files.'), 'info');
+                                                finishUpdate('sf-spinner-done', _('Update completed. Refresh LuCI if the interface still shows old files.'), 'info');
                                                 return;
                                         }
 
                                         if (status === 'no_update') {
-                                                finishUpdate('sf-spinner-done', T('No updates available. Installed version is already current.'), 'info');
+                                                finishUpdate('sf-spinner-done', _('No updates available. Installed version is already current.'), 'info');
                                                 return;
                                         }
 
                                         if (status.indexOf('failed') === 0) {
-                                                finishUpdate('sf-spinner-failed', T('Update failed. See log above.'), 'warning');
+                                                finishUpdate('sf-spinner-failed', _('Update failed. See log above.'), 'warning');
                                                 return;
                                         }
 
-                                        statusNode.textContent = T('Update is running. Waiting for router response...');
+                                        statusNode.textContent = _('Update is running. Waiting for router response...');
                                         pollTimer = window.setTimeout(pollUpdate, 2000);
                                 }, function () {
-                                        statusNode.textContent = T('Update is running. Waiting for router response...');
+                                        statusNode.textContent = _('Update is running. Waiting for router response...');
                                         pollTimer = window.setTimeout(pollUpdate, 2000);
                                 });
                         }
 
-                        ui.showModal(T('Update result'), [
+                        ui.showModal(_('Update result'), [
                                 E('div', { 'class': 'sf-update-progress' }, [
                                         spinner,
                                         statusNode
@@ -1131,29 +699,29 @@ function updateAppButton() {
                                         E('button', {
                                                 'class': 'btn cbi-button',
                                                 'click': closeModal
-                                        }, T('Close'))
+                                        }, _('Close'))
                                 ])
                         ]);
 
                         Promise.all([
                                 fs.write('/tmp/sheepfold/update.status', 'queued\n'),
-                                fs.write('/tmp/sheepfold/update.log', T('Checking for updates...') + '\n'),
+                                fs.write('/tmp/sheepfold/update.log', _('Checking for updates...') + '\n'),
                                 fs.write('/tmp/sheepfold/update.request', String(Date.now()) + '\n')
                         ]).then(function () {
-                                statusNode.textContent = T('Checking for updates...');
-                                outputNode.textContent = T('Checking for updates...');
+                                statusNode.textContent = _('Checking for updates...');
+                                outputNode.textContent = _('Checking for updates...');
                                 pollUpdate();
                         }, function (error) {
                                 outputNode.textContent = String(error && error.message ? error.message : error);
-                                finishUpdate('sf-spinner-failed', T('Could not queue update request.'), 'warning');
+                                finishUpdate('sf-spinner-failed', _('Could not queue update request.'), 'warning');
                                 button.disabled = false;
                         });
                 }
-        }, T('Update app'));
+        }, _('Update app'));
 }
 
 function updateVersionStatusText(version, status) {
-        return T('current version') + ' ' + version + ' (' + T(status) + ')';
+        return _('current version') + ' ' + version + ' (' + _(status) + ')';
 }
 
 function updateAppRow() {
@@ -1197,17 +765,39 @@ function infoValue(value, fallback) {
 
 function translatedStatus(value) {
         var labels = {
-                online: T('Online'),
-                offline: T('Offline'),
-                limited: T('Limited'),
-                unknown: T('Unknown'),
-                enabled: T('Enabled'),
-                disabled: T('Disabled'),
-                yes: T('Installed'),
-                no: T('Not installed')
+                online: _('Online'),
+                offline: _('Offline'),
+                limited: _('Limited'),
+                unknown: _('Unknown'),
+                enabled: _('Enabled'),
+                disabled: _('Disabled'),
+                yes: _('Installed'),
+                no: _('Not installed')
         };
 
-        return labels[value] || value || T('Unknown');
+        return labels[value] || value || _('Unknown');
+}
+
+function packageVersionStatusLabel(status) {
+        var labels = {
+                up_to_date: _('package up to date'),
+                outdated: _('package outdated')
+        };
+
+        return labels[status] || '';
+}
+
+function formatInstalledPackageInfo(installed, version, versionStatus) {
+        var versionText = infoValue(version);
+
+        if (installed === 'yes') {
+                var statusLabel = packageVersionStatusLabel(versionStatus);
+
+                if (statusLabel)
+                        versionText += ', ' + statusLabel;
+        }
+
+        return translatedStatus(installed) + ' (' + versionText + ')';
 }
 
 function informationRow(label, value) {
@@ -1236,91 +826,106 @@ function renderWifiModulesInfo(values) {
         }
 
         if (!rows.length)
-                return E('div', { 'class': 'sf-note sf-note-warning' }, T('No active Wi-Fi networks were found in the router wireless config.'));
+                return E('div', { 'class': 'sf-note sf-note-warning' }, _('No active Wi-Fi networks were found in the router wireless config.'));
 
         return E('div', { 'class': 'sf-info-table sf-info-wifi-table' }, [
                 E('div', { 'class': 'sf-info-table-row sf-info-table-head' }, [
-                        E('div', {}, T('Module')),
-                        E('div', {}, T('Status')),
-                        E('div', {}, T('Band')),
-                        E('div', {}, T('Channel')),
-                        E('div', {}, T('Driver/type')),
-                        E('div', {}, T('Path')),
-                        E('div', {}, T('Country')),
-                        E('div', {}, T('Mode'))
+                        E('div', {}, _('Module')),
+                        E('div', {}, _('Status')),
+                        E('div', {}, _('Band')),
+                        E('div', {}, _('Channel')),
+                        E('div', {}, _('Driver/type')),
+                        E('div', {}, _('Path')),
+                        E('div', {}, _('Country')),
+                        E('div', {}, _('Mode'))
                 ])
         ].concat(rows));
 }
 
-function routerInformationPanel() {
-        var body = E('div', { 'class': 'sf-info-body' }, T('Loading router information...'));
-        var refreshButton;
+function renderRouterInfoContent(body, values) {
+        var podkopText = formatInstalledPackageInfo(values.podkop_installed, values.podkop_version, values.podkop_version_status);
+        var adguardText = translatedStatus(values.adguard_installed) + ' (' + infoValue(values.adguard_version) + ')';
 
-        function render(values) {
-                var internetText = translatedStatus(values.internet_status) + ' - ' + infoValue(values.internet_reason);
-                var podkopText = translatedStatus(values.podkop_installed) + ' (' + infoValue(values.podkop_version) + ')';
-                var adguardText = translatedStatus(values.adguard_installed) + ' (' + infoValue(values.adguard_version) + ')';
-
-                body.replaceChildren(
-                        E('div', { 'class': 'sf-grid two sf-info-grid' }, [
-                                E('div', { 'class': 'sf-box' }, [
-                                        informationRow(T('Current router time'), infoValue(values.current_time)),
-                                        informationRow(T('Current Sheepfold version'), infoValue(values.sheepfold_version)),
-                                        informationRow(T('Internet connection status'), internetText),
-                                        informationRow(T('Ping to ya.ru'), infoValue(values.ping_yandex_ms) + ' ms'),
-                                        informationRow(T('Router firmware version'), infoValue(values.firmware_version)),
-                                        informationRow(T('OpenWRT release'), infoValue(values.openwrt_release)),
-                                        informationRow(T('Kernel version'), infoValue(values.kernel_version))
-                                ]),
-                                E('div', { 'class': 'sf-box' }, [
-                                        informationRow(T('Router model'), infoValue(values.router_model)),
-                                        informationRow(T('Router uptime'), infoValue(values.uptime)),
-                                        informationRow(T('Load average'), infoValue(values.load_average)),
-                                        informationRow(T('Memory'), infoValue(values.memory)),
-                                        informationRow(T('LAN ports'), infoValue(values.lan_ports_count, '0') + ' (' + infoValue(values.lan_ports) + ')'),
-                                        informationRow(T('Podkop'), podkopText),
-                                        informationRow(T('AdGuard Home'), adguardText)
-                                ])
+        body.replaceChildren(
+                E('div', { 'class': 'sf-grid two sf-info-grid' }, [
+                        E('div', { 'class': 'sf-box' }, [
+                                informationRow(_('Current router time'), infoValue(values.current_time)),
+                                informationRow(_('Current Sheepfold version'), infoValue(values.sheepfold_version)),
+                                informationRow(_('Internet connection status'), internetStatusDetails(values)),
+                                informationRow(_('Router firmware version'), infoValue(values.firmware_version)),
+                                informationRow(_('OpenWRT release'), infoValue(values.openwrt_release)),
+                                informationRow(_('Kernel version'), infoValue(values.kernel_version))
                         ]),
                         E('div', { 'class': 'sf-box' }, [
-                                E('h4', {}, T('Wi-Fi modules')),
-                                renderWifiModulesInfo(values)
+                                informationRow(_('Router model'), infoValue(values.router_model)),
+                                informationRow(_('Router uptime'), infoValue(values.uptime)),
+                                informationRow(_('Load average'), infoValue(values.load_average)),
+                                informationRow(_('Memory'), infoValue(values.memory)),
+                                informationRow(_('Router storage'), infoValue(values.storage_space)),
+                                informationRow(_('LAN ports'), infoValue(values.lan_ports_count, '0') + ' (' + infoValue(values.lan_ports) + ')'),
+                                informationRow(_('Podkop'), podkopText),
+                                informationRow(_('AdGuard Home'), adguardText)
                         ])
-                );
+                ]),
+                E('div', { 'class': 'sf-box' }, [
+                        E('h4', {}, _('Wi-Fi modules')),
+                        renderWifiModulesInfo(values)
+                ])
+        );
+}
+
+function routerInfoLoadingSpinner() {
+        return E('div', { 'class': 'sf-info-loading' }, [
+                E('div', { 'class': 'sf-spinner', 'aria-hidden': 'true' })
+        ]);
+}
+
+function paintRouterInformationPanel(body, refreshButton) {
+        if (routerInfoState.status === 'loading' || routerInfoState.status === 'idle') {
+                body.replaceChildren(routerInfoLoadingSpinner());
+                if (refreshButton)
+                        refreshButton.disabled = true;
+                return;
         }
 
-        function loadInfo() {
-                refreshButton.disabled = true;
-                body.replaceChildren(T('Loading router information...'));
+        if (refreshButton)
+                refreshButton.disabled = null;
 
-                routerControl(['router-info']).then(function (result) {
-                        var values = parseKeyValueOutput(result.stdout || '');
-
-                        if (!Object.keys(values).length)
-                                throw new Error(T('Router information command returned empty output.'));
-
-                        render(values);
-                }, function (error) {
-                        body.replaceChildren(E('div', { 'class': 'sf-note sf-note-warning' }, commandErrorText(error, T('Could not load router information.'))));
-                }).finally(function () {
-                        refreshButton.disabled = null;
-                });
+        if (routerInfoState.status === 'error') {
+                body.replaceChildren(E('div', { 'class': 'sf-note sf-note-warning' }, routerInfoState.error));
+                return;
         }
+
+        renderRouterInfoContent(body, routerInfoState.values || {});
+}
+
+function routerInformationPanel() {
+        var body = E('div', { 'class': 'sf-info-body' });
+        var refreshButton;
+        var paint = function () {
+                paintRouterInformationPanel(body, refreshButton);
+        };
 
         refreshButton = E('button', {
                 'class': 'sf-action sf-action-neutral',
                 'click': function (ev) {
                         ev.preventDefault();
-                        loadInfo();
+                        loadRouterInformation(true).catch(function () {});
                 }
-        }, T('Refresh information'));
+        }, _('Refresh information'));
 
-        window.setTimeout(loadInfo, 0);
+        routerInfoState.listeners = [paint];
+        paint();
+
+        if (routerInfoState.status === 'idle')
+                window.setTimeout(function () {
+                        loadRouterInformation().catch(function () {});
+                }, 0);
 
         return E('div', { 'class': 'sf-settings-section' }, [
                 E('div', { 'class': 'sf-panel-head' }, [
                         E('div', {}, [
-                                E('p', { 'class': 'sf-section-intro' }, T('Router information'))
+                                E('p', { 'class': 'sf-section-intro' }, _('Router information'))
                         ]),
                         refreshButton
                 ]),
@@ -1359,16 +964,18 @@ function parseRamLog(text) {
         }).filter(Boolean);
 }
 
-function renderLogRows() {
-        if (!logEntries.length)
-                return [E('div', { 'class': 'sf-log-empty' }, T('Log is empty.'))];
+function renderLogRows(entries) {
+        entries = entries || filterLogEntriesForView(logViewFilters);
+
+        if (!entries.length)
+                return [E('div', { 'class': 'sf-log-empty' }, logEntries.length ? _('No log entries match the current filters.') : _('Log is empty.'))];
 
         // Файл журнала остаётся append-only в естественном порядке для экспорта и отладки,
         // а в интерфейсе новые события показываем сверху, чтобы родитель сразу видел последнее.
-        return logEntries.slice().reverse().map(function (entry) {
+        return entries.slice().reverse().map(function (entry) {
                 return E('div', {}, [
                         E('time', {}, entry.time),
-                        E('span', {}, T(entry.message))
+                        E('span', {}, _(entry.message))
                 ]);
         });
 }
@@ -1424,24 +1031,198 @@ function filterLogEntriesByPeriod(period, fromValue, toValue) {
         });
 }
 
+function logMessagePhraseOptions() {
+        return [
+                ['', _('All messages')],
+                ['new_device', _('New device detected')],
+                ['manual_add', _('Device added manually')],
+                ['allowlist_add', _('Device added to allowlist')],
+                ['blocklist_add', _('Device added to blocklist')],
+                ['auto_group', _('Device auto-assigned to a group')],
+                ['router_access_blocked', _('Router settings access blocked')],
+                ['wan_down', _('Router internet lost')],
+                ['wan_up', _('Router internet restored')],
+                ['wifi_on', _('Wi-Fi enabled by Sheepfold')],
+                ['wifi_off', _('Wi-Fi disabled by Sheepfold')],
+                ['wps', _('WPS pairing window')],
+                ['global_block', _('Global internet block toggled')]
+        ];
+}
+
+function logPhrasePattern(phraseKey) {
+        var patterns = {
+                new_device: /Обнаружено новое устройство/i,
+                manual_add: /Устройство добавлено вручную/i,
+                allowlist_add: /Устройство добавлено в белый список/i,
+                blocklist_add: /Устройство добавлено в чёрный список|Устройство заблокировано/i,
+                auto_group: /автоматически добавлено в группу/i,
+                router_access_blocked: /пыталось открыть настройки роутера/i,
+                wan_down: /У роутера пропал интернет/i,
+                wan_up: /Интернет на роутере восстановлен/i,
+                wifi_on: /Wi-Fi включён Sheepfold/i,
+                wifi_off: /Wi-Fi отключён Sheepfold/i,
+                wps: /WPS-подключение|Окно WPS-добавления/i,
+                global_block: /Глобальная блокировка интернета/i
+        };
+
+        return patterns[phraseKey] || null;
+}
+
+function logEntryMatchesPhrase(entry, phraseKey) {
+        if (!phraseKey)
+                return true;
+
+        var pattern = logPhrasePattern(phraseKey);
+
+        return pattern ? pattern.test(String(entry.message || '')) : true;
+}
+
+function logEntryMatchesNeedle(entry, needle, kind) {
+        needle = String(needle || '').trim();
+
+        if (!needle)
+                return true;
+
+        var message = String(entry.message || '');
+
+        if (kind === 'mac') {
+                var normalized = normalizeMac(needle).toLowerCase();
+
+                return normalized ? message.toLowerCase().indexOf(normalized) !== -1 : true;
+        }
+
+        if (kind === 'ip')
+                return message.indexOf(needle) !== -1;
+
+        return message.toLowerCase().indexOf(needle.toLowerCase()) !== -1;
+}
+
+function filterLogEntriesForView(filters) {
+        filters = filters || logViewFilters;
+
+        return logEntries.filter(function (entry) {
+                var time = parseLogTime(entry.time);
+                var from = filters.from ? new Date(filters.from) : null;
+                var to = filters.to ? new Date(filters.to) : null;
+
+                if (from || to) {
+                        if (!time)
+                                return false;
+                        if (from && time < from)
+                                return false;
+                        if (to && time > to)
+                                return false;
+                }
+
+                if (!logEntryMatchesNeedle(entry, filters.ip, 'ip'))
+                        return false;
+                if (!logEntryMatchesNeedle(entry, filters.mac, 'mac'))
+                        return false;
+                if (!logEntryMatchesNeedle(entry, filters.deviceName, 'name'))
+                        return false;
+                if (!logEntryMatchesPhrase(entry, filters.phrase))
+                        return false;
+
+                return true;
+        });
+}
+
+function renderLogFilterControls(onChange) {
+        var fromField = inputControl(_('From'), logViewFilters.from, { 'type': 'datetime-local' });
+        var toField = inputControl(_('To'), logViewFilters.to, { 'type': 'datetime-local' });
+        var ipField = inputControl(_('IP address'), logViewFilters.ip);
+        var macField = inputControl(_('MAC address'), logViewFilters.mac);
+        var deviceField = inputControl(_('Device name'), logViewFilters.deviceName);
+        var phraseField = selectControl(_('Message type'), logViewFilters.phrase, logMessagePhraseOptions());
+
+        function syncFilters() {
+                logViewFilters.from = fromField.input.value;
+                logViewFilters.to = toField.input.value;
+                logViewFilters.ip = ipField.input.value.trim();
+                logViewFilters.mac = macField.input.value.trim();
+                logViewFilters.deviceName = deviceField.input.value.trim();
+                logViewFilters.phrase = phraseField.input.value;
+                onChange();
+        }
+
+        [fromField, toField, ipField, macField, deviceField, phraseField].forEach(function (field) {
+                field.input.addEventListener('change', syncFilters);
+                field.input.addEventListener('input', syncFilters);
+        });
+
+        return E('div', { 'class': 'sf-log-filters' }, [
+                fromField.node,
+                toField.node,
+                ipField.node,
+                macField.node,
+                deviceField.node,
+                phraseField.node,
+                E('div', { 'class': 'sf-log-filter-actions' }, [
+                        E('button', {
+                                'class': 'sf-action sf-action-neutral',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        logViewFilters = {
+                                                from: '',
+                                                to: '',
+                                                ip: '',
+                                                mac: '',
+                                                deviceName: '',
+                                                phrase: ''
+                                        };
+                                        fromField.input.value = '';
+                                        toField.input.value = '';
+                                        ipField.input.value = '';
+                                        macField.input.value = '';
+                                        deviceField.input.value = '';
+                                        phraseField.input.value = '';
+                                        onChange();
+                                }
+                        }, _('Reset filters'))
+                ])
+        ]);
+}
+
+function createLogFilterUi(onChange) {
+        var expanded = false;
+        var filtersWrap = E('div', {
+                'class': 'sf-log-filters-wrap',
+                'hidden': 'hidden'
+        }, renderLogFilterControls(onChange));
+        var toggleButton = E('button', {
+                'class': 'sf-action sf-action-neutral',
+                'click': function (ev) {
+                        ev.preventDefault();
+                        expanded = !expanded;
+                        filtersWrap.hidden = expanded ? null : 'hidden';
+                        toggleButton.classList.toggle('sf-action-positive', expanded);
+                }
+        }, _('Filter'));
+
+        return {
+                toggleButton: toggleButton,
+                filtersWrap: filtersWrap
+        };
+}
+
 function maskedLogExportTextForEntries(entries) {
         if (!entries.length)
-                return T('Log is empty.') + '\n';
+                return _('Log is empty.') + '\n';
 
         return entries.map(function (entry) {
-                return entry.time + ' ' + maskLogMessage(T(entry.message));
+                return entry.time + ' ' + maskLogMessage(_(entry.message));
         }).join('\n') + '\n';
 }
 
 function showLogExportModal() {
-        var periodField = selectControl(T('Export period'), 'week', [
-                ['hour', T('Last hour')],
-                ['week', T('Last week')],
-                ['custom', T('Custom period')],
-                ['all', T('All time')]
+        var periodField = selectControl(_('Export period'), 'week', [
+                ['hour', _('Last hour')],
+                ['week', _('Last week')],
+                ['custom', _('Custom period')],
+                ['all', _('All time')]
         ]);
-        var fromField = inputControl(T('From'), '', { 'type': 'datetime-local' });
-        var toField = inputControl(T('To'), '', { 'type': 'datetime-local' });
+        var fromField = inputControl(_('From'), '', { 'type': 'datetime-local' });
+        var toField = inputControl(_('To'), '', { 'type': 'datetime-local' });
         var customRange = E('div', { 'class': 'sf-grid two', 'hidden': 'hidden' }, [
                 fromField.node,
                 toField.node
@@ -1454,7 +1235,7 @@ function showLogExportModal() {
         periodField.input.addEventListener('change', updateRangeVisibility);
         updateRangeVisibility();
 
-        ui.showModal(T('Export log'), [
+        ui.showModal(_('Export log'), [
                 E('div', { 'class': 'sf-device-editor' }, [
                         periodField.node,
                         customRange
@@ -1463,7 +1244,7 @@ function showLogExportModal() {
                         E('button', {
                                 'class': 'btn cbi-button',
                                 'click': ui.hideModal
-                        }, T('Cancel')),
+                        }, _('Cancel')),
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
@@ -1472,13 +1253,13 @@ function showLogExportModal() {
                                         var stamp = new Date().toISOString().replace(/[:.]/g, '-');
 
                                         if (!entries.length)
-                                                notify(T('No log entries for selected period.'), 'warning');
+                                                notify(_('No log entries for selected period.'), 'warning');
 
                                         downloadTextFile('sheepfold-log-masked-' + period + '-' + stamp + '.txt', maskedLogExportTextForEntries(entries));
-                                        notify(T('Masked log export has been saved.'), 'info');
+                                        notify(_('Masked log export has been saved.'), 'info');
                                         ui.hideModal();
                                 }
-                        }, T('Export selected period'))
+                        }, _('Export selected period'))
                 ])
         ]);
 }
@@ -1563,7 +1344,7 @@ function exportSettingsAndUsers() {
         var stamp = new Date().toISOString().replace(/[:.]/g, '-');
 
         downloadTextFile('sheepfold-settings-' + stamp + '.json', sheepfoldSettingsExportText());
-        notify(T('Settings export saved.'), 'info');
+        notify(_('Settings export saved.'), 'info');
 }
 
 function importSettingsAndUsers() {
@@ -1584,27 +1365,27 @@ function importSettingsAndUsers() {
                                 try {
                                         parsed = JSON.parse(String(reader.result || ''));
                                 } catch (e) {
-                                        notify(T('Import file format is not recognized.'), 'warning');
+                                        notify(_('Import file format is not recognized.'), 'warning');
                                         return;
                                 }
 
                                 if (!parsed || parsed.format !== 'sheepfold-settings-export-v1') {
-                                        notify(T('Import file format is not recognized.'), 'warning');
+                                        notify(_('Import file format is not recognized.'), 'warning');
                                         return;
                                 }
 
-                                ui.showModal(T('Import all settings and user list'), [
-                                        E('div', { 'class': 'sf-note sf-note-warning' }, T('Import file checked. Applying imported settings will be added after backend import confirmation is implemented.')),
+                                ui.showModal(_('Import all settings and user list'), [
+                                        E('div', { 'class': 'sf-note sf-note-warning' }, _('Import file checked. Applying imported settings will be added after backend import confirmation is implemented.')),
                                         E('div', { 'class': 'right sf-modal-actions' }, [
                                                 E('button', {
                                                         'class': 'btn cbi-button cbi-button-positive',
                                                         'click': ui.hideModal
-                                                }, T('Close'))
+                                                }, _('Close'))
                                         ])
                                 ]);
                         };
                         reader.onerror = function () {
-                                notify(T('Could not read import file.'), 'warning');
+                                notify(_('Could not read import file.'), 'warning');
                         };
                         reader.readAsText(file);
                 }
@@ -1633,7 +1414,7 @@ function svgIcon(paths, attrs) {
 }
 
 function adminDeviceIcon() {
-        return E('span', { 'class': 'sf-admin-device-icon', 'title': T('Admin device') }, [
+        return E('span', { 'class': 'sf-admin-device-icon', 'title': _('Admin device') }, [
                 svgIcon([
                         'M4 5h11a2 2 0 0 1 2 2v8H2V7a2 2 0 0 1 2-2z',
                         'M1 17h17v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z',
@@ -1643,7 +1424,7 @@ function adminDeviceIcon() {
 }
 
 function adminCrownIcon() {
-        return E('span', { 'class': 'sf-admin-crown-icon', 'title': T('Admin device') }, [
+        return E('span', { 'class': 'sf-admin-crown-icon', 'title': _('Admin device') }, [
                 svgIcon([
                         'M3 8l4 4 5-7 5 7 4-4-2 11H5L3 8z',
                         'M6 19h12'
@@ -1652,7 +1433,7 @@ function adminCrownIcon() {
 }
 
 function staticLeaseIcon() {
-        return E('span', { 'class': 'sf-static-lease-icon', 'title': T('Permanent IP lease') }, [
+        return E('span', { 'class': 'sf-static-lease-icon', 'title': _('Permanent IP lease') }, [
                 svgIcon([
                         'M7 11V8a5 5 0 0 1 10 0v3',
                         'M6 11h12v10H6z',
@@ -1665,16 +1446,17 @@ function deviceTypeDefinitions() {
         return [
                 {
                         value: 'unknown',
-                        label: T('Unknown device type'),
+                        label: _('Unknown device type'),
                         mark: '?',
                         paths: [
-                                'M12 18h.01',
-                                'M9.1 9a3 3 0 1 1 5.8 1c-.4 1.3-1.6 1.9-2.3 2.5-.5.4-.6.8-.6 1.5'
+                                'M9.09 9a3 3 0 1 1 5.82 1c0 2-3 3-3 3',
+                                'M12 17h.01',
+                                'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z'
                         ]
                 },
                 {
                         value: 'phone',
-                        label: T('Phone'),
+                        label: _('Phone'),
                         mark: '▯',
                         paths: [
                                 'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z',
@@ -1683,7 +1465,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'tablet',
-                        label: T('Tablet'),
+                        label: _('Tablet'),
                         mark: '▭',
                         paths: [
                                 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
@@ -1692,7 +1474,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'computer',
-                        label: T('Computer'),
+                        label: _('Computer'),
                         mark: '⌨',
                         paths: [
                                 'M3 4h18v11H3z',
@@ -1702,7 +1484,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'tv',
-                        label: T('TV'),
+                        label: _('TV'),
                         mark: '▣',
                         paths: [
                                 'M3 5h18v12H3z',
@@ -1712,7 +1494,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'console',
-                        label: T('Game console'),
+                        label: _('Game console'),
                         mark: '✚',
                         paths: [
                                 'M7 10h10a5 5 0 0 1 4 8l-1 1a2 2 0 0 1-3-.4L15 16H9l-2 2.6a2 2 0 0 1-3 .4l-1-1a5 5 0 0 1 4-8z',
@@ -1724,7 +1506,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'printer',
-                        label: T('Printer'),
+                        label: _('Printer'),
                         mark: '▤',
                         paths: [
                                 'M7 8V3h10v5',
@@ -1734,7 +1516,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'server',
-                        label: T('Server'),
+                        label: _('Server'),
                         mark: '▦',
                         paths: [
                                 'M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z',
@@ -1748,7 +1530,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'camera',
-                        label: T('Camera'),
+                        label: _('Camera'),
                         mark: '◉',
                         paths: [
                                 'M4 7h4l2-3h4l2 3h4v13H4z',
@@ -1757,7 +1539,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'speaker',
-                        label: T('Smart speaker'),
+                        label: _('Smart speaker'),
                         mark: '♪',
                         paths: [
                                 'M8 6a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-2a3 3 0 0 1-3-3z',
@@ -1770,7 +1552,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'vacuum',
-                        label: T('Robot vacuum'),
+                        label: _('Robot vacuum'),
                         mark: '◌',
                         paths: [
                                 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
@@ -1781,7 +1563,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'smart_home',
-                        label: T('Smart home'),
+                        label: _('Smart home'),
                         mark: '⌁',
                         paths: [
                                 'M3 11l9-8 9 8',
@@ -1793,7 +1575,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'engineering',
-                        label: T('Engineering device'),
+                        label: _('Engineering device'),
                         mark: '⚙',
                         paths: [
                                 'M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
@@ -1806,7 +1588,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'smart',
-                        label: T('Smart device'),
+                        label: _('Smart device'),
                         mark: '◇',
                         paths: [
                                 'M12 2l8 8-8 12-8-12z',
@@ -1816,7 +1598,7 @@ function deviceTypeDefinitions() {
                 },
                 {
                         value: 'network',
-                        label: T('Network device'),
+                        label: _('Network device'),
                         mark: '⌂',
                         paths: [
                                 'M4 12h16',
@@ -1919,16 +1701,16 @@ function passwordRevealField(label, value) {
         });
         var button = E('button', {
                 'class': 'sf-icon-action sf-secret-toggle',
-                'title': T('Show temporary password'),
-                'aria-label': T('Show temporary password'),
+                'title': _('Show temporary password'),
+                'aria-label': _('Show temporary password'),
                 'click': function (ev) {
                         var visible;
 
                         ev.preventDefault();
                         visible = input.type === 'password';
                         input.type = visible ? 'text' : 'password';
-                        button.setAttribute('title', visible ? T('Hide temporary password') : T('Show temporary password'));
-                        button.setAttribute('aria-label', visible ? T('Hide temporary password') : T('Show temporary password'));
+                        button.setAttribute('title', visible ? _('Hide temporary password') : _('Show temporary password'));
+                        button.setAttribute('aria-label', visible ? _('Hide temporary password') : _('Show temporary password'));
                 }
         }, iconSvg('eye'));
 
@@ -2159,12 +1941,12 @@ function qrCode(text) {
         try {
                 matrix = createQrMatrix(text);
         } catch (error) {
-                return E('div', { 'class': 'sf-qr-error' }, T('QR payload') + ': ' + error.message);
+                return E('div', { 'class': 'sf-qr-error' }, _('QR payload') + ': ' + error.message);
         }
 
         return E('div', {
                 'class': 'sf-qr',
-                'aria-label': T('Pairing'),
+                'aria-label': _('Pairing'),
                 'style': 'grid-template-columns: repeat(' + matrix.length + ', 1fr);'
         },
                 matrix.reduce(function (nodes, row) {
@@ -2249,9 +2031,9 @@ function upsertPairedAdminDevice(admin, status) {
                         name: status.device_name || mac,
                         ip: status.ip || '',
                         mac: mac,
-                        group: T('Not configured'),
+                        group: _('Not configured'),
                         status: 'allow',
-                        note: T('Admin device'),
+                        note: _('Admin device'),
                         adminDevice: true,
                         adminOwner: status.admin_name || admin.name || '',
                         adminLogin: status.admin_login || admin.login || '',
@@ -2419,21 +2201,21 @@ function quickCandidateAgeText(ageMs) {
         var minutes;
 
         if (seconds < 60)
-                return seconds + ' ' + T('seconds ago');
+                return seconds + ' ' + _('seconds ago');
 
         minutes = Math.floor(seconds / 60);
 
         if (minutes === 1)
-                return T('minute ago');
+                return _('minute ago');
 
-        return minutes + ' ' + T('minutes ago');
+        return minutes + ' ' + _('minutes ago');
 }
 
 function renderQuickCandidateRow(candidate, onAdd) {
         return E('tr', {}, [
                 E('td', {}, [
                         E('strong', {}, candidate.device.name || '-'),
-                        E('small', {}, T('Connected after quick add started.'))
+                        E('small', {}, _('Connected after quick add started.'))
                 ]),
                 E('td', {}, candidate.device.ip || '-'),
                 E('td', {}, candidate.device.mac || '-'),
@@ -2445,18 +2227,18 @@ function renderQuickCandidateRow(candidate, onAdd) {
                                 ev.preventDefault();
                                 onAdd(candidate, ev.currentTarget);
                         }
-                }, candidate.added ? T('Candidate added to allowlist. Save changes to apply.') : T('Add')))
+                }, candidate.added ? _('Candidate added to allowlist. Save changes to apply.') : _('Add')))
         ]);
 }
 
 function renderQuickCandidateTable(candidates, onAdd) {
         return E('table', { 'class': 'sf-quick-table' }, [
                 E('thead', {}, E('tr', {}, [
-                        E('th', {}, T('Device')),
+                        E('th', {}, _('Device')),
                         E('th', {}, 'IP'),
                         E('th', {}, 'MAC'),
-                        E('th', {}, T('Seen')),
-                        E('th', {}, T('Actions'))
+                        E('th', {}, _('Seen')),
+                        E('th', {}, _('Actions'))
                 ])),
                 E('tbody', {}, candidates.map(function (candidate) {
                         return renderQuickCandidateRow(candidate, onAdd);
@@ -2597,29 +2379,29 @@ function showPairingModal(device) {
         var pairingCode = device.pairingCode || generatePairingCode();
         var pairingPayloadText = pairingPayload(routerAddress, port, device.adminLogin || 'SuperParent', pairingCode);
 
-        ui.showModal(T('Pairing settings'), [
+        ui.showModal(_('Pairing settings'), [
                 E('div', { 'class': 'sf-modal-pairing' }, [
                         E('div', { 'class': 'sf-qr-wrap' }, [
                                 qrCode(pairingPayloadText),
-                                E('p', {}, T('Scan this QR code with the Android app to connect it to this router.'))
+                                E('p', {}, _('Scan this QR code with the Android app to connect it to this router.'))
                         ]),
                         E('div', { 'class': 'sf-manual-settings' }, [
-                                E('h4', {}, T('Manual setup')),
-                                settingLine(T('Router address'), routerAddress),
-                                settingLine(T('Sheepfold API URL'), apiUrl),
-                                settingLine(T('Administrator login'), device.adminLogin || 'SuperParent'),
-                                settingLine(T('Pairing code'), pairingCode),
-                                settingLine(T('Token lifetime'), T('10 minutes')),
-                                settingLine(T('QR payload'), pairingPayloadText),
-                                settingLine(T('Wi-Fi MAC check'), T('Use the real device MAC for this home Wi-Fi network.')),
-                                E('div', { 'class': 'sf-note sf-note-warning' }, T('Android must require the real device MAC for this home Wi-Fi network before continuing setup.'))
+                                E('h4', {}, _('Manual setup')),
+                                settingLine(_('Router address'), routerAddress),
+                                settingLine(_('Sheepfold API URL'), apiUrl),
+                                settingLine(_('Administrator login'), device.adminLogin || 'SuperParent'),
+                                settingLine(_('Pairing code'), pairingCode),
+                                settingLine(_('Token lifetime'), _('10 minutes')),
+                                settingLine(_('QR payload'), pairingPayloadText),
+                                settingLine(_('Wi-Fi MAC check'), _('Use the real device MAC for this home Wi-Fi network.')),
+                                E('div', { 'class': 'sf-note sf-note-warning' }, _('Android must require the real device MAC for this home Wi-Fi network before continuing setup.'))
                         ])
                 ]),
                 E('div', { 'class': 'right' }, [
                         E('button', {
                                 'class': 'btn cbi-button',
                                 'click': ui.hideModal
-                        }, T('Close'))
+                        }, _('Close'))
                 ])
         ]);
 }
@@ -2638,22 +2420,22 @@ function showAdminSettingsModal(admin) {
         activateAdministratorPairingCode(admin, temporaryPassword).then(function () {
                 stopPairingWatcher = startAdminPairingWatcher(admin, pairingStartedAt);
         }).catch(function () {
-                notify(T('Could not save settings.'), 'warning');
+                notify(_('Could not save settings.'), 'warning');
         });
 
-        ui.showModal(T('Administrator settings'), [
+        ui.showModal(_('Administrator settings'), [
                 E('div', { 'class': 'sf-modal-pairing' }, [
                         E('div', { 'class': 'sf-qr-wrap' }, [
                                 qrCode(pairingPayloadText),
-                                E('p', {}, T('Scan this QR code in the Android app for quick setup.'))
+                                E('p', {}, _('Scan this QR code in the Android app for quick setup.'))
                         ]),
                         E('div', { 'class': 'sf-manual-settings' }, [
-                                field(T('Admin name'), admin.name),
-                                field(T('Login'), admin.login),
-                                passwordRevealField(T('Temporary password'), temporaryPassword),
-                                settingLine(T('Sheepfold API URL'), apiUrl),
-                                settingLine(T('Server IP address'), routerAddress),
-                                settingLine(T('Port'), port)
+                                field(_('Admin name'), admin.name),
+                                field(_('Login'), admin.login),
+                                passwordRevealField(_('Temporary password'), temporaryPassword),
+                                settingLine(_('Sheepfold API URL'), apiUrl),
+                                settingLine(_('Server IP address'), routerAddress),
+                                settingLine(_('Port'), port)
                         ])
                 ]),
                 E('div', { 'class': 'right' }, [
@@ -2664,7 +2446,7 @@ function showAdminSettingsModal(admin) {
                                                 stopPairingWatcher();
                                         ui.hideModal();
                                 }
-                        }, T('Close'))
+                        }, _('Close'))
                 ])
         ]);
 }
@@ -2676,7 +2458,7 @@ function pairingButton(device) {
                         ev.preventDefault();
                         showPairingModal(device);
                 }
-        }, [adminDeviceIcon(), E('span', {}, T('Pairing'))]);
+        }, [adminDeviceIcon(), E('span', {}, _('Pairing'))]);
 }
 
 function listDeviceCanBeAdded(device, targetStatus) {
@@ -2703,26 +2485,26 @@ function listDeviceCandidateTable(targetStatus, onSelect) {
         });
 
         if (!rows.length)
-                return E('div', { 'class': 'sf-note sf-note-warning' }, T('No devices available to add.'));
+                return E('div', { 'class': 'sf-note sf-note-warning' }, _('No devices available to add.'));
 
         return E('div', { 'class': 'sf-add-device-candidates' }, [
-                E('strong', {}, T('Available devices')),
+                E('strong', {}, _('Available devices')),
                 E('table', { 'class': 'sf-quick-table sf-add-device-table' }, [
                         E('thead', {}, [
                                 E('tr', {}, [
-                                        E('th', {}, T('ID')),
-                                        E('th', {}, T('Device')),
-                                        E('th', {}, T('IP address')),
-                                        E('th', {}, T('MAC address')),
-                                        E('th', {}, T('Actions'))
+                                        E('th', {}, _('ID')),
+                                        E('th', {}, _('Device')),
+                                        E('th', {}, _('IP address')),
+                                        E('th', {}, _('MAC address')),
+                                        E('th', {}, _('Actions'))
                                 ])
                         ]),
                         E('tbody', {}, rows.map(function (device) {
                                 return E('tr', {}, [
                                         E('td', {}, formattedDeviceDisplayId(device)),
                                         E('td', {}, [
-                                                E('strong', {}, device.name || T('Unknown device')),
-                                                E('small', {}, device.group || T('Not configured'))
+                                                E('strong', {}, device.name || _('Unknown device')),
+                                                E('small', {}, device.group || _('Not configured'))
                                         ]),
                                         E('td', {}, device.ip || '-'),
                                         E('td', { 'class': 'sf-mono' }, device.mac || '-'),
@@ -2733,7 +2515,7 @@ function listDeviceCandidateTable(targetStatus, onSelect) {
                                                                 ev.preventDefault();
                                                                 onSelect(device);
                                                         }
-                                                }, T('Select'))
+                                                }, _('Select'))
                                         ])
                                 ]);
                         }))
@@ -2741,11 +2523,47 @@ function listDeviceCandidateTable(targetStatus, onSelect) {
         ]);
 }
 
+function grantDeviceTemporaryAccess(device, minutes) {
+        var mac = normalizeMac(device && device.mac);
+        var duration = Number(minutes || 0);
+
+        if (!mac)
+                return Promise.reject(new Error(_('Invalid MAC address')));
+
+        if (!duration || duration < 1)
+                return Promise.reject(new Error(_('Temporary access duration is invalid.')));
+
+        if (!window.confirm(
+                _('Grant temporary internet access to %s for %s minutes?')
+                        .replace('%s', infoValue(device.name || device.hostname || mac))
+                        .replace('%s', String(duration))
+        ))
+                return Promise.resolve(null);
+
+        return routerControl(['device-temp-access', mac, String(duration)]).then(function (result) {
+                ensureRouterControlOk(result, _('Could not grant temporary access.'));
+                notify(_('Temporary access granted.'), 'info');
+                return load();
+        }, function (error) {
+                notify(commandErrorText(error, _('Could not grant temporary access.')), 'warning');
+        });
+}
+
 function setDeviceBackendStatus(device, status) {
         var mac = normalizeMac(device && device.mac);
 
         if (!mac)
-                return Promise.reject(new Error(T('Invalid MAC address')));
+                return Promise.reject(new Error(_('Invalid MAC address')));
+
+        if (status === 'allow')
+                return routerControl(['device-allow', mac]).then(function (result) {
+                        return ensureRouterControlOk(result, _('Could not add device to allowlist.'));
+                });
+
+        if (status === 'blocked')
+                return routerControl(['device-block', mac]).then(function (result) {
+                        return ensureRouterControlOk(result, _('Could not add device to blocklist.'));
+                });
 
         return routerControl([
                 'set-device-status',
@@ -2753,63 +2571,112 @@ function setDeviceBackendStatus(device, status) {
                 status,
                 device.name || device.hostname || mac,
                 device.ip || '',
-                device.group || T('Not configured'),
+                device.group || _('Not configured'),
                 device.deviceType || 'smart'
-        ]);
+        ]).then(function (result) {
+                return ensureRouterControlOk(result, _('Could not update device status.'));
+        });
+}
+
+function persistDeviceListMembership(selectedDevices, targetStatus) {
+        var isAllowlist = targetStatus === 'allow';
+        var device;
+        var mac;
+        var sectionName;
+        var i;
+
+        for (i = 0; i < selectedDevices.length; i++) {
+                device = selectedDevices[i];
+                mac = normalizeMac(device && device.mac);
+
+                if (!mac)
+                        return Promise.reject(new Error(_('Invalid MAC address')));
+
+                if (isAllowlist && (device.status === 'blocked' || macInSheepfoldList('blocklist', mac)))
+                        return Promise.reject(new Error(_('This device is in the blocklist. Remove it from the blocklist first.')));
+
+                if (!isAllowlist && (device.status === 'allow' || macInSheepfoldList('allowlist', mac)))
+                        return Promise.reject(new Error(_('This device is in the allowlist. Remove it from the allowlist first.')));
+        }
+
+        selectedDevices.forEach(function (item) {
+                mac = normalizeMac(item.mac);
+                sectionName = ensureSheepfoldDeviceSection(item);
+
+                uci.set('sheepfold', sectionName, 'mac', mac);
+                uci.set('sheepfold', sectionName, 'name', item.name || item.hostname || mac);
+                uci.set('sheepfold', sectionName, 'ip', item.ip || '');
+                uci.set('sheepfold', sectionName, 'group', item.group || _('Not configured'));
+                uci.set('sheepfold', sectionName, 'device_type', item.deviceType || 'smart');
+                uci.set('sheepfold', sectionName, 'status', isAllowlist ? 'allow' : 'blocked');
+
+                updateMacList(isAllowlist ? 'allowlist' : 'blocklist', mac, true);
+                updateMacList(isAllowlist ? 'blocklist' : 'allowlist', mac, false);
+        });
+
+        return saveUciChanges(['sheepfold']);
 }
 
 function showManualListDeviceModal(targetStatus) {
         var isAllowlist = targetStatus === 'allow';
-        var title = isAllowlist ? T('Add device to allowlist') : T('Add device to blocklist');
+        var title = isAllowlist ? _('Add device to allowlist') : _('Add device to blocklist');
         var selector = createDeviceSelectionBox({
                 filter: function (device) {
                         return listDeviceCanBeAdded(device, targetStatus);
                 }
         });
+        var actionRow;
 
-        ui.showModal(title, [
-                E('div', { 'class': 'sf-device-editor' }, [
-                        selector.node
-                ]),
-                E('div', { 'class': 'right sf-modal-actions' }, [
+        function saveSelectedDevices() {
+                var selectedDevices = selector.selectedDevices();
+
+                if (!selectedDevices.length) {
+                        notify(_('No devices selected'), 'warning');
+                        return;
+                }
+
+                persistDeviceListMembership(selectedDevices, targetStatus).then(function () {
+                        notify(isAllowlist ? _('Device added to allowlist.') : _('Device added to blocklist.'), 'info');
+                        ui.hideModal();
+                        window.setTimeout(function () {
+                                window.location.reload();
+                        }, 700);
+                }, function (error) {
+                        notify(commandErrorText(error, _('Could not add device.')), 'warning');
+                });
+        }
+
+        function modalActions() {
+                return E('div', { 'class': 'right sf-modal-actions' }, [
                         E('button', {
                                 'class': 'btn cbi-button',
                                 'click': ui.hideModal
-                        }, T('Cancel')),
+                        }, _('Cancel')),
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
-                                'click': function () {
-                                        var selectedDevices = selector.selectedDevices();
+                                'click': saveSelectedDevices
+                        }, _('Save'))
+                ]);
+        }
 
-                                        if (!selectedDevices.length) {
-                                                notify(T('No devices selected'), 'warning');
-                                                return;
-                                        }
+        actionRow = modalActions();
 
-                                        Promise.all(selectedDevices.map(function (device) {
-                                                return setDeviceBackendStatus(device, targetStatus);
-                                        })).then(function () {
-                                                notify(isAllowlist ? T('Device added to allowlist.') : T('Device added to blocklist.'), 'info');
-                                                ui.hideModal();
-                                                window.setTimeout(function () {
-                                                        window.location.reload();
-                                                }, 700);
-                                        }, function (error) {
-                                                notify(commandErrorText(error, T('Could not add device.')), 'warning');
-                                        });
-                                }
-                        }, T('Save'))
-                ])
+        ui.showModal(title, [
+                E('div', { 'class': 'sf-binding-modal' }, [
+                        actionRow,
+                        selector.node
+                ]),
+                modalActions()
         ]);
 }
 
 function showManualDeviceModal() {
-        var nameField = siteInputField(T('Device name'), '');
-        var macField = siteInputField(T('MAC address'), '');
-        var ipField = siteInputField(T('IP address'), '');
-        var typeField = deviceTypeSelectControl(T('Device type'), 'smart');
+        var nameField = siteInputField(_('Device name'), '');
+        var macField = siteInputField(_('MAC address'), '');
+        var ipField = siteInputField(_('IP address'), '');
+        var typeField = deviceTypeSelectControl(_('Device type'), 'smart');
 
-        ui.showModal(T('Add device'), [
+        ui.showModal(_('Add device'), [
                 E('div', { 'class': 'sf-device-editor' }, [
                         nameField.node,
                         macField.node,
@@ -2820,14 +2687,14 @@ function showManualDeviceModal() {
                         E('button', {
                                 'class': 'btn cbi-button',
                                 'click': ui.hideModal
-                        }, T('Cancel')),
+                        }, _('Cancel')),
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
                                         var mac = normalizeMac(macField.input.value);
 
                                         if (!mac) {
-                                                notify(T('Enter a valid MAC address.'), 'warning');
+                                                notify(_('Enter a valid MAC address.'), 'warning');
                                                 return;
                                         }
 
@@ -2835,19 +2702,19 @@ function showManualDeviceModal() {
                                                 mac: mac,
                                                 name: nameField.input.value.trim() || mac,
                                                 ip: ipField.input.value.trim(),
-                                                group: T('Not configured'),
+                                                group: _('Not configured'),
                                                 deviceType: typeField.input.value
                                         }, 'restricted').then(function () {
-                                                notify(T('Device added.'), 'info');
+                                                notify(_('Device added.'), 'info');
                                                 ui.hideModal();
                                                 window.setTimeout(function () {
                                                         window.location.reload();
                                                 }, 700);
                                         }, function (error) {
-                                                notify(commandErrorText(error, T('Could not add device.')), 'warning');
+                                                notify(commandErrorText(error, _('Could not add device.')), 'warning');
                                         });
                                 }
-                        }, T('Save'))
+                        }, _('Save'))
                 ])
         ]);
 }
@@ -2859,7 +2726,7 @@ function manualListDeviceButton(targetStatus) {
                         ev.preventDefault();
                         showManualListDeviceModal(targetStatus);
                 }
-        }, T('Add device'));
+        }, _('Add device'));
 }
 
 function showQuickAllowlistModal() {
@@ -2900,13 +2767,13 @@ function showQuickAllowlistModal() {
 
                 candidatesNode.replaceChildren(renderQuickCandidateTable(candidates, function (candidate, button) {
                         button.disabled = true;
-                        setDeviceBackendStatus(candidate.device, 'allow').then(function () {
+                        persistDeviceListMembership([candidate.device], 'allow').then(function () {
                                 candidate.added = true;
-                                button.textContent = T('Device added to allowlist.');
-                                notify(T('Device added to allowlist.'), 'info');
+                                button.textContent = _('Device added to allowlist.');
+                                notify(_('Device added to allowlist.'), 'info');
                         }, function (error) {
                                 button.disabled = false;
-                                notify(commandErrorText(error, T('Could not add device.')), 'warning');
+                                notify(commandErrorText(error, _('Could not add device.')), 'warning');
                         });
                 }));
         }
@@ -2942,8 +2809,8 @@ function showQuickAllowlistModal() {
                         window.clearInterval(refreshTimer);
 
                 permitButton.classList.remove('expired');
-                permitTitle.textContent = T('Adding allowed');
-                permitHint.textContent = T('Click to restart the 30 second window.');
+                permitTitle.textContent = _('Adding allowed');
+                permitHint.textContent = _('Click to restart the 30 second window.');
                 windowStartedAt = Date.now();
                 windowExpiresAt = windowStartedAt + secondsTotal * 1000;
                 baselineKeys = {};
@@ -2974,8 +2841,8 @@ function showQuickAllowlistModal() {
                                         refreshTimer = null;
                                 }
                                 permitButton.classList.add('expired');
-                                permitTitle.textContent = T('Adding window expired');
-                                permitHint.textContent = T('Click to restart the 30 second window.');
+                                permitTitle.textContent = _('Adding window expired');
+                                permitHint.textContent = _('Click to restart the 30 second window.');
                         }
 
                         remaining--;
@@ -2985,8 +2852,8 @@ function showQuickAllowlistModal() {
                 timer = window.setInterval(tick, 1000);
         }
 
-        permitTitle = E('strong', {}, T('Adding allowed'));
-        permitHint = E('small', {}, T('Click to restart the 30 second window.'));
+        permitTitle = E('strong', {}, _('Adding allowed'));
+        permitHint = E('small', {}, _('Click to restart the 30 second window.'));
         permitButton = E('button', {
                 'class': 'sf-action sf-action-positive sf-quick-permit',
                 'click': function (ev) {
@@ -2999,27 +2866,27 @@ function showQuickAllowlistModal() {
                 permitHint
         ]);
 
-        ui.showModal(T('Quick allowlist add'), [
+        ui.showModal(_('Quick allowlist add'), [
                 E('div', { 'class': 'sf-modal-quick' }, [
                         E('div', { 'class': 'sf-modal-quick-top' }, [
                                 E('div', { 'class': 'sf-qr-wrap' }, [
-                                        E('h4', {}, T('Wi-Fi access QR')),
+                                        E('h4', {}, _('Wi-Fi access QR')),
                                         qrCode(wifiPayload),
-                                        E('p', {}, T('Scan Wi-Fi QR, then add newly connected devices manually.'))
+                                        E('p', {}, _('Scan Wi-Fi QR, then add newly connected devices manually.'))
                                 ]),
                                 E('div', { 'class': 'sf-qr-wrap sf-qr-divider' }, [
-                                        E('h4', {}, T('Allowlist request QR')),
+                                        E('h4', {}, _('Allowlist request QR')),
                                         qrCode(allowlistUrl),
-                                        E('p', {}, T('After connecting to Wi-Fi, scan this QR to request allowlist access from this phone.')),
-                                        settingLine(T('One-time allowlist link'), allowlistUrl)
+                                        E('p', {}, _('After connecting to Wi-Fi, scan this QR to request allowlist access from this phone.')),
+                                        settingLine(_('One-time allowlist link'), allowlistUrl)
                                 ]),
                                 E('div', { 'class': 'sf-quick-side' }, [
                                         permitButton,
-                                        E('div', { 'class': 'sf-note' }, T('Quick mode only collects candidates. A parent still presses Add for every device.'))
+                                        E('div', { 'class': 'sf-note' }, _('Quick mode only collects candidates. A parent still presses Add for every device.'))
                                 ])
                         ]),
                         E('div', { 'class': 'sf-quick-candidates-wrap' }, [
-                                E('h4', {}, T('Newly connected devices')),
+                                E('h4', {}, _('Newly connected devices')),
                                 candidatesNode
                         ])
                 ]),
@@ -3033,7 +2900,7 @@ function showQuickAllowlistModal() {
                                                 window.clearInterval(refreshTimer);
                                         ui.hideModal();
                                 }
-                        }, T('Close'))
+                        }, _('Close'))
                 ])
         ]);
 
@@ -3047,7 +2914,7 @@ function quickAllowlistButton() {
                         ev.preventDefault();
                         showQuickAllowlistModal();
                 }
-        }, T('Quick add to allowlist'));
+        }, _('Quick add to allowlist'));
 }
 
 function renderEmergencySiteList() {
@@ -3084,23 +2951,23 @@ function siteTextareaField(label, value) {
 function showSiteModal(site) {
         var isEdit = !!site;
         var current = site || ['', '', ''];
-        var urlField = siteInputField(T('URL address'), current[0]);
-        var nameField = siteInputField(T('Name'), current[1]);
-        var descriptionField = siteTextareaField(T('Description'), current[2]);
+        var urlField = siteInputField(_('URL address'), current[0]);
+        var nameField = siteInputField(_('Name'), current[1]);
+        var descriptionField = siteTextareaField(_('Description'), current[2]);
 
-        ui.showModal(isEdit ? T('Edit site') : T('Add site'), [
+        ui.showModal(isEdit ? _('Edit site') : _('Add site'), [
                 E('div', { 'class': 'sf-site-modal' }, [
                         urlField.node,
                         nameField.node,
                         descriptionField.node,
                         E('div', { 'class': 'sf-note sf-note-warning' },
-                                T('Do not add broad yandex.ru by default: it can open video, music, games, feeds, and other non-emergency services.'))
+                                _('Do not add broad yandex.ru by default: it can open video, music, games, feeds, and other non-emergency services.'))
                 ]),
                 E('div', { 'class': 'right sf-modal-actions' }, [
                         E('button', {
                                 'class': 'btn cbi-button',
                                 'click': ui.hideModal
-                        }, T('Cancel')),
+                        }, _('Cancel')),
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
@@ -3109,7 +2976,7 @@ function showSiteModal(site) {
                                         var description = descriptionField.input.value.trim();
 
                                         if (!url) {
-                                                notify(T('Site URL is required.'), 'warning');
+                                                notify(_('Site URL is required.'), 'warning');
                                                 return;
                                         }
 
@@ -3122,10 +2989,10 @@ function showSiteModal(site) {
                                         }
 
                                         renderEmergencySiteList();
-                                        notify(T('Site saved.'), 'info');
+                                        notify(_('Site saved.'), 'info');
                                         ui.hideModal();
                                 }
-                        }, T('Save'))
+                        }, _('Save'))
                 ])
         ]);
 }
@@ -3138,28 +3005,28 @@ function deleteSite(site) {
 
         emergencySites.splice(index, 1);
         renderEmergencySiteList();
-        notify(T('Site deleted.'), 'info');
+        notify(_('Site deleted.'), 'info');
         ui.hideModal();
 }
 
 function showDeleteSiteModal(site) {
-        ui.showModal(T('Delete site'), [
+        ui.showModal(_('Delete site'), [
                 E('div', { 'class': 'sf-site-modal' }, [
-                        E('p', {}, T('Delete this site?')),
+                        E('p', {}, _('Delete this site?')),
                         E('strong', {}, site[0]),
-                        E('small', {}, T('This site will be removed from the emergency-useful list.'))
+                        E('small', {}, _('This site will be removed from the emergency-useful list.'))
                 ]),
                 E('div', { 'class': 'right sf-modal-actions' }, [
                         E('button', {
                                 'class': 'btn cbi-button',
                                 'click': ui.hideModal
-                        }, T('Cancel')),
+                        }, _('Cancel')),
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-negative',
                                 'click': function () {
                                         deleteSite(site);
                                 }
-                        }, T('Delete'))
+                        }, _('Delete'))
                 ])
         ]);
 }
@@ -3167,7 +3034,7 @@ function showDeleteSiteModal(site) {
 function domainCard(site) {
         return E('div', { 'class': 'sf-domain' }, [
                 E('div', { 'class': 'sf-domain-actions sf-domain-actions-top' }, [
-                        iconButton(T('Edit site'), 'gear', 'neutral', function () {
+                        iconButton(_('Edit site'), 'gear', 'neutral', function () {
                                 showSiteModal(site);
                         })
                 ]),
@@ -3175,7 +3042,7 @@ function domainCard(site) {
                 E('span', {}, site[1]),
                 E('small', {}, site[2]),
                 E('div', { 'class': 'sf-domain-actions sf-domain-actions-bottom' }, [
-                        iconButton(T('Delete site'), 'trash', 'danger', function () {
+                        iconButton(_('Delete site'), 'trash', 'danger', function () {
                                 showDeleteSiteModal(site);
                         })
                 ])
@@ -3192,15 +3059,112 @@ function formattedDeviceDisplayId(device) {
         return '#' + deviceDisplayId(device);
 }
 
-function normalizeGroupName(groupName) {
-        if (groupName === 'Ребёнок номер 1' || groupName === 'Child number 1')
-                return T('Child number 1');
+var DEFAULT_GROUP_SECTION_IDS = ['no_restrictions', 'child_1'];
+var LEGACY_GROUP_ALIASES = {
+        'No restrictions': 'no_restrictions',
+        'Без ограничений': 'no_restrictions',
+        'Child number 1': 'child_1',
+        'Первый ребёнок': 'child_1',
+        'Ребёнок номер 1': 'child_1'
+};
 
-        return String(groupName || '').trim();
+function defaultGroupDisplayName(sectionId, fallback) {
+        var stored = safeUciGet('sheepfold', sectionId, 'name', '');
+
+        return String(stored || fallback || '').trim();
 }
 
 function noRestrictionsGroupName() {
-        return normalizeGroupName(T('No restrictions'));
+        return defaultGroupDisplayName('no_restrictions', 'No restrictions');
+}
+
+function childGroupName() {
+        return defaultGroupDisplayName('child_1', 'Child number 1');
+}
+
+function normalizeGroupName(groupName) {
+        var trimmed = String(groupName || '').trim();
+
+        if (!trimmed || trimmed === 'Not configured' || trimmed === 'Не настроено')
+                return trimmed;
+
+        if (LEGACY_GROUP_ALIASES[trimmed])
+                return defaultGroupDisplayName(LEGACY_GROUP_ALIASES[trimmed], trimmed);
+
+        return trimmed;
+}
+
+function sheepfoldGroupOptions() {
+        var options = [[_('Not configured'), _('Not configured')]];
+
+        safeUciSections('sheepfold', 'group').forEach(function (section) {
+                var name = normalizeGroupName(section.name);
+
+                if (!name)
+                        return;
+
+                options.push([name, name]);
+        });
+
+        return options;
+}
+
+function supplementGroupedDevicesFromUci(grouped) {
+        var devicesByMac = {};
+
+        devices.forEach(function (device) {
+                devicesByMac[device.mac] = device;
+        });
+
+        safeUciSections('sheepfold', 'device').forEach(function (section) {
+                var mac = normalizeMac(section.mac);
+                var groupName;
+                var deviceEntry;
+                var alreadyListed;
+
+                if (!mac || reservedSheepfoldListSection(section['.name']))
+                        return;
+
+                groupName = section.group ? normalizeGroupName(section.group) : '';
+                if (!groupName || groupName === _('Not configured') || groupName === 'Не настроено')
+                        return;
+
+                if (!grouped[groupName])
+                        grouped[groupName] = [];
+
+                alreadyListed = grouped[groupName].some(function (device) {
+                        return device.mac === mac;
+                });
+
+                if (alreadyListed)
+                        return;
+
+                deviceEntry = devicesByMac[mac] || {
+                        id: generatedSectionName('device', mac),
+                        name: section.name || mac,
+                        mac: mac,
+                        group: groupName
+                };
+
+                grouped[groupName].push(deviceEntry);
+        });
+}
+
+function ensureDefaultGroupSections(grouped, groupSections) {
+        DEFAULT_GROUP_SECTION_IDS.forEach(function (sectionId) {
+                var section = safeUciSections('sheepfold', 'group').find(function (item) {
+                        return item['.name'] === sectionId;
+                });
+
+                if (!section)
+                        return;
+
+                var displayName = normalizeGroupName(section.name || defaultGroupDisplayName(sectionId, sectionId));
+
+                if (!grouped[displayName])
+                        grouped[displayName] = [];
+                groupSections[displayName] = section;
+        });
 }
 
 function markNoRestrictionsAutoExcluded(sectionName) {
@@ -3283,7 +3247,7 @@ function adminDeviceList(admin) {
         });
 
         if (!selected.length)
-                return E('span', { 'class': 'sf-muted' }, T('No devices selected'));
+                return E('span', { 'class': 'sf-muted' }, _('No devices selected'));
 
         return E('div', { 'class': 'sf-admin-device-list' }, selected.map(function (device) {
                 return E('div', {}, [
@@ -3346,7 +3310,7 @@ function createDeviceSelectionBox(options) {
         var selected = {};
         var filterInput = E('input', {
                 'class': 'cbi-input-text sf-search sf-binding-filter',
-                'placeholder': T('Search by name, IP, MAC, or ID')
+                'placeholder': _('Search by name, IP, MAC, or ID')
         });
         var table = E('div', { 'class': 'sf-binding-table' });
         var filter = options.filter || function () { return true; };
@@ -3396,10 +3360,10 @@ function createDeviceSelectionBox(options) {
 
                 table.replaceChildren.apply(table, [
                         E('div', { 'class': 'sf-binding-row sf-binding-head' }, [
-                                E('div', {}, T('ID')),
-                                E('div', {}, T('Device')),
-                                E('div', {}, T('IP address')),
-                                E('div', {}, T('MAC address')),
+                                E('div', {}, _('ID')),
+                                E('div', {}, _('Device')),
+                                E('div', {}, _('IP address')),
+                                E('div', {}, _('MAC address')),
                                 E('div', {}, '')
                         ])
                 ].concat(rows));
@@ -3412,7 +3376,7 @@ function createDeviceSelectionBox(options) {
                 node: E('div', { 'class': 'sf-binding-selector' }, [
                         E('div', { 'class': 'sf-panel-head sf-binding-toolbar' }, [
                                 filterInput,
-                                E('span', { 'class': 'sf-muted' }, T('Selected devices are shown first.'))
+                                E('span', { 'class': 'sf-muted' }, _('Selected devices are shown first.'))
                         ]),
                         table
                 ]),
@@ -3470,7 +3434,7 @@ function usedGroupColors(exceptGroupName) {
         var used = {};
 
         safeUciSections('sheepfold', 'group').forEach(function (section) {
-                var name = normalizeGroupName(section.name || section['.name']);
+                var name = normalizeGroupName(section.name);
                 var color = String(section.color || '').toLowerCase();
 
                 if (name === exceptGroupName || !validGroupColor(color))
@@ -3508,7 +3472,7 @@ function groupSectionByName(groupName) {
         var result = null;
 
         safeUciSections('sheepfold', 'group').forEach(function (section) {
-                if (!result && normalizeGroupName(section.name || section['.name']) === normalized)
+                if (!result && normalizeGroupName(section.name) === normalized)
                         result = section;
         });
 
@@ -3524,9 +3488,9 @@ function ensureGroupSection(groupName, section) {
 
 function scheduleDefinitions() {
         return [
-                ['school_days', T('School days')],
-                ['temporary_access', T('Temporary access')],
-                ['bedtime', T('Bedtime')]
+                ['school_days', _('School days')],
+                ['temporary_access', _('Temporary access')],
+                ['bedtime', _('Bedtime')]
         ];
 }
 
@@ -3579,7 +3543,7 @@ function showScheduleConflictDisclaimer(onContinue) {
                         ui.hideModal();
                         onContinue();
                 }
-        }, T('I understand the risk, continue'));
+        }, _('I understand the risk, continue'));
         var timer = window.setInterval(function () {
                 seconds--;
                 countdown.textContent = String(Math.max(0, seconds));
@@ -3590,11 +3554,11 @@ function showScheduleConflictDisclaimer(onContinue) {
                 }
         }, 1000);
 
-        ui.showModal(T('Schedule conflict'), [
+        ui.showModal(_('Schedule conflict'), [
                 E('div', { 'class': 'sf-device-editor' }, [
-                        E('div', { 'class': 'sf-note sf-note-warning' }, T('Selected schedules may conflict with each other. Saving is allowed, but review the rules carefully.')),
+                        E('div', { 'class': 'sf-note sf-note-warning' }, _('Selected schedules may conflict with each other. Saving is allowed, but review the rules carefully.')),
                         E('p', {}, [
-                                T('Confirmation will be available in'),
+                                _('Confirmation will be available in'),
                                 ' ',
                                 countdown
                         ])
@@ -3606,15 +3570,15 @@ function showScheduleConflictDisclaimer(onContinue) {
                                         window.clearInterval(timer);
                                         ui.hideModal();
                                 }
-                        }, T('Cancel')),
+                        }, _('Cancel')),
                         button
                 ])
         ]);
 }
 
 function showGroupSettingsModal(groupName, section, onSave) {
-        var nameField = inputControl(T('Group name'), groupName, section && section.protected === '1' ? { 'readonly': 'readonly' } : {});
-        var colorField = inputControl(T('Group color'), groupColor(groupName, section), { 'type': 'color' });
+        var nameField = inputControl(_('Group name'), groupName, section && section.protected === '1' ? { 'readonly': 'readonly' } : {});
+        var colorField = inputControl(_('Group color'), groupColor(groupName, section), { 'type': 'color' });
         var currentDeviceIds = devices.filter(function (device) {
                 return normalizeGroupName(device.group) === groupName;
         }).map(function (device) {
@@ -3625,14 +3589,14 @@ function showGroupSettingsModal(groupName, section, onSave) {
         });
         var scheduleSelector = scheduleCheckboxes(listOptionValues(section && section.schedules));
         var allowlistOnlyField = checkboxControl(
-                T('Allow only selected whitelist sources for this group'),
+                _('Allow only selected whitelist sources for this group'),
                 section && section.allowlist_only === '1',
-                T('Devices in this group will be limited to domains from the selected whitelist sources and manually allowed emergency-useful sites.')
+                _('Devices in this group will be limited to domains from the selected whitelist sources and manually allowed emergency-useful sites.')
         );
         var activityLogField = checkboxControl(
-                T('Enable activity journal for all devices in this group'),
+                _('Enable activity journal for all devices in this group'),
                 section && section.activity_log_enabled === '1',
-                T('Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices.')
+                _('Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices.')
         );
         var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
 
@@ -3653,14 +3617,14 @@ function showGroupSettingsModal(groupName, section, onSave) {
                 conflictNote.textContent = '';
 
                 if (!newName) {
-                        showError(T('Group name is required.'));
+                        showError(_('Group name is required.'));
                         return;
                 }
 
                 if (newName !== oldName && safeUciSections('sheepfold', 'group').some(function (item) {
                         return normalizeGroupName(item.name || item['.name']) === newName;
                 })) {
-                        showError(T('This group already exists.'));
+                        showError(_('This group already exists.'));
                         return;
                 }
 
@@ -3684,7 +3648,7 @@ function showGroupSettingsModal(groupName, section, onSave) {
                         var currentGroup = normalizeGroupName(deviceSection.group);
 
                         if (currentGroup === oldName || linked) {
-                                uci.set('sheepfold', deviceSection['.name'], 'group', linked ? newName : T('Not configured'));
+                                uci.set('sheepfold', deviceSection['.name'], 'group', linked ? newName : _('Not configured'));
 
                                 if (oldName === noRestrictionsGroupName() && !linked)
                                         markNoRestrictionsAutoExcluded(deviceSection['.name']);
@@ -3703,7 +3667,7 @@ function showGroupSettingsModal(groupName, section, onSave) {
                 });
 
                 saveUciChanges(['sheepfold']).then(function () {
-                        notify(T('Group saved.'), 'info');
+                        notify(_('Group saved.'), 'info');
                         if (onSave)
                                 onSave();
                         ui.hideModal();
@@ -3711,29 +3675,29 @@ function showGroupSettingsModal(groupName, section, onSave) {
                                 window.location.reload();
                         }, 700);
                 }, function () {
-                        notify(T('Could not save group.'), 'warning');
+                        notify(_('Could not save group.'), 'warning');
                 });
         }
 
-        ui.showModal(T('Group settings'), [
+        ui.showModal(_('Group settings'), [
                 E('div', { 'class': 'sf-device-editor' }, [
                         conflictNote,
                         E('div', { 'class': 'sf-grid two' }, [
                                 nameField.node,
                                 colorField.node
                         ]),
-                        E('strong', {}, T('Group schedules')),
+                        E('strong', {}, _('Group schedules')),
                         scheduleSelector.node,
                         allowlistOnlyField.node,
                         activityLogField.node,
-                        E('strong', {}, T('Assigned devices')),
+                        E('strong', {}, _('Assigned devices')),
                         deviceSelector.node
                 ]),
                 E('div', { 'class': 'right sf-modal-actions' }, [
                         E('button', {
                                 'class': 'btn cbi-button',
                                 'click': ui.hideModal
-                        }, T('Cancel')),
+                        }, _('Cancel')),
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
@@ -3744,14 +3708,15 @@ function showGroupSettingsModal(groupName, section, onSave) {
 
                                         saveGroupSettings();
                                 }
-                        }, T('Save'))
+                        }, _('Save'))
                 ])
         ]);
 }
 
 function showAddGroupModal(existingNames) {
-        var nameField = inputControl(T('Group name'), '');
-        var colorField = inputControl(T('Group color'), nextAvailableGroupColor(T('Custom')), { 'type': 'color' }, T('Automatic color'));
+        var nameField = inputControl(_('Group name'), '');
+        var colorField = inputControl(_('Group color'), nextAvailableGroupColor(_('Custom')), { 'type': 'color' }, _('Automatic color'));
+        var personalField = checkboxControl(_('Personal group'), false, _('Only devices belonging to one person can be added to this group.'));
         var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
 
         function showError(message) {
@@ -3759,19 +3724,20 @@ function showAddGroupModal(existingNames) {
                 conflictNote.hidden = false;
         }
 
-        ui.showModal(T('Add group'), [
+        ui.showModal(_('Add group'), [
                 E('div', { 'class': 'sf-device-editor' }, [
                         conflictNote,
                         E('div', { 'class': 'sf-grid two' }, [
                                 nameField.node,
                                 colorField.node
-                        ])
+                        ]),
+                        personalField.node
                 ]),
                 E('div', { 'class': 'right sf-modal-actions' }, [
                         E('button', {
                                 'class': 'btn cbi-button',
                                 'click': ui.hideModal
-                        }, T('Cancel')),
+                        }, _('Cancel')),
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
@@ -3783,12 +3749,12 @@ function showAddGroupModal(existingNames) {
                                         conflictNote.textContent = '';
 
                                         if (!groupName) {
-                                                showError(T('Group name is required.'));
+                                                showError(_('Group name is required.'));
                                                 return;
                                         }
 
                                         if (existingNames[groupName]) {
-                                                showError(T('This group already exists.'));
+                                                showError(_('This group already exists.'));
                                                 return;
                                         }
 
@@ -3802,18 +3768,19 @@ function showAddGroupModal(existingNames) {
                                         uci.set('sheepfold', sectionName, 'auto_assignable', '0');
                                         uci.set('sheepfold', sectionName, 'allowlist_only', '0');
                                         uci.set('sheepfold', sectionName, 'activity_log_enabled', '0');
+                                        uci.set('sheepfold', sectionName, 'personal', personalField.input.checked ? '1' : '0');
 
                                         saveUciChanges(['sheepfold']).then(function () {
-                                                notify(T('Group created.'), 'info');
+                                                notify(_('Group created.'), 'info');
                                                 ui.hideModal();
                                                 window.setTimeout(function () {
                                                         window.location.reload();
                                                 }, 700);
                                         }, function () {
-                                                notify(T('Could not create group.'), 'warning');
+                                                notify(_('Could not create group.'), 'warning');
                                         });
                                 }
-                        }, T('Save'))
+                        }, _('Save'))
                 ])
         ]);
 }
@@ -3849,10 +3816,10 @@ function adminTableRow(admin) {
                 E('div', { 'class': 'sf-mono' }, admin.login),
                 devicesCell,
                 E('div', { 'class': 'sf-row-actions' }, [
-                        iconButton(T('Configure'), 'gear', 'neutral', function () {
+                        iconButton(_('Configure'), 'gear', 'neutral', function () {
                                 showAdminSettingsModal(admin);
                         }),
-                        iconButton(T('Bind devices'), 'link', 'neutral', function () {
+                        iconButton(_('Bind devices'), 'link', 'neutral', function () {
                                 showAdminDeviceBindingModal(admin, function () {
                                         devicesCell.replaceChildren(adminDeviceList(admin));
                                 });
@@ -3862,8 +3829,8 @@ function adminTableRow(admin) {
 }
 
 function showAddAdministratorModal(onAdd) {
-        var nameField = inputControl(T('Admin name'), '');
-        var loginField = inputControl(T('Login'), '');
+        var nameField = inputControl(_('Admin name'), '');
+        var loginField = inputControl(_('Login'), '');
         var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
         var assignedToAnyAdmin = adminAssignedDeviceIds(null);
         var selector = createDeviceSelectionBox({
@@ -3877,64 +3844,73 @@ function showAddAdministratorModal(onAdd) {
                 conflictNote.hidden = false;
         }
 
-        ui.showModal(T('Add administrator'), [
+        function saveAdministrator() {
+                var name = nameField.input.value.trim();
+                var login = loginField.input.value.trim();
+                var admin;
+
+                conflictNote.hidden = true;
+                conflictNote.textContent = '';
+
+                if (!name || !login) {
+                        showError(_('Name and login are required.'));
+                        return;
+                }
+
+                if (adminLoginExists(login)) {
+                        showError(_('This login is already used.'));
+                        return;
+                }
+
+                admin = {
+                        id: nextAdminId(),
+                        name: name,
+                        login: login,
+                        deviceIds: selector.selectedIds(),
+                        temporaryPassword: generatePairingCode()
+                };
+
+                admins.push(admin);
+                applyAdminDeviceBindings(admin, selector.selectedDevices(), []).then(function () {
+                        if (onAdd)
+                                onAdd(admin);
+                        notify(_('Administrator added.'), 'info');
+                        ui.hideModal();
+                        window.setTimeout(function () {
+                                window.location.reload();
+                        }, 700);
+                }, function (error) {
+                        notify(error && error.message ? error.message : _('Could not save device settings.'), 'warning');
+                });
+        }
+
+        function modalActions() {
+                return E('div', { 'class': 'right sf-modal-actions' }, [
+                        E('button', {
+                                'class': 'btn cbi-button',
+                                'click': ui.hideModal
+                        }, _('Cancel')),
+                        E('button', {
+                                'class': 'btn cbi-button cbi-button-positive',
+                                'click': function () {
+                                        saveAdministrator();
+                                }
+                        }, _('Save'))
+                ]);
+        }
+
+        ui.showModal(_('Add administrator'), [
                 E('div', { 'class': 'sf-device-editor' }, [
                         conflictNote,
                         E('div', { 'class': 'sf-grid two' }, [
                                 nameField.node,
                                 loginField.node
                         ]),
-                        E('strong', {}, T('Assigned devices')),
+                        modalActions(),
+                        E('strong', {}, _('Assigned devices')),
                         selector.node
                 ]),
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', {
-                                'class': 'btn cbi-button',
-                                'click': ui.hideModal
-                        }, T('Cancel')),
-                        E('button', {
-                                'class': 'btn cbi-button cbi-button-positive',
-                                'click': function () {
-                                        var name = nameField.input.value.trim();
-                                        var login = loginField.input.value.trim();
-                                        var admin;
-
-                                        conflictNote.hidden = true;
-                                        conflictNote.textContent = '';
-
-                                        if (!name || !login) {
-                                                showError(T('Name and login are required.'));
-                                                return;
-                                        }
-
-                                        if (adminLoginExists(login)) {
-                                                showError(T('This login is already used.'));
-                                                return;
-                                        }
-
-                                        admin = {
-                                                id: nextAdminId(),
-                                                name: name,
-                                                login: login,
-                                                deviceIds: selector.selectedIds(),
-                                                temporaryPassword: generatePairingCode()
-                                        };
-
-                                        admins.push(admin);
-                                        applyAdminDeviceBindings(admin, selector.selectedDevices(), []).then(function () {
-                                                if (onAdd)
-                                                        onAdd(admin);
-                                                notify(T('Administrator added.'), 'info');
-                                                ui.hideModal();
-                                                window.setTimeout(function () {
-                                                        window.location.reload();
-                                                }, 700);
-                                        }, function (error) {
-                                                notify(error && error.message ? error.message : T('Could not save device settings.'), 'warning');
-                                        });
-                                }
-                        }, T('Save'))
-                ])
+                modalActions()
         ]);
 }
 
@@ -3957,13 +3933,13 @@ function showAdminDeviceBindingModal(admin, onSave) {
                         if (onSave)
                                 onSave();
                         ui.hideModal();
-                        notify(T('Device bindings saved.'), 'info');
+                        notify(_('Device bindings saved.'), 'info');
                         window.setTimeout(function () {
                                 window.location.reload();
                         }, 700);
                 }, function (error) {
                         admin.deviceIds = previousIds;
-                        notify(error && error.message ? error.message : T('Could not save device settings.'), 'warning');
+                        notify(error && error.message ? error.message : _('Could not save device settings.'), 'warning');
                 });
         }
 
@@ -3972,22 +3948,22 @@ function showAdminDeviceBindingModal(admin, onSave) {
                         E('button', {
                                 'class': 'btn cbi-button',
                                 'click': ui.hideModal
-                        }, T('Cancel')),
+                        }, _('Cancel')),
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': saveBindings
-                        }, T('Save'))
+                        }, _('Save'))
                 ]);
         }
 
         actionRow = modalActions();
 
-        ui.showModal(T('Assign devices to administrator') + ' ' + admin.name, [
+        ui.showModal(_('Assign devices to administrator') + ' ' + admin.name, [
                 E('div', { 'class': 'sf-binding-modal' }, [
                         E('div', { 'class': 'sf-section-intro' }, [
-                                E('p', {}, T('Select administrator devices') + ' ' + admin.name + '. ' + T('Selected administrator devices can manage Sheepfold.')),
-                                E('p', {}, T('Blocklisted devices are not available for binding.')),
-                                E('p', {}, T('When a device is assigned to an administrator, Sheepfold removes it from ordinary groups and schedules, disables activity logging for it, and adds it to the allowlist.'))
+                                E('p', {}, _('Select administrator devices') + ' ' + admin.name + '. ' + _('Selected administrator devices can manage Sheepfold.')),
+                                E('p', {}, _('Blocklisted devices are not available for binding.')),
+                                E('p', {}, _('When a device is assigned to an administrator, Sheepfold removes it from ordinary groups and schedules, disables activity logging for it, and adds it to the allowlist.'))
                         ]),
                         actionRow,
                         selector.node
@@ -3997,48 +3973,40 @@ function showAdminDeviceBindingModal(admin, onSave) {
 }
 
 function showDeviceSettingsModal(device) {
-        var knownGroups = [
-                [T('Not configured'), T('Not configured')],
-                [T('Parents'), T('Parents')],
-                [T('Child number 1'), T('Child number 1')],
-                [T('Children'), T('Children')],
-                [T('TV / media'), T('TV / media')],
-                [T('Guests'), T('Guests')],
-                [T('No restrictions'), T('No restrictions')]
-        ];
+        var knownGroups = sheepfoldGroupOptions();
         var knownGroupValues = knownGroups.map(function (item) { return item[0]; });
         var groupIsCustom = device.group && knownGroupValues.indexOf(device.group) === -1;
-        var nameField = inputControl(T('Device name'), device.name);
-        var ipField = inputControl(T('IP address'), device.ip);
-        var groupField = selectControl(T('Group'), groupIsCustom ? '__custom' : device.group, knownGroups.concat([
-                ['__custom', T('Custom')]
+        var nameField = inputControl(_('Device name'), device.name);
+        var ipField = inputControl(_('IP address'), device.ip);
+        var groupField = selectControl(_('Group'), groupIsCustom ? '__custom' : device.group, knownGroups.concat([
+                ['__custom', _('Custom')]
         ]));
-        var customGroupField = inputControl(T('Use custom group'), groupIsCustom ? device.group : '');
-        var typeField = deviceTypeSelectControl(T('Device type'), displayDeviceType(device));
-        var statusField = selectControl(T('Access mode'), device.status, [
-                ['new', T('Not configured')],
-                ['allow', T('Allowlist')],
-                ['blocked', T('Blocklist')],
-                ['scheduled', T('Scheduled')],
-                ['restricted', T('Restricted')]
+        var customGroupField = inputControl(_('Use custom group'), groupIsCustom ? device.group : '');
+        var typeField = deviceTypeSelectControl(_('Device type'), displayDeviceType(device));
+        var statusField = selectControl(_('Access mode'), device.status, [
+                ['new', _('Not configured')],
+                ['allow', _('Allowlist')],
+                ['blocked', _('Blocklist')],
+                ['scheduled', _('Scheduled')],
+                ['restricted', _('Restricted')]
         ]);
         var staticLeaseField = checkboxControl(
-                device.staticLease ? T('Permanent DHCP lease') : T('Create permanent DHCP lease'),
+                device.staticLease ? _('Permanent DHCP lease') : _('Create permanent DHCP lease'),
                 device.staticLease,
-                device.staticLease ? T('Existing permanent DHCP lease will be updated, not removed.') : '',
+                device.staticLease ? _('Existing permanent DHCP lease will be updated, not removed.') : '',
                 device.staticLease ? { 'disabled': 'disabled' } : null
         );
         var activityLogField = checkboxControl(
-                T('Enable activity journal for this device'),
+                _('Enable activity journal for this device'),
                 device.activityLogEnabled,
-                T('Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices.')
+                _('Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices.')
         );
         var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
         var infoLines = E('div', { 'class': 'sf-device-info-lines' }, [
-                settingLine(T('ID'), formattedDeviceDisplayId(device)),
-                settingLine(T('MAC address'), device.mac),
-                settingLine(T('Hostname'), device.hostname || '-'),
-                settingLine(T('Detection source'), device.sourceLabel || '-')
+                settingLine(_('ID'), formattedDeviceDisplayId(device)),
+                settingLine(_('MAC address'), device.mac),
+                settingLine(_('Hostname'), device.hostname || '-'),
+                settingLine(_('Detection source'), device.sourceLabel || '-')
         ]);
 
         function updateCustomGroupVisibility() {
@@ -4048,7 +4016,7 @@ function showDeviceSettingsModal(device) {
         groupField.input.addEventListener('change', updateCustomGroupVisibility);
         updateCustomGroupVisibility();
 
-        ui.showModal(T('Device settings'), [
+        ui.showModal(_('Device settings'), [
                 E('div', { 'class': 'sf-device-editor' }, [
                         infoLines,
                         conflictNote,
@@ -4067,7 +4035,7 @@ function showDeviceSettingsModal(device) {
                         E('button', {
                                 'class': 'btn cbi-button',
                                 'click': ui.hideModal
-                        }, T('Cancel')),
+                        }, _('Cancel')),
                         E('button', {
                                 'class': 'btn cbi-button cbi-button-positive',
                                 'click': function () {
@@ -4079,7 +4047,7 @@ function showDeviceSettingsModal(device) {
                                                 customGroupField.input.value.trim() :
                                                 groupField.input.value;
                                         var oldGroup = normalizeGroupName(device.group);
-                                        var newGroup = normalizeGroupName(group || T('Not configured'));
+                                        var newGroup = normalizeGroupName(group || _('Not configured'));
                                         var deviceType = typeField.input.value;
                                         var status = statusField.input.value;
                                         var configs = ['sheepfold'];
@@ -4088,19 +4056,19 @@ function showDeviceSettingsModal(device) {
                                         conflictNote.textContent = '';
 
                                         if (status === 'allow' && macInSheepfoldList('blocklist', device.mac)) {
-                                                conflictNote.textContent = T('This device is already in the blocklist. Remove it from the blocklist before adding it to the allowlist.');
+                                                conflictNote.textContent = _('This device is already in the blocklist. Remove it from the blocklist before adding it to the allowlist.');
                                                 conflictNote.hidden = false;
                                                 return;
                                         }
 
                                         if (status === 'blocked' && macInSheepfoldList('allowlist', device.mac)) {
-                                                conflictNote.textContent = T('This device is already in the allowlist. Remove it from the allowlist before adding it to the blocklist.');
+                                                conflictNote.textContent = _('This device is already in the allowlist. Remove it from the allowlist before adding it to the blocklist.');
                                                 conflictNote.hidden = false;
                                                 return;
                                         }
 
                                         if (staticLeaseField.input.checked && !ip) {
-                                                notify(T('Static lease requires an IP address.'), 'warning');
+                                                notify(_('Static lease requires an IP address.'), 'warning');
                                                 return;
                                         }
 
@@ -4138,16 +4106,16 @@ function showDeviceSettingsModal(device) {
                                         saveUciChanges(configs.filter(function (config, index) {
                                                 return configs.indexOf(config) === index;
                                         })).then(function () {
-                                                notify(T('Device settings saved.'), 'info');
+                                                notify(_('Device settings saved.'), 'info');
                                                 ui.hideModal();
                                                 window.setTimeout(function () {
                                                         window.location.reload();
                                                 }, 700);
                                         }, function () {
-                                                notify(T('Could not save device settings.'), 'warning');
+                                                notify(_('Could not save device settings.'), 'warning');
                                         });
                                 }
-                        }, T('Save'))
+                        }, _('Save'))
                 ])
         ]);
 }
@@ -4186,16 +4154,16 @@ function deviceTable(rows, options) {
                         E('div', { 'class': 'sf-mono' }, device.mac),
                         E('div', {}, device.group),
                         E('div', { 'class': 'sf-status-stack' }, [
-                                badge(device.status),
+                                device.statusBadge ? badge(device.statusBadge) : '',
                                 device.activityLogEnabled ? badge('journal') : ''
                         ]),
                         E('div', { 'class': 'sf-row-actions' }, [
-                                iconButton(T('Configure'), 'gear', 'neutral', function () {
+                                iconButton(_('Configure'), 'gear', 'neutral', function () {
                                         showDeviceSettingsModal(device);
                                 }),
                                 options.removeFromList ?
                                         iconButton(
-                                                options.removeFromList === 'allowlist' ? T('Remove from allowlist') : T('Remove from blocklist'),
+                                                options.removeFromList === 'allowlist' ? _('Remove from allowlist') : _('Remove from blocklist'),
                                                 'trash',
                                                 'danger',
                                                 function () {
@@ -4205,21 +4173,27 @@ function deviceTable(rows, options) {
                                         '',
                                 options.compact || adminDevice || device.status === 'allow' || device.status === 'blocked' ?
                                         '' :
-                                        actionButton(T('+30 min'), 'positive', T('Temporary access would require confirmation.'))
+                                        E('button', {
+                                                'class': 'sf-action sf-action-positive',
+                                                'click': function (ev) {
+                                                        ev.preventDefault();
+                                                        grantDeviceTemporaryAccess(device, 30);
+                                                }
+                                        }, _('+30 min'))
                         ])
                 ]);
         });
 
         return E('div', { 'class': 'sf-device-table' }, [
                 E('div', { 'class': 'sf-device-row sf-device-head' }, [
-                        E('div', {}, deviceSortHeader(T('ID'), 'id')),
-                        E('div', {}, deviceSortHeader(T('Device'), 'device')),
-                        E('div', {}, deviceSortHeader(T('Type'), 'type')),
-                        E('div', {}, deviceSortHeader(T('IP address'), 'ip')),
-                        E('div', {}, T('MAC address')),
-                        E('div', {}, deviceSortHeader(T('Group'), 'group')),
-                        E('div', {}, deviceSortHeader(T('Status'), 'status')),
-                        E('div', {}, T('Actions'))
+                        E('div', {}, deviceSortHeader(_('ID'), 'id')),
+                        E('div', {}, deviceSortHeader(_('Device'), 'device')),
+                        E('div', {}, deviceSortHeader(_('Type'), 'type')),
+                        E('div', {}, deviceSortHeader(_('IP address'), 'ip')),
+                        E('div', {}, _('MAC address')),
+                        E('div', {}, deviceSortHeader(_('Group'), 'group')),
+                        E('div', {}, deviceSortHeader(_('Status'), 'status')),
+                        E('div', {}, _('Actions'))
                 ])
         ].concat(tableRows));
 }
@@ -4274,6 +4248,348 @@ function globalTextareaOptionField(label, option, defaultValue, savedMessage, er
         ]);
 }
 
+function logStorageStatusView() {
+        var lamp = E('span', { 'class': 'sf-storage-status-lamp warn' });
+        var text = E('span', { 'class': 'sf-storage-status-text' }, _('Checking storage status...'));
+
+        function applyStatus(payload) {
+                var state = payload && payload.state ? payload.state : 'error';
+
+                lamp.className = 'sf-storage-status-lamp ' + (state === 'ok' ? 'ok' : state === 'warn' ? 'warn' : 'error');
+                text.textContent = payload && payload.message ? payload.message : _('Could not read storage status.');
+        }
+
+        function refresh() {
+                text.textContent = _('Checking storage status...');
+                lamp.className = 'sf-storage-status-lamp warn';
+
+                return routerControl(['log-storage-status']).then(function (result) {
+                        var code = Number(result && result.code || 0);
+                        var payload = null;
+
+                        if (code === 0) {
+                                try {
+                                        payload = JSON.parse(String(result.stdout || '').trim() || '{}');
+                                } catch (error) {
+                                        payload = null;
+                                }
+                        }
+
+                        applyStatus(payload || { state: 'error', message: _('Could not read storage status.') });
+                }, function () {
+                        applyStatus({ state: 'error', message: _('Could not read storage status.') });
+                });
+        }
+
+        return {
+                node: E('span', { 'class': 'sf-storage-status' }, [lamp, text]),
+                refresh: refresh
+        };
+}
+
+function parseRouterJsonOutput(result) {
+        var code = Number(result && result.code || 0);
+
+        if (code !== 0)
+                return null;
+
+        try {
+                return JSON.parse(String(result.stdout || '').trim() || '{}');
+        } catch (error) {
+                return null;
+        }
+}
+
+function formatYandexSyncAge(at) {
+        var parsed;
+
+        if (!at)
+                return '';
+
+        parsed = Date.parse(String(at).replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
+        if (isNaN(parsed))
+                return String(at);
+
+        var diffSec = Math.max(0, Math.round((Date.now() - parsed) / 1000));
+
+        if (diffSec < 60)
+                return _('just now');
+        if (diffSec < 3600)
+                return String(Math.floor(diffSec / 60)) + ' ' + _('min ago');
+        if (diffSec < 86400)
+                return String(Math.floor(diffSec / 3600)) + ' ' + _('h ago');
+
+        return String(Math.floor(diffSec / 86400)) + ' ' + _('d ago');
+}
+
+function yandexDiskMaintenancePanel() {
+        var statusNode = E('div', { 'class': 'sf-yandex-disk-actions-status sf-note' });
+        var syncStatusNode = E('div', { 'class': 'sf-yandex-disk-sync-status sf-muted' });
+        var listNode = E('div', { 'class': 'sf-yandex-disk-file-list' });
+        var backupSelect = E('select', { 'class': 'cbi-input-select sf-yandex-disk-backup-select' }, [
+                E('option', { value: '' }, _('Latest backup'))
+        ]);
+
+        function setStatus(message, tone) {
+                statusNode.textContent = message || '';
+                statusNode.className = 'sf-yandex-disk-actions-status sf-note' +
+                        (tone ? ' sf-note-' + tone : '');
+        }
+
+        function renderSyncStatus(payload) {
+                var when;
+                var line;
+
+                if (!payload) {
+                        syncStatusNode.textContent = _('Could not read Yandex Disk sync status.');
+                        syncStatusNode.className = 'sf-yandex-disk-sync-status sf-note sf-note-warning';
+                        return;
+                }
+
+                if (payload.ok === false && payload.message === 'no sync yet') {
+                        syncStatusNode.textContent = _('No sync to Yandex Disk yet.');
+                        syncStatusNode.className = 'sf-yandex-disk-sync-status sf-muted';
+                        return;
+                }
+
+                when = formatYandexSyncAge(payload.at);
+                line = _('Last Yandex Disk sync:') + ' ' + (when || infoValue(payload.at)) +
+                        (payload.message ? ' — ' + payload.message : '');
+
+                syncStatusNode.textContent = line;
+                syncStatusNode.className = 'sf-yandex-disk-sync-status sf-note' +
+                        (payload.ok ? ' sf-note-info' : ' sf-note-warning');
+        }
+
+        function refreshSyncStatus() {
+                routerControl(['yandex-disk-sync-status']).then(function (result) {
+                        renderSyncStatus(parseRouterJsonOutput(result));
+                }, function () {
+                        renderSyncStatus(null);
+                });
+        }
+
+        function populateBackupSelect(backups) {
+                var sorted = (backups || []).slice().sort(function (a, b) {
+                        return String(b.name || '').localeCompare(String(a.name || ''));
+                });
+
+                backupSelect.replaceChildren(E('option', { value: '' }, _('Latest backup')));
+                sorted.forEach(function (item) {
+                        backupSelect.appendChild(E('option', { value: item.name }, item.name));
+                });
+        }
+
+        function restoreSelectedBackup() {
+                var selected = backupSelect.value || '';
+                var confirmMessage = selected ?
+                        _('Restore Sheepfold settings from configuration backup %s on Yandex Disk?').replace('%s', selected) :
+                        _('Restore Sheepfold settings from the latest configuration backup on Yandex Disk?');
+
+                if (!window.confirm(confirmMessage))
+                        return;
+
+                setStatus(_('Restoring configuration from Yandex Disk...'));
+
+                routerControl(selected ?
+                        ['yandex-disk-restore-config', selected] :
+                        ['yandex-disk-restore-config']
+                ).then(function (result) {
+                        var payload = parseRouterJsonOutput(result);
+
+                        if (payload && payload.ok) {
+                                setStatus(
+                                        _('Configuration restored from Yandex Disk:') + ' ' +
+                                                infoValue(payload.restored),
+                                        'info'
+                                );
+                                refreshSyncStatus();
+                                window.setTimeout(function () {
+                                        window.location.reload();
+                                }, 1200);
+                                return;
+                        }
+
+                        setStatus(_('Could not restore configuration from Yandex Disk.'), 'warning');
+                }, function () {
+                        setStatus(_('Could not restore configuration from Yandex Disk.'), 'warning');
+                });
+        }
+
+        function renderFileList(payload) {
+                if (!payload || !payload.ok) {
+                        listNode.replaceChildren(E('div', { 'class': 'sf-muted' }, _('Could not read Yandex Disk file list.')));
+                        return;
+                }
+
+                populateBackupSelect(payload.backups || []);
+                listNode.replaceChildren.apply(listNode, [
+                        [_('Logs on Yandex Disk'), payload.logs || []],
+                        [_('Configuration backups on Yandex Disk'), payload.backups || []]
+                ].map(function (section) {
+                        var items = section[1];
+
+                        return E('div', { 'class': 'sf-yandex-disk-file-group' }, [
+                                E('strong', {}, section[0]),
+                                items.length ?
+                                        E('ul', {}, items.map(function (item) {
+                                                var sizeKb = Math.max(1, Math.round((item.bytes || 0) / 1024));
+
+                                                return E('li', {}, item.name + ' (' + sizeKb + ' KB)');
+                                        })) :
+                                        E('div', { 'class': 'sf-muted' }, _('No files'))
+                        ]);
+                }));
+        }
+
+        window.setTimeout(refreshSyncStatus, 0);
+
+        return E('div', { 'class': 'sf-yandex-disk-actions' }, [
+                E('div', { 'class': 'sf-toolbar sf-yandex-disk-toolbar' }, [
+                        E('button', {
+                                'class': 'sf-action sf-action-neutral',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        setStatus(_('Testing Yandex Disk login...'));
+
+                                        routerControl(['yandex-disk-test']).then(function (result) {
+                                                var payload = parseRouterJsonOutput(result);
+
+                                                if (payload && payload.ok)
+                                                        setStatus(payload.message || _('Yandex Disk login works.'), 'info');
+                                                else
+                                                        setStatus(_('Yandex Disk login failed.'), 'warning');
+                                        }, function () {
+                                                setStatus(_('Yandex Disk login failed.'), 'warning');
+                                        });
+                                }
+                        }, _('Test Yandex Disk login')),
+                        E('button', {
+                                'class': 'sf-action sf-action-neutral',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        setStatus(_('Loading file list from Yandex Disk...'));
+
+                                        routerControl(['yandex-disk-list']).then(function (result) {
+                                                var payload = parseRouterJsonOutput(result);
+
+                                                renderFileList(payload);
+                                                if (payload && payload.ok)
+                                                        setStatus(_('Yandex Disk file list updated.'), 'info');
+                                                else
+                                                        setStatus(_('Could not read Yandex Disk file list.'), 'warning');
+                                        }, function () {
+                                                setStatus(_('Could not read Yandex Disk file list.'), 'warning');
+                                        });
+                                }
+                        }, _('Show files on disk')),
+                        E('button', {
+                                'class': 'sf-action sf-action-neutral',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        refreshSyncStatus();
+                                }
+                        }, _('Refresh sync status'))
+                ]),
+                syncStatusNode,
+                E('div', { 'class': 'sf-yandex-disk-restore-row' }, [
+                        backupSelect,
+                        E('button', {
+                                'class': 'sf-action sf-action-positive',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        restoreSelectedBackup();
+                                }
+                        }, _('Restore configuration backup'))
+                ]),
+                statusNode,
+                listNode
+        ]);
+}
+
+function logStorageLocationField() {
+        var currentValue = settingValue('log_storage', 'ram');
+        var statusView = logStorageStatusView();
+        var yandexBlock = E('div', { 'class': 'sf-yandex-disk-settings' });
+        var select;
+
+        function syncVisibility() {
+                yandexBlock.hidden = select.value === 'yandex_disk' ? null : 'hidden';
+                statusView.refresh();
+        }
+
+        select = E('select', {
+                'class': 'cbi-input-select',
+                'change': function (ev) {
+                        setSettingsDraftOption('log_storage', ev.currentTarget.value);
+                        syncVisibility();
+                }
+        }, [
+                ['ram', _('RAM, router operational memory, cleared on reboot (recommended)')],
+                ['usb', _('USB flash drive')],
+                ['yandex_disk', _('Yandex Disk')]
+        ].map(function (item) {
+                return E('option', {
+                        'value': item[0],
+                        'selected': item[0] === currentValue ? 'selected' : null
+                }, item[1]);
+        }));
+
+        yandexBlock.appendChild(settingsDivider(_('Yandex Disk settings')));
+        yandexBlock.appendChild(sectionInputField(
+                'cloud',
+                _('Yandex Disk login'),
+                'login',
+                '',
+                'login@yandex.ru',
+                _('Use an app password from Yandex ID security settings.')
+        ));
+        yandexBlock.appendChild(sectionInputField(
+                'cloud',
+                _('Yandex Disk password'),
+                'password',
+                '',
+                '',
+                _('Use an app password from Yandex ID security settings.'),
+                true
+        ));
+        yandexBlock.appendChild(sectionInputField(
+                'cloud',
+                _('Root folder on disk for Sheepfold'),
+                'root_folder',
+                '/sheepfold',
+                '/sheepfold'
+        ));
+        yandexBlock.appendChild(saveSelectSectionField(
+                'cloud',
+                _('Allowed storage for Sheepfold data'),
+                'quota_mb',
+                '500',
+                [
+                        ['50', _('50 MB')],
+                        ['100', _('100 MB')],
+                        ['250', _('250 MB')],
+                        ['500', _('500 MB')],
+                        ['1024', _('1 GB')]
+                ],
+                _('Sheepfold uploads journals, rotated archives and configuration backups within this limit.')
+        ));
+        yandexBlock.appendChild(yandexDiskMaintenancePanel());
+
+        syncVisibility();
+
+        return E('div', { 'class': 'sf-log-storage-field-wrap' }, [
+                E('label', { 'class': 'sf-field sf-field-wide sf-log-storage-field' }, [
+                        E('span', {}, _('Log storage location')),
+                        E('div', { 'class': 'sf-log-storage-row' }, [
+                                select,
+                                statusView.node
+                        ])
+                ]),
+                yandexBlock
+        ]);
+}
+
 function cachePathField() {
         var currentValue = settingValue('log_cache_path', defaultLogCachePath) || defaultLogCachePath;
         var values = [
@@ -4296,229 +4612,9 @@ function cachePathField() {
         }));
 
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, T('Cache file path')),
+                E('span', {}, _('Cache file path')),
                 select,
-                E('small', {}, T('The cache file should be stored under /tmp/ so it does not wear router flash memory.'))
-        ]);
-}
-
-function usbStatusBadge(status) {
-        var enabled = String(status.enabled || '0') === '1';
-        var mounted = String(status.mounted || '0') === '1';
-
-        return E('div', { 'class': 'sf-note ' + (mounted ? 'sf-note-success' : 'sf-note-warning') }, [
-                E('strong', {}, enabled ? T('USB storage enabled') : T('USB storage disabled')),
-                E('span', {}, ' · ' + (mounted ? T('Mounted') : T('Not mounted'))),
-                E('span', {}, status.dev ? ' · ' + status.dev : ''),
-                E('span', {}, ' · ' + T('Free space') + ': ' + String(status.free_pct || 0) + '%'),
-                E('span', {}, ' · ' + T('Archives') + ': ' + String(status.archives || 0)),
-                E('span', {}, ' · ' + T('Key ready') + ': ' + (String(status.key_ready || 0) === '1' ? T('Yes') : T('No')))
-        ]);
-}
-
-function usbDeviceLabel(device) {
-        var name = [device.vendor, device.model].filter(Boolean).join(' ').trim();
-        var size = device.size_gb != null ? ' · ' + device.size_gb + ' GB' : '';
-
-        return (device.dev || T('Unknown')) + (name ? ' · ' + name : '') + size;
-}
-
-function replaceNodeChildren(node, children) {
-        node.innerHTML = '';
-        children.forEach(function (child) {
-                node.appendChild(child);
-        });
-}
-
-function usbStorageSettingsField() {
-        var initial = {
-                enabled: safeUciGet('sheepfold', 'usb', 'enabled', '0') === '1' ? '1' : '0',
-                device: safeUciGet('sheepfold', 'usb', 'device', ''),
-                role: safeUciGet('sheepfold', 'usb', 'role', 'logs_only') || 'logs_only',
-                encrypt: safeUciGet('sheepfold', 'usb', 'encrypt', '1') === '0' ? '0' : '1'
-        };
-        var current = Object.assign({}, initial);
-        var devices = [];
-        var status = {
-                enabled: initial.enabled,
-                dev: initial.device,
-                role: initial.role,
-                encrypt: initial.encrypt,
-                mounted: 0,
-                free_pct: 0,
-                archives: 0,
-                key_ready: 0
-        };
-        var statusNode = E('div', { 'class': 'sf-usb-status' }, usbStatusBadge(status));
-        var deviceSelect = E('select', {
-                'class': 'cbi-input-select',
-                'change': function (ev) {
-                        current.device = ev.currentTarget.value;
-                        markSettingsDraftChanged();
-                }
-        });
-        var enabledSelect = E('select', {
-                'class': 'cbi-input-select',
-                'change': function (ev) {
-                        current.enabled = ev.currentTarget.value === '1' ? '1' : '0';
-                        markSettingsDraftChanged();
-                }
-        }, [
-                E('option', { 'value': '0', 'selected': current.enabled === '0' ? 'selected' : null }, T('No')),
-                E('option', { 'value': '1', 'selected': current.enabled === '1' ? 'selected' : null }, T('Yes'))
-        ]);
-        var roleSelect = E('select', {
-                'class': 'cbi-input-select',
-                'change': function (ev) {
-                        current.role = ev.currentTarget.value;
-                        markSettingsDraftChanged();
-                }
-        }, [
-                ['logs_only', T('Logs only')],
-                ['swap_logs', T('Logs and swap file')],
-                ['extroot_logs', T('Logs and future extroot')]
-        ].map(function (item) {
-                return E('option', { 'value': item[0], 'selected': current.role === item[0] ? 'selected' : null }, item[1]);
-        }));
-        var encryptSelect = E('select', {
-                'class': 'cbi-input-select',
-                'change': function (ev) {
-                        current.encrypt = ev.currentTarget.value === '1' ? '1' : '0';
-                        markSettingsDraftChanged();
-                }
-        }, [
-                E('option', { 'value': '1', 'selected': current.encrypt === '1' ? 'selected' : null }, T('Yes')),
-                E('option', { 'value': '0', 'selected': current.encrypt === '0' ? 'selected' : null }, T('No'))
-        ]);
-
-        function refreshDeviceOptions() {
-                var values = devices.slice();
-
-                if (current.device && !values.some(function (device) { return device.dev === current.device; }))
-                        values.unshift({ dev: current.device, model: T('Selected USB device') });
-
-                deviceSelect.innerHTML = '';
-                if (!values.length) {
-                        deviceSelect.appendChild(E('option', { 'value': '', 'selected': 'selected' }, T('No USB devices found')));
-                        return;
-                }
-
-                values.forEach(function (device) {
-                        deviceSelect.appendChild(E('option', {
-                                'value': device.dev || '',
-                                'selected': (device.dev || '') === current.device ? 'selected' : null
-                        }, usbDeviceLabel(device)));
-                });
-        }
-
-        function refreshStatus() {
-                return usbStorageControl(['status']).then(function (result) {
-                        status = parseJsonOutput(result && result.stdout, status);
-                        replaceNodeChildren(statusNode, [usbStatusBadge(status)]);
-                }, function () {
-                        replaceNodeChildren(statusNode, [E('div', { 'class': 'sf-note sf-note-warning' }, T('USB action failed.'))]);
-                });
-        }
-
-        function refreshDevices() {
-                return usbStorageControl(['scan']).then(function (result) {
-                        devices = parseJsonOutput(result && result.stdout, []);
-                        refreshDeviceOptions();
-                        return refreshStatus();
-                }, function () {
-                        devices = [];
-                        refreshDeviceOptions();
-                        notify(T('USB action failed.'), 'warning');
-                });
-        }
-
-        function runUsbAction(args) {
-                return usbStorageControl(args).then(function () {
-                        notify(T('USB action completed.'), 'info');
-                        return refreshDevices();
-                }, function (error) {
-                        notify(T('USB action failed.') + ' ' + commandErrorText(error, ''), 'warning');
-                });
-        }
-
-        registerSettingsSpecialSaver({
-                isChanged: function () {
-                        return !sameObjectValues(initial, current);
-                },
-                save: function () {
-                        // USB-настройки живут в отдельной секции UCI, а не в global:
-                        // так backend читает их привычным для OpenWrt способом.
-                        ensureSection('sheepfold', 'usb_storage', 'usb');
-                        uci.set('sheepfold', 'usb', 'enabled', current.enabled);
-                        uci.set('sheepfold', 'usb', 'device', current.device);
-                        uci.set('sheepfold', 'usb', 'role', current.role);
-                        uci.set('sheepfold', 'usb', 'encrypt', current.encrypt);
-                        return saveUciChanges(['sheepfold']).then(refreshStatus);
-                },
-                accept: function () {
-                        initial.enabled = current.enabled;
-                        initial.device = current.device;
-                        initial.role = current.role;
-                        initial.encrypt = current.encrypt;
-                }
-        });
-
-        refreshDevices();
-
-        return E('div', { 'class': 'sf-flat-form' }, [
-                settingsDivider(T('USB flash drive')),
-                statusNode,
-                E('div', { 'class': 'sf-grid two' }, [
-                        E('label', { 'class': 'sf-field sf-field-wide' }, [
-                                E('span', {}, T('Use USB storage for Sheepfold')),
-                                enabledSelect
-                        ]),
-                        E('label', { 'class': 'sf-field sf-field-wide' }, [
-                                E('span', {}, T('Selected USB device')),
-                                deviceSelect,
-                                E('small', {}, T('Choose only a removable USB drive. Sheepfold will refuse system disks, overlay, root, and swap devices.'))
-                        ]),
-                        E('label', { 'class': 'sf-field sf-field-wide' }, [
-                                E('span', {}, T('USB storage role')),
-                                roleSelect
-                        ]),
-                        E('label', { 'class': 'sf-field sf-field-wide' }, [
-                                E('span', {}, T('Encrypt archives on USB')),
-                                encryptSelect
-                        ])
-                ]),
-                E('div', { 'class': 'sf-toolbar' }, [
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        refreshDevices();
-                                }
-                        }, T('Refresh USB devices')),
-                        E('button', {
-                                'class': 'sf-action sf-action-positive',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        if (!current.device)
-                                                return notify(T('No USB devices found'), 'warning');
-                                        runUsbAction(['mount', current.device]);
-                                }
-                        }, T('Mount selected USB')),
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        runUsbAction(['umount']);
-                                }
-                        }, T('Unmount USB')),
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        runUsbAction(['archive-push']);
-                                }
-                        }, T('Move RAM archives to USB'))
-                ])
+                E('small', {}, _('The cache file should be stored under /tmp/ so it does not wear router flash memory.'))
         ]);
 }
 
@@ -4530,31 +4626,31 @@ function blocklistEmergencyAccessField() {
                         setSettingsDraftOption('domain_allowlist_for_blocklist', ev.currentTarget.value);
                 }
         }, [
-                E('option', { 'value': '1', 'selected': value === '1' ? 'selected' : null }, T('Yes')),
-                E('option', { 'value': '0', 'selected': value === '0' ? 'selected' : null }, T('No'))
+                E('option', { 'value': '1', 'selected': value === '1' ? 'selected' : null }, _('Yes')),
+                E('option', { 'value': '0', 'selected': value === '0' ? 'selected' : null }, _('No'))
         ]);
 
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, T('Blocklist emergency-useful sites access')),
+                E('span', {}, _('Blocklist emergency-useful sites access')),
                 select,
-                E('small', {}, T('Allows blocklisted devices to access only sites added to the emergency-useful sites list. Router access remains blocked.'))
+                E('small', {}, _('Allows blocklisted devices to access only sites added to the emergency-useful sites list. Router access remains blocked.'))
         ]);
 }
 
 function siteBlacklistModeField() {
-        return saveSelectGlobalField(T('Site blacklist'), 'site_blocklist_mode', 'except_allowlist_admins', [
-                ['disabled', T('Disabled')],
-                ['all', T('Enabled for everyone')],
-                ['except_allowlist_admins', T('Enabled for everyone except allowlist and administrators')]
-        ], T('Site blacklist mode saved.'), T('Could not save site blacklist mode.'));
+        return saveSelectGlobalField(_('Site blacklist'), 'site_blocklist_mode', 'except_allowlist_admins', [
+                ['disabled', _('Disabled')],
+                ['all', _('Enabled for everyone')],
+                ['except_allowlist_admins', _('Enabled for everyone except allowlist and administrators')]
+        ], _('Site blacklist mode saved.'), _('Could not save site blacklist mode.'));
 }
 
 function siteListsUpdateIntervalField() {
-        return saveSelectGlobalField(T('Site list update'), 'site_lists_update_interval', 'weekly', [
-                ['daily', T('Every day')],
-                ['3days', T('Every 3 days')],
-                ['weekly', T('Once a week')]
-        ], T('Site list update interval saved.'), T('Could not save site list update interval.'), null, function () {
+        return saveSelectGlobalField(_('Site list update from allowlist and blocklist sources'), 'site_lists_update_interval', 'weekly', [
+                ['daily', _('Every day')],
+                ['3days', _('Every 3 days')],
+                ['weekly', _('Once a week')]
+        ], _('Site list update interval saved.'), _('Could not save site list update interval.'), null, function () {
                 return routerControl(['site-lists-cron-apply']);
         });
 }
@@ -4574,14 +4670,14 @@ function autoConfigureDevicesField() {
                         });
                 }
         }, [
-                E('option', { 'value': 'full', 'selected': value === 'full' ? 'selected' : null }, T('Full automatic setup')),
-                E('option', { 'value': 'reduced', 'selected': value === 'reduced' ? 'selected' : null }, T('Reduced automatic setup'))
+                E('option', { 'value': 'full', 'selected': value === 'full' ? 'selected' : null }, _('Full automatic setup')),
+                E('option', { 'value': 'reduced', 'selected': value === 'reduced' ? 'selected' : null }, _('Reduced automatic setup'))
         ]);
 
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, T('New device automatic setup')),
+                E('span', {}, _('New device automatic setup')),
                 select,
-                E('small', {}, T('Full mode can use port checks when available. Reduced mode avoids heavy checks but still can automatically add confidently detected home infrastructure devices to No restrictions.'))
+                E('small', {}, _('Full mode can use port checks when available. Reduced mode avoids heavy checks but still can automatically add confidently detected home infrastructure devices to No restrictions.'))
         ]);
 }
 
@@ -4593,25 +4689,95 @@ function updateCheckInstallField() {
                         setSettingsDraftOption('update_check_install_mode', ev.currentTarget.value);
                 }
         }, [
-                E('option', { 'value': 'daily', 'selected': value === 'daily' ? 'selected' : null }, T('Every day')),
-                E('option', { 'value': 'weekly', 'selected': value === 'weekly' ? 'selected' : null }, T('Every week')),
-                E('option', { 'value': 'monthly', 'selected': value === 'monthly' ? 'selected' : null }, T('Every month')),
-                E('option', { 'value': 'never', 'selected': value === 'never' ? 'selected' : null }, T('Never'))
+                E('option', { 'value': 'daily', 'selected': value === 'daily' ? 'selected' : null }, _('Every day')),
+                E('option', { 'value': 'weekly', 'selected': value === 'weekly' ? 'selected' : null }, _('Every week')),
+                E('option', { 'value': 'monthly', 'selected': value === 'monthly' ? 'selected' : null }, _('Every month')),
+                E('option', { 'value': 'never', 'selected': value === 'never' ? 'selected' : null }, _('Never'))
         ]);
 
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, T('Update check and installation')),
+                E('span', {}, _('Update check and installation')),
                 select,
-                E('small', {}, T('Defines how often Sheepfold should check for and install updates after confirmation.'))
+                E('small', {}, _('Defines how often Sheepfold should check for and install updates after confirmation.'))
         ]);
 }
 
+function ensureSheepfoldNamedSection(section, type) {
+        try {
+                uci.get('sheepfold', section);
+        } catch (e) {
+                uci.set('sheepfold', section, type);
+        }
+}
+
+function normalizeApplicationLanguage(value) {
+        return String(value || '').trim() === 'en' ? 'en' : 'ru';
+}
+
+function ensureLuciMainSection() {
+        try {
+                uci.get('luci', 'main');
+        } catch (e) {
+                uci.set('luci', 'main', 'core');
+        }
+}
+
 function saveGlobalOptions(options) {
-        Object.keys(options).forEach(function (option) {
-                uci.set('sheepfold', 'global', option, options[option]);
+        var globalOptions = {};
+        var usbOptions = {};
+        var cloudOptions = {};
+        var configs = ['sheepfold'];
+
+        Object.keys(options).forEach(function (key) {
+                var usbParts = key.match(/^usb\.(.+)$/);
+                var cloudParts = key.match(/^cloud\.(.+)$/);
+
+                if (usbParts)
+                        usbOptions[usbParts[1]] = options[key];
+                else if (cloudParts)
+                        cloudOptions[cloudParts[1]] = options[key];
+                else
+                        globalOptions[key] = options[key];
         });
 
-        return saveUciChanges(['sheepfold']);
+        if (hasOwn(globalOptions, 'language')) {
+                globalOptions.language = normalizeApplicationLanguage(globalOptions.language);
+                ensureLuciMainSection();
+                uci.set('luci', 'main', 'lang', globalOptions.language);
+                if (configs.indexOf('luci') === -1)
+                        configs.push('luci');
+        }
+
+        Object.keys(globalOptions).forEach(function (option) {
+                uci.set('sheepfold', 'global', option, globalOptions[option]);
+        });
+
+        if (hasOwn(globalOptions, 'deepseek_api_key') && String(globalOptions.deepseek_api_key || '').trim())
+                uci.set('sheepfold', 'global', 'ai_enabled', '1');
+
+        if (hasOwn(globalOptions, 'gemini_api_key') && String(globalOptions.gemini_api_key || '').trim())
+                uci.set('sheepfold', 'global', 'ai_enabled', '1');
+
+        if (hasOwn(globalOptions, 'child_ai_parental_consent'))
+                uci.set('sheepfold', 'global', 'child_ai_consent_version', 'child-ai-v1');
+
+        if (Object.keys(usbOptions).length) {
+                ensureSheepfoldNamedSection('usb', 'usb');
+                Object.keys(usbOptions).forEach(function (option) {
+                        uci.set('sheepfold', 'usb', option, usbOptions[option]);
+                });
+        }
+
+        if (Object.keys(cloudOptions).length) {
+                ensureSheepfoldNamedSection('cloud', 'yandex_disk');
+                if (hasOwn(cloudOptions, 'login') || hasOwn(cloudOptions, 'password'))
+                        uci.set('sheepfold', 'cloud', 'authorized', '0');
+                Object.keys(cloudOptions).forEach(function (option) {
+                        uci.set('sheepfold', 'cloud', option, cloudOptions[option]);
+                });
+        }
+
+        return saveUciChanges(configs);
 }
 
 function confirmWifiAutoDisable(timeValue) {
@@ -4640,14 +4806,14 @@ function confirmWifiAutoDisable(timeValue) {
                                 ev.preventDefault();
                                 done(true);
                         }
-                }, T('I understand the risk, continue') + ' (' + remaining + ')');
+                }, _('I understand the risk, continue') + ' (' + remaining + ')');
 
                 timer = window.setInterval(function () {
                         remaining -= 1;
                         countdown.textContent = String(Math.max(remaining, 0));
                         confirmButton.textContent = remaining > 0 ?
-                                T('I understand the risk, continue') + ' (' + remaining + ')' :
-                                T('I understand the risk, continue');
+                                _('I understand the risk, continue') + ' (' + remaining + ')' :
+                                _('I understand the risk, continue');
 
                         if (remaining <= 0) {
                                 confirmButton.disabled = false;
@@ -4655,17 +4821,17 @@ function confirmWifiAutoDisable(timeValue) {
                         }
                 }, 1000);
 
-                ui.showModal(T('Wi-Fi auto-disable warning'), [
+                ui.showModal(_('Wi-Fi auto-disable warning'), [
                         E('div', { 'class': 'sf-warning-modal' }, [
-                                E('p', {}, T('When Wi-Fi turns off, you will not be able to turn it back on from a phone connected only by Wi-Fi. Configure messenger control or a WPS button action so you can enable Wi-Fi outside the schedule if needed.')),
+                                E('p', {}, _('When Wi-Fi turns off, you will not be able to turn it back on from a phone connected only by Wi-Fi. Configure messenger control or a WPS button action so you can enable Wi-Fi outside the schedule if needed.')),
                                 E('p', {}, [
-                                        E('strong', {}, T('Auto-disable time') + ': '),
+                                        E('strong', {}, _('Auto-disable time') + ': '),
                                         E('span', {}, timeValue)
                                 ]),
                                 E('p', {}, [
-                                        E('span', {}, T('Confirmation will be available in') + ' '),
+                                        E('span', {}, _('Confirmation will be available in') + ' '),
                                         countdown,
-                                        E('span', {}, ' ' + T('seconds'))
+                                        E('span', {}, ' ' + _('seconds'))
                                 ])
                         ]),
                         E('div', { 'class': 'right sf-modal-actions' }, [
@@ -4675,7 +4841,7 @@ function confirmWifiAutoDisable(timeValue) {
                                                 ev.preventDefault();
                                                 done(false);
                                         }
-                                }, T('Cancel')),
+                                }, _('Cancel')),
                                 confirmButton
                         ])
                 ]);
@@ -4739,14 +4905,14 @@ function timeAutomationField(label, modeOption, timeOption, defaultTime) {
                 E('span', {}, label),
                 E('label', { 'class': 'sf-inline-option' }, [
                         neverRadio,
-                        E('span', {}, T('Never'))
+                        E('span', {}, _('Never'))
                 ]),
                 E('label', { 'class': 'sf-inline-option' }, [
                         timeRadio,
-                        E('span', {}, T('At time')),
+                        E('span', {}, _('At time')),
                         timeInput
                 ]),
-                E('small', {}, T('Applies to all Wi-Fi radios on the router. Real switching must require confirmation and be performed by the router backend.'))
+                E('small', {}, _('Applies to all Wi-Fi radios on the router. Real switching must require confirmation and be performed by the router backend.'))
         ]);
 }
 
@@ -4764,6 +4930,177 @@ function saveSelectGlobalField(label, option, value, values, successMessage, err
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
                 E('span', {}, label),
                 select,
+                hint ? E('small', {}, hint) : ''
+        ]);
+}
+
+function saveSelectSectionField(section, label, option, defaultValue, values, hint) {
+        var currentValue = sectionSettingValue(section, option, defaultValue);
+        var select = E('select', {
+                'class': 'cbi-input-select',
+                'change': function (ev) {
+                        setSettingsDraftSectionOption(section, option, ev.currentTarget.value);
+                }
+        }, values.map(function (item) {
+                return E('option', { 'value': item[0], 'selected': item[0] === currentValue ? 'selected' : null }, item[1]);
+        }));
+
+        return E('label', { 'class': 'sf-field sf-field-wide' }, [
+                E('span', {}, label),
+                select,
+                hint ? E('small', {}, hint) : ''
+        ]);
+}
+
+function hasConfiguredAiProvider() {
+        var provider = settingValue('ai_provider', 'none');
+
+        if (!provider || provider === 'none')
+                return false;
+
+        var keyOption = provider === 'gemini' ? 'gemini_api_key' : 'deepseek_api_key';
+
+        return !!String(settingValue(keyOption, '') || '').trim();
+}
+
+function aiSettingsBox() {
+        var container = E('div', { 'class': 'sf-flat-form' });
+
+        function currentProvider() {
+                return settingValue('ai_provider', 'none');
+        }
+
+        function rebuild() {
+                var provider = currentProvider();
+                var fields = [
+                        E('label', { 'class': 'sf-field sf-field-wide' }, [
+                                E('span', {}, _('AI provider')),
+                                E('select', {
+                                        'class': 'cbi-input-select',
+                                        'change': function (ev) {
+                                                setSettingsDraftOption('ai_provider', ev.currentTarget.value);
+                                                rebuild();
+                                        }
+                                }, [
+                                        ['none', _('Not set up')],
+                                        ['deepseek', 'DeepSeek'],
+                                        ['gemini', _('Gemini Free')]
+                                ].map(function (item) {
+                                        return E('option', {
+                                                'value': item[0],
+                                                'selected': item[0] === provider ? 'selected' : null
+                                        }, item[1]);
+                                })),
+                                E('small', {}, _('The Android app sends AI requests to the router; the router calls the selected provider.'))
+                        ])
+                ];
+
+                if (provider === 'deepseek') {
+                        fields.push(
+                                saveSelectGlobalField(_('AI assistant model'), 'deepseek_model', 'deepseek-v4-flash', [
+                                        ['deepseek-v4-flash', 'DeepSeek V4 Flash'],
+                                        ['deepseek-v4-pro', 'DeepSeek V4 Pro']
+                                ], null, null, _('DeepSeek requests are sent from the router. The Android app does not store the API key.')),
+                                globalInputOptionField(
+                                        _('DeepSeek API key'),
+                                        'deepseek_api_key',
+                                        '',
+                                        'sk-...',
+                                        _('Create the key in DeepSeek Platform and save it here. It is stored only on the router.'),
+                                        true
+                                )
+                        );
+                } else if (provider === 'gemini') {
+                        fields.push(
+                                saveSelectGlobalField(_('Gemini Free') + ' - ' + _('AI assistant model'), 'gemini_model', 'gemini-2.5-flash', [
+                                        ['gemini-2.5-flash', 'Gemini 2.5 Flash'],
+                                        ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash Lite']
+                                ], null, null, _('Gemini Free uses Google AI Studio free-tier limits. The API key is stored only on the router.')),
+                                globalInputOptionField(
+                                        _('Gemini API key'),
+                                        'gemini_api_key',
+                                        '',
+                                        'AIza...',
+                                        _('Create the key in Google AI Studio and save it here. Free limits depend on Google account and region.'),
+                                        true
+                                )
+                        );
+                }
+
+                if (provider !== 'none') {
+                        if (!hasConfiguredAiProvider()) {
+                                fields.push(E('p', { 'class': 'sf-note' },
+                                        _('Save the API key for the selected provider before enabling the assistant and protected logs.')));
+                        } else {
+                                fields.push(
+                                        settingsDivider(_('Access and limits')),
+                                        globalFlagOptionField(_('Enable AI assistant'), 'ai_enabled', '1'),
+                                        globalFlagOptionField(
+                                                _('Allow the AI assistant on child devices'),
+                                                'child_ai_parental_consent',
+                                                '0',
+                                                _('Enable only after talking with the child. The child client never receives router diagnostics or admin logs.')
+                                        ),
+                                        globalInputOptionField(_('Requests per device'), 'ai_rate_limit_requests', '20', '20', null, false),
+                                        globalInputOptionField(_('Rate limit window, seconds'), 'ai_rate_limit_window_seconds', '3600', '3600', null, false),
+                                        globalFlagOptionField(
+                                                _('Allow per-device logs for AI'),
+                                                'ai_individual_logs',
+                                                '0',
+                                                _('Enabling protected per-device logs runs an OpenSSL check on the router.')
+                                        )
+                                );
+                        }
+                }
+
+                container.replaceChildren.apply(container, fields);
+        }
+
+        rebuild();
+        return container;
+}
+
+function globalFlagOptionField(label, option, defaultValue, hint) {
+        var control = checkboxControl(label, settingValue(option, defaultValue || '0') === '1', hint, {
+                'change': function (ev) {
+                        setSettingsDraftOption(option, ev.currentTarget.checked ? '1' : '0');
+                }
+        });
+
+        return control.node;
+}
+
+function sectionFlagOptionField(section, label, option, defaultValue, hint) {
+        var control = checkboxControl(label, sectionSettingValue(section, option, defaultValue || '0') === '1', hint, {
+                'change': function (ev) {
+                        setSettingsDraftSectionOption(section, option, ev.currentTarget.checked ? '1' : '0');
+                }
+        });
+
+        return control.node;
+}
+
+function sectionInputField(section, label, option, defaultValue, placeholder, hint, secret) {
+        var input = E('input', {
+                'class': 'cbi-input-text' + (secret ? ' sf-secret-input' : ''),
+                'type': secret ? 'password' : 'text',
+                'value': sectionSettingValue(section, option, defaultValue || ''),
+                'placeholder': placeholder || ''
+        });
+
+        input.addEventListener('input', function () {
+                setSettingsDraftSectionOption(section, option, input.value.trim());
+        });
+        input.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                        ev.preventDefault();
+                        setSettingsDraftSectionOption(section, option, input.value.trim());
+                }
+        });
+
+        return E('label', { 'class': 'sf-field sf-field-wide' }, [
+                E('span', {}, label),
+                input,
                 hint ? E('small', {}, hint) : ''
         ]);
 }
@@ -4793,16 +5130,16 @@ function globalInputOptionField(label, option, defaultValue, placeholder, hint, 
                         E('button', {
                                 'class': 'sf-icon-action sf-secret-toggle',
                                 'type': 'button',
-                                'title': T('Show secret'),
-                                'aria-label': T('Show secret'),
+                                'title': _('Show secret'),
+                                'aria-label': _('Show secret'),
                                 'click': function (ev) {
                                         var visible;
 
                                         ev.preventDefault();
                                         visible = input.type === 'password';
                                         input.type = visible ? 'text' : 'password';
-                                        ev.currentTarget.setAttribute('title', visible ? T('Hide secret') : T('Show secret'));
-                                        ev.currentTarget.setAttribute('aria-label', visible ? T('Hide secret') : T('Show secret'));
+                                        ev.currentTarget.setAttribute('title', visible ? _('Hide secret') : _('Show secret'));
+                                        ev.currentTarget.setAttribute('aria-label', visible ? _('Hide secret') : _('Show secret'));
                                 }
                         }, iconSvg('eye'))
                 ]);
@@ -4837,16 +5174,16 @@ function messengerField(label, option, placeholder, hint, secret) {
                         E('button', {
                                 'class': 'sf-icon-action sf-secret-toggle',
                                 'type': 'button',
-                                'title': T('Show secret'),
-                                'aria-label': T('Show secret'),
+                                'title': _('Show secret'),
+                                'aria-label': _('Show secret'),
                                 'click': function (ev) {
                                         var visible;
 
                                         ev.preventDefault();
                                         visible = input.type === 'password';
                                         input.type = visible ? 'text' : 'password';
-                                        ev.currentTarget.setAttribute('title', visible ? T('Hide secret') : T('Show secret'));
-                                        ev.currentTarget.setAttribute('aria-label', visible ? T('Hide secret') : T('Show secret'));
+                                        ev.currentTarget.setAttribute('title', visible ? _('Hide secret') : _('Show secret'));
+                                        ev.currentTarget.setAttribute('aria-label', visible ? _('Hide secret') : _('Show secret'));
                                 }
                         }, iconSvg('eye'))
                 ]);
@@ -4866,26 +5203,26 @@ function messengerField(label, option, placeholder, hint, secret) {
 
 function messengerCommandRows() {
         return [
-                ['/start', 'старт', T('Shows available commands.')],
-                ['/help', 'помощь, help', T('Shows available commands.')],
-                ['/status', 'статус', T('Shows Sheepfold and router status.')],
-                ['/devices', 'показать все устройства, устройства', T('Shows all detected devices with Sheepfold IDs.')],
-                ['/internet_on', 'включить интернет, интернет включён', T('Turns global blocking off.')],
-                ['/internet_off', 'отключить интернет, выключить интернет, интернет отключен', T('Turns on global blocking for everyone except the allowlist.')],
-                ['/wifi_status', 'статус Wi-Fi, статус вайфай', T('Shows whether Wi-Fi is enabled.')],
-                ['/wifi_on', 'включить Wi-Fi, включить вайфай', T('Turns router Wi-Fi on.')],
-                ['/wifi_off', 'отключить Wi-Fi, выключить вайфай', T('Turns router Wi-Fi off; use carefully.')],
-                ['/support', 'саппорт, поддержка', T('Shows what to prepare before asking for support.')],
-                ['/grant_time #3 30', 'дать #3 30 минут, +30 #3', T('Grants temporary access to the selected device.')],
-                ['/block_device #3', 'заблокировать #3', T('Blocks the selected device.')],
-                ['/unblock_device #3', 'разблокировать #3', T('Removes blocking from the selected device.')],
-                ['/allowlist_add #3', 'добавить #3 в белый список', T('Adds the selected device to the allowlist.')],
-                ['/blocklist_add #3', 'добавить #3 в чёрный список', T('Adds the selected device to the blocklist.')],
-                ['/logs', 'журнал, показать журнал', T('Shows recent administrative log entries.')],
-                ['/clear_logs', 'очистить журнал', T('Clears the administrative log after confirmation.')],
-                ['/update', 'обновить приложение', T('Checks and installs an update after confirmation.')],
-                ['/reboot', 'перезагрузить роутер', T('Reboots the router after confirmation.')],
-                ['/emergency_sites', 'аварийно-полезные сайты', T('Shows configured emergency-useful sites.')]
+                ['/start', 'старт', _('Shows available commands.')],
+                ['/help', 'помощь, help', _('Shows available commands.')],
+                ['/status', 'статус', _('Shows Sheepfold and router status.')],
+                ['/devices', 'показать все устройства, устройства', _('Shows all detected devices with Sheepfold IDs.')],
+                ['/internet_on', 'включить интернет, интернет включён', _('Turns global blocking off.')],
+                ['/internet_off', 'отключить интернет, выключить интернет, интернет отключен', _('Turns on global blocking for everyone except the allowlist.')],
+                ['/wifi_status', 'статус Wi-Fi, статус вайфай', _('Shows whether Wi-Fi is enabled.')],
+                ['/wifi_on', 'включить Wi-Fi, включить вайфай', _('Turns router Wi-Fi on.')],
+                ['/wifi_off', 'отключить Wi-Fi, выключить вайфай', _('Turns router Wi-Fi off; use carefully.')],
+                ['/support', 'саппорт, поддержка', _('Shows what to prepare before asking for support.')],
+                ['/grant_time #3 30', 'дать #3 30 минут, +30 #3', _('Grants temporary access to the selected device.')],
+                ['/block_device #3', 'заблокировать #3', _('Blocks the selected device.')],
+                ['/unblock_device #3', 'разблокировать #3', _('Removes blocking from the selected device.')],
+                ['/allowlist_add #3', 'добавить #3 в белый список', _('Adds the selected device to the allowlist.')],
+                ['/blocklist_add #3', 'добавить #3 в чёрный список', _('Adds the selected device to the blocklist.')],
+                ['/logs', 'журнал, показать журнал', _('Shows recent administrative log entries.')],
+                ['/clear_logs', 'очистить журнал', _('Clears the administrative log after confirmation.')],
+                ['/update', 'обновить приложение', _('Checks and installs an update after confirmation.')],
+                ['/reboot', 'перезагрузить роутер', _('Reboots the router after confirmation.')],
+                ['/emergency_sites', 'аварийно-полезные сайты', _('Shows configured emergency-useful sites.')]
         ];
 }
 
@@ -4920,27 +5257,27 @@ function appPortField() {
         });
 
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, T('Port')),
+                E('span', {}, _('Application port')),
                 input,
-                E('small', {}, T('Used by Android app and pairing QR codes.'))
+                E('small', {}, _('Used by Android app and pairing QR codes.'))
         ]);
 }
 
 function messengerSettingsBox() {
         var activeValue = safeUciGet('sheepfold', 'global', 'active_messenger', 'none');
-        var vkToken = messengerField(T('VK community access token'), 'vk_access_token', '', T('Stored on the router.'), true);
-        var vkCommunity = messengerField(T('VK community ID'), 'vk_community_id', 'club123456789', '', false);
-        var vkAdmin = messengerField(T('VK admin user ID'), 'vk_admin_user_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false);
-        var telegramToken = messengerField(T('Telegram bot token'), 'telegram_bot_token', '123456:ABC...', T('Stored on the router.'), true);
-        var telegramAdmin = messengerField(T('Telegram admin chat ID'), 'telegram_admin_chat_id', '123456789', T('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false);
+        var vkToken = messengerField(_('VK community access token'), 'vk_access_token', '', _('Stored on the router.'), true);
+        var vkCommunity = messengerField(_('VK community ID'), 'vk_community_id', 'club123456789', '', false);
+        var vkAdmin = messengerField(_('VK admin user ID'), 'vk_admin_user_id', '123456789', _('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false);
+        var telegramToken = messengerField(_('Telegram bot token'), 'telegram_bot_token', '123456:ABC...', _('Stored on the router.'), true);
+        var telegramAdmin = messengerField(_('Telegram admin chat ID'), 'telegram_admin_chat_id', '123456789', _('Sheepfold accepts messenger commands only from the administrator ID entered here. Other users are ignored.'), false);
         var fields = [vkToken, vkCommunity, vkAdmin, telegramToken, telegramAdmin];
         var select;
         var initialMessengerOptions;
-        var statusText = E('span', {}, activeValue === 'none' ? T('Messenger disabled.') : T('Messenger status will be checked after saving settings or sending a test message.'));
+        var statusText = E('span', {}, activeValue === 'none' ? _('Messenger disabled.') : _('Messenger status will be checked after saving settings or sending a test message.'));
         var statusPlaque = E('div', {
                 'class': 'sf-messenger-status ' + (activeValue === 'none' ? 'sf-messenger-status-muted' : 'sf-messenger-status-idle')
         }, [
-                E('span', { 'class': 'sf-messenger-status-label' }, T('Messenger connection status')),
+                E('span', { 'class': 'sf-messenger-status-label' }, _('Messenger connection status')),
                 statusText
         ]);
 
@@ -4968,26 +5305,26 @@ function messengerSettingsBox() {
 
         function setMessengerStatus(kind, message) {
                 statusPlaque.className = 'sf-messenger-status sf-messenger-status-' + kind;
-                statusText.textContent = message || T('Connection check failed.');
+                statusText.textContent = message || _('Connection check failed.');
         }
 
         function fallbackMessengerStatusMessage(value) {
                 if (value === 'telegram')
-                        return T('No response from Telegram server.');
+                        return _('No response from Telegram server.');
                 if (value === 'vk')
-                        return T('No response from VK server.');
-                return T('Messenger disabled.');
+                        return _('No response from VK server.');
+                return _('Messenger disabled.');
         }
 
         function checkMessengerConnection() {
                 var options = collectOptions();
 
                 if (options.active_messenger === 'none') {
-                        setMessengerStatus('muted', T('Messenger disabled.'));
+                        setMessengerStatus('muted', _('Messenger disabled.'));
                         return Promise.resolve(null);
                 }
 
-                setMessengerStatus('checking', T('Checking messenger connection...'));
+                setMessengerStatus('checking', _('Checking messenger connection...'));
 
                 return routerControl(['messenger-check']).then(function (result) {
                         var status = parseKeyValueOutput(result.stdout || '');
@@ -5030,7 +5367,7 @@ function messengerSettingsBox() {
                         return readMessengerStatus();
                 }).then(function (status) {
                         if ((status.active || 'none') !== options.active_messenger) {
-                                throw new Error(T('Messenger settings were sent to the router, but the router still reports another active messenger. Reinstall the latest Sheepfold package and check UCI config.') + ' ' + T('Router reports active messenger:') + ' ' + (status.active || 'none'));
+                                throw new Error(_('Messenger settings were sent to the router, but the router still reports another active messenger. Reinstall the latest Sheepfold package and check UCI config.') + ' ' + _('Router reports active messenger:') + ' ' + (status.active || 'none'));
                         }
 
                         activeValue = options.active_messenger;
@@ -5042,60 +5379,60 @@ function messengerSettingsBox() {
         }
 
         var vkFields = E('div', { 'class': 'sf-messenger-fields' }, [
-                E('div', { 'class': 'sf-note' }, T('Create a VK community, enable messages, create an access token for community messages, then enter the community ID and the VK user ID of the parent whose commands are allowed.')),
+                E('div', { 'class': 'sf-note' }, _('Create a VK community, enable messages, create an access token for community messages, then enter the community ID and the VK user ID of the parent whose commands are allowed.')),
                 vkToken,
                 vkCommunity,
                 vkAdmin
         ]);
         var telegramSetupSteps = E('details', { 'class': 'sf-note' }, [
-                E('summary', {}, T('Step-by-step Telegram setup')),
+                E('summary', {}, _('Step-by-step Telegram setup')),
                 E('ol', {}, [
-                        E('li', {}, T('Open Telegram and find the official @BotFather account. Check the username carefully: @BotFather.')),
-                        E('li', {}, T('Press Start or send /start.')),
-                        E('li', {}, T('Send /newbot and follow BotFather questions.')),
-                        E('li', {}, T('Enter a visible bot name, for example Sheepfold Home. This name is shown in Telegram.')),
-                        E('li', {}, T('Enter a unique bot username. It must end with bot, for example my_sheepfold_home_bot.')),
-                        E('li', {}, T('BotFather will send a token that looks like 123456:ABC-DEF... Copy it into the Telegram bot token field. Treat this token like a password.')),
-                        E('li', {}, T('Select Telegram as the active messenger and save settings in Sheepfold.')),
-                        E('li', {}, T('Open the created bot from the parent Telegram account and send any message to it. If the chat ID field is empty, Sheepfold will reply with your chat ID.')),
-                        E('li', {}, T('Copy that chat ID into the Telegram admin chat ID field and save settings again.')),
-                        E('li', {}, T('Press the test message button. If everything is correct, the bot will send a message from the router.'))
+                        E('li', {}, _('Open Telegram and find the official @BotFather account. Check the username carefully: @BotFather.')),
+                        E('li', {}, _('Press Start or send /start.')),
+                        E('li', {}, _('Send /newbot and follow BotFather questions.')),
+                        E('li', {}, _('Enter a visible bot name, for example Sheepfold Home. This name is shown in Telegram.')),
+                        E('li', {}, _('Enter a unique bot username. It must end with bot, for example my_sheepfold_home_bot.')),
+                        E('li', {}, _('BotFather will send a token that looks like 123456:ABC-DEF... Copy it into the Telegram bot token field. Treat this token like a password.')),
+                        E('li', {}, _('Select Telegram as the active messenger and save settings in Sheepfold.')),
+                        E('li', {}, _('Open the created bot from the parent Telegram account and send any message to it. If the chat ID field is empty, Sheepfold will reply with your chat ID.')),
+                        E('li', {}, _('Copy that chat ID into the Telegram admin chat ID field and save settings again.')),
+                        E('li', {}, _('Press the test message button. If everything is correct, the bot will send a message from the router.'))
                 ]),
-                E('p', {}, T('Keep the bot private. Do not publish its token, do not add it to public groups, and do not give the token to children.')),
+                E('p', {}, _('Keep the bot private. Do not publish its token, do not add it to public groups, and do not give the token to children.')),
                 E('p', {}, [
                         E('a', {
                                 'href': 'https://core.telegram.org/bots/tutorial',
                                 'target': '_blank',
                                 'rel': 'noopener noreferrer'
-                        }, T('Official Telegram guide'))
+                        }, _('Official Telegram guide'))
                 ])
         ]);
         var telegramFields = E('div', { 'class': 'sf-messenger-fields' }, [
-                E('div', { 'class': 'sf-note' }, T('Telegram setup short note')),
+                E('div', { 'class': 'sf-note' }, _('Telegram setup short note')),
                 telegramSetupSteps,
                 telegramToken,
                 telegramAdmin,
-                E('div', { 'class': 'sf-note' }, T('Russian phrases like "help", "status", "show all devices", "turn internet off", and "support" also work. Dangerous commands require confirmation. Commands are accepted only from the allowed user ID configured on the router.')),
+                E('div', { 'class': 'sf-note' }, _('Russian phrases like "help", "status", "show all devices", "turn internet off", and "support" also work. Dangerous commands require confirmation. Commands are accepted only from the allowed user ID configured on the router.')),
                 E('button', {
                         'class': 'sf-action sf-action-positive sf-action-nowrap',
                         'click': function (ev) {
                                 ev.preventDefault();
                                 select.value = 'telegram';
                                 setMessengerFieldsVisibility('telegram');
-                                setMessengerStatus('checking', T('Checking messenger connection...'));
+                                setMessengerStatus('checking', _('Checking messenger connection...'));
                                 saveMessengerOptions().then(function () {
                                         return fs.exec('/usr/libexec/sheepfold/sheepfold-telegram-bot', ['send-test']);
                                 }).then(function () {
-                                        setMessengerStatus('ok', T('Telegram connected.'));
-                                        notify(T('Test Telegram message sent.'), 'info');
+                                        setMessengerStatus('ok', _('Telegram connected.'));
+                                        notify(_('Test Telegram message sent.'), 'info');
                                 }, function (error) {
-                                        setMessengerStatus('warning', T('No response from Telegram server.'));
-                                        notify(T('Could not send test Telegram message. Check bot token, chat ID, internet access on the router, and that Telegram is selected as the active messenger.') + ' ' + commandErrorText(error, ''), 'warning');
+                                        setMessengerStatus('warning', _('No response from Telegram server.'));
+                                        notify(_('Could not send test Telegram message. Check bot token, chat ID, internet access on the router, and that Telegram is selected as the active messenger.') + ' ' + commandErrorText(error, ''), 'warning');
                                 });
                         }
-                }, T('Send test Telegram message')),
+                }, _('Send test Telegram message')),
                 E('div', { 'class': 'sf-messenger-command-box' }, [
-                        E('h4', {}, T('Commands')),
+                        E('h4', {}, _('Commands')),
                         renderMessengerCommandList()
                 ])
         ]);
@@ -5107,13 +5444,13 @@ function messengerSettingsBox() {
                         activeValue = nextValue;
                         setMessengerFieldsVisibility(activeValue);
                         if (activeValue === 'none')
-                                setMessengerStatus('muted', T('Messenger disabled.'));
+                                setMessengerStatus('muted', _('Messenger disabled.'));
                         else
-                                setMessengerStatus('idle', T('Messenger status will be checked after saving settings or sending a test message.'));
+                                setMessengerStatus('idle', _('Messenger status will be checked after saving settings or sending a test message.'));
                         markSettingsDraftChanged();
                 }
         }, [
-                ['none', T('Disabled')],
+                ['none', _('Disabled')],
                 ['vk', 'VK'],
                 ['telegram', 'Telegram']
         ].map(function (item) {
@@ -5154,7 +5491,7 @@ function messengerSettingsBox() {
 
         return E('div', { 'class': 'sf-box' }, [
                 E('label', { 'class': 'sf-field sf-field-wide' }, [
-                        E('span', {}, T('Active messenger')),
+                        E('span', {}, _('Active messenger')),
                         select
                 ]),
                 statusPlaque,
@@ -5172,17 +5509,17 @@ function settingsDivider(label) {
 
 function routerTimezoneOptions() {
         return [
-                ['Europe/Moscow|MSK-3', T('Moscow time') + ' (Europe/Moscow, MSK-3)'],
-                ['Europe/Kaliningrad|EET-2', T('Kaliningrad time') + ' (Europe/Kaliningrad, EET-2)'],
-                ['Europe/Samara|+04-4', T('Samara time') + ' (Europe/Samara, +04-4)'],
-                ['Asia/Yekaterinburg|+05-5', T('Yekaterinburg time') + ' (Asia/Yekaterinburg, +05-5)'],
-                ['Asia/Omsk|+06-6', T('Omsk time') + ' (Asia/Omsk, +06-6)'],
-                ['Asia/Krasnoyarsk|+07-7', T('Krasnoyarsk time') + ' (Asia/Krasnoyarsk, +07-7)'],
-                ['Asia/Irkutsk|+08-8', T('Irkutsk time') + ' (Asia/Irkutsk, +08-8)'],
-                ['Asia/Yakutsk|+09-9', T('Yakutsk time') + ' (Asia/Yakutsk, +09-9)'],
-                ['Asia/Vladivostok|+10-10', T('Vladivostok time') + ' (Asia/Vladivostok, +10-10)'],
-                ['Asia/Magadan|+11-11', T('Magadan time') + ' (Asia/Magadan, +11-11)'],
-                ['Asia/Kamchatka|+12-12', T('Kamchatka time') + ' (Asia/Kamchatka, +12-12)'],
+                ['Europe/Moscow|MSK-3', _('Moscow time') + ' (Europe/Moscow, MSK-3)'],
+                ['Europe/Kaliningrad|EET-2', _('Kaliningrad time') + ' (Europe/Kaliningrad, EET-2)'],
+                ['Europe/Samara|+04-4', _('Samara time') + ' (Europe/Samara, +04-4)'],
+                ['Asia/Yekaterinburg|+05-5', _('Yekaterinburg time') + ' (Asia/Yekaterinburg, +05-5)'],
+                ['Asia/Omsk|+06-6', _('Omsk time') + ' (Asia/Omsk, +06-6)'],
+                ['Asia/Krasnoyarsk|+07-7', _('Krasnoyarsk time') + ' (Asia/Krasnoyarsk, +07-7)'],
+                ['Asia/Irkutsk|+08-8', _('Irkutsk time') + ' (Asia/Irkutsk, +08-8)'],
+                ['Asia/Yakutsk|+09-9', _('Yakutsk time') + ' (Asia/Yakutsk, +09-9)'],
+                ['Asia/Vladivostok|+10-10', _('Vladivostok time') + ' (Asia/Vladivostok, +10-10)'],
+                ['Asia/Magadan|+11-11', _('Magadan time') + ' (Asia/Magadan, +11-11)'],
+                ['Asia/Kamchatka|+12-12', _('Kamchatka time') + ' (Asia/Kamchatka, +12-12)'],
                 ['UTC|UTC0', 'UTC']
         ];
 }
@@ -5203,8 +5540,8 @@ function routerTimeSettingsField() {
         var ntpEnabled = safeUciGet('system', 'ntp', 'enabled', safeUciGet('sheepfold', 'global', 'router_ntp_client_auto_configure', '1')) !== '0';
         var ntpServerEnabled = safeUciGet('system', 'ntp', 'enable_server', safeUciGet('sheepfold', 'global', 'router_ntp_server_enabled', '1')) === '1';
         var ntpServers = listOptionValues(safeUciGet('system', 'ntp', 'server', safeUciGet('sheepfold', 'global', 'router_ntp_servers', defaultServers))).join('\n');
-        var serverField = checkboxControl(T('Make router an NTP server for LAN'), ntpServerEnabled, T('Home devices can use the router as their local time server.'));
-        var clientField = checkboxControl(T('Automatically configure router NTP client'), ntpEnabled, T('Sheepfold will write NTP servers and time settings to OpenWRT system config.'));
+        var serverField = checkboxControl(_('Make router an NTP server for LAN'), ntpServerEnabled, _('Home devices can use the router as their local time server.'));
+        var clientField = checkboxControl(_('Automatically configure router NTP client'), ntpEnabled, _('Sheepfold will write NTP servers and time settings to OpenWRT system config.'));
         var timezoneSelect = E('select', { 'class': 'cbi-input-select' }, routerTimezoneOptions().map(function (item) {
                 return E('option', {
                         'value': item[0],
@@ -5261,27 +5598,27 @@ function routerTimeSettingsField() {
                 serverField.node,
                 clientField.node,
                 E('label', { 'class': 'sf-field sf-field-wide' }, [
-                        E('span', {}, T('Router timezone')),
+                        E('span', {}, _('Router timezone')),
                         timezoneSelect
                 ]),
                 E('label', { 'class': 'sf-field sf-field-wide' }, [
-                        E('span', {}, T('NTP servers')),
+                        E('span', {}, _('NTP servers')),
                         ntpServersTextarea,
-                        E('small', {}, T('One server per line. Default for Russia: ntp1.vniiftri.ru, ntp2.ntp-servers.net, 3.openwrt.pool.ntp.org.'))
+                        E('small', {}, _('One server per line. Default for Russia: ntp1.vniiftri.ru, ntp2.ntp-servers.net, 3.openwrt.pool.ntp.org.'))
                 ])
         ]);
 }
 
 function wpsActionField(label, option) {
         return saveSelectGlobalField(label, option, 'router_default', [
-                ['router_default', T('Router default behavior')],
-                ['allow_wifi_connection', T('Allow Wi-Fi connection')],
-                ['allow_wifi_and_allowlist', T('Allow Wi-Fi connection and add devices to allowlist (dangerous)')],
-                ['disable_wifi', T('Disable Wi-Fi')]
-        ], T('WPS action saved.'), T('Could not save WPS action.'), [
-                E('span', {}, T('Adding devices to allowlist through the WPS button is dangerous because after pressing it, for 30 seconds any device can connect to Wi-Fi and get into the allowlist.')),
+                ['router_default', _('Router default behavior')],
+                ['allow_wifi_connection', _('Allow Wi-Fi connection')],
+                ['allow_wifi_and_allowlist', _('Allow Wi-Fi connection and add devices to allowlist (dangerous)')],
+                ['disable_wifi', _('Disable Wi-Fi')]
+        ], _('WPS action saved.'), _('Could not save WPS action.'), [
+                E('span', {}, _('Adding devices to allowlist through the WPS button is dangerous because after pressing it, for 30 seconds any device can connect to Wi-Fi and get into the allowlist.')),
                 E('br'),
-                E('span', {}, T('While WPS connection is allowed, all router LEDs should blink using the 1010000 pattern for 30 seconds. One tick is half a second.'))
+                E('span', {}, _('While WPS connection is allowed, all router LEDs should blink using the 1010000 pattern for 30 seconds. One tick is half a second.'))
         ]);
 }
 
@@ -5289,7 +5626,7 @@ function ledControlField() {
         var currentValue = settingValue('router_led_control', 'router_default');
         var hint = E('small', {
                 'hidden': currentValue === 'new_device_alert_until_luci_login' ? null : 'hidden'
-        }, T('When a new device connects, router LEDs will turn on. After a successful LuCI password login or after any admin views the new-device notification on the phone, restore the router default LED behavior immediately.'));
+        }, _('When a new device connects, router LEDs will turn on. After a successful LuCI password login or after any admin views the new-device notification on the phone, restore the router default LED behavior immediately.'));
         var select = E('select', {
                 'class': 'cbi-input-select',
                 'change': function (ev) {
@@ -5299,15 +5636,15 @@ function ledControlField() {
                         setSettingsDraftOption('router_led_control', nextValue);
                 }
         }, [
-                ['router_default', T('Router default behavior')],
-                ['off_forever', T('Turn off all LEDs permanently')],
-                ['new_device_alert_until_luci_login', T('New device LED alert until LuCI login')]
+                ['router_default', _('Router default behavior')],
+                ['off_forever', _('Turn off all LEDs permanently')],
+                ['new_device_alert_until_luci_login', _('New device LED alert until LuCI login')]
         ].map(function (item) {
                 return E('option', { 'value': item[0], 'selected': item[0] === currentValue ? 'selected' : null }, item[1]);
         }));
 
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, T('Router LED control')),
+                E('span', {}, _('Router LED control')),
                 select,
                 hint
         ]);
@@ -5547,6 +5884,10 @@ function reservedSheepfoldListSection(name) {
         return ['allowlist', 'blocklist', 'domain_allowlist'].indexOf(String(name || '')) !== -1;
 }
 
+function isReservedDeviceSourceName(name) {
+        return /^(arp|dhcp|static)$/i.test(String(name || '').trim());
+}
+
 function normalizeMac(mac) {
         var value = String(mac || '').trim().toUpperCase().replace(/-/g, ':');
         var compact = value.replace(/:/g, '');
@@ -5739,13 +6080,17 @@ function updateMacList(listName, mac, enabled) {
                         return value !== normalizedMac;
                 });
 
-        uci.set('sheepfold', sectionName, 'mac', values.join(' '));
+        // Сбрасываем list mac целиком: иначе LuCI uci.set не схлопывает add_list с роутера и MAC не попадает в белый список.
+        uci.unset('sheepfold', sectionName, 'mac');
+        values.forEach(function (value) {
+                uci.set('sheepfold', sectionName, 'mac', value);
+        });
 }
 
 function removeDeviceFromAccessList(device, listName) {
         var isAllowlist = listName === 'allowlist';
-        var confirmText = isAllowlist ? T('Remove device from allowlist?') : T('Remove device from blocklist?');
-        var successText = isAllowlist ? T('Device removed from allowlist.') : T('Device removed from blocklist.');
+        var confirmText = isAllowlist ? _('Remove device from allowlist?') : _('Remove device from blocklist?');
+        var successText = isAllowlist ? _('Device removed from allowlist.') : _('Device removed from blocklist.');
         var sectionName;
 
         if (!window.confirm(confirmText + ' ' + formattedDeviceDisplayId(device) + ' ' + (device.name || device.mac)))
@@ -5761,7 +6106,7 @@ function removeDeviceFromAccessList(device, listName) {
                         window.location.reload();
                 }, 500);
         }, function () {
-                notify(T('Could not remove device from list.'), 'warning');
+                notify(_('Could not remove device from list.'), 'warning');
         });
 }
 
@@ -5769,7 +6114,7 @@ function applyAdminDeviceBindings(admin, selectedDevices, previousIds) {
         var selectedById = {};
 
         if (selectedDevices.some(function (device) { return !adminDeviceCanBeBound(device); }))
-                return Promise.reject(new Error(T('A blocklisted device cannot become an administrator device. Remove it from the blocklist first.')));
+                return Promise.reject(new Error(_('A blocklisted device cannot become an administrator device. Remove it from the blocklist first.')));
 
         // Админское устройство нельзя оставлять в детских группах, расписаниях и журналировании:
         // иначе родитель может сам себя заблокировать, а журнал ребёнка начнёт смешиваться
@@ -5785,7 +6130,7 @@ function applyAdminDeviceBindings(admin, selectedDevices, previousIds) {
                 uci.set('sheepfold', sectionName, 'name', device.name || mac);
                 uci.set('sheepfold', sectionName, 'ip', device.ip || '');
                 uci.set('sheepfold', sectionName, 'device_type', device.deviceType || 'phone');
-                uci.set('sheepfold', sectionName, 'group', T('Not configured'));
+                uci.set('sheepfold', sectionName, 'group', _('Not configured'));
                 uci.set('sheepfold', sectionName, 'schedules', '');
                 uci.set('sheepfold', sectionName, 'schedule', '');
                 uci.set('sheepfold', sectionName, 'activity_log_enabled', '0');
@@ -5845,28 +6190,28 @@ function routerDeviceNote(item, configured) {
 
         if (configured && configured.detection_reason) {
                 var confidence = configured.detection_confidence ?
-                        ' (' + T('Detection confidence') + ': ' + configured.detection_confidence + '%)' :
+                        ' (' + _('Detection confidence') + ': ' + configured.detection_confidence + '%)' :
                         '';
 
-                return T('Auto-detected') + ': ' + configured.detection_reason + confidence;
+                return _('Auto-detected') + ': ' + configured.detection_reason + confidence;
         }
 
         if (configured)
-                return T('Configured in Sheepfold');
+                return _('Configured in Sheepfold');
 
         if (item.sources.static && (item.sources.dhcp || item.sources.arp))
-                return T('Static DHCP lease, currently online');
+                return _('Static DHCP lease, currently online');
 
         if (item.sources.dhcp)
-                return T('Active DHCP lease');
+                return _('Active DHCP lease');
 
         if (item.sources.arp)
-                return T('ARP/neighbor entry');
+                return _('ARP/neighbor entry');
 
         if (item.sources.static)
-                return T('Static DHCP lease');
+                return _('Static DHCP lease');
 
-        return T('Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.');
+        return _('Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.');
 }
 
 function buildRouterDevices(dhcpLeases, arpTable) {
@@ -5878,8 +6223,21 @@ function buildRouterDevices(dhcpLeases, arpTable) {
         parseDhcpLeases(dhcpLeases, map);
         parseArpTable(arpTable, map);
         addStaticDhcpLeases(map);
-
         configuredByMac = sheepfoldDeviceConfigByMac();
+
+        Object.keys(configuredByMac).forEach(function (mac) {
+                var section = configuredByMac[mac];
+
+                if (map[mac])
+                        return;
+
+                map[mac] = {
+                        ip: section.ip || '',
+                        hostname: section.name || '',
+                        staticName: section.name || '',
+                        sources: {}
+                };
+        });
         allowlist = sheepfoldListMacs('allowlist');
         blocklist = sheepfoldListMacs('blocklist');
 
@@ -5900,7 +6258,7 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                 var configured = configuredByMac[mac];
                 var status = configured && configured.status ? configured.status : 'new';
                 var adminDevice = configured && configured.admin_device === '1';
-                var groupName = configured && configured.group ? normalizeGroupName(configured.group) : T('Not configured');
+                var groupName = configured && configured.group ? normalizeGroupName(configured.group) : _('Not configured');
                 var groupSection = groupSectionByName(groupName);
                 var deviceType = configured && configured.device_type ?
                         configured.device_type :
@@ -5913,11 +6271,15 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                 if (blocklist[mac])
                         status = 'blocked';
 
+                var statusBadge = deviceStatusBadge(status, configured);
+
                 return {
                         id: 'D-' + String(index + 1).padStart(4, '0'),
-                        name: configured && configured.name && !reservedSheepfoldListSection(configured.name) ?
+                        name: configured && configured.name &&
+                                !reservedSheepfoldListSection(configured.name) &&
+                                !isReservedDeviceSourceName(configured.name) ?
                                 configured.name :
-                                (item.staticName || item.hostname || T('Unknown device')),
+                                (item.staticName || item.hostname || _('Unknown device')),
                         ip: configured && configured.ip ? configured.ip : (item.ip || item.staticIp || ''),
                         mac: mac,
                         hostname: item.hostname || '',
@@ -5926,9 +6288,9 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                         staticSection: item.staticSection || '',
                         configSection: configured && configured['.name'],
                         sourceLabel: Object.keys(item.sources).map(function (source) {
-                                return source === 'dhcp' ? T('Active DHCP lease') :
-                                        source === 'arp' ? T('ARP/neighbor entry') :
-                                                T('Static DHCP lease');
+                                return source === 'dhcp' ? _('Active DHCP lease') :
+                                        source === 'arp' ? _('ARP/neighbor entry') :
+                                                _('Static DHCP lease');
                         }).join(', '),
                         group: groupName,
                         deviceType: deviceType,
@@ -5938,6 +6300,7 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                         autoGroupAssigned: configured && configured.auto_group_assigned === '1',
                         noRestrictionsAutoExcluded: configured && configured.no_restrictions_auto_excluded === '1',
                         status: status,
+                        statusBadge: statusBadge,
                         note: routerDeviceNote(item, configured),
                         adminDevice: adminDevice,
                         adminOwner: configured && configured.admin_owner,
@@ -5951,12 +6314,84 @@ function buildRouterDevices(dhcpLeases, arpTable) {
         });
 }
 
+function wifiBandKind(band, channel) {
+        var value = String(band || '').toLowerCase().trim();
+        var channelNum = parseInt(channel, 10);
+
+        if (value === '2g' || value === '2ghz' || value.indexOf('2.4') !== -1)
+                return '2g';
+
+        if (value === '5g' || value === '5ghz')
+                return '5g';
+
+        if (value === '6g' || value === '6ghz')
+                return '6g';
+
+        if (/^11b$|^11g$|^11ng$|^bg$/.test(value))
+                return '2g';
+
+        if (/^11a$|^11ac$/.test(value))
+                return '5g';
+
+        if (!isNaN(channelNum)) {
+                if (channelNum >= 36)
+                        return '5g';
+
+                if (channelNum >= 1 && channelNum <= 14)
+                        return '2g';
+        }
+
+        return '';
+}
+
+function wifiBandBadge(kind) {
+        var labels = {
+                '2g': '2.4',
+                '5g': '5',
+                '6g': '6'
+        };
+        var titles = {
+                '2g': '2.4 GHz',
+                '5g': '5 GHz',
+                '6g': '6 GHz'
+        };
+
+        if (!kind || !labels[kind])
+                return '';
+
+        return E('span', {
+                'class': 'sf-wifi-band sf-wifi-band-' + kind,
+                'title': titles[kind],
+                'aria-label': titles[kind]
+        }, [
+                svgIcon([
+                        'M2 8c5-5 15-5 20 0',
+                        'M5 11c3.5-3.5 10.5-3.5 14 0',
+                        'M8 14c2-2 6-2 8 0',
+                        'M11 17h2'
+                ]),
+                E('span', { 'class': 'sf-wifi-band-label' }, labels[kind])
+        ]);
+}
+
+function wifiNetworkTitle(network) {
+        var title = network.title || _('Network');
+        var bandBadge = wifiBandBadge(network.bandKind);
+
+        return E('span', { 'class': 'sf-wifi-title-row' }, bandBadge ? [
+                E('span', { 'class': 'sf-wifi-title-text' }, title),
+                bandBadge
+        ] : [
+                E('span', { 'class': 'sf-wifi-title-text' }, title)
+        ]);
+}
+
 function readWifiNetworksFromUci() {
         return safeUciSections('wireless', 'wifi-iface').filter(function (section) {
                 return section.disabled !== '1' && (!section.mode || section.mode === 'ap');
         }).map(function (section) {
                 var device = section.device || '';
-                var deviceLabel = device || T('Network');
+                var deviceLabel = device || _('Network');
                 var band = device ? (safeUciGet('wireless', device, 'band', '') || safeUciGet('wireless', device, 'hwmode', '')) : '';
                 var channel = device ? (safeUciGet('wireless', device, 'channel', 'auto') || 'auto') : 'auto';
                 var sectionName = section['.name'] || '';
@@ -5965,13 +6400,116 @@ function readWifiNetworksFromUci() {
                 var password = section.key || (sectionName ? safeUciGet('wireless', sectionName, 'key', '') : '') || '';
 
                 return {
-                        label: ssid ? ssid + ' (' + (band || deviceLabel) + ')' : deviceLabel,
+                        title: ssid || deviceLabel,
+                        bandKind: wifiBandKind(band, channel),
+                        sectionName: sectionName,
+                        device: device,
                         ssid: ssid,
                         password: password,
                         encryption: encryption,
                         channel: channel
                 };
         });
+}
+
+function clearWifiNetworkEditors() {
+        wifiNetworkEditors = [];
+}
+
+function wifiEditorSnapshot(editor) {
+        return {
+                ssid: String(editor.ssidInput.value || '').trim(),
+                password: String(editor.passwordInput.value || ''),
+                encryption: String(editor.securitySelect.value || ''),
+                channel: String(editor.channelSelect.value || 'auto')
+        };
+}
+
+function wifiEditorIsDirty(editor) {
+        var current = wifiEditorSnapshot(editor);
+
+        return current.ssid !== editor.original.ssid ||
+                current.password !== editor.original.password ||
+                current.encryption !== editor.original.encryption ||
+                current.channel !== editor.original.channel;
+}
+
+function updateWifiSaveButton() {
+        var dirty = wifiNetworkEditors.some(function (editor) {
+                return wifiEditorIsDirty(editor);
+        });
+
+        document.querySelectorAll('[data-wifi-save]').forEach(function (button) {
+                button.disabled = wifiIsSaving ? true : (!dirty ? true : null);
+                button.classList.toggle('sf-action-muted', !dirty);
+        });
+}
+
+function registerWifiNetworkEditor(editor) {
+        wifiNetworkEditors.push(editor);
+
+        editor.ssidInput.addEventListener('input', updateWifiSaveButton);
+        editor.passwordInput.addEventListener('input', updateWifiSaveButton);
+        editor.securitySelect.addEventListener('change', updateWifiSaveButton);
+        editor.channelSelect.addEventListener('change', updateWifiSaveButton);
+}
+
+function saveWifiNetworksNow() {
+        if (wifiIsSaving || !wifiNetworkEditors.length)
+                return Promise.resolve();
+
+        wifiIsSaving = true;
+        updateWifiSaveButton();
+
+        wifiNetworkEditors.forEach(function (editor) {
+                var snapshot = wifiEditorSnapshot(editor);
+                var encryption = snapshot.encryption;
+
+                if (!editor.sectionName)
+                        return;
+
+                uci.set('wireless', editor.sectionName, 'ssid', snapshot.ssid);
+                uci.set('wireless', editor.sectionName, 'encryption', encryption);
+
+                if (encryption === 'none')
+                        uci.unset('wireless', editor.sectionName, 'key');
+                else
+                        uci.set('wireless', editor.sectionName, 'key', snapshot.password);
+
+                if (editor.device)
+                        uci.set('wireless', editor.device, 'channel', snapshot.channel || 'auto');
+        });
+
+        return saveUciChanges(['wireless']).then(function () {
+                return fs.exec('/sbin/wifi', ['reload']).catch(function () {
+                        return fs.exec('/sbin/wifi', []);
+                });
+        }).then(function () {
+                wifiNetworkEditors.forEach(function (editor) {
+                        editor.original = wifiEditorSnapshot(editor);
+                });
+                notify(_('Wi-Fi settings saved.'), 'info');
+        }, function (error) {
+                notify(_('Could not save Wi-Fi settings.') + ' ' + commandErrorText(error, ''), 'warning');
+                return Promise.reject(error);
+        }).finally(function () {
+                wifiIsSaving = false;
+                updateWifiSaveButton();
+        });
+}
+
+function wifiSaveBar() {
+        return E('div', { 'class': 'sf-wifi-save-bar' }, [
+                E('button', {
+                        'class': 'sf-action sf-action-positive sf-action-nowrap sf-action-muted',
+                        'data-wifi-save': '1',
+                        'disabled': 'disabled',
+                        'click': function (ev) {
+                                ev.preventDefault();
+                                saveWifiNetworksNow();
+                        }
+                }, _('Save'))
+        ]);
 }
 
 function wifiSecurityOptions(value) {
@@ -5981,7 +6519,7 @@ function wifiSecurityOptions(value) {
                 ['sae', 'WPA3-SAE'],
                 ['psk-mixed', 'WPA/WPA2 mixed'],
                 ['wep', 'WEP'],
-                ['none', T('Open network')]
+                ['none', _('Open network')]
         ];
         var known = options.some(function (item) {
                 return item[0] === value;
@@ -6006,7 +6544,7 @@ function wifiNetworkBox(network, index) {
                 return E('option', { 'value': item[0], 'selected': item[0] === network.encryption ? 'selected' : null }, item[1]);
         }));
         var channelSelect = E('select', { 'class': 'cbi-input-select' }, [
-                ['auto', T('Auto')],
+                ['auto', _('Auto')],
                 ['1', '1'],
                 ['6', '6'],
                 ['11', '11'],
@@ -6030,32 +6568,47 @@ function wifiNetworkBox(network, index) {
 
         updateQr();
 
+        registerWifiNetworkEditor({
+                sectionName: network.sectionName || '',
+                device: network.device || '',
+                ssidInput: ssidInput,
+                passwordInput: passwordInput,
+                securitySelect: securitySelect,
+                channelSelect: channelSelect,
+                original: {
+                        ssid: String(network.ssid || '').trim(),
+                        password: String(network.password || ''),
+                        encryption: String(network.encryption || 'none'),
+                        channel: String(network.channel || 'auto')
+                }
+        });
+
         return E('div', {
                 'class': 'sf-box sf-wifi-network',
                 'style': 'background-color: ' + wifiNetworkCardColor(index) + ';'
         }, [
-                E('h4', { 'class': 'sf-wifi-title' }, network.label),
+                E('h4', { 'class': 'sf-wifi-title' }, wifiNetworkTitle(network)),
                 E('div', { 'class': 'sf-wifi-fields' }, [
                         E('label', { 'class': 'sf-field' }, [
-                                E('span', {}, T('SSID')),
+                                E('span', {}, _('SSID')),
                                 ssidInput
                         ]),
                         E('label', { 'class': 'sf-field' }, [
-                                E('span', {}, T('Password')),
+                                E('span', {}, _('Password')),
                                 passwordInput
                         ]),
                         E('label', { 'class': 'sf-field' }, [
-                                E('span', {}, T('Security')),
+                                E('span', {}, _('Security')),
                                 securitySelect
                         ]),
                         E('label', { 'class': 'sf-field' }, [
-                                E('span', {}, T('Channel')),
+                                E('span', {}, _('Channel')),
                                 channelSelect
                         ])
                 ]),
                 E('div', { 'class': 'sf-wifi-qr' }, [
                         qrWrap,
-                        E('small', {}, T('Scan to connect to this Wi-Fi network.'))
+                        E('small', {}, _('Scan to connect to this Wi-Fi network.'))
                 ])
         ]);
 }
@@ -6260,12 +6813,15 @@ return view.extend({
                 panel.querySelectorAll('.sf-settings-panel').forEach(function (node) {
                         node.hidden = node.getAttribute('data-settings-panel') !== tab;
                 });
+
+                if (tab === 'info' && routerInfoState.status !== 'loading')
+                        loadRouterInformation(routerInfoState.status !== 'ready').catch(function () {});
         },
 
-        renderSettingsTabs: function () {
+        renderSettingsTabRow: function (tabs, extraClass) {
                 var self = this;
 
-                return E('div', { 'class': 'sf-tabs sf-settings-tabs' }, settingsTabs.map(function (tab) {
+                return E('div', { 'class': 'sf-tabs sf-settings-tabs' + (extraClass ? ' ' + extraClass : '') }, tabs.map(function (tab) {
                         return E('button', {
                                 'class': 'sf-tab sf-settings-tab' + (self.activeSettingsTab === tab[0] ? ' active' : ''),
                                 'data-settings-tab': tab[0],
@@ -6343,12 +6899,12 @@ return view.extend({
                 return E('div', {
                         'class': 'sf-note ' + (rootPasswordIsSet ? 'sf-note-ok' : 'sf-note-danger')
                 }, [
-                        E('strong', {}, T('Router root password check')),
-                        E('span', {}, T('Root password is not set. Sheepfold settings must stay locked until the router password is configured.')),
+                        E('strong', {}, _('Router root password check')),
+                        E('span', {}, _('Root password is not set. Sheepfold settings must stay locked until the router password is configured.')),
                         E('a', {
                                 'class': 'sf-inline-link',
                                 'href': L.url('admin/system/admin')
-                        }, T('Open router password page'))
+                        }, _('Open router password page'))
                 ]);
         },
 
@@ -6356,7 +6912,7 @@ return view.extend({
                 var table = deviceTable(devices);
                 var search = E('input', {
                         'class': 'cbi-input-text sf-search',
-                        'placeholder': T('Search by name, IP, or MAC')
+                        'placeholder': _('Search by name, IP, or MAC')
                 });
 
                 search.addEventListener('input', function () {
@@ -6366,7 +6922,7 @@ return view.extend({
                 return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('p', {}, T('Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.'))
+                                        E('p', {}, _('Detected automatically from router leases, ARP/neighbor data, and static DHCP leases.'))
                                 ])
                         ]),
                         E('div', { 'class': 'sf-toolbar sf-device-toolbar' }, [
@@ -6377,9 +6933,9 @@ return view.extend({
                                                 ev.preventDefault();
                                                 showManualDeviceModal();
                                         }
-                                }, T('Add device'))
+                                }, _('Add device'))
                         ]),
-                        devices.length ? '' : E('div', { 'class': 'sf-note sf-note-warning' }, T('No devices found in DHCP leases, ARP, or static DHCP leases yet.')),
+                        devices.length ? '' : E('div', { 'class': 'sf-note sf-note-warning' }, _('No devices found in DHCP leases, ARP, or static DHCP leases yet.')),
                         table
                 ]);
         },
@@ -6388,7 +6944,7 @@ return view.extend({
                 return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('p', {}, T('These devices are never blocked by global blocking or schedules.'))
+                                        E('p', {}, _('These devices are never blocked by global blocking or schedules.'))
                                 ]),
                                 E('div', { 'class': 'sf-toolbar' }, [
                                         quickAllowlistButton(),
@@ -6405,13 +6961,13 @@ return view.extend({
                 return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('p', {}, T('Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API.'))
+                                        E('p', {}, _('Blocklisted devices cannot access the internet, LuCI, SSH, or the Sheepfold API.'))
                                 ]),
                                 manualListDeviceButton('blocked')
                         ]),
                         E('div', { 'class': 'sf-note ' + (emergencyAccessEnabled ? 'sf-note-ok' : 'sf-note-warning') }, emergencyAccessEnabled ?
-                                T('Emergency-useful sites for blocklisted devices are enabled and still do not open router access.') :
-                                T('Emergency-useful sites for blocklisted devices are disabled and still do not open router access.')),
+                                _('Emergency-useful sites for blocklisted devices are enabled and still do not open router access.') :
+                                _('Emergency-useful sites for blocklisted devices are disabled and still do not open router access.')),
                         deviceTable(devices.filter(function (device) { return device.status === 'blocked'; }), { compact: true, removeFromList: 'blocklist' })
                 ]);
         },
@@ -6454,33 +7010,33 @@ return view.extend({
                 return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('p', {}, T('Allow and block rules for devices and groups.'))
+                                        E('p', {}, _('Allow and block rules for devices and groups.'))
                                 ]),
-                                actionButton(T('Add rule'), 'positive', T('Schedule editor is not implemented in this visual test build.'))
+                                actionButton(_('Add rule'), 'positive', _('Schedule editor is not implemented in this visual test build.'))
                         ]),
                         E('div', { 'class': 'sf-grid two' }, [
                                 E('div', { 'class': 'sf-box' }, [
-                                        E('h4', {}, T('School days')),
-                                        E('p', {}, T('Children group')),
-                                        E('strong', {}, T('Allow 07:00-20:30, block after bedtime'))
+                                        E('h4', {}, _('School days')),
+                                        E('p', {}, _('Children group')),
+                                        E('strong', {}, _('Allow 07:00-20:30, block after bedtime'))
                                 ]),
                                 E('div', { 'class': 'sf-box' }, [
-                                        E('h4', {}, T('Temporary access')),
+                                        E('h4', {}, _('Temporary access')),
                                         E('div', { 'class': 'sf-chip-row' }, [
-                                                '+15', '+30', '+1h', '+2h', '+3h', '+5h', T('End of day'), T('Bedtime')
+                                                '+15', '+30', '+1h', '+2h', '+3h', '+5h', _('End of day'), _('Bedtime')
                                         ].map(function (label) {
                                                 return E('button', {
                                                 'class': 'sf-chip',
                                                         'click': function (ev) {
                                                                 ev.preventDefault();
-                                                                notify(T('Temporary access requires confirmation.'), 'info');
+                                                                notify(_('Temporary access requires confirmation.'), 'info');
                                                         }
                                                 }, label);
                                         }))
                                 ])
                         ]),
                         E('div', { 'class': 'sf-form-row' }, [
-                                field(T('Default bedtime'), '21:00', T('Used by the "until bedtime" quick action.'))
+                                field(_('Default bedtime'), '21:00', _('Used by the "until bedtime" quick action.'))
                         ])
                 ]);
         },
@@ -6491,7 +7047,7 @@ return view.extend({
                 var groupNames;
 
                 safeUciSections('sheepfold', 'group').forEach(function (section) {
-                        var groupName = normalizeGroupName(section.name || section['.name']);
+                        var groupName = normalizeGroupName(section.name);
 
                         if (groupName && !grouped[groupName])
                                 grouped[groupName] = [];
@@ -6499,25 +7055,7 @@ return view.extend({
                                 groupSections[groupName] = section;
                 });
 
-                function ensureVisibleDefaultGroup(groupName, data) {
-                        if (!grouped[groupName])
-                                grouped[groupName] = [];
-                        if (!groupSections[groupName])
-                                groupSections[groupName] = data;
-                }
-
-                ensureVisibleDefaultGroup(T('No restrictions'), {
-                        name: T('No restrictions'),
-                        protected: '1',
-                        auto_assignable: '1',
-                        color: '#e8f4ef'
-                });
-                ensureVisibleDefaultGroup(T('Child number 1'), {
-                        name: T('Child number 1'),
-                        protected: '0',
-                        auto_assignable: '0',
-                        color: '#eef2ff'
-                });
+                ensureDefaultGroupSections(grouped, groupSections);
 
                 devices.forEach(function (device) {
                         if (!device.group)
@@ -6531,43 +7069,45 @@ return view.extend({
                         grouped[device.group].push(device);
                 });
 
+                supplementGroupedDevicesFromUci(grouped);
+
                 function deleteGroup(groupName) {
                         var section = groupSections[groupName];
                         var sectionName = section && section['.name'];
 
                         if (normalizeGroupName(groupName) === noRestrictionsGroupName()) {
-                                notify(T('Protected group cannot be deleted.'), 'warning');
+                                notify(_('Protected group cannot be deleted.'), 'warning');
                                 return;
                         }
 
                         if (grouped[groupName] && grouped[groupName].length) {
-                                notify(T('This group cannot be deleted while devices are assigned to it.'), 'warning');
+                                notify(_('This group cannot be deleted while devices are assigned to it.'), 'warning');
                                 return;
                         }
 
                         if (section && section.protected === '1') {
-                                notify(T('Protected group cannot be deleted.'), 'warning');
+                                notify(_('Protected group cannot be deleted.'), 'warning');
                                 return;
                         }
 
                         if (!sectionName) {
-                                notify(T('Group editor is not implemented in this visual test build.'), 'warning');
+                                notify(_('Group editor is not implemented in this visual test build.'), 'warning');
                                 return;
                         }
 
-                        if (!window.confirm(T('Delete group') + ': ' + groupName + '?'))
+                        if (!window.confirm(_('Delete group') + ': ' + groupName + '?'))
                                 return;
 
                         uci.remove('sheepfold', sectionName);
                         saveUciChanges(['sheepfold']).then(function () {
                                 delete grouped[groupName];
                                 delete groupSections[groupName];
-                                notify(T('Group deleted.'), 'info');
+                                notify(_('Group deleted.'), 'info');
                                 window.setTimeout(function () {
                                         window.location.reload();
                                 }, 700);
                         }, function () {
-                                notify(T('Could not delete group.'), 'warning');
+                                notify(_('Could not delete group.'), 'warning');
                         });
                 }
 
@@ -6608,13 +7148,13 @@ return view.extend({
                                 E('div', { 'class': 'sf-group-head' }, [
                                         E('div', {}, [
                                                 E('h4', { 'class': 'sf-group-title' }, groupName),
-                                                E('strong', { 'class': 'sf-group-count' }, groupDevices.length + ' ' + T('Devices'))
+                                                E('strong', { 'class': 'sf-group-count' }, groupDevices.length + ' ' + _('Devices'))
                                         ]),
                                         E('div', { 'class': 'sf-row-actions' }, [
-                                                iconButton(T('Configure group'), 'gear', 'neutral', function () {
+                                                iconButton(_('Configure group'), 'gear', 'neutral', function () {
                                                         showGroupSettingsModal(groupName, section);
                                                 }),
-                                                iconButton(T('Delete group'), 'trash', 'danger', function () {
+                                                iconButton(_('Delete group'), 'trash', 'danger', function () {
                                                         deleteGroup(groupName);
                                                 })
                                         ])
@@ -6625,15 +7165,15 @@ return view.extend({
                                                 E('span', {}, device.name)
                                         ]);
                                 }).concat(hiddenCount ? [
-                                        E('div', { 'class': 'sf-group-device-more' }, '+ ' + hiddenCount + ' ' + T('more devices hidden'))
-                                ] : [])) : E('div', { 'class': 'sf-muted' }, T('No devices'))
+                                        E('div', { 'class': 'sf-group-device-more' }, '+ ' + hiddenCount + ' ' + _('more devices hidden'))
+                                ] : [])) : E('div', { 'class': 'sf-muted' }, _('No devices'))
                         ]);
                 }
 
                 return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('p', {}, T('Groups collect devices so schedules and access rules can be applied to several devices at once.'))
+                                        E('p', {}, _('Groups collect devices so schedules and access rules can be applied to several devices at once.'))
                                 ]),
                                 E('button', {
                                         'class': 'sf-action sf-action-positive sf-action-nowrap',
@@ -6646,11 +7186,11 @@ return view.extend({
                                                 });
                                                 showAddGroupModal(existingNames);
                                         }
-                                }, T('Add group'))
+                                }, _('Add group'))
                         ]),
                         groupNames.length ?
                                 E('div', { 'class': 'sf-grid two' }, groupNames.map(groupCard)) :
-                                E('div', { 'class': 'sf-note sf-note-warning' }, T('No groups yet. Assign devices to groups in device settings.'))
+                                E('div', { 'class': 'sf-note sf-note-warning' }, _('No groups yet. Assign devices to groups in device settings.'))
                 ]);
         },
 
@@ -6658,7 +7198,7 @@ return view.extend({
                 return E('div', { 'class': 'sf-settings-section' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('p', { 'class': 'sf-section-intro' }, T('Emergency-useful sites are a small editable list of necessary services that may stay available during restricted access.'))
+                                        E('p', { 'class': 'sf-section-intro' }, _('Emergency-useful sites are a small editable list of necessary services that may stay available during restricted access.'))
                                 ]),
                                 E('button', {
                                         'class': 'sf-action sf-action-positive',
@@ -6666,7 +7206,7 @@ return view.extend({
                                                 ev.preventDefault();
                                                 showSiteModal();
                                         }
-                                }, T('Add site'))
+                                }, _('Add site'))
                         ]),
                         E('div', { 'class': 'sf-domain-list' }, emergencySites.map(domainCard))
                 ]);
@@ -6679,21 +7219,24 @@ return view.extend({
         renderWifi: function () {
                 var networks = this.readWifiNetworks();
 
+                clearWifiNetworkEditors();
+
                 return E('div', { 'class': 'sf-panel' }, [
                         networks.length ?
                                 E('div', { 'class': 'sf-grid two' }, networks.map(function (network, index) {
                                         return wifiNetworkBox(network, index);
                                 })) :
-                                E('div', { 'class': 'sf-note sf-note-warning' }, T('No active Wi-Fi networks were found in the router wireless config.'))
+                                E('div', { 'class': 'sf-note sf-note-warning' }, _('No active Wi-Fi networks were found in the router wireless config.')),
+                        networks.length ? wifiSaveBar() : ''
                 ]);
         },
 
         integrationModeNotes: function (mode) {
                 var notes = {
-                        none: T('Sheepfold works alone.'),
-                        adguard: T('Sheepfold blocks/allows devices before AdGuard Home DNS filtering.'),
-                        podkop: T('Sheepfold must not overwrite Podkop-managed routing, Dnsmasq, nftables, or sing-box state.'),
-                        adguard_podkop: T('Recommended chain: Sheepfold -> AdGuard Home -> Podkop.')
+                        none: _('Sheepfold works alone.'),
+                        adguard: _('Sheepfold blocks/allows devices before AdGuard Home DNS filtering.'),
+                        podkop: _('Sheepfold must not overwrite Podkop-managed routing, Dnsmasq, nftables, or sing-box state.'),
+                        adguard_podkop: _('Recommended chain: Sheepfold -> AdGuard Home -> Podkop.')
                 };
 
                 return notes[mode] || notes.none;
@@ -6716,7 +7259,7 @@ return view.extend({
                                 modeNote.textContent = self.integrationModeNotes(nextMode);
                         }
                 }, [
-                        ['none', T('None')],
+                        ['none', _('None')],
                         ['adguard', 'AdGuard Home'],
                         ['podkop', 'Podkop'],
                         ['adguard_podkop', 'AdGuard Home + Podkop']
@@ -6727,37 +7270,37 @@ return view.extend({
                 return E('div', { 'class': 'sf-settings-section' }, [
                         E('div', { 'class': 'sf-form-row' }, [
                                 E('label', { 'class': 'sf-field sf-field-wide' }, [
-                                        E('span', {}, T('Use together with')),
+                                        E('span', {}, _('Use together with')),
                                         modeSelect,
-                                        E('small', {}, T('Auto-detected during installation. You can change it manually if needed.'))
+                                        E('small', {}, _('Auto-detected during installation. You can change it manually if needed.'))
                                 ])
                         ]),
                         E('div', { 'class': 'sf-grid two' }, [
                                 E('div', { 'class': 'sf-box sf-status-card sf-status-warning' }, [
-                                        E('h4', {}, T('AdGuard Home status')),
-                                        E('p', {}, T('AdGuard Home filters DNS requests after Sheepfold allows a device. It helps block ads, trackers, and unwanted domains.')),
+                                        E('h4', {}, _('AdGuard Home status')),
+                                        E('p', {}, _('AdGuard Home filters DNS requests after Sheepfold allows a device. It helps block ads, trackers, and unwanted domains.')),
                                         E('strong', {}, 'API: pending'),
-                                        E('p', {}, T('AdGuard Home API check should use the local AdGuard Home API when credentials are configured.'))
+                                        E('p', {}, _('AdGuard Home API check should use the local AdGuard Home API when credentials are configured.'))
                                 ]),
                                 E('div', { 'class': 'sf-box sf-status-card sf-status-warning' }, [
-                                        E('h4', {}, T('Podkop status')),
-                                        E('p', {}, T('Podkop routes already allowed traffic according to its own routing rules. Sheepfold must not overwrite Podkop routing.')),
+                                        E('h4', {}, _('Podkop status')),
+                                        E('p', {}, _('Podkop routes already allowed traffic according to its own routing rules. Sheepfold must not overwrite Podkop routing.')),
                                         E('strong', {}, 'service/package: pending'),
-                                        E('p', {}, T('Podkop has no stable Sheepfold-facing API yet; detect package/service state and show conservative notes.'))
+                                        E('p', {}, _('Podkop has no stable Sheepfold-facing API yet; detect package/service state and show conservative notes.'))
                                 ])
                         ]),
                         E('div', { 'class': 'sf-note' }, [
-                                E('strong', {}, T('Mode notes')),
+                                E('strong', {}, _('Mode notes')),
                                 modeNote
                         ]),
-                        E('div', { 'class': 'sf-note' }, T('Automatic router changes must show integration-specific notes and create/export a backup before applying.')),
-                        actionButton(T('Prepare integration settings'), 'danger', T('Integration setup must show planned changes, create an export, and require confirmation before applying.'))
+                        E('div', { 'class': 'sf-note' }, _('Automatic router changes must show integration-specific notes and create/export a backup before applying.')),
+                        actionButton(_('Prepare integration settings'), 'danger', _('Integration setup must show planned changes, create an export, and require confirmation before applying.'))
                 ]);
         },
 
         renderBot: function () {
                 return E('div', { 'class': 'sf-settings-section' }, [
-                        E('p', { 'class': 'sf-section-intro' }, T('Messenger integration lets approved parents receive notifications and control Sheepfold with short commands when they are away from home.')),
+                        E('p', { 'class': 'sf-section-intro' }, _('Messenger integration lets approved parents receive notifications and control Sheepfold with short commands when they are away from home.')),
                         messengerSettingsBox()
                 ]);
         },
@@ -6765,17 +7308,17 @@ return view.extend({
         renderAdmins: function (embedded) {
                 var table = E('div', { 'class': 'sf-admin-table' }, [
                         E('div', { 'class': 'sf-admin-row sf-admin-head' }, [
-                                E('div', {}, adminSortHeader(T('Admin name'), 'name')),
-                                E('div', {}, adminSortHeader(T('Login'), 'login')),
-                                E('div', {}, T('Admin devices')),
-                                E('div', {}, T('Actions'))
+                                E('div', {}, adminSortHeader(_('Admin name'), 'name')),
+                                E('div', {}, adminSortHeader(_('Login'), 'login')),
+                                E('div', {}, _('Admin devices')),
+                                E('div', {}, _('Actions'))
                         ])
                 ].concat(admins.map(adminTableRow)));
 
                 return E('div', { 'class': embedded ? 'sf-settings-section' : 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('h3', {}, T('Administrator accounts'))
+                                        E('h3', {}, _('Administrator accounts'))
                                 ]),
                                 E('button', {
                                         'class': 'sf-action sf-action-positive',
@@ -6785,68 +7328,74 @@ return view.extend({
                                                         table.appendChild(adminTableRow(admin));
                                                 });
                                         }
-                                }, T('Add administrator'))
+                                }, _('Add administrator'))
                         ]),
                         table
                 ]);
         },
 
         renderLogs: function () {
+                var logNode = E('div', { 'class': 'sf-log' }, renderLogRows());
+                var filterUi;
+
+                function refreshLogView() {
+                        logNode.replaceChildren.apply(logNode, renderLogRows());
+                }
+
+                filterUi = createLogFilterUi(refreshLogView);
+
                 return E('div', { 'class': 'sf-panel' }, [
-                        E('div', { 'class': 'sf-panel-head' }, [
-                                E('div', {}, [
-                                        E('p', {}, T('The log is stored in RAM and is cleared after router reboot. Export masks sensitive fields.'))
-                                ]),
-                                E('div', { 'class': 'sf-toolbar sf-log-toolbar' }, [
+                        E('p', { 'class': 'sf-section-intro' }, _('The log is stored in RAM for fast viewing and is cleared after router reboot. When USB flash or Yandex Disk is configured, events are mirrored there too. Export masks sensitive fields.')),
+                        E('div', { 'class': 'sf-log-toolbar-row' }, [
+                                filterUi.toggleButton,
+                                E('div', { 'class': 'sf-log-toolbar-actions' }, [
                                         E('button', {
                                                 'class': 'sf-action sf-action-danger',
                                                 'click': function (ev) {
-                                                        var logNode = ev.currentTarget.closest('.sf-panel').querySelector('.sf-log');
-
                                                         ev.preventDefault();
                                                         fs.write(logCachePath(), '').then(function () {
                                                                 logEntries = [];
-                                                                if (logNode)
-                                                                        logNode.replaceChildren.apply(logNode, renderLogRows());
-                                                                notify(T('Log cleared.'), 'info');
+                                                                refreshLogView();
+                                                                notify(_('Log cleared.'), 'info');
                                                         }, function () {
-                                                                notify(T('Could not clear log.'), 'warning');
+                                                                notify(_('Could not clear log.'), 'warning');
                                                         });
                                                 }
-                                        }, T('Clear log')),
+                                        }, _('Clear log')),
                                         E('button', {
                                                 'class': 'sf-action sf-action-neutral',
                                                 'click': function (ev) {
                                                         ev.preventDefault();
                                                         showLogExportModal();
                                                 }
-                                        }, T('Export masked'))
+                                        }, _('Export masked'))
                                 ])
                         ]),
-                        E('div', { 'class': 'sf-log' }, renderLogRows())
+                        filterUi.filtersWrap,
+                        logNode
                 ]);
         },
 
         renderSettingsGeneral: function () {
                 return E('div', { 'class': 'sf-flat-form' }, [
-                        saveSelectGlobalField(T('Application language'), 'language', 'ru', [
-                                ['ru', T('Russian')],
-                                ['en', T('English')]
-                        ]),
+                        saveSelectGlobalField(_('Application language'), 'language', 'ru', [
+                                ['ru', _('Russian')],
+                                ['en', _('English')]
+                        ], null, null, _('Applies to the Sheepfold LuCI interface after you press Save. The page reloads automatically.')),
                         appPortField(),
-                        saveSelectGlobalField(T('New device behavior'), 'new_device_policy', 'allow', [
-                                ['allow', T('Allow internet by default')],
-                                ['restrict_until_configured', T('Restrict until configured')]
+                        saveSelectGlobalField(_('New device behavior'), 'new_device_policy', 'allow', [
+                                ['allow', _('Allow internet by default')],
+                                ['restrict_until_configured', _('Restrict until configured')]
                         ]),
                         autoConfigureDevicesField(),
                         updateCheckInstallField(),
                         blocklistEmergencyAccessField(),
                         globalTextareaOptionField(
-                                T('Blocked internet page text shown instead of websites'),
+                                _('Blocked internet page text shown instead of websites'),
                                 'blocked_page_text',
-                                T('Internet is temporarily unavailable by family rules.'),
-                                T('Settings saved.'),
-                                T('Could not save settings.'),
+                                _('Internet is temporarily unavailable by family rules.'),
+                                _('Settings saved.'),
+                                _('Could not save settings.'),
                                 null,
                                 2
                         )
@@ -6854,86 +7403,80 @@ return view.extend({
         },
 
         renderSettingsAi: function () {
-                return E('div', { 'class': 'sf-flat-form' }, [
-                        saveSelectGlobalField(T('AI provider'), 'ai_provider', 'deepseek', [
-                                ['deepseek', 'DeepSeek'],
-                                ['gemini', T('Gemini Free')]
-                        ], null, null, T('The Android app sends AI requests to the router; the router calls the selected provider.')),
-                        saveSelectGlobalField(T('AI assistant model'), 'deepseek_model', 'deepseek-v4-flash', [
-                                ['deepseek-v4-flash', 'DeepSeek V4 Flash'],
-                                ['deepseek-v4-pro', 'DeepSeek V4 Pro']
-                        ], null, null, T('DeepSeek requests are sent from the router. The Android app does not store the API key.')),
-                        globalInputOptionField(
-                                T('DeepSeek API key'),
-                                'deepseek_api_key',
-                                '',
-                                'sk-...',
-                                T('Create the key in DeepSeek Platform and save it here. It is stored only on the router.'),
-                                true
-                        ),
-                        saveSelectGlobalField(T('Gemini Free') + ' - ' + T('AI assistant model'), 'gemini_model', 'gemini-2.5-flash', [
-                                ['gemini-2.5-flash', 'Gemini 2.5 Flash'],
-                                ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash Lite']
-                        ], null, null, T('Gemini Free uses Google AI Studio free-tier limits. The API key is stored only on the router.')),
-                        globalInputOptionField(
-                                T('Gemini API key'),
-                                'gemini_api_key',
-                                '',
-                                'AIza...',
-                                T('Create the key in Google AI Studio and save it here. Free limits depend on Google account and region.'),
-                                true
-                        )
-                ]);
+                return aiSettingsBox();
         },
 
-        renderSettingsMemory: function () {
+        renderSettingsStorage: function () {
                 return E('div', { 'class': 'sf-flat-form' }, [
-                        usbStorageSettingsField(),
-                        settingsDivider(T('Log storage')),
-                        saveSelectGlobalField(T('Known offline devices cleanup'), 'offline_device_retention_days', '90', [
-                                ['30', T('30 days')],
-                                ['90', T('90 days')],
-                                ['180', T('180 days')]
+                        E('p', { 'class': 'sf-note' },
+                                _('Store journals in RAM to protect router flash memory. USB or Yandex Disk can archive rotated logs and configuration backups when configured.')),
+                        logStorageLocationField(),
+                        cachePathField(),
+                        saveSelectGlobalField(_('Log retention on router'), 'log_retention', '3d', [
+                                ['1d', _('1 day')],
+                                ['3d', _('3 days')],
+                                ['7d', _('7 days')],
+                                ['14d', _('14 days')],
+                                ['30d', _('30 days')]
                         ]),
-                        cachePathField()
+                        saveSelectGlobalField(_('Known offline devices cleanup'), 'offline_device_retention_days', '90', [
+                                ['30', _('30 days')],
+                                ['90', _('90 days')],
+                                ['180', _('180 days')]
+                        ]),
+                        settingsDivider(_('USB flash settings')),
+                        sectionFlagOptionField('usb', _('Use USB flash for Sheepfold'), 'enabled', '0'),
+                        sectionInputField(
+                                'usb',
+                                _('USB partition device path'),
+                                'device',
+                                '',
+                                '/dev/sda1',
+                                _('Example: /dev/sda1. Sheepfold accepts only explicitly confirmed removable devices.')
+                        ),
+                        saveSelectSectionField('usb', _('USB role'), 'role', 'logs_only', [
+                                ['logs_only', _('Logs only')],
+                                ['swap_logs', _('Swap and logs')]
+                        ], _('Automatic extroot from USB is disabled for safety. Only log archive roles are supported in this version.')),
+                        sectionFlagOptionField('usb', _('Encrypt USB archive'), 'encrypt', '1')
                 ]);
         },
 
         renderSettingsMisc: function () {
                 return E('div', { 'class': 'sf-flat-form sf-misc-actions' }, [
-                        settingsDivider(T('Wi-Fi settings')),
-                        timeAutomationField(T('Enable Wi-Fi automatically'), 'wifi_auto_enable_mode', 'wifi_auto_enable_time', '07:00'),
-                        timeAutomationField(T('Disable Wi-Fi automatically'), 'wifi_auto_disable_mode', 'wifi_auto_disable_time', '23:00'),
-                        settingsDivider(T('Router time and NTP')),
+                        settingsDivider(_('Wi-Fi settings')),
+                        timeAutomationField(_('Enable Wi-Fi automatically'), 'wifi_auto_enable_mode', 'wifi_auto_enable_time', '07:00'),
+                        timeAutomationField(_('Disable Wi-Fi automatically'), 'wifi_auto_disable_mode', 'wifi_auto_disable_time', '23:00'),
+                        settingsDivider(_('Router time and NTP')),
                         routerTimeSettingsField(),
-                        settingsDivider(T('WPS button')),
-                        wpsActionField(T('WPS short button press'), 'wps_short_press_action'),
-                        wpsActionField(T('WPS long button press'), 'wps_long_press_action'),
-                        settingsDivider(T('Router LEDs')),
+                        settingsDivider(_('WPS button')),
+                        wpsActionField(_('WPS short button press'), 'wps_short_press_action'),
+                        wpsActionField(_('WPS long button press'), 'wps_long_press_action'),
+                        settingsDivider(_('Router LEDs')),
                         ledControlField(),
-                        settingsDivider(T('Site list sources')),
+                        settingsDivider(_('Site list sources')),
                         siteListsUpdateIntervalField(),
                         globalTextareaOptionField(
-                                T('Whitelist sources'),
+                                _('Whitelist sources'),
                                 'site_allowlist_sources',
                                 defaultSiteAllowlistSources,
-                                T('Whitelist sources saved.'),
-                                T('Could not save whitelist sources.'),
-                                T('One source per line: name | URL. Use updateable external sources instead of manually maintaining a huge list.')
+                                _('Whitelist sources saved.'),
+                                _('Could not save whitelist sources.'),
+                                _('One source per line: name | URL. Use updateable external sources instead of manually maintaining a huge list.')
                         ),
                         siteBlacklistModeField(),
                         globalTextareaOptionField(
-                                T('Site blacklist sources'),
+                                _('Site blacklist sources'),
                                 'site_blocklist_sources',
                                 defaultSiteBlocklistSources,
-                                T('Site blacklist sources saved.'),
-                                T('Could not save site blacklist sources.'),
-                                T('One source per line: name | URL. Use updateable external sources instead of manually maintaining a huge list.')
+                                _('Site blacklist sources saved.'),
+                                _('Could not save site blacklist sources.'),
+                                _('One source per line: name | URL. Use updateable external sources instead of manually maintaining a huge list.')
                         ),
-                        settingsDivider(T('Other actions')),
-                        saveSelectGlobalField(T('Export mode'), 'export_mode', 'safe', [
-                                ['safe', T('Readable JSON without secrets')],
-                                ['encrypted', T('Encrypted full backup')]
+                        settingsDivider(_('Other actions')),
+                        saveSelectGlobalField(_('Export mode'), 'export_mode', 'safe', [
+                                ['safe', _('Readable JSON without secrets')],
+                                ['encrypted', _('Encrypted full backup')]
                         ]),
                         E('div', { 'class': 'sf-action-stack' }, [
                                 E('button', {
@@ -6942,14 +7485,14 @@ return view.extend({
                                                 ev.preventDefault();
                                                 importSettingsAndUsers();
                                         }
-                                }, T('Import all settings and user list')),
+                                }, _('Import all settings and user list')),
                                 E('button', {
                                         'class': 'sf-action sf-action-neutral',
                                         'click': function (ev) {
                                                 ev.preventDefault();
                                                 exportSettingsAndUsers();
                                         }
-                                }, T('Export all settings and user list')),
+                                }, _('Export all settings and user list')),
                                 updateAppRow(),
                                 rebootRouterButton()
                         ])
@@ -6965,24 +7508,27 @@ return view.extend({
         },
 
         renderSettings: function () {
-                if (!settingsTabs.some(function (tab) { return tab[0] === this.activeSettingsTab; }, this))
+                if (!isKnownSettingsTab(this.activeSettingsTab))
                         this.activeSettingsTab = 'general';
 
                 resetSettingsDraft();
 
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-settings-tabs-row' }, [
-                                this.renderSettingsTabs(),
-                        settingsSaveBar(true)
-                ]),
+                                E('div', { 'class': 'sf-settings-tabs-wrap' }, [
+                                        this.renderSettingsTabRow(settingsTabsPrimary),
+                                        this.renderSettingsTabRow(settingsTabsSecondary, 'sf-settings-tabs-secondary')
+                                ]),
+                                settingsSaveBar(true)
+                        ]),
                         this.renderSettingsPanel('info', routerInformationPanel()),
                         this.renderSettingsPanel('general', this.renderSettingsGeneral()),
-                        this.renderSettingsPanel('ai', this.renderSettingsAi()),
                         this.renderSettingsPanel('integrations', this.renderIntegrations()),
                         this.renderSettingsPanel('messenger', this.renderBot()),
                         this.renderSettingsPanel('emergency', this.renderEmergency()),
-                        this.renderSettingsPanel('memory', this.renderSettingsMemory()),
                         this.renderSettingsPanel('misc', this.renderSettingsMisc()),
+                        this.renderSettingsPanel('ai', this.renderSettingsAi()),
+                        this.renderSettingsPanel('storage', this.renderSettingsStorage()),
                         settingsSaveBar(false)
                 ]);
         },
@@ -6991,15 +7537,15 @@ return view.extend({
                 return E('div', { 'class': 'sf-panel' }, [
                         E('div', { 'class': 'sf-panel-head' }, [
                                 E('div', {}, [
-                                        E('p', {}, T('Support the project'))
+                                        E('p', {}, _('Support the project'))
                                 ])
                         ]),
                         E('div', { 'class': 'sf-flat-form' }, [
-                                E('p', {}, T('If Sheepfold becomes useful and you want to support development, donation links will be added here before the first public release.')),
-                                E('p', {}, T('Possible options:')),
+                                E('p', {}, _('If Sheepfold becomes useful and you want to support development, donation links will be added here before the first public release.')),
+                                E('p', {}, _('Possible options:')),
                                 E('ul', {}, [
-                                        E('li', {}, T('GitHub Sponsors for international audience;')),
-                                        E('li', {}, T('Boosty or YooMoney for Russian-speaking users.'))
+                                        E('li', {}, _('GitHub Sponsors for international audience;')),
+                                        E('li', {}, _('Boosty or YooMoney for Russian-speaking users.'))
                                 ])
                         ])
                 ]);
@@ -7040,12 +7586,12 @@ return view.extend({
                 var page;
                 var header = E('div', { 'class': 'sf-header' }, [
                         E('div', {}, [
-                                E('h2', {}, T('Sheepfold Family Internet Control')),
-                                E('p', {}, T('Visual test build. Router rules and persistence are not active yet.'))
+                                E('h2', {}, _('Sheepfold Family Internet Control')),
+                                E('p', {}, _('Visual test build. Router rules and persistence are not active yet.'))
                         ]),
                         E('div', { 'class': 'sf-header-actions' }, [
-                                this.internetToggleButton(T('Internet enabled'), 'positive', false, internetBlocked, T('Global block would be disabled after confirmation.')),
-                                this.internetToggleButton(T('Internet disabled'), 'danger', true, internetBlocked, T('Global block would block every device except allowlist.'))
+                                this.internetToggleButton(_('Internet enabled'), 'positive', false, internetBlocked, _('Global block would be disabled after confirmation.')),
+                                this.internetToggleButton(_('Internet disabled'), 'danger', true, internetBlocked, _('Global block would block every device except allowlist.'))
                         ])
                 ]);
 
@@ -7064,16 +7610,16 @@ return view.extend({
                         E('link', { 'rel': 'stylesheet', 'href': cssHref }),
                         header,
                         E('div', { 'class': 'sf-metrics' }, [
-                                metric(T('Devices'), String(devices.length), 'neutral', function (button) {
+                                metric(_('Devices'), String(devices.length), 'neutral', function (button) {
                                         self.openUserListMetric(button, 'devices');
                                 }),
-                                metric(T('Allowlist'), String(allowlistCount), 'positive', function (button) {
+                                metric(_('Allowlist'), String(allowlistCount), 'positive', function (button) {
                                         self.openUserListMetric(button, 'allowlist');
                                 }),
-                                metric(T('Restricted'), String(restrictedCount), 'warning', function (button) {
+                                metric(_('Restricted'), String(restrictedCount), 'warning', function (button) {
                                         self.openUserListMetric(button, 'devices');
                                 }),
-                                metric(T('Blocklist'), String(blocklistCount), 'danger', function (button) {
+                                metric(_('Blocklist'), String(blocklistCount), 'danger', function (button) {
                                         self.openUserListMetric(button, 'blocklist');
                                 })
                         ]),

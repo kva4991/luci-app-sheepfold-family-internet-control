@@ -8,9 +8,7 @@
 
 /*
  * secureOverview нужен как зависимость: он патчит базовый overview до того,
- * как этот personal-wrapper добавит водяные знаки и presence-декор.
- * Сам render ниже вызывает базовый overview, иначе personal-методы не участвуют
- * в цепочке secure -> personal.
+ * как personal-wrapper добавит водяные знаки и presence-декор.
  */
 var renderGroups = overview.renderGroups;
 var renderUsers = overview.renderUsers;
@@ -482,11 +480,6 @@ return view.extend({
 	},
 
 	render: function() {
-		/*
-		 * Не возвращаем импортированный overview напрямую: для LuCI это уже
-		 * экземпляр, а не constructor. Рендерим базовый overview, потому что
-		 * именно на него последовательно повешены secure- и personal-правки.
-		 */
 		return overview.render.apply(overview, arguments);
 	}
 });

@@ -3,13 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PKG_DIR="$ROOT_DIR/package/luci-app-sheepfold-family-internet-control"
-OUT_DIR="${SHEEPFOLD_OUT_DIR:-$ROOT_DIR/dist}"
-BUILD_DIR="$ROOT_DIR/.build/test-ipk"
-PKG_NAME="luci-app-sheepfold-family-internet-control"
-PKG_VERSION="$(sed -n 's/^PKG_VERSION:=//p' "$PKG_DIR/Makefile" | head -n 1)"
-PKG_RELEASE="$(sed -n 's/^PKG_RELEASE:=//p' "$PKG_DIR/Makefile" | head -n 1)"
-ARCH="all"
-IPK="$OUT_DIR/${PKG_NAME}_${PKG_VERSION}-${PKG_RELEASE}_${ARCH}.ipk"
 
 resolve_downloads_dir() {
         if [ -n "${SHEEPFOLD_DOWNLOADS_DIR:-}" ]; then
@@ -35,23 +28,32 @@ resolve_downloads_dir() {
         return 1
 }
 
+if [ -n "${SHEEPFOLD_OUT_DIR:-}" ]; then
+        OUT_DIR="$SHEEPFOLD_OUT_DIR"
+else
+        OUT_DIR="$(resolve_downloads_dir 2>/dev/null || true)"
+        [ -n "$OUT_DIR" ] || OUT_DIR="$ROOT_DIR/.build/ipk-output"
+fi
+BUILD_DIR="$ROOT_DIR/.build/test-ipk"
+PKG_NAME="luci-app-sheepfold-family-internet-control"
+PKG_VERSION="$(sed -n 's/^PKG_VERSION:=//p' "$PKG_DIR/Makefile" | head -n 1)"
+PKG_RELEASE="$(sed -n 's/^PKG_RELEASE:=//p' "$PKG_DIR/Makefile" | head -n 1)"
+ARCH="all"
+IPK="$OUT_DIR/${PKG_NAME}_${PKG_VERSION}-${PKG_RELEASE}_${ARCH}.ipk"
+
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/control" "$BUILD_DIR/data/www" "$OUT_DIR"
 trap 'rm -rf "$BUILD_DIR"; rmdir "$ROOT_DIR/.build" 2>/dev/null || true' EXIT
 
 cp -R "$PKG_DIR/root/." "$BUILD_DIR/data/"
 cp -R "$PKG_DIR/htdocs/." "$BUILD_DIR/data/www/"
+find "$BUILD_DIR/data/usr/libexec/sheepfold" -type f -exec chmod 0755 {} + 2>/dev/null || true
 chmod 0755 "$BUILD_DIR/data/etc/init.d/sheepfold"
 chmod 0755 "$BUILD_DIR/data/etc/uci-defaults/50_luci-sheepfold"
-chmod 0755 "$BUILD_DIR/data/etc/hotplug.d/button/90-sheepfold-wps"
-chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-service"
-chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-device-detector"
-chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-log"
-chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-telegram-bot"
-chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-updater"
-chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-router-control"
-chmod 0755 "$BUILD_DIR/data/usr/libexec/sheepfold/sheepfold-site-lists"
-chmod 0755 "$BUILD_DIR/data/www/cgi-bin/sheepfold-blocked"
+find "$BUILD_DIR/data/etc/hotplug.d" -type f -exec chmod 0755 {} + 2>/dev/null || true
+chmod 0755 "$BUILD_DIR/data/www/cgi-bin/sheepfold-api" 2>/dev/null || true
+chmod 0755 "$BUILD_DIR/data/www/cgi-bin/sheepfold-blocked" 2>/dev/null || true
+chmod 0755 "$BUILD_DIR/data/www/.well-known/sheepfold.json.sh" 2>/dev/null || true
 
 cat > "$BUILD_DIR/control/control" <<CONTROL
 Package: $PKG_NAME
@@ -65,13 +67,59 @@ Installed-Size: 10240
 Description: Visual test build of Sheepfold Family Internet Control LuCI app.
 CONTROL
 
-cat > "$BUILD_DIR/control/conffiles" <<CONFFILES
-/etc/config/sheepfold
-CONFFILES
+cat > "$BUILD_DIR/control/preinst" <<PREINST
+#!/bin/sh
+[ -n "\${IPKG_INSTROOT}" ] && exit 0
+case "\$1" in
+        upgrade|install)
+                if [ -s /etc/config/sheepfold ]; then
+                        mkdir -p /etc/sheepfold/migrations
+                        cp /etc/config/sheepfold /etc/sheepfold/migrations/sheepfold.config.pre-upgrade
+                        chmod 600 /etc/sheepfold/migrations/sheepfold.config.pre-upgrade 2>/dev/null || true
+                fi
+                ;;
+esac
+exit 0
+PREINST
+chmod 0755 "$BUILD_DIR/control/preinst"
 
 cat > "$BUILD_DIR/control/postinst" <<POSTINST
 #!/bin/sh
 [ -n "\${IPKG_INSTROOT}" ] && exit 0
+cleanup_opkg_conffile_artifacts() {
+        for leftover in /etc/config/sheepfold-opkg /etc/config/sheepfold-opkg.old; do
+                [ -e "\$leftover" ] || continue
+                rm -f "\$leftover"
+        done
+}
+cleanup_stale_update_artifacts() {
+        rm -f /tmp/sheepfold/update/*.ipk /tmp/sheepfold/update/sheepfold-config-before-update 2>/dev/null || true
+}
+recover_sheepfold_config() {
+        mkdir -p /etc/config /etc/sheepfold/migrations
+        if [ -s /etc/config/sheepfold ]; then
+                return 0
+        fi
+        for candidate in \
+                /etc/sheepfold/migrations/sheepfold.config.pre-upgrade \
+                /etc/config/sheepfold-opkg \
+                /etc/config/sheepfold-opkg.old \
+                /tmp/sheepfold/update/sheepfold-config-before-update; do
+                if [ -s "\$candidate" ]; then
+                        cp "\$candidate" /etc/config/sheepfold
+                        chmod 600 /etc/config/sheepfold 2>/dev/null || true
+                        return 0
+                fi
+        done
+        if [ -r /usr/share/sheepfold/sheepfold.uci.defaults ]; then
+                cp /usr/share/sheepfold/sheepfold.uci.defaults /etc/config/sheepfold
+        else
+                : > /etc/config/sheepfold
+        fi
+        chmod 600 /etc/config/sheepfold 2>/dev/null || true
+}
+recover_sheepfold_config
+cleanup_stale_update_artifacts
 repair_sheepfold_uci_sections() {
         mkdir -p /etc/config
         [ -e /etc/config/sheepfold ] || : > /etc/config/sheepfold
@@ -145,16 +193,18 @@ ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
 ensure_global_option log_storage 'ram'
 ensure_global_option log_cache_path '/tmp/sheepfold/events.log'
-uci -q get sheepfold.no_restrictions >/dev/null || uci -q set sheepfold.no_restrictions='group'
-uci -q set sheepfold.no_restrictions.name='Без ограничений'
-uci -q set sheepfold.no_restrictions.protected='1'
-uci -q set sheepfold.no_restrictions.auto_assignable='1'
-uci -q set sheepfold.no_restrictions.description='Trusted home infrastructure devices that should not be limited unless they are blocklisted'
-uci -q get sheepfold.child_1 >/dev/null || uci -q set sheepfold.child_1='group'
-uci -q set sheepfold.child_1.name='Ребёнок номер 1'
-uci -q set sheepfold.child_1.protected='0'
-uci -q set sheepfold.child_1.auto_assignable='0'
-uci -q set sheepfold.child_1.description='Default first child group'
+[ -x /usr/libexec/sheepfold/sheepfold-default-groups ] && /usr/libexec/sheepfold/sheepfold-default-groups apply
+if [ "$(uci -q get sheepfold.global.luci_language_synced 2>/dev/null)" != "1" ]; then
+	lang="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
+	case "$lang" in
+		en|ru) ;;
+		*) lang=ru ;;
+	esac
+	uci -q get luci.main >/dev/null 2>&1 || uci -q set luci.main=core
+	uci -q set luci.main.lang="$lang"
+	uci -q set sheepfold.global.luci_language_synced='1'
+	uci -q commit luci 2>/dev/null || true
+fi
 detect_installed() {
         pkg="\$1"
         init="\$2"
@@ -184,7 +234,14 @@ if [ "\$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null)" != 
 fi
 uci -q set sheepfold.global.ui_asset_version='${PKG_VERSION}-${PKG_RELEASE}'
 uci -q commit sheepfold
-chmod 0755 /usr/libexec/sheepfold/sheepfold-site-lists 2>/dev/null || true
+find /usr/libexec/sheepfold -type f -exec chmod 0755 {} + 2>/dev/null || true
+for helper in \
+        /etc/hotplug.d/dhcp/90-sheepfold-device-signals \
+        /www/.well-known/sheepfold.json.sh \
+        /www/cgi-bin/sheepfold-api \
+        /www/cgi-bin/sheepfold-blocked; do
+        [ -e "$helper" ] && chmod 0755 "$helper" 2>/dev/null || true
+done
 rm -f /var/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-modulecache/* 2>/dev/null || true
@@ -212,8 +269,3 @@ printf '2.0\n' > "$BUILD_DIR/debian-binary"
 )
 
 echo "$IPK"
-
-if DOWNLOADS_DIR="$(resolve_downloads_dir)" && [ -d "$DOWNLOADS_DIR" ]; then
-        cp "$IPK" "$DOWNLOADS_DIR/$(basename "$IPK")"
-        echo "$DOWNLOADS_DIR/$(basename "$IPK")"
-fi

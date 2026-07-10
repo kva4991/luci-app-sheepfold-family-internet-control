@@ -3,9 +3,8 @@ package app.sheepfold.android.router
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.InetAddress
 import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 import java.net.URLEncoder
 
 data class AiAssistantRequest(
@@ -45,10 +44,9 @@ object AiAssistantClient {
             "${urlEncode(key)}=${urlEncode(value)}"
         }
         val url = URL(apiUrl)
-        if (url.protocol == "http" && !isPrivateLanHost(url.host)) {
-            throw IllegalArgumentException("HTTP разрешён только для локального роутера")
-        }
-        val connection = url.openConnection() as HttpURLConnection
+        val tlsPin = request.connection.tlsPinSha256
+            ?: throw IllegalStateException("Отпечаток TLS роутера не сохранён. Выполните сопряжение заново.")
+        val (connection, _) = RouterHttps.open(url, tlsPin, allowTrustOnFirstUse = false)
 
         try {
             connection.connectTimeout = 5000
@@ -62,7 +60,11 @@ object AiAssistantClient {
             connection.setRequestProperty("X-Sheepfold-Client", "android-admin-v1")
             val token = request.connection.bearerToken
                 ?: throw IllegalStateException("Административный токен отсутствует")
+            val deviceMac = request.connection.deviceMac
+                ?: throw IllegalStateException("MAC парного устройства отсутствует. Выполните сопряжение заново.")
             connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.setRequestProperty("X-Sheepfold-Device-Id", deviceId)
+            connection.setRequestProperty("X-Sheepfold-Device-Mac", deviceMac)
             connection.outputStream.use { output ->
                 output.write(body.toByteArray(Charsets.UTF_8))
             }
@@ -122,7 +124,7 @@ object AiAssistantClient {
             .ifBlank { body.trim() }
     }
 
-    private fun readBody(connection: HttpURLConnection): String {
+    private fun readBody(connection: HttpsURLConnection): String {
         val stream = if (connection.responseCode in 200..299) {
             connection.inputStream
         } else {
@@ -141,24 +143,7 @@ object AiAssistantClient {
             explicitPort != null -> explicitPort
             else -> 5200
         }
-        val httpPort = when {
-            parsed.protocol == "http" && explicitPort != null -> explicitPort
-            explicitPort == 5200 -> 5201
-            explicitPort != null -> explicitPort
-            else -> 5201
-        }
-        val result = mutableListOf("https://$host:$httpsPort${parsed.path}")
-        if (isPrivateLanHost(parsed.host)) result += "http://$host:$httpPort${parsed.path}"
-        return result.distinct()
-    }
-
-    private fun isPrivateLanHost(host: String): Boolean {
-        val normalized = host.trim().lowercase()
-        if (normalized == "localhost" || normalized.endsWith(".local") || normalized.endsWith(".lan")) return true
-        return runCatching {
-            val address = InetAddress.getByName(normalized)
-            address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress || address.isSiteLocalAddress
-        }.getOrDefault(false)
+        return listOf("https://$host:$httpsPort${parsed.path}")
     }
 
     private fun urlEncode(value: String): String =

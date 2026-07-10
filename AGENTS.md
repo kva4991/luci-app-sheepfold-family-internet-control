@@ -51,8 +51,8 @@ Avoid:
 - Keep the English and Russian README files structurally similar where practical.
 - Keep `install.sh`, `update.sh`, and `uninstall.sh` suitable for running directly on an OpenWRT router.
 - Test `.ipk` packages must follow OpenWrt `ipkg-build` style: a gzip-compressed tar archive containing `debian-binary`, `data.tar.gz`, and `control.tar.gz`; do not publish ad-hoc `ar` archives for OpenWrt test packages.
-- After building local test packages such as `.ipk` or `.apk`, copy the finished artifact to the user's Downloads folder for easy manual installation, but do not commit generated package artifacts.
-- In the Codex sandbox, copying finished artifacts to `C:\Users\User\Downloads` usually requires an explicit escalated copy command. Build inside the repository first, then copy the already-built `.ipk`/`.apk` to Downloads with a narrow `Copy-Item` escalation instead of expecting the build script to write there from inside the sandbox.
+- After building local test packages such as `.ipk` or `.apk`, always copy the finished artifact to `C:\Users\User\Downloads` for easy manual installation. Do not commit generated package artifacts.
+- Default artifact output for this Windows workspace: `C:\Users\User\Downloads`. Test IPK builders write the package there directly; do not use `dist\` as the default output directory.
 - The uninstall command must remove the package without clearing Sheepfold client lists or user settings, then print a report of remaining router settings that may require manual cleanup.
 - When changing installation, update, or uninstall commands, update both README files and `docs/github-install-setup.md` if relevant.
 
@@ -67,9 +67,19 @@ Avoid:
 - Because NTP/timezone changes touch OpenWRT system settings, preserve previous values in export/reporting where practical and show the setting clearly in LuCI.
 - The LuCI `Information` settings tab and Android `/cgi-bin/sheepfold-api/router-info` diagnostics snapshot may include router health and integration metadata, but must not include Wi-Fi passwords, bot/API tokens, session cookies, child names, client MAC addresses, client device lists, or logs. Android must show a preview and ask for explicit parent confirmation before sending this diagnostics snapshot to an AI provider.
 
+## Operational Gotchas And Documentation
+
+- Non-obvious product, installer, router, LuCI, i18n, grouping, or environment findings must be maintained in focused docs in the same change session — not only left in code comments or chat.
+- Use `docs/agent-gotchas.ru.md` as the index: **add** new one-line entries, **update** wording when behavior changes, and **remove** entries when the trap is fixed or the setting becomes visible in UI.
+- Put full explanations in the topic doc (for example `docs/localization.ru.md`, `docs/hidden-settings.ru.md`, `docs/device-detection.ru.md`).
+- Programming-style rules, deprecations, LuCI view patterns, and review checklists belong in `CODING_RULES.md`, not in product docs.
+- Do not dump long technical gotchas into README files; keep README user-facing.
+- If no suitable focused doc exists, create one under `docs/` and link it from `docs/developer-task.ru.md` and `docs/agent-gotchas.ru.md`.
+
 ## Implementation Entry Point
 
 - Before running builds or tests in a fresh local Codex Desktop chat on the user's Windows PC, read `docs/agent-environment.ru.md`. It records the Windows/Codex tooling setup, required programs, common build commands, IPK/APK build notes, and the verification commands that have already worked for this repository. For Linux, WSL, macOS, or GitHub Actions, keep the intent but adapt paths and shell syntax.
+- Read `docs/agent-gotchas.ru.md` when debugging surprising LuCI, i18n, default-group, detector, or test-IPK behavior so earlier traps are not rediscovered from scratch.
 - Future AI developers should start with `docs/developer-task.ru.md`, then read `docs/product-requirements.md` and the relevant focused docs.
 - For broad feature work, future AI developers must also read `docs/agent-playbook.ru.md`; it is the detailed implementation playbook that captures product decisions from the planning discussion.
 - Keep `docs/developer-task.ru.md` updated when project-level decisions change.
@@ -259,6 +269,7 @@ Avoid:
 
 ## UCI Config Hygiene
 
+- When changing UCI schema, package `postinst`, or defaults, read `docs/uci-config-migration.ru.md` first. Do not ship `/etc/config/sheepfold` in the `.ipk` payload; use `sheepfold.uci.defaults` plus `postinst` migrations.
 - Keep UCI section names unique inside `/etc/config/sheepfold`.
 - Only the main application section may be named `global`: `config sheepfold 'global'`.
 - Helper sections must use explicit names such as `messenger_global`, `export_global`, `wifi_control_global`, and `pairing_global`.

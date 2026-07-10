@@ -8,6 +8,8 @@ object SheepfoldConnectionStore {
     private const val routerNameKey = "routerName"
     private const val adminLoginKey = "administratorLogin"
     private const val deviceIdKey = "administratorDeviceId"
+    private const val deviceMacKey = "administratorDeviceMac"
+    private const val tlsPinKey = "routerTlsPinSha256"
     private const val legacyBearerTokenKey = "administratorBearerToken"
     private const val googleAccountKey = "googleAccount"
 
@@ -18,8 +20,11 @@ object SheepfoldConnectionStore {
             .putString(routerNameKey, request.routerName)
             .putString(adminLoginKey, request.administratorLogin.orEmpty())
             .putString(deviceIdKey, request.deviceId.orEmpty())
+            .putString(deviceMacKey, request.deviceMac.orEmpty())
+            .putString(tlsPinKey, request.tlsPinSha256.orEmpty())
             .remove(legacyBearerTokenKey)
             .apply()
+        request.tlsPinSha256?.let { RouterTlsPin.save(context, it) }
         SecureSecretStore.write(context, request.bearerToken)
     }
 
@@ -41,11 +46,17 @@ object SheepfoldConnectionStore {
         ).also { request ->
             request.bearerToken = SecureSecretStore.read(context)
             request.deviceId = preferences.getString(deviceIdKey, "").orEmpty().ifBlank { null }
+            request.deviceMac = preferences.getString(deviceMacKey, "").orEmpty().ifBlank { null }
+            request.tlsPinSha256 = preferences.getString(tlsPinKey, "")
+                .orEmpty()
+                .ifBlank { RouterTlsPin.read(context) }
         }
     }
 
     fun hasConnection(context: Context): Boolean = read(context)?.let { request ->
-        !request.bearerToken.isNullOrBlank() && !request.deviceId.isNullOrBlank()
+        !request.bearerToken.isNullOrBlank() &&
+            !request.deviceId.isNullOrBlank() &&
+            !request.deviceMac.isNullOrBlank()
     } == true
 
     fun clear(context: Context) {
@@ -55,8 +66,11 @@ object SheepfoldConnectionStore {
             .remove(routerNameKey)
             .remove(adminLoginKey)
             .remove(deviceIdKey)
+            .remove(deviceMacKey)
+            .remove(tlsPinKey)
             .remove(legacyBearerTokenKey)
             .apply()
+        RouterTlsPin.clear(context)
         SecureSecretStore.clear(context)
     }
 

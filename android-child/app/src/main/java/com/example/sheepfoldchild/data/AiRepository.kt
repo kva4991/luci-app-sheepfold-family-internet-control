@@ -8,7 +8,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
-import java.net.InetAddress
 import java.net.URL
 import java.net.URLEncoder
 
@@ -61,21 +60,17 @@ class AiRepository(private val context: Context) {
             "${encode(key)}=${encode(value)}"
         }
 
-        var lastError: Throwable? = null
-        for (candidate in candidateBaseUrls(baseUrl)) {
-            val result = askOnce(candidate, formBody)
-            if (result.isSuccess) return@withContext result
-            lastError = result.exceptionOrNull()
-        }
-        Result.failure(lastError ?: IllegalStateException("Роутер Sheepfold недоступен"))
+        askOnce(preferredBaseUrl(baseUrl), formBody)
     }
+
+    private fun preferredBaseUrl(rawUrl: String): String = candidateBaseUrls(rawUrl).first()
 
     private fun askOnce(baseUrl: String, formBody: String): Result<String> {
         var connection: HttpURLConnection? = null
         return try {
             val url = URL("${baseUrl.trimEnd('/')}$AI_ENDPOINT")
-            if (url.protocol == "http" && !isPrivateLanHost(url.host)) {
-                return Result.failure(IllegalArgumentException("HTTP разрешён только для локального роутера"))
+            if (url.protocol != "https") {
+                return Result.failure(IllegalArgumentException("Поддерживается только HTTPS"))
             }
 
             connection = url.openConnection() as HttpURLConnection
@@ -125,42 +120,22 @@ class AiRepository(private val context: Context) {
             explicitPort != null -> explicitPort
             else -> DEFAULT_HTTPS_PORT
         }
-        val httpPort = when {
-            explicitPort == DEFAULT_HTTPS_PORT -> DEFAULT_HTTP_PORT
-            explicitPort != null -> explicitPort
-            else -> DEFAULT_HTTP_PORT
-        }
-        val result = mutableListOf("https://$host:$httpsPort$path".trimEnd('/'))
-        if (isPrivateLanHost(parsed.host)) {
-            result += "http://$host:$httpPort$path".trimEnd('/')
-        }
-        return result.distinct()
+        return listOf("https://$host:$httpsPort$path".trimEnd('/'))
     }
 
     private fun parseRouterUrl(rawUrl: String): URL {
         val trimmed = rawUrl.trim().trimEnd('/')
         require(trimmed.isNotBlank()) { "Адрес роутера не указан" }
-        val withScheme = if (
-            trimmed.startsWith("http://", ignoreCase = true) ||
-            trimmed.startsWith("https://", ignoreCase = true)
-        ) trimmed else "https://$trimmed"
-        val parsed = URL(withScheme)
-        require(parsed.protocol == "http" || parsed.protocol == "https") {
-            "Поддерживаются только HTTP и HTTPS"
+        val withScheme = when {
+            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
+            trimmed.startsWith("http://", ignoreCase = true) ->
+                "https://${trimmed.removePrefix("http://").removePrefix("HTTP://")}"
+            else -> "https://$trimmed"
         }
+        val parsed = URL(withScheme)
+        require(parsed.protocol == "https") { "Поддерживается только HTTPS" }
         require(parsed.host.isNotBlank()) { "Некорректный адрес роутера" }
         return parsed
-    }
-
-    private fun isPrivateLanHost(host: String): Boolean {
-        val normalized = host.trim().lowercase()
-        if (normalized == "localhost" || normalized.endsWith(".local") || normalized.endsWith(".lan")) {
-            return true
-        }
-        return runCatching {
-            val address = InetAddress.getByName(normalized)
-            address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress || address.isSiteLocalAddress
-        }.getOrDefault(false)
     }
 
     private fun encode(value: String): String =

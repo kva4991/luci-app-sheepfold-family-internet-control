@@ -3,8 +3,6 @@ package app.sheepfold.android.router
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.InetAddress
 import java.net.URL
 import java.net.URLEncoder
 
@@ -92,8 +90,8 @@ class SecureRouterConnectionManager {
 
     private fun pair(request: RouterConnectionRequest, apiUrl: String): RouterConnectionRequest {
         val url = URL("${apiUrl.trimEnd('/')}/pair")
-        if (url.protocol == "http" && !isPrivateLanHost(url.host)) {
-            throw IllegalArgumentException("HTTP разрешён только для локального роутера")
+        require(url.protocol.equals("https", ignoreCase = true)) {
+            "Сопряжение выполняется только по HTTPS"
         }
         val body = listOf(
             "login" to request.administratorLogin.orEmpty(),
@@ -102,7 +100,11 @@ class SecureRouterConnectionManager {
         ).joinToString("&") { (key, value) ->
             "${encode(key)}=${encode(value)}"
         }
-        val connection = url.openConnection() as HttpURLConnection
+        val (connection, capturedPin) = RouterHttps.open(
+            url = url,
+            tlsPinSha256 = request.tlsPinSha256,
+            allowTrustOnFirstUse = request.tlsPinSha256.isNullOrBlank()
+        )
         try {
             connection.connectTimeout = 5000
             connection.readTimeout = 7000
@@ -146,6 +148,8 @@ class SecureRouterConnectionManager {
             ).also { connected ->
                 connected.bearerToken = token
                 connected.deviceId = deviceId
+                connected.deviceMac = mac
+                connected.tlsPinSha256 = capturedPin?.value ?: request.tlsPinSha256
             }
         } finally {
             connection.disconnect()
@@ -166,7 +170,8 @@ class SecureRouterConnectionManager {
         }.replace("//cgi-bin", "/cgi-bin")
         val port = parsed.port.takeIf { it > 0 }
         val host = if (parsed.host.contains(':')) "[${parsed.host}]" else parsed.host
-        return "${parsed.protocol}://$host${port?.let { ":$it" }.orEmpty()}$path"
+        val scheme = if (parsed.protocol.equals("http", ignoreCase = true)) "https" else parsed.protocol
+        return "$scheme://$host${port?.let { ":$it" }.orEmpty()}$path"
     }
 
     private fun candidateApiUrls(rawApiUrl: String): List<String> {
@@ -179,23 +184,7 @@ class SecureRouterConnectionManager {
             explicitPort != null -> explicitPort
             else -> 5200
         }
-        val httpPort = when {
-            explicitPort == 5200 -> 5201
-            explicitPort != null -> explicitPort
-            else -> 5201
-        }
-        val result = mutableListOf("https://$host:$httpsPort$path")
-        if (isPrivateLanHost(parsed.host)) result += "http://$host:$httpPort$path"
-        return result.distinct()
-    }
-
-    private fun isPrivateLanHost(host: String): Boolean {
-        val normalized = host.trim().lowercase()
-        if (normalized == "localhost" || normalized.endsWith(".local") || normalized.endsWith(".lan")) return true
-        return runCatching {
-            val address = InetAddress.getByName(normalized)
-            address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress || address.isSiteLocalAddress
-        }.getOrDefault(false)
+        return listOf("https://$host:$httpsPort$path")
     }
 
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())

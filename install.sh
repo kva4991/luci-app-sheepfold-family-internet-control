@@ -135,8 +135,10 @@ echo "Recommended Sheepfold integration mode: ${INTEGRATION_MODE}"
 if [ -r /etc/config/sheepfold ] && command -v uci >/dev/null 2>&1; then
     echo "Applying detected integration mode to existing Sheepfold config."
     uci -q set sheepfold.global.language="${APP_LANGUAGE}"
+    uci -q set sheepfold.global.luci_language_synced='1'
     # Тот же выбор применяем и к языку интерфейса LuCI, чтобы админка сразу
     # открывалась на выбранном языке, а не только внутренние строки Sheepfold.
+    uci -q get luci.main >/dev/null 2>&1 || uci -q set luci.main=core
     uci -q set luci.main.lang="${APP_LANGUAGE}" 2>/dev/null || true
     uci -q set sheepfold.global.integration_mode="${INTEGRATION_MODE}"
     uci -q set sheepfold.global.adguard_integration="${ADGUARD_DETECTED}"
@@ -149,6 +151,9 @@ if [ -r /etc/config/sheepfold ] && command -v uci >/dev/null 2>&1; then
     uci -q commit sheepfold
     uci -q commit luci 2>/dev/null || true
 else
+    mkdir -p /etc/sheepfold
+    printf '%s\n' "${APP_LANGUAGE}" > /etc/sheepfold/install.language
+    chmod 600 /etc/sheepfold/install.language 2>/dev/null || true
     echo "Sheepfold config is not installed yet; the package installer should apply this mode after installation."
     echo "Automatic setup choice:"
     echo "  language=${APP_LANGUAGE}"

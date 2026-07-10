@@ -2,7 +2,11 @@
 set -eu
 
 # =============================================================================
-# sheepfold-router-control — центральный диспетчер команд Sheepfold на роутере.
+# sheepfold-router-control-legacy — основной корпус CLI-команд Sheepfold.
+#
+# Суффикс *-legacy здесь не про «старую версию для пользователей». Тонкий фасад
+# /usr/libexec/sheepfold/sheepfold-router-control перехватывает security-sensitive
+# команды (SHA-256 токены, pairing, LED) и делегирует остальное в этот файл.
 #
 # Принимает единственный аргумент COMMAND и вызывает соответствующую функцию.
 # Все функции пишут результат в stdout в формате key=value (по одному на строку),
@@ -335,9 +339,52 @@ package_version_any() {
         return 1
 }
 
+# Возвращает 0, если хотя бы один пакет из списка есть в opkg list-upgradable.
+package_upgradable_any() {
+        local upgradable pkg
+
+        command -v opkg >/dev/null 2>&1 || return 1
+        upgradable="$(opkg list-upgradable 2>/dev/null || true)"
+        [ -n "$upgradable" ] || return 1
+
+        for pkg in "$@"; do
+                if printf '%s\n' "$upgradable" | grep -q "^${pkg} "; then
+                        return 0
+                fi
+        done
+        return 1
+}
+
 ping_average_ms() {
         ping -c 3 -W 2 "$1" 2>/dev/null | \
                 awk -F'/' '/round-trip|rtt/ { print $5; found=1 } END { if (!found) exit 1 }'
+}
+
+# Быстрый ping для LuCI-панели, чтобы не упираться в таймаут fs.exec.
+ping_quick_ms() {
+        ping -c 1 -W 2 "$1" 2>/dev/null | \
+                awk -F'/' '/round-trip|rtt/ { print $5; found=1 } END { if (!found) exit 1 }'
+}
+
+storage_summary_text() {
+        local target free_kb total_kb used_pct
+
+        for target in /overlay /rom /; do
+                [ -d "$target" ] || continue
+                free_kb="$(df -k "$target" 2>/dev/null | awk 'NR==2 { print $4 }' || true)"
+                total_kb="$(df -k "$target" 2>/dev/null | awk 'NR==2 { print $2 }' || true)"
+                [ -n "$free_kb" ] && [ -n "$total_kb" ] || continue
+                used_pct="$(awk -v free="$free_kb" -v total="$total_kb" 'BEGIN {
+                        if (total > 0) printf "%.0f", (total - free) * 100 / total;
+                        else print "0"
+                }')"
+                printf '%s: %.0f MB free / %.0f MB total (%s%% used)' \
+                        "$target" "$(awk -v kb="$free_kb" 'BEGIN { printf "%.0f", kb / 1024 }')" \
+                        "$(awk -v kb="$total_kb" 'BEGIN { printf "%.0f", kb / 1024 }')" "$used_pct"
+                return 0
+        done
+
+        printf 'unknown'
 }
 
 router_board_json() {
@@ -1147,15 +1194,27 @@ time_save() {
 # -----------------------------------------------------------------------------
 
 router_info() {
-        local status_json wan_state wan_reason ping_ms
+        local status_json wan_state wan_reason ping_ms ping_ya_ru_ms ping_google_com_ms ping_youtube_com_ms any_ping_ok
         local firmware release model kernel
-        local sheepfold_version podkop_version adguard_version
-        local lan_ports lan_count uptime_text load_avg memory_text
+        local sheepfold_version podkop_version adguard_version podkop_version_status
+        local lan_ports lan_count uptime_text load_avg memory_text storage_text
+        local wifi_radios wifi_index radio
+
+        # LuCI вызывает router-info через fs.exec. set -e не должен обрывать
+        # диагностику до первой строки key=value, иначе панель остаётся пустой.
+        set +e
 
         status_json="$(ubus_wan_status)"
         wan_state="unknown"
         wan_reason="статус WAN неизвестен"
-        ping_ms="$(ping_average_ms ya.ru 2>/dev/null || true)"
+        ping_ya_ru_ms="$(ping_quick_ms ya.ru 2>/dev/null || true)"
+        ping_google_com_ms="$(ping_quick_ms google.com 2>/dev/null || true)"
+        ping_youtube_com_ms="$(ping_quick_ms youtube.com 2>/dev/null || true)"
+        ping_ms="$ping_ya_ru_ms"
+        any_ping_ok=0
+        [ -n "$ping_ya_ru_ms" ] && any_ping_ok=1
+        [ -n "$ping_google_com_ms" ] && any_ping_ok=1
+        [ -n "$ping_youtube_com_ms" ] && any_ping_ok=1
         firmware="unknown"
         release="unknown"
         model="$(router_model_text)"
@@ -1163,11 +1222,20 @@ router_info() {
         sheepfold_version="$(opkg_version luci-app-sheepfold-family-internet-control)"
         podkop_version="$(package_version_any podkop luci-app-podkop || true)"
         adguard_version="$(package_version_any AdGuardHome adguardhome luci-app-adguardhome || true)"
+        podkop_version_status="not_installed"
+        if [ -n "$podkop_version" ]; then
+                if package_upgradable_any podkop luci-app-podkop; then
+                        podkop_version_status="outdated"
+                else
+                        podkop_version_status="up_to_date"
+                fi
+        fi
         lan_ports="$(lan_ports_text)"
         lan_count="0"
         uptime_text="$(awk '{ s=int($1); printf "%sd %sh %sm", int(s/86400), int((s%86400)/3600), int((s%3600)/60) }' /proc/uptime 2>/dev/null || printf unknown)"
         load_avg="$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || printf unknown)"
         memory_text="$(awk '/MemTotal:/ { t=$2 } /MemAvailable:/ { a=$2 } END { if (t>0) printf "%.0f MB free / %.0f MB total", a/1024, t/1024; else print "unknown" }' /proc/meminfo 2>/dev/null || printf unknown)"
+        storage_text="$(storage_summary_text)"
 
         [ -n "$sheepfold_version" ] || sheepfold_version="$(global_get ui_asset_version unknown)"
 
@@ -1201,12 +1269,12 @@ router_info() {
                 elif [ "$up" != "true" ]; then
                         wan_state="offline"
                         wan_reason="$([ "$available" = "false" ] && printf 'WAN-интерфейс недоступен' || printf 'WAN-интерфейс не поднят')"
-                elif [ -n "$ping_ms" ]; then
+                elif [ "$any_ping_ok" -eq 1 ]; then
                         wan_state="online"
-                        wan_reason="ya.ru отвечает"
+                        wan_reason=""
                 else
                         wan_state="limited"
-                        wan_reason="WAN поднят, но ya.ru не ответил на ping"
+                        wan_reason="WAN поднят, но проверочные хосты не ответили на ping"
                 fi
         fi
 
@@ -1216,7 +1284,10 @@ router_info() {
         print_kv sheepfold_version   "$sheepfold_version"
         print_kv internet_status     "$wan_state"
         print_kv internet_reason     "$wan_reason"
-        print_kv ping_yandex_ms      "${ping_ms:-timeout}"
+        print_kv ping_ya_ru_ms         "${ping_ya_ru_ms:-timeout}"
+        print_kv ping_google_com_ms    "${ping_google_com_ms:-timeout}"
+        print_kv ping_youtube_com_ms   "${ping_youtube_com_ms:-timeout}"
+        print_kv ping_yandex_ms        "${ping_ya_ru_ms:-timeout}"
         print_kv firmware_version    "$firmware"
         print_kv openwrt_release     "$release"
         print_kv kernel_version      "$kernel"
@@ -1228,11 +1299,14 @@ router_info() {
         print_kv lan_ports           "${lan_ports:-unknown}"
         print_kv podkop_installed    "$([ -n "$podkop_version" ]  && printf yes || printf no)"
         print_kv podkop_version      "${podkop_version:-not installed}"
+        print_kv podkop_version_status "$podkop_version_status"
         print_kv adguard_installed   "$([ -n "$adguard_version" ] && printf yes || printf no)"
         print_kv adguard_version     "${adguard_version:-not installed}"
+        print_kv storage_space       "$storage_text"
 
-        local wifi_index=0
-        for radio in $(uci -q show wireless 2>/dev/null | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\1/p'); do
+        wifi_index=0
+        wifi_radios="$(uci -q show wireless 2>/dev/null | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\1/p' || true)"
+        for radio in $wifi_radios; do
                 wifi_index=$((wifi_index + 1))
                 local disabled type path band channel country htmode
                 disabled="$(uci -q get "wireless.$radio.disabled" 2>/dev/null || printf 0)"
@@ -1700,6 +1774,24 @@ case "$COMMAND" in
                 ;;
 
         # --- Диагностика -----------------------------------------------------
+        log-storage-status)
+                /usr/libexec/sheepfold/sheepfold-log-storage status
+                ;;
+        yandex-disk-test)
+                /usr/libexec/sheepfold/sheepfold-yandex-disk test
+                ;;
+        yandex-disk-list)
+                /usr/libexec/sheepfold/sheepfold-yandex-disk list
+                ;;
+        yandex-disk-download)
+                /usr/libexec/sheepfold/sheepfold-yandex-disk download "${2:-}" "${3:-}"
+                ;;
+        yandex-disk-restore-config)
+                /usr/libexec/sheepfold/sheepfold-yandex-disk restore-config "${2:-}"
+                ;;
+        yandex-disk-sync-status)
+                /usr/libexec/sheepfold/sheepfold-yandex-disk sync-status
+                ;;
         router-info)
                 router_info
                 ;;

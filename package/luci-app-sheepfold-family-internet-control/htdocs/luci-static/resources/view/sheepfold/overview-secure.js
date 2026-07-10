@@ -6,12 +6,10 @@
 'require fs';
 
 /*
- * Совместимая обёртка над основным экраном overview
- *
- * Настройки ИИ раньше находились в общей секции, теперь ими управляет отдельный
- * экран sheepfold/ai, чтобы не создавать конкурирующие пути сохранения
+ * Secure-обёртка над основным экраном overview.
+ * LuCI require() возвращает экземпляр view, а не constructor с .extend().
+ * Патчим методы базового экрана и возвращаем свой view.extend()-делегат.
  */
-var renderSettingsGeneral = overview.renderSettingsGeneral;
 var renderSettings = overview.renderSettings;
 var renderAdmins = overview.renderAdmins;
 
@@ -303,30 +301,6 @@ function attachLedSaveCheck(root, button) {
 	}, true);
 }
 
-overview.renderSettingsGeneral = function() {
-	/*
-	 * Поля ИИ больше не вырезаем из "Общие": они вынесены во вторую строку
-	 * вкладок "Настройки". Оставляем обёртку как точку совместимости secure-view,
-	 * чтобы будущие патчи не ломали порядок наследования LuCI-представлений.
-	 */
-	return renderSettingsGeneral.apply(this, arguments);
-};
-
-overview.renderSettings = function() {
-	var node = renderSettings.apply(this, arguments);
-	var ledSelect = findLedControlSelect(node);
-	var ledField = ledSelect ? ledSelect.closest('label') : null;
-
-	if (ledField && ledField.parentNode)
-		ledField.parentNode.insertBefore(createLedRepairField(), ledField.nextSibling);
-
-	node.querySelectorAll('[data-settings-save]').forEach(function(button) {
-		attachLedSaveCheck(node, button);
-	});
-
-	return node;
-};
-
 function administratorLoginExists(login) {
 	var normalized = String(login || '').trim().toLowerCase();
 	var exists = false;
@@ -352,9 +326,63 @@ function showSafeAddAdministratorModal() {
 		errorNode.hidden = false;
 	}
 
+	function createAdministrator() {
+		var displayName = nameInput.value.trim();
+		var login = loginInput.value.trim();
+		var sectionName;
+
+		errorNode.hidden = true;
+		if (!displayName || !login) {
+			showError(_('Имя и логин обязательны.'));
+			return;
+		}
+		if (!/^[A-Za-z0-9_.@+-]{1,64}$/.test(login)) {
+			showError(_('Логин может содержать только латинские буквы, цифры и символы . _ - @ +'));
+			return;
+		}
+		if (administratorLoginExists(login)) {
+			showError(_('Этот логин уже используется.'));
+			return;
+		}
+
+		sectionName = uci.add('sheepfold', 'administrator');
+		uci.set('sheepfold', sectionName, 'display_name', displayName);
+		uci.set('sheepfold', sectionName, 'login', login);
+		uci.set('sheepfold', sectionName, 'role', 'administrator');
+		uci.set('sheepfold', sectionName, 'password_hash', '');
+		uci.set('sheepfold', sectionName, 'password_setup_required', '1');
+
+		uci.save('sheepfold').then(function() {
+			return uci.apply();
+		}).then(function() {
+			ui.addNotification(null, E('p', {}, _('Администратор создан. Откройте его настройки и выполните QR-сопряжение.')), 'info');
+			ui.hideModal();
+			window.location.reload();
+		}).catch(function(error) {
+			showError(error.message || _('Не удалось создать администратора.'));
+		});
+	}
+
+	function modalActions() {
+		return E('div', { 'class': 'right sf-modal-actions' }, [
+			E('button', {
+				'class': 'btn cbi-button',
+				'click': ui.hideModal
+			}, _('Отмена')),
+			E('button', {
+				'class': 'btn cbi-button cbi-button-positive',
+				'click': function(event) {
+					event.preventDefault();
+					createAdministrator();
+				}
+			}, _('Создать'))
+		]);
+	}
+
 	ui.showModal(_('Добавить администратора'), [
 		E('div', { 'class': 'cbi-section' }, [
 			E('p', {}, _('Сначала создаётся только учётная запись. Телефон получает административные права исключительно после QR-сопряжения с проверкой MAC, blocklist и одноразового кода.')),
+			modalActions(),
 			errorNode,
 			E('label', { 'class': 'cbi-value' }, [
 				E('span', { 'class': 'cbi-value-title' }, _('Имя администратора')),
@@ -365,53 +393,24 @@ function showSafeAddAdministratorModal() {
 				E('div', { 'class': 'cbi-value-field' }, loginInput)
 			])
 		]),
-		E('div', { 'class': 'right' }, [
-			E('button', {
-				'class': 'btn cbi-button',
-				'click': ui.hideModal
-			}, _('Отмена')),
-			E('button', {
-				'class': 'btn cbi-button cbi-button-positive',
-				'click': function() {
-					var displayName = nameInput.value.trim();
-					var login = loginInput.value.trim();
-					var sectionName;
-
-					errorNode.hidden = true;
-					if (!displayName || !login) {
-						showError(_('Имя и логин обязательны.'));
-						return;
-					}
-					if (!/^[A-Za-z0-9_.@+-]{1,64}$/.test(login)) {
-						showError(_('Логин может содержать только латинские буквы, цифры и символы . _ - @ +'));
-						return;
-					}
-					if (administratorLoginExists(login)) {
-						showError(_('Этот логин уже используется.'));
-						return;
-					}
-
-					sectionName = uci.add('sheepfold', 'administrator');
-					uci.set('sheepfold', sectionName, 'display_name', displayName);
-					uci.set('sheepfold', sectionName, 'login', login);
-					uci.set('sheepfold', sectionName, 'role', 'administrator');
-					uci.set('sheepfold', sectionName, 'password_hash', '');
-					uci.set('sheepfold', sectionName, 'password_setup_required', '1');
-
-					uci.save('sheepfold').then(function() {
-						return uci.apply();
-					}).then(function() {
-						ui.addNotification(null, E('p', {}, _('Администратор создан. Откройте его настройки и выполните QR-сопряжение.')), 'info');
-						ui.hideModal();
-						window.location.reload();
-					}).catch(function(error) {
-						showError(error.message || _('Не удалось создать администратора.'));
-					});
-				}
-			}, _('Создать'))
-		])
+		modalActions()
 	]);
 }
+
+overview.renderSettings = function() {
+	var node = renderSettings.apply(this, arguments);
+	var ledSelect = findLedControlSelect(node);
+	var ledField = ledSelect ? ledSelect.closest('label') : null;
+
+	if (ledField && ledField.parentNode)
+		ledField.parentNode.insertBefore(createLedRepairField(), ledField.nextSibling);
+
+	node.querySelectorAll('[data-settings-save]').forEach(function(button) {
+		attachLedSaveCheck(node, button);
+	});
+
+	return node;
+};
 
 overview.renderAdmins = function() {
 	var node = renderAdmins.apply(this, arguments);
@@ -427,18 +426,9 @@ overview.renderAdmins = function() {
 		}, _('Добавить администратора')));
 	}
 
-	/*
-	 * Ручная привязка обходила серверную повторную проверку blocklist
-	 * В secure-экране устройство становится административным только через QR
-	 */
-	node.querySelectorAll('.sf-admin-row:not(.sf-admin-head) .sf-row-actions').forEach(function(actions) {
-		var buttons = actions.querySelectorAll('button');
-		if (buttons.length > 1)
-			buttons[1].remove();
-	});
-
 	node.insertBefore(E('div', { 'class': 'sf-note sf-note-warning' },
-		_('Ручная выдача административных прав устройству отключена. Используйте QR-код в настройках администратора.')), node.firstChild);
+		_('Нельзя выдавать административные права из общего списка устройств. Привязку выполняйте кнопкой рядом с шестерёнкой; устройства из чёрного списка недоступны. QR-сопряжение — в настройках администратора.')),
+		node.firstChild);
 
 	return node;
 };
@@ -449,12 +439,6 @@ return view.extend({
 	},
 
 	render: function() {
-		/*
-		 * LuCI require() возвращает экземпляр view, а не constructor.
-		 * Поэтому wrapper обязан вернуть свой view.extend(), иначе LuCI падает
-		 * с "factory yields invalid constructor". Делегируем в базовый экран,
-		 * где уже переопределены нужные методы.
-		 */
 		return overview.render.apply(overview, arguments);
 	}
 });

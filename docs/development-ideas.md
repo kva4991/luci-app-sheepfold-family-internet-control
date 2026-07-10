@@ -261,6 +261,44 @@
 - Низкий, но полезный приоритет: тесты обновления приложения. Проверять сравнение текущей и latest версии, сообщение "обновлений нет", понятную ошибку при timeout, запуск обновления через service без зависания LuCI XHR, установку только stable-релизов и отказ от prerelease.
 - Низкий, но полезный приоритет: smoke-тесты документации. Проверять наличие обязательных ссылок, отсутствие слова `Овчарня` в публичных текстах кроме явно оговорённых исторических/внутренних упоминаний, наличие предупреждений про AdGuard/Podkop, emergency-useful sites и отсутствие WireGuard/VPN-туннеля как обязательной функции.
 
+## Из аудита ветки editsByClaude (отложено)
+
+Идеи из статического аудита и хэндовера `handoff-next-session.ru.md`, которые признаны полезными, но пока не реализованы. Когда идея созревает — переносить в `docs/developer-task.ru.md` или `docs/product-requirements.md`.
+
+### Безопасность и аутентификация
+
+- ~~**Привязка Bearer-токена к устройству (P0)**~~ — реализовано в 0.1.0-156: metadata в `/etc/sheepfold/tokens/`, заголовки `X-Sheepfold-Device-Id` / `X-Sheepfold-Device-Mac`, `revoke-device-tokens`, тест `tokenDeviceBinding.test.mjs`.
+- **Транзакционный pairing (P0):** снимок UCI до изменений, временная запись токена, один commit, откат allowlist/admin-флагов при ошибке `pair_store_token`; fault-injection тесты.
+- **Fingerprint TLS в QR v2:** класть SHA-256 публичного ключа роутера в QR сопряжения, чтобы pinning не зависел только от TOFU при первом HTTPS.
+- **Защита от DNS rebinding:** фиксировать IP роутера после первой успешной локальной проверки, не доверять DNS на каждом запросе.
+- **API-ключ ИИ не через argv:** передавать заголовок Authorization в `curl -K -` / ucode / отдельный сервис, чтобы ключ не светился в `/proc/*/cmdline` на роутере.
+- **Удаление мёртвого legacy-пути:** вырезать недостижимые ветки MD5 `token_issue` и query-string token из `sheepfold-api-legacy` / `sheepfold-router-control-legacy` после grep-проверки, что никто их не вызывает.
+- **Поведенческие security-тесты в CI:** не только `grep` в `sheepfold-runtime-hardening`, а harness с fake UCI/ARP для кражи токена, oversized body, отката pairing, протухшего lock, HTTPS downgrade.
+
+### Производительность и надёжность backend
+
+- **Оптимизация главного цикла `sheepfold-service`:** WAN/LED/blocked-page/Wi-Fi automation — только при изменении состояния; детектор вынести в отдельный procd-таймер.
+- **Индексы в детекторе устройств:** один проход `uci show`, in-memory MAC→секция; volatile evidence/ports — в `/tmp`, в flash — только стабильные поля.
+- **Очередь activity log:** writer-процесс с FIFO/ubus вместо mkdir-lock + `du` + `tar` на каждое событие.
+- **Общий `sheepfold-lock-common`:** PID + stale-recovery для всех mkdir-локов (8 мест), без перехода на `flock`, если его нет на целевой BusyBox-сборке.
+
+### Архитектура API и LuCI
+
+- **Allowlist маршрутов в `sheepfold-api`:** неизвестный `PATH_INFO` → 404; переносить legacy endpoints по одному в typed handlers.
+- **Типизированный rpcd/ubus API:** `sheepfold.device.list`, `sheepfold.pair.activate`, `sheepfold.led.apply` и т.д., чтобы ACL LuCI не давал прямой `fs.exec` на весь CLI.
+- **LuCI без DOM monkey-patch:** заменить индексы полей в `overview-secure.js` на стабильные `data-*` атрибуты из `overview.js`.
+- **Модуляризация и i18n `overview.js`:** вынос QR-кода и вкладок в отдельные модули, перевод строк на `_()` + `po/` по мере выноса (см. CODING_RULES.md §8.1–8.2).
+
+### Инфраструктура и enforcement
+
+- **Firewall/nftables enforcement:** реальное применение block/allow/temp-access/schedule к трафику, не только запись UCI.
+- **Парсинг Telegram через `jsonfilter`/`ucode`:** заменить хрупкий `sed` в `sheepfold-telegram-bot`.
+- **ShellCheck + actionlint в CI:** BusyBox/POSIX профиль для всех `usr/libexec/sheepfold/*`.
+
+### Что сознательно не делать сейчас
+
+- Полноценный anti-DDoS по числу запросов с интернета — для домашнего роутера это отдельный продукт (CDN, reverse proxy, железо). Лёгкий rate-limit по IP на API уже закрывает локальный флуд и перебор pairing.
+
 ## Требует решения
 
 - Нужен ли режим полного автоматического назначения инфраструктурных устройств в группу `Без ограничений` сразу после установки, или лучше всегда показывать список предложений на подтверждение.

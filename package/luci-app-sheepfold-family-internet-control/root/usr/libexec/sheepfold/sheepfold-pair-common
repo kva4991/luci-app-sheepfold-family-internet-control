@@ -1,5 +1,7 @@
 #!/bin/sh
 
+. /usr/libexec/sheepfold/sheepfold-token-common
+
 PAIR_RUNTIME_DIR="/tmp/sheepfold"
 # Bearer-токен должен переживать перезагрузку роутера: Android сохраняет его как
 # долгоживущий credential. В /tmp остаётся только совместимая ссылка для legacy.
@@ -159,8 +161,13 @@ pair_prepare_token() {
 }
 
 pair_store_token() {
-    tmp="$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH.tmp.$$"
-    : > "$tmp"
-    chmod 600 "$tmp"
-    mv -f "$tmp" "$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH"
+    issued_at="${PAIR_TOKEN_ISSUED_AT:-$(date +%s)}"
+    case "$issued_at" in ''|*[!0-9]*) issued_at="$(date +%s)" ;; esac
+    [ -n "${PAIR_TOKEN_HASH:-}" ] || return 1
+    [ -n "${PAIR_TOKEN_LOGIN:-}" ] || return 1
+    [ -n "${PAIR_TOKEN_DEVICE_ID:-}" ] || return 1
+    [ -n "${PAIR_TOKEN_MAC:-}" ] || return 1
+    token_write_bound_file "$PAIR_TOKEN_DIR" "$PAIR_TOKEN_HASH" \
+        "$PAIR_TOKEN_LOGIN" "$PAIR_TOKEN_DEVICE_ID" "$PAIR_TOKEN_MAC" \
+        "$issued_at" "0"
 }

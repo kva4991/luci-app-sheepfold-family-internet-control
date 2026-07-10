@@ -23,31 +23,25 @@ describe('Personal group watermark', () => {
     );
   });
 
-  it('extends the secure overview and versions the watermark stylesheet', () => {
-    const source = readProjectFile(
-      'htdocs/luci-static/resources/view/sheepfold/overview-personal.js',
-    );
-
-    assert.match(source, /require view\.sheepfold\.overview-secure as secureOverview/);
-    assert.match(source, /section\.personal === '1'/);
-    assert.match(source, /sheepfold-personal-groups\.css/);
-    assert.match(source, /ui_asset_version/);
-    assert.match(source, /sf-group-person-watermark/);
-  });
-
-  it('decorates the base overview so secure wrapper delegation keeps watermarks visible', () => {
+  it('patches overview through the secure wrapper and versions the watermark stylesheet', () => {
     const source = readProjectFile(
       'htdocs/luci-static/resources/view/sheepfold/overview-personal.js',
     );
 
     assert.match(source, /require view\.sheepfold\.overview-secure as secureOverview/);
     assert.match(source, /require view\.sheepfold\.overview as overview/);
-    assert.match(source, /overview\.renderGroups = function/);
-    assert.match(source, /overview\.render\.apply\(overview, arguments\)/);
+    assert.match(source, /var renderGroups = overview\.renderGroups/);
+    assert.match(source, /overview\.renderGroups = function\(/);
+    assert.match(source, /return view\.extend\(/);
+    assert.doesNotMatch(source, /BaseView\.extend\(/);
+    assert.match(source, /section\.personal === '1'/);
+    assert.match(source, /sheepfold-personal-groups\.css/);
+    assert.match(source, /ui_asset_version/);
+    assert.match(source, /sf-group-person-watermark/);
   });
 
   it('marks the default child group as personal but not the unrestricted group', () => {
-    const config = readProjectFile('root/etc/config/sheepfold');
+    const config = readProjectFile('root/usr/share/sheepfold/sheepfold.uci.defaults');
     const unrestricted = config.match(
       /config group 'no_restrictions'([\s\S]*?)(?=\nconfig |$)/,
     );

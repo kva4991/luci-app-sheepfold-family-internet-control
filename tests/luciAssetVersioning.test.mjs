@@ -11,7 +11,7 @@ const overviewPath = resolve(
   'htdocs/luci-static/resources/view/sheepfold/overview.js',
 );
 const makefilePath = resolve(packageDir, 'Makefile');
-const defaultConfigPath = resolve(packageDir, 'root/etc/config/sheepfold');
+const defaultConfigPath = resolve(packageDir, 'root/usr/share/sheepfold/sheepfold.uci.defaults');
 const buildPyPath = resolve(repoRoot, 'scripts/build-test-ipk.py');
 const buildShPath = resolve(repoRoot, 'scripts/build-test-ipk.sh');
 
@@ -51,12 +51,9 @@ describe('LuCI asset versioning', () => {
     );
   });
 
-  it('keeps package release and default UCI asset version in sync', () => {
+  it('keeps package release and UCI asset version bootstrap in sync', () => {
     const makefile = readProjectFile(makefilePath);
     const defaultConfig = readProjectFile(defaultConfigPath);
-    const version = makeVariable(makefile, 'PKG_VERSION');
-    const release = makeVariable(makefile, 'PKG_RELEASE');
-    const expectedAssetVersion = `${version}-${release}`;
 
     assert.match(
       makefile,
@@ -70,8 +67,13 @@ describe('LuCI asset versioning', () => {
     );
     assert.match(
       defaultConfig,
-      new RegExp(`option\\s+ui_asset_version\\s+'${expectedAssetVersion.replaceAll('.', '\\.')}'`),
-      'root/etc/config/sheepfold должен содержать текущий PKG_VERSION-PKG_RELEASE',
+      /option\s+ui_asset_version\s+'0\.0\.0-0'/,
+      'sheepfold.uci.defaults не должен тащить релизный ui_asset_version в пакет',
+    );
+    assert.doesNotMatch(
+      makefile,
+      /root\/etc\/config\/sheepfold/,
+      'Makefile не должен снова класть /etc/config/sheepfold в payload пакета',
     );
   });
 

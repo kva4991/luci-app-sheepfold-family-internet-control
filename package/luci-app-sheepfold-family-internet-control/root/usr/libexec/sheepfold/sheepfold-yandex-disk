@@ -1,0 +1,666 @@
+#!/bin/sh
+# Архивирование журналов и резервных копий настроек в Yandex Disk через WebDAV.
+set -eu
+
+WEBDAV_BASE="https://webdav.yandex.ru"
+RAM_ARCHIVE_DIR="/tmp/sheepfold/.private/archive"
+EVENTS_LOG="/tmp/sheepfold/events.log"
+BACKUP_STAGING="/tmp/sheepfold/.yandex-backup-staging"
+SYNC_STATUS_FILE="/tmp/sheepfold/.yandex-sync-status.json"
+
+uci_get() {
+	uci -q get "sheepfold.cloud.$1" 2>/dev/null || printf '%s' "${2:-}"
+}
+
+global_get() {
+	uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "${2:-}"
+}
+
+json_escape() {
+	printf '%s' "$1" | tr '\r\n\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+have_curl() {
+	command -v curl >/dev/null 2>&1
+}
+
+credentials_ready() {
+	login="$(uci_get login '')"
+	password="$(uci_get password '')"
+	[ -n "$login" ] && [ -n "$password" ]
+}
+
+normalize_root_folder() {
+	folder="$(uci_get root_folder '/sheepfold')"
+	case "$folder" in
+		/*) ;;
+		*) folder="/$folder" ;;
+	esac
+	folder="${folder%/}"
+	[ -n "$folder" ] || folder="/sheepfold"
+	printf '%s' "$folder"
+}
+
+quota_mb() {
+	quota="$(uci_get quota_mb '500')"
+	case "$quota" in
+		50|100|250|500|1024) printf '%s' "$quota" ;;
+		*) printf '500' ;;
+	esac
+}
+
+webdav_url() {
+	path="$1"
+	case "$path" in
+		/*) ;;
+		*) path="/$path" ;;
+	esac
+	printf '%s%s' "$WEBDAV_BASE" "$path"
+}
+
+webdav_request() {
+	method="$1"
+	url="$2"
+	extra="${3:-}"
+	login="$(uci_get login '')"
+	password="$(uci_get password '')"
+	# shellcheck disable=SC2086
+	curl -sS -m 45 -u "$login:$password" -X "$method" $extra "$url"
+}
+
+require_tooling() {
+	if ! have_curl; then
+		printf '{"ok":false,"error":"curl_required"}\n'
+		return 1
+	fi
+	if ! credentials_ready; then
+		printf '{"ok":false,"error":"credentials_missing"}\n'
+		return 1
+	fi
+	return 0
+}
+
+ensure_webdav_path() {
+	target="$1"
+	current=""
+	IFS='/'
+	# shellcheck disable=SC2086
+	set -- $(printf '%s' "$target" | sed 's#^/##')
+	for part in "$@"; do
+		[ -n "$part" ] || continue
+		current="${current}/${part}"
+		code="$(curl -sS -m 30 -o /dev/null -w '%{http_code}' -u "$(uci_get login):$(uci_get password)" \
+			-X MKCOL "$(webdav_url "$current")" 2>/dev/null || printf 000)"
+		case "$code" in
+			201|200|204|301|302|405|409|423) ;;
+			*) return 1 ;;
+		esac
+	done
+}
+
+remote_path_allowed() {
+	path="$1"
+	root="$(normalize_root_folder)"
+	prefix_logs="${root}/logs/"
+	prefix_backups="${root}/backups/"
+
+	case "$path" in
+		"${prefix_logs}"*) ;;
+		"${prefix_backups}"*) ;;
+		*) return 1 ;;
+	esac
+	case "$path" in
+		*..*) return 1 ;;
+	esac
+	return 0
+}
+
+resolve_remote_path() {
+	spec="$1"
+	root="$(normalize_root_folder)"
+	case "$spec" in
+		/*)
+			remote_path="$spec"
+			;;
+		logs/*)
+			remote_path="${root}/${spec}"
+			;;
+		backups/*)
+			remote_path="${root}/${spec}"
+			;;
+		*)
+			remote_path="${root}/backups/${spec}"
+			;;
+	esac
+
+	if ! remote_path_allowed "$remote_path"; then
+		printf '{"ok":false,"error":"path_not_allowed"}\n'
+		return 1
+	fi
+	printf '%s' "$remote_path"
+}
+
+folder_used_bytes() {
+	root="$1"
+	response="$(webdav_request PROPFIND "$(webdav_url "$root")" '-H Depth: 1')" || return 1
+	printf '%s' "$response" | awk '
+		BEGIN { total = 0 }
+		/<[^>]*getcontentlength[^>]*>[0-9]+/ {
+			line = $0
+			sub(/.*<[^>]*getcontentlength[^>]*>/, "", line)
+			sub(/<.*/, "", line)
+			if (line ~ /^[0-9]+$/) total += line
+		}
+		END { print total + 0 }
+	'
+}
+
+remote_file_bytes() {
+	remote_path="$1"
+	response="$(webdav_request PROPFIND "$(webdav_url "$remote_path")" '-H Depth: 0')" || return 1
+	printf '%s' "$response" | sed -n 's/.*getcontentlength>\([0-9]*\).*/\1/p' | head -1
+}
+
+usage_state() {
+	used_bytes="$1"
+	quota_bytes="$2"
+	[ "$quota_bytes" -gt 0 ] || { printf 'error\t0\n'; return; }
+	pct=$((used_bytes * 100 / quota_bytes))
+	if [ "$used_bytes" -ge "$quota_bytes" ]; then
+		printf 'error\t%s\n' "$pct"
+	elif [ "$pct" -ge 80 ]; then
+		printf 'warn\t%s\n' "$pct"
+	else
+		printf 'ok\t%s\n' "$pct"
+	fi
+}
+
+write_sync_status() {
+	command_name="$1"
+	ok="$2"
+	message="$3"
+	mkdir -p /tmp/sheepfold 2>/dev/null || true
+	printf '{"command":"%s","ok":%s,"message":"%s","at":"%s"}\n' \
+		"$(json_escape "$command_name")" "$ok" "$(json_escape "$message")" "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
+		>"$SYNC_STATUS_FILE"
+	chmod 600 "$SYNC_STATUS_FILE" 2>/dev/null || true
+}
+
+verify_upload() {
+	local_path="$1"
+	remote_path="$2"
+	local_bytes remote_bytes
+
+	[ -f "$local_path" ] || {
+		printf '{"ok":false,"error":"local_missing"}\n'
+		return 1
+	}
+
+	local_bytes="$(wc -c <"$local_path" | tr -d ' ')"
+	case "$local_bytes" in ''|*[!0-9]*) local_bytes=0 ;; esac
+	remote_bytes="$(remote_file_bytes "$remote_path" 2>/dev/null || true)"
+	case "$remote_bytes" in ''|*[!0-9]*) remote_bytes=0 ;; esac
+
+	if [ "$local_bytes" -gt 0 ] && [ "$local_bytes" -eq "$remote_bytes" ]; then
+		printf '{"ok":true,"local_bytes":%s,"remote_bytes":%s}\n' "$local_bytes" "$remote_bytes"
+		return 0
+	fi
+
+	printf '{"ok":false,"error":"size_mismatch","local_bytes":%s,"remote_bytes":%s}\n' \
+		"$local_bytes" "$remote_bytes"
+	return 1
+}
+
+upload_file() {
+	local_path="$1"
+	remote_path="$2"
+	curl -sS -m 120 -o /dev/null -w '%{http_code}' -T "$local_path" \
+		-u "$(uci_get login):$(uci_get password)" "$(webdav_url "$remote_path")"
+}
+
+upload_and_verify() {
+	local_path="$1"
+	remote_path="$2"
+	code verify_json
+
+	code="$(upload_file "$local_path" "$remote_path")"
+	case "$code" in
+		201|204|200) ;;
+		*)
+			printf '{"ok":false,"http":%s}\n' "$code"
+			return 1
+			;;
+	esac
+
+	verify_json="$(verify_upload "$local_path" "$remote_path" 2>/dev/null || true)"
+	case "$verify_json" in
+		*"\"ok\":true"*) printf '%s\n' "$verify_json"; return 0 ;;
+	esac
+
+	printf '%s\n' "$verify_json"
+	return 1
+}
+
+create_config_backup() {
+	mkdir -p "$BACKUP_STAGING"
+	backup_file="$BACKUP_STAGING/sheepfold-config-$(date +%Y%m%d-%H%M%S).tar.gz"
+	if command -v gzip >/dev/null 2>&1; then
+		tar -C /etc/config -czf "$backup_file" sheepfold 2>/dev/null || return 1
+	else
+		backup_file="${backup_file%.gz}"
+		tar -C /etc/config -cf "$backup_file" sheepfold 2>/dev/null || return 1
+	fi
+	printf '%s' "$backup_file"
+}
+
+propfind_folder_json_array() {
+	folder="$1"
+	response="$(webdav_request PROPFIND "$(webdav_url "$folder")" '-H Depth: 1')" || return 1
+	printf '%s' "$response" | awk -v folder="$folder" '
+		function json_escape(value,    chars) {
+			gsub(/\\/, "\\\\", value)
+			gsub(/"/, "\\\"", value)
+			return value
+		}
+		function flush(    name, esc_name, esc_modified) {
+			if (href == "" || href == folder || href == folder "/") {
+				href = ""
+				size = 0
+				modified = ""
+				return
+			}
+			name = href
+			sub(/^.*\//, "", name)
+			if (name == "") {
+				href = ""
+				size = 0
+				modified = ""
+				return
+			}
+			esc_name = json_escape(name)
+			esc_modified = json_escape(modified)
+			if (items != "") items = items ","
+			items = items sprintf("{\"name\":\"%s\",\"path\":\"%s\",\"bytes\":%s,\"modified\":\"%s\"}",
+				esc_name, json_escape(href), (size == "" ? 0 : size), esc_modified)
+			href = ""
+			size = 0
+			modified = ""
+		}
+		BEGIN {
+			items = ""
+			href = ""
+			size = 0
+			modified = ""
+		}
+		/<[dD]:href>/ {
+			flush()
+			line = $0
+			sub(/.*<[dD]:href>/, "", line)
+			sub(/<.*/, "", line)
+			gsub(/%20/, " ", line)
+			href = line
+		}
+		/getcontentlength/ {
+			line = $0
+			sub(/.*getcontentlength>/, "", line)
+			sub(/<.*/, "", line)
+			size = line
+		}
+		/getlastmodified/ {
+			line = $0
+			sub(/.*getlastmodified>/, "", line)
+			sub(/<.*/, "", line)
+			modified = line
+		}
+		END {
+			flush()
+			printf "%s", items
+		}
+	'
+}
+
+cmd_test() {
+	require_tooling || return 1
+
+	code="$(curl -sS -m 20 -o /dev/null -w '%{http_code}' -u "$(uci_get login):$(uci_get password)" \
+		-X PROPFIND -H 'Depth: 0' "$(webdav_url "/")" 2>/dev/null || printf 000)"
+	case "$code" in
+		207|200|301|302)
+			printf '{"ok":true,"message":"Yandex Disk login works"}\n'
+			;;
+		401|403)
+			printf '{"ok":false,"error":"auth_failed","http":%s}\n' "$code"
+			return 1
+			;;
+		*)
+			printf '{"ok":false,"error":"unreachable","http":%s}\n' "$code"
+			return 1
+			;;
+	esac
+}
+
+cmd_list() {
+	root logs_json backups_json
+
+	require_tooling || return 1
+	root="$(normalize_root_folder)"
+	logs_json="$(propfind_folder_json_array "${root}/logs" 2>/dev/null || true)"
+	backups_json="$(propfind_folder_json_array "${root}/backups" 2>/dev/null || true)"
+	[ -n "$logs_json" ] || logs_json=""
+	[ -n "$backups_json" ] || backups_json=""
+	printf '{"ok":true,"root":"%s","logs":[%s],"backups":[%s]}\n' \
+		"$(json_escape "$root")" "$logs_json" "$backups_json"
+}
+
+cmd_download() {
+	remote_spec="$1"
+	local_path="$2"
+	remote_path code
+
+	require_tooling || return 1
+	[ -n "$remote_spec" ] && [ -n "$local_path" ] || {
+		printf '{"ok":false,"error":"usage","hint":"download <remote> <local>"}\n'
+		return 1
+	}
+
+	remote_path="$(resolve_remote_path "$remote_spec")" || return 1
+	case "$local_path" in
+		/tmp/*|/tmp/sheepfold/*) ;;
+		*)
+			printf '{"ok":false,"error":"local_path_not_allowed"}\n'
+			return 1
+			;;
+	esac
+
+	mkdir -p "${local_path%/*}" 2>/dev/null || true
+	code="$(curl -sS -m 120 -o "$local_path" -w '%{http_code}' -u "$(uci_get login):$(uci_get password)" \
+		"$(webdav_url "$remote_path")" 2>/dev/null || printf 000)"
+	case "$code" in
+		200|201|204)
+			printf '{"ok":true,"remote":"%s","local":"%s","bytes":%s}\n' \
+				"$(json_escape "$remote_path")" "$(json_escape "$local_path")" "$(wc -c <"$local_path" | tr -d ' ')"
+			;;
+		*)
+			rm -f "$local_path"
+			printf '{"ok":false,"error":"download_failed","http":%s}\n' "$code"
+			return 1
+			;;
+	esac
+}
+
+latest_backup_name() {
+	root="$1"
+	propfind_folder_json_array "${root}/backups" 2>/dev/null |
+		sed -n 's/.*"name":"\([^"]*\)".*/\1/p' |
+		grep '^sheepfold-config-.*\.tar' |
+		sort |
+		tail -1
+}
+
+cmd_restore_config() {
+	requested="$1"
+	root remote_spec remote_path local_archive safety_backup restore_dir tar_extract_flags=""
+
+	require_tooling || return 1
+	root="$(normalize_root_folder)"
+	mkdir -p "$BACKUP_STAGING" 2>/dev/null || true
+
+	if [ -n "$requested" ]; then
+		remote_spec="backups/$requested"
+	else
+		requested="$(latest_backup_name "$root")"
+		[ -n "$requested" ] || {
+			printf '{"ok":false,"error":"no_backups"}\n'
+			return 1
+		}
+		remote_spec="backups/$requested"
+	fi
+
+	remote_path="$(resolve_remote_path "$remote_spec")" || return 1
+	local_archive="$BACKUP_STAGING/restore-config-$$.tar.gz"
+	cmd_download "$remote_spec" "$local_archive" >/dev/null || return 1
+
+	if tar -tzf "$local_archive" 2>/dev/null | grep -Eq '^sheepfold$'; then
+		tar_extract_flags="-xzf"
+	elif tar -tf "$local_archive" 2>/dev/null | grep -Eq '^sheepfold$'; then
+		tar_extract_flags="-xf"
+	else
+		rm -f "$local_archive"
+		printf '{"ok":false,"error":"invalid_backup_archive"}\n'
+		return 1
+	fi
+
+	safety_backup="/tmp/sheepfold/sheepfold-config-before-restore-$(date +%Y%m%d-%H%M%S).tar.gz"
+	mkdir -p /tmp/sheepfold 2>/dev/null || true
+	if command -v gzip >/dev/null 2>&1; then
+		tar -C /etc/config -czf "$safety_backup" sheepfold 2>/dev/null || safety_backup=""
+	else
+		safety_backup="${safety_backup%.gz}"
+		tar -C /etc/config -cf "$safety_backup" sheepfold 2>/dev/null || safety_backup=""
+	fi
+
+	restore_dir="$BACKUP_STAGING/restore-config-extract-$$"
+	mkdir -p "$restore_dir"
+	if ! tar -C "$restore_dir" $tar_extract_flags "$local_archive" sheepfold 2>/dev/null; then
+		rm -rf "$restore_dir" "$local_archive"
+		printf '{"ok":false,"error":"extract_failed"}\n'
+		return 1
+	fi
+
+	if [ ! -f "$restore_dir/sheepfold" ]; then
+		rm -rf "$restore_dir" "$local_archive"
+		printf '{"ok":false,"error":"missing_sheepfold_config"}\n'
+		return 1
+	fi
+
+	cp "$restore_dir/sheepfold" /etc/config/sheepfold
+	chmod 600 /etc/config/sheepfold 2>/dev/null || true
+	rm -rf "$restore_dir" "$local_archive"
+
+	if [ -x /etc/init.d/sheepfold ]; then
+		/etc/init.d/sheepfold restart >/dev/null 2>&1 || true
+	fi
+
+	printf '{"ok":true,"restored":"%s","safety_backup":"%s"}\n' \
+		"$(json_escape "$requested")" "$(json_escape "${safety_backup:-}")"
+}
+
+cmd_status() {
+	backend="yandex_disk"
+	authorized=0
+	state="error"
+	message="Yandex Disk is not configured"
+	used_mb=0
+	quota="$(quota_mb)"
+	free_pct=100
+
+	if [ "$(global_get log_storage ram)" != "yandex_disk" ]; then
+		message="Yandex Disk is selected only when log storage is set to Yandex Disk"
+		printf '{"backend":"%s","state":"%s","message":"%s","authorized":%s,"used_mb":%s,"quota_mb":%s,"free_pct":%s}\n' \
+			"$backend" "$state" "$(json_escape "$message")" "$authorized" "$used_mb" "$quota" "$free_pct"
+		return 0
+	fi
+
+	if ! have_curl; then
+		message="curl is required for Yandex Disk on the router"
+		printf '{"backend":"%s","state":"%s","message":"%s","authorized":%s,"used_mb":%s,"quota_mb":%s,"free_pct":%s}\n' \
+			"$backend" "$state" "$(json_escape "$message")" "$authorized" "$used_mb" "$quota" "$free_pct"
+		return 0
+	fi
+
+	if ! credentials_ready; then
+		message="Enter Yandex Disk login and password"
+		printf '{"backend":"%s","state":"%s","message":"%s","authorized":%s,"used_mb":%s,"quota_mb":%s,"free_pct":%s}\n' \
+			"$backend" "$state" "$(json_escape "$message")" "$authorized" "$used_mb" "$quota" "$free_pct"
+		return 0
+	fi
+
+	code="$(curl -sS -m 30 -o /dev/null -w '%{http_code}' -u "$(uci_get login):$(uci_get password)" \
+		-X PROPFIND -H 'Depth: 0' "$(webdav_url "/")" 2>/dev/null || printf 000)"
+	case "$code" in
+		207|200|301|302)
+			authorized=1
+			;;
+		401|403)
+			message="Yandex Disk authorization failed"
+			printf '{"backend":"%s","state":"error","message":"%s","authorized":0,"used_mb":0,"quota_mb":%s,"free_pct":0}\n' \
+				"$backend" "$(json_escape "$message")" "$quota"
+			return 0
+			;;
+		*)
+			message="Cannot reach Yandex Disk (HTTP $code)"
+			printf '{"backend":"%s","state":"error","message":"%s","authorized":0,"used_mb":0,"quota_mb":%s,"free_pct":0}\n' \
+				"$backend" "$(json_escape "$message")" "$quota"
+			return 0
+			;;
+	esac
+
+	root="$(normalize_root_folder)"
+	used_bytes="$(folder_used_bytes "$root" 2>/dev/null || printf 0)"
+	case "$used_bytes" in ''|*[!0-9]*) used_bytes=0 ;; esac
+	used_mb=$((used_bytes / 1024 / 1024))
+	quota_bytes=$((quota * 1024 * 1024))
+	state_line="$(usage_state "$used_bytes" "$quota_bytes")"
+	state="${state_line%%	*}"
+	used_pct="${state_line#*	}"
+	free_pct=$((100 - used_pct))
+	[ "$free_pct" -ge 0 ] || free_pct=0
+
+	case "$state" in
+		ok) message="Connected, ${used_mb} MB of ${quota} MB used" ;;
+		warn) message="Low space soon, ${used_mb} MB of ${quota} MB used" ;;
+		error) message="Sheepfold quota exceeded (${used_mb} MB of ${quota} MB)" ;;
+	esac
+
+	uci -q set sheepfold.cloud.authorized='1' 2>/dev/null || true
+	uci -q commit sheepfold 2>/dev/null || true
+
+	printf '{"backend":"%s","state":"%s","message":"%s","authorized":%s,"used_mb":%s,"quota_mb":%s,"free_pct":%s}\n' \
+		"$backend" "$state" "$(json_escape "$message")" "$authorized" "$used_mb" "$quota" "$free_pct"
+}
+
+prune_remote_logs() {
+	root="$1"
+	quota_bytes="$2"
+	used_bytes="$(folder_used_bytes "$root" 2>/dev/null || printf 0)"
+	[ "$used_bytes" -le "$quota_bytes" ] && return 0
+
+	response="$(webdav_request PROPFIND "$(webdav_url "$root/logs")" '-H Depth: 1')" || return 0
+	printf '%s' "$response" | sed -n 's/.*href="\([^"]*\)".*/\1/p' | grep "${root}/logs/" | grep -v '/$' | sort | while IFS= read -r href; do
+		[ -n "$href" ] || continue
+		curl -sS -m 30 -o /dev/null -u "$(uci_get login):$(uci_get password)" \
+			-X DELETE "$(webdav_url "$href")" >/dev/null 2>&1 || true
+		used_bytes="$(folder_used_bytes "$root" 2>/dev/null || printf 0)"
+		[ "$used_bytes" -le "$quota_bytes" ] && break
+	done
+}
+
+cmd_push_events() {
+	remote_path verify_json
+
+	[ "$(global_get log_storage ram)" = "yandex_disk" ] || return 0
+	[ -f "$EVENTS_LOG" ] || return 0
+	require_tooling || return 1
+
+	root="$(normalize_root_folder)"
+	ensure_webdav_path "$root" || return 1
+	ensure_webdav_path "$root/logs" || return 1
+
+	remote_path="${root}/logs/events.log"
+	verify_json="$(upload_and_verify "$EVENTS_LOG" "$remote_path")" || {
+		write_sync_status push-events false "upload verify failed"
+		printf '%s\n' "$verify_json"
+		return 1
+	}
+
+	write_sync_status push-events true "events.log uploaded"
+	printf '%s\n' "$verify_json"
+}
+
+cmd_archive_push() {
+	[ "$(global_get log_storage ram)" = "yandex_disk" ] || return 0
+	[ "$(uci_get authorized '0')" = "1" ] || cmd_status >/dev/null 2>&1 || true
+	[ "$(uci_get authorized '0')" = "1" ] || return 0
+	require_tooling || return 1
+
+	root="$(normalize_root_folder)"
+	quota_bytes=$(( $(quota_mb) * 1024 * 1024 ))
+	ensure_webdav_path "$root" || return 1
+	ensure_webdav_path "$root/logs" || return 1
+	ensure_webdav_path "$root/backups" || return 1
+
+	pushed=0
+	errors=0
+
+	for archive in "$RAM_ARCHIVE_DIR"/*.tar.gz "$RAM_ARCHIVE_DIR"/*.tar; do
+		[ -f "$archive" ] || continue
+		remote="${root}/logs/$(basename "$archive")"
+		if upload_and_verify "$archive" "$remote" >/dev/null 2>&1; then
+			rm -f "$archive"
+			pushed=$((pushed + 1))
+		else
+			errors=$((errors + 1))
+		fi
+	done
+
+	if [ -f "$EVENTS_LOG" ]; then
+		events_copy="$BACKUP_STAGING/events-$(date +%Y%m%d-%H%M%S).log"
+		mkdir -p "$BACKUP_STAGING"
+		cp "$EVENTS_LOG" "$events_copy"
+		remote="${root}/logs/$(basename "$events_copy")"
+		if upload_and_verify "$events_copy" "$remote" >/dev/null 2>&1; then
+			pushed=$((pushed + 1))
+		else
+			errors=$((errors + 1))
+		fi
+		rm -f "$events_copy"
+	fi
+
+	backup_file="$(create_config_backup 2>/dev/null || true)"
+	if [ -n "$backup_file" ] && [ -f "$backup_file" ]; then
+		remote="${root}/backups/$(basename "$backup_file")"
+		if upload_and_verify "$backup_file" "$remote" >/dev/null 2>&1; then
+			pushed=$((pushed + 1))
+		else
+			errors=$((errors + 1))
+		fi
+		rm -f "$backup_file"
+	fi
+
+	prune_remote_logs "$root" "$quota_bytes" || true
+
+	if [ "$errors" -gt 0 ]; then
+		write_sync_status archive-push false "completed with errors"
+		printf '{"ok":false,"pushed":%d,"errors":%d}\n' "$pushed" "$errors"
+		return 1
+	fi
+
+	write_sync_status archive-push true "archive push completed"
+	printf '{"ok":true,"pushed":%d,"errors":0}\n' "$pushed"
+}
+
+cmd_sync_status() {
+	if [ -r "$SYNC_STATUS_FILE" ]; then
+		cat "$SYNC_STATUS_FILE"
+		return 0
+	fi
+	printf '{"ok":false,"message":"no sync yet"}\n'
+}
+
+command_name="${1:-}"
+shift || true
+case "$command_name" in
+	status) cmd_status ;;
+	test) cmd_test ;;
+	list) cmd_list ;;
+	download) cmd_download "$1" "$2" ;;
+	restore-config) cmd_restore_config "$1" ;;
+	sync-status) cmd_sync_status ;;
+	verify) verify_upload "$1" "$2" ;;
+	push-events) cmd_push_events ;;
+	archive-push) cmd_archive_push ;;
+	*)
+		echo "Usage: sheepfold-yandex-disk <status|test|list|download|restore-config|sync-status|verify|push-events|archive-push>" >&2
+		exit 1
+		;;
+esac
