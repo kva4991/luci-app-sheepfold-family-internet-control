@@ -230,4 +230,31 @@ grep -r '§xaji0y6' .
 
 ---
 
+## 📘 Agent playbook и архитектурные инварианты
+
+Теги для ключевых продуктовых правил в `docs/agent-playbook.ru.md`. В этом файле они вставляются HTML-комментариями `<!-- §xxxxxxx -->`, чтобы не шуметь в пользовательском тексте и при этом оставаться доступными для поиска.
+
+| Тег | Имя | Тип | Описание |
+|-----|-----|-----|--------|
+| `§v7x2k9p` | PLAYBOOK_TRAFFIC_CHAIN | архитектура | Цепочка трафика и ответственности: Sheepfold принимает решение по устройству, затем AdGuard Home фильтрует DNS, затем Podkop маршрутизирует разрешённый трафик. Файлы: `agent-playbook.ru.md` |
+| `§q3nj8wd` | PLAYBOOK_NO_DEV_CLOUD | архитектура | Не добавлять developer-operated cloud backend; проект остаётся self-hosted на роутере пользователя. Файлы: `agent-playbook.ru.md` |
+| `§k5rf0hb` | PLAYBOOK_LOCAL_FULL_CONTROL | архитектура | Полное управление через LuCI/Android только в локальной сети; вне дома — короткие подтверждаемые команды через мессенджер. Файлы: `agent-playbook.ru.md` |
+| `§b3nw8vp` | PLAYBOOK_ADMIN_LOG_NO_SECRETS | безопасность | Административные действия логируются, но без секретов, токенов, паролей и лишних чувствительных данных. Файлы: `agent-playbook.ru.md` |
+| `§n2lp7yt` | PLAYBOOK_INSTALLER_EXPLICIT_CONSENT | legal/installer | OpenWRT installer требует явное согласие `yes`, `y` или `да` перед применением изменений. Файлы: `agent-playbook.ru.md` |
+| `§m9qe4lk` | PLAYBOOK_LUCI_NO_PENDING_CHANGES | UX/LuCI | LuCI-действия Sheepfold не должны оставлять системную плашку `Не принятые изменения`; после понятной кнопки Sheepfold изменения надо сохранить и применить. Файлы: `agent-playbook.ru.md` |
+| `§h6mxq4c` | PLAYBOOK_BLOCKLIST_NO_ROUTER_UI | безопасность | Устройства из чёрного списка не должны открывать LuCI, SSH и Sheepfold API. Файлы: `agent-playbook.ru.md` |
+| `§w8dm3kv` | PLAYBOOK_BLOCKLIST_BEATS_TEMP_SCHEDULE | доступ | Чёрный список сильнее временного доступа и расписаний. Файлы: `agent-playbook.ru.md` |
+| `§x1hy6pz` | PLAYBOOK_ALLOWLIST_BYPASS_BLOCKS | доступ | Белый список не блокируется глобальной блокировкой и расписаниями. Файлы: `agent-playbook.ru.md` |
+| `§e4bq1mn` | PLAYBOOK_QR_NO_SECRETS | безопасность | QR сопряжения не содержит root-пароль, LuCI cookie, bot tokens, AI keys, пароли или full backups. Файлы: `agent-playbook.ru.md` |
+| `§j9wv3sz` | PLAYBOOK_PAIRING_BACKEND_CONSUMES_TOKEN | безопасность | Сжигание одноразового pairing token/code реализуется только backend-частью роутера, не Android/LuCI состоянием. Файлы: `agent-playbook.ru.md` |
+| `§f8ck5ry` | PLAYBOOK_WIFI_DISABLE_DISCLAIMER | UX/Wi-Fi | Перед включением авто-выключения Wi-Fi нужен непропускаемый дисклеймер с 10-секундным таймером. Файлы: `agent-playbook.ru.md` |
+| `§p1zt6ow` | PLAYBOOK_FULL_EXPORT_ENCRYPTED | безопасность | Full export with secrets разрешён только в encrypted-виде и не является default export. Файлы: `agent-playbook.ru.md` |
+| `§c7ds2xv` | PLAYBOOK_BLOCKED_PAGE_IOT_SHORT_RESPONSE | совместимость | IoT/API-клиенты при блокировке получают короткий предсказуемый HTTP/TCP-ответ, а не тяжёлую HTML-страницу. Файлы: `agent-playbook.ru.md` |
+| `§r2at5nq` | PLAYBOOK_SINGLE_MESSENGER_ADAPTER | архитектура | Один роутер — один активный messenger adapter. Файлы: `agent-playbook.ru.md` |
+| `§t4lq9bw` | PLAYBOOK_AI_ADVISES_NOT_ACTS | безопасность/AI | ИИ-помощник не управляет роутером сам; он советует, а действия применяются только после явного подтверждения parent/admin. Файлы: `agent-playbook.ru.md` |
+| `§u6fj2sr` | PLAYBOOK_AI_NO_AUTO_SENSITIVE_CONTEXT | приватность/AI | MAC/IP/device names/child names/family details/logs/device lists/router settings не отправляются AI автоматически. Файлы: `agent-playbook.ru.md` |
+| `§z5ck8mv` | PLAYBOOK_ANDROID_PARENT_ONLY | Android | Android-приложение ставится только на телефоны родителей-администраторов, не на телефоны детей. Файлы: `agent-playbook.ru.md` |
+
+---
+
 *Файл поддерживается разработчиками и ИИ-агентами вручную. При добавлении нового тега — обязательно добавить строку в нужный раздел. При удалении или изменении смысла — обновить/удалить строку и найти все вхождения через `grep -r '§XXXXXXX' .`*
