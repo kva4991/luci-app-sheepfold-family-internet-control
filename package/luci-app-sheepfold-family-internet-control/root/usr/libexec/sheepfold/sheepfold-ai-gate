@@ -69,6 +69,36 @@ list_has_mac() {
     return 1
 }
 
+personal_group_for_device() {
+    section="$1"
+    mac="$(normalize_mac "$2")"
+    device_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+
+    # Детский AI открывается только для устройства, которое родитель явно
+    # связал с личной группой. Поддерживаем новую personal_group-модель и
+    # текущие group-секции с option personal=1, чтобы миграция была мягкой.
+    for group_section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=personal_group$/\1/p'); do
+        for existing in $(uci -q get "sheepfold.$group_section.deviceMac" 2>/dev/null || true); do
+            [ "$(normalize_mac "$existing")" = "$mac" ] || continue
+            uci -q get "sheepfold.$group_section.displayName" 2>/dev/null || \
+                uci -q get "sheepfold.$group_section.name" 2>/dev/null || \
+                printf '%s' "$group_section"
+            return 0
+        done
+    done
+
+    [ -n "$device_group" ] || return 1
+    for group_section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=group$/\1/p'); do
+        [ "$(uci -q get "sheepfold.$group_section.personal" 2>/dev/null || printf 0)" = 1 ] || continue
+        group_name="$(uci -q get "sheepfold.$group_section.name" 2>/dev/null || printf '%s' "$group_section")"
+        [ "$device_group" = "$group_section" ] || [ "$device_group" = "$group_name" ] || continue
+        printf '%s' "$group_name"
+        return 0
+    done
+
+    return 1
+}
+
 is_admin_request() {
     bearer=""
     case "${HTTP_AUTHORIZATION:-}" in [Bb]earer\ *) bearer="${HTTP_AUTHORIZATION#* }" ;; esac
@@ -163,6 +193,8 @@ else
     [ "$consent_version" = child-ai-v1 ] || reject "403 Forbidden" parental_consent_version_required "The current parental consent version is required."
     [ "$(uci -q get sheepfold.global.child_ai_parental_consent 2>/dev/null || printf 0)" = 1 ] || \
         reject "403 Forbidden" parental_consent_required "A parent must enable child AI access in Sheepfold settings."
+    personal_group_for_device "$device_section" "$mac" >/dev/null || \
+        reject "403 Forbidden" personal_group_required "Ask a parent to put this device into your personal group in Sheepfold settings."
 fi
 
 consume_quota "$server_device_id" || reject "429 Too Many Requests" rate_limited "AI request limit reached for this device." "${retry_after:-3600}"

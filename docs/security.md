@@ -7,7 +7,7 @@
 - Use API tokens or session-based authentication.
 - Restrict management API access to the local network by default.
 - Sheepfold is a family self-hosted tool by default; do not require a developer-operated cloud service.
-- The Android app is for parent/admin devices only, not for hidden installation on children's phones.
+- The main Android app in `android/` is for parent/admin devices only. The separate `android-child/` app, when used, must be an explicitly installed status/helper client without administrative functions, not a hidden installation flow (§z5ck8mv).
 - Validate MAC addresses, IP addresses, hostnames, and domains.
 - Avoid shell injection.
 - Avoid duplicate nftables rules.
@@ -32,7 +32,7 @@ Sheepfold is administered by parent/admin users configured on the router.
 
 The current MVP does not need a visible role selector. If a future permission split is added, use `owner` and `admin`: `owner` can add/remove administrators and perform dangerous maintenance actions; `admin` can manage family internet rules but cannot remove the owner.
 
-Do not add child/client roles unless explicitly requested.
+Do not add hidden child/client roles or child-facing control interfaces with administrative power. The separate child client may show only its own router-computed status and explicitly allowed helper flows (§z5ck8mv).
 
 Each messenger administrator must be explicitly bound to a Telegram/VK/MAX user ID or chat ID in router settings. VK is the default first-run messenger choice, but no messenger must become active until credentials and at least one administrator binding are configured. MAX is experimental and must not be enabled by default.
 

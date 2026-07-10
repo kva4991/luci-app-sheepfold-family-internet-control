@@ -50,6 +50,7 @@
     <!-- AI-чат -->
     <string name="ai_chat_title">ИИ-помощник</string>
     <string name="ai_input_hint">Задай вопрос…</string>
+    <string name="ai_personal_group_required">Попросите родителя поместить ваше устройство в вашу личную группу в настройках Sheepfold. Тогда ИИ-помощник откроется.</string>
 
     <!-- Экран «Мой доступ» -->
     <string name="access_screen_title">Мой доступ</string>

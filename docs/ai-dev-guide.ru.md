@@ -22,13 +22,14 @@
 Строго по `docs/personal-groups.ru.md`. Нет UCI-схемы в реальном коде.
 Что сделать: добавить команды `personal-group-*` в `sheepfold-router-control` и CGI.
 
-### 2. camelCase везде
+### 2. Именование по слоям
 
-Стиль проекта — **camelCase** (не snake_case) (§pm3kq7r). Все новые UCI-поля, JSON-ключи, имена переменных в sh-скриптах — camelCase. Уже существующие UCI-поля переименовывать с осторожностью (нужна миграция).
+Стиль проекта зависит от слоя (§pm3kq7r). В JS/Kotlin/JSON-моделях используем camelCase, потому что это привычный стиль для LuCI frontend, Android и HTTP API. В OpenWrt/UCI, shell-скриптах и Makefile сохраняем привычный для OpenWrt стиль: `snake_case` для UCI-опций и shell-переменных, верхний регистр для Makefile-переменных. Не переименовывать существующие UCI-поля без миграции.
 
 Примеры правильных имён:
-- `deviceId`, `displayName`, `personalGroupId`, `ownershipUpdatedAt`
-- `activeMessenger`, `blockOnBoot`, `adminDevice`
+- JS/Kotlin/JSON: `deviceId`, `displayName`, `personalGroupId`, `ownershipUpdatedAt`, `activeMessenger`, `adminDevice`;
+- UCI/shell: `device_id`, `display_name`, `personal_group_id`, `active_messenger`, `admin_device`;
+- Makefile: `PKG_RELEASE`, `SHEEPFOLD_UI_ASSET_VERSION`.
 
 ### 3. ИИ-промпты: тонкие места
 
@@ -46,7 +47,7 @@
 
 ### 4. Вкладка «ИИ-помощник» в APK
 
-По описанию: вкладка отображается только если на роутере настроен хотя бы один ИИ-провайдер (`aiProviderOpenAiKey`, `aiProviderGeminiKey`, `aiProviderYandexGptKey` — хотя бы один непустой) (§c9rf1pe). Это правило нужно проверить в `GET /.well-known/sheepfold-config`.
+Вкладка отображается только если роутер сообщает, что на нём настроен хотя бы один ИИ-провайдер. Android не проверяет provider API keys напрямую и не хранит их у себя: он читает безопасный флаг/список провайдеров из router-side discovery/status API и отправляет запросы только через Sheepfold backend (§xaji0y6, §dpbhsah, §c9rf1pe).
 
 ### 5. Загрузка логов с детского устройства
 

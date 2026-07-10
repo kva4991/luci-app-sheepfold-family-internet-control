@@ -17,8 +17,8 @@ Requirements:
 - Do not hardcode one global provider for every country.
 - Do not show providers marked as unavailable, prohibited, or unsupported in the selected country profile.
 - Keep provider availability editable in country profile data because legal and network availability can change.
-- Store API keys securely on Android, preferably through Android Keystore.
-- Never store provider API keys in OpenWRT UCI config unless a server-side proxy mode is explicitly implemented later.
+- Android must not call DeepSeek, Gemini, or other LLM providers directly. All requests go through the router endpoint `/cgi-bin/sheepfold-api/ai-assistant` (§xaji0y6).
+- Store provider API keys on the router in Sheepfold UCI settings. Android Keystore is only for local Android secrets such as the admin Bearer token, pairing data, and local app lock, not for external LLM provider keys (§dpbhsah).
 
 ## AI Data Sharing
 

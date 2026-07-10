@@ -69,6 +69,7 @@ Avoid:
 
 ## Implementation Entry Point
 
+- Before running builds or tests in a fresh local Codex Desktop chat on the user's Windows PC, read `docs/agent-environment.ru.md`. It records the Windows/Codex tooling setup, required programs, common build commands, IPK/APK build notes, and the verification commands that have already worked for this repository. For Linux, WSL, macOS, or GitHub Actions, keep the intent but adapt paths and shell syntax.
 - Future AI developers should start with `docs/developer-task.ru.md`, then read `docs/product-requirements.md` and the relevant focused docs.
 - For broad feature work, future AI developers must also read `docs/agent-playbook.ru.md`; it is the detailed implementation playbook that captures product decisions from the planning discussion.
 - Keep `docs/developer-task.ru.md` updated when project-level decisions change.
@@ -127,7 +128,7 @@ Avoid:
 - The agreement must be visible before first use in LuCI/Android when practical.
 - Do not claim that the agreement is final legal advice; production releases should be reviewed by a qualified lawyer.
 - Sheepfold is self-hosted for family use by default. Do not introduce a developer-operated cloud dependency unless explicitly requested later.
-- Android is for parent/admin devices only; do not design hidden child-phone installation flows.
+- The main Android app in `android/` is for parent/admin devices only. A separate child app in `android-child/` is allowed only as an explicitly installed status/helper client without administrative functions; never design hidden child-phone installation flows (§z5ck8mv).
 - If app-store publication is added later, prepare store-specific privacy disclosures before release.
 - Do not collect website visit history as part of the normal administrative log. If per-device site activity history is added later, it must be a separate opt-in feature, off by default, excluded for administrator devices and allowlisted devices, and documented in privacy/legal text. See `docs/site-activity-logs.ru.md`.
 
@@ -156,7 +157,7 @@ Avoid:
 
 - Do not show an administrator role selector in the current MVP unless the project owner explicitly asks for roles again.
 - If a future permission split is added, use `owner` and `admin`: `owner` can manage administrators; `admin` can manage family internet rules but must not remove the owner.
-- Do not add child/client roles or child-facing control interfaces unless explicitly requested later.
+- Do not add hidden child/client roles or child-facing control interfaces with administrative power. The existing separate `android-child/` client may show only its own router-computed status and allowed child AI helper flows; it must not manage router rules (§z5ck8mv).
 - Administrative logs should record who changed what, when, and with what result, without storing secrets.
 - LuCI must include a separate `Administrators` tab.
 - A default administrator account must exist after installation/first setup.

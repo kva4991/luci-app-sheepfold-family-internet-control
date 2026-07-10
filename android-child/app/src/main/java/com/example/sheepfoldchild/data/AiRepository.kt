@@ -41,12 +41,21 @@ class AiRepository(private val context: Context) {
                 IllegalStateException("Роутер ещё не подтвердил идентификатор и роль устройства")
             )
         }
+        val checkedStatus = status
+            ?: return@withContext Result.failure(
+                IllegalStateException("Роутер ещё не подтвердил статус устройства")
+            )
+        if (status?.personalGroupRequired == true) {
+            return@withContext Result.failure(
+                IllegalStateException("Попросите родителя поместить ваше устройство в вашу личную группу, тогда ИИ-помощник откроется.")
+            )
+        }
 
         val formBody = listOf(
-            "message" to buildPrompt(question, status, history),
+            "message" to buildPrompt(question, checkedStatus, history),
             "deviceId" to deviceId,
             "clientRole" to clientRole,
-            "isAdministrator" to if (status.isAdministrator) "1" else "0",
+            "isAdministrator" to if (checkedStatus.isAdministrator) "1" else "0",
             "consentVersion" to CONSENT_VERSION
         ).joinToString("&") { (key, value) ->
             "${encode(key)}=${encode(value)}"

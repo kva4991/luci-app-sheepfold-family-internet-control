@@ -94,6 +94,9 @@
     <string name="router_internet_enabled">Internet is enabled on the router</string>
     <string name="router_refresh_failed">Could not refresh data</string>
     <string name="router_info_title">Router Information</string>
+    <string name="widget_internet_enabled">Sheepfold internet enable widget</string>
+    <string name="widget_internet_disabled">Sheepfold internet disable widget</string>
+    <string name="widget_internet_switch">Sheepfold internet control widget</string>
 
     <string name="action_ok">OK</string>
     <string name="action_cancel">Cancel</string>

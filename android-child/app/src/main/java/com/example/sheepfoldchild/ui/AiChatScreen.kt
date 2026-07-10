@@ -20,12 +20,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.sheepfoldchild.R
 import com.example.sheepfoldchild.data.ChatMessage
+import com.example.sheepfoldchild.data.ClientStatusData
 import com.example.sheepfoldchild.viewmodel.AiChatViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AiChatScreen(viewModel: AiChatViewModel) {
+fun AiChatScreen(viewModel: AiChatViewModel, status: ClientStatusData?) {
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
+    val aiBlockedByPersonalGroup = status?.personalGroupRequired == true
 
     // Прокручиваем к последнему сообщению.
     LaunchedEffect(viewModel.messages.size) {
@@ -47,16 +50,16 @@ fun AiChatScreen(viewModel: AiChatViewModel) {
                 .padding(padding)
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
+                color = if (aiBlockedByPersonalGroup) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    text = stringResource(R.string.ai_data_notice),
+                    text = if (aiBlockedByPersonalGroup) stringResource(R.string.ai_personal_group_required) else stringResource(R.string.ai_data_notice),
                     modifier = Modifier.padding(12.dp),
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = if (aiBlockedByPersonalGroup) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
                     fontSize = 13.sp
                 )
             }
@@ -113,7 +116,7 @@ fun AiChatScreen(viewModel: AiChatViewModel) {
                         inputText = ""
                     }),
                     maxLines = 4,
-                    enabled = !viewModel.isLoading
+                    enabled = !viewModel.isLoading && !aiBlockedByPersonalGroup
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(
@@ -121,7 +124,7 @@ fun AiChatScreen(viewModel: AiChatViewModel) {
                         viewModel.sendMessage(inputText)
                         inputText = ""
                     },
-                    enabled = inputText.isNotBlank() && !viewModel.isLoading
+                    enabled = inputText.isNotBlank() && !viewModel.isLoading && !aiBlockedByPersonalGroup
                 ) {
                     Icon(
                         Icons.Default.Send,

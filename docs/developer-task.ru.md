@@ -14,13 +14,14 @@ Sheepfold — OpenWRT-пакет для семейного управления 
 ## Порядок чтения документации
 
 1. **Этот файл** — общая ориентация.
-2. [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) — детальный плейбук для AI: продуктовые решения, архитектурные ограничения, правила реализации.
-3. [`docs/product-requirements.md`](product-requirements.md) — полные требования к продукту.
-4. [`docs/backend-design.ru.md`](backend-design.ru.md) — архитектура бэкенда роутера, API-эндпоинты, UCI-структура.
-5. [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента, сопряжение, детский APK.
-6. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
-7. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
-8. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения.
+2. [`docs/agent-environment.ru.md`](agent-environment.ru.md) — локальное окружение Codex Desktop на Windows, нужные программы, сборка IPK/APK и команды проверок.
+3. [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) — детальный плейбук для AI: продуктовые решения, архитектурные ограничения, правила реализации.
+4. [`docs/product-requirements.md`](product-requirements.md) — полные требования к продукту.
+5. [`docs/backend-design.ru.md`](backend-design.ru.md) — архитектура бэкенда роутера, API-эндпоинты, UCI-структура.
+6. [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента, сопряжение, детский APK.
+7. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
+8. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
+9. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения.
 
 ---
 
@@ -85,6 +86,7 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 │       └── Makefile
 ├── docs/                     # Документация
 │   ├── agent-playbook.ru.md  # Плейбук для AI
+│   ├── agent-environment.ru.md # Codex Desktop на Windows: окружение и команды
 │   ├── backend-design.ru.md  # Архитектура бэкенда ← читать обязательно
 │   ├── android-config.ru.md  # Android-конфигурация ← читать обязательно
 │   ├── testing-cases.ru.md   # Тест-кейсы ← прогнать перед PR
@@ -147,6 +149,7 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 | Документ | Назначение |
 |---|---|
 | [`AGENTS.md`](../AGENTS.md) | Правила для AI-агентов |
+| [`docs/agent-environment.ru.md`](agent-environment.ru.md) | Локальное окружение Codex Desktop на Windows и команды проверок |
 | [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) | Детальный плейбук |
 | [`docs/product-requirements.md`](product-requirements.md) | Полные требования |
 | [`docs/backend-design.ru.md`](backend-design.ru.md) | Архитектура бэкенда |

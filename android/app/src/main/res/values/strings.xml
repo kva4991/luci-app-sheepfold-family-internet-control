@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Овчарня</string>
+    <string name="app_name">Sheepfold</string>
     <string name="app_tagline">Семейный интернет-контроль</string>
 
     <string name="tab_control">Управление</string>
@@ -94,6 +94,9 @@
     <string name="router_internet_enabled">Интернет включён на роутере</string>
     <string name="router_refresh_failed">Не удалось обновить данные</string>
     <string name="router_info_title">Информация о роутере</string>
+    <string name="widget_internet_enabled">Виджет включения интернета Sheepfold</string>
+    <string name="widget_internet_disabled">Виджет отключения интернета Sheepfold</string>
+    <string name="widget_internet_switch">Виджет управления интернетом Sheepfold</string>
 
     <string name="action_ok">ОК</string>
     <string name="action_cancel">Отмена</string>

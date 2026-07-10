@@ -405,11 +405,17 @@ write_detection() {
 }
 
 scan_devices() {
+        scan_scope="${1:-full}"
         mode="$(global_get detection_mode full)"
+        effective_mode="$mode"
         max_hosts="$(global_get detector_max_hosts_per_scan 16)"
         min_confidence="$(global_get detector_min_device_type_confidence 70)"
         now="$(date +%s)"
         scanned=0
+
+        # DHCP-события должны быть быстрыми: обновляем аренды, ARP, DHCP/mDNS-сигналы,
+        # а тяжёлые проверки портов оставляем для контрольного прохода раз в 15 минут.
+        [ "$scan_scope" = "changed" ] && effective_mode="reduced"
 
         case "$max_hosts" in ''|*[!0-9]*) max_hosts=16 ;; esac
         case "$min_confidence" in ''|*[!0-9]*) min_confidence=70 ;; esac
@@ -454,8 +460,8 @@ scan_devices() {
                 fi
 
                 ports="$stored_ports"
-                if [ "$mode" = "full" ] && [ "$scanned" -lt "$max_hosts" ]; then
-                        ports="$(scan_ports "$ip" "$mode" || true)"
+                if [ "$effective_mode" = "full" ] && [ "$scanned" -lt "$max_hosts" ]; then
+                        ports="$(scan_ports "$ip" "$effective_mode" || true)"
                         scanned=$((scanned + 1))
                 fi
                 write_detection "$mac" "$ip" "$name" "$sources" "$ports" "$mdns_services" "$now"
@@ -471,7 +477,7 @@ scan_devices() {
 
 case "$COMMAND" in
         scan|run|once)
-                scan_devices
+                scan_devices "${2:-full}"
                 ;;
         status)
                 [ -r "$CACHE_FILE" ] && cat "$CACHE_FILE"

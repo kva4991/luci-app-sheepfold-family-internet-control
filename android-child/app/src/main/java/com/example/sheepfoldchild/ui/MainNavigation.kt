@@ -60,7 +60,7 @@ fun MainNavigation(statusViewModel: ChildStatusViewModel, appContext: android.co
             when (selectedTab) {
                 0 -> ChildStatusScreen(viewModel = statusViewModel)
                 1 -> AccessInfoScreen(status = latestStatus)
-                2 -> AiChatScreen(viewModel = aiViewModel)
+                2 -> AiChatScreen(viewModel = aiViewModel, status = latestStatus)
             }
         }
     }

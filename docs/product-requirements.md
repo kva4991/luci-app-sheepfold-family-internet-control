@@ -109,7 +109,8 @@ Requirements:
 - DeepSeek should be the preferred default provider in countries where it is allowed and reachable;
 - users should be able to choose another provider when it is allowed in the selected router country;
 - provider options must change according to the selected router country profile;
-- API keys must be stored securely on Android;
+- Android must not call DeepSeek, Gemini, or other LLM providers directly; AI requests go through the router-side Sheepfold proxy endpoint (§xaji0y6);
+- provider API keys must be stored on the router in Sheepfold settings, while Android Keystore is used only for local Android secrets such as the admin Bearer token, pairing data, and local app lock (§dpbhsah);
 - MAC addresses, IP addresses, child names, device names, family details, logs, device lists, and router settings must not be sent to the AI provider without a separate explicit confirmation;
 - Android may offer a limited router diagnostics snapshot to the AI assistant only after showing the parent a preview. This diagnostics snapshot must not include Wi-Fi passwords, bot tokens, API keys, session cookies, child names, MAC addresses, device lists, or logs.
 - the assistant may recommend router/app settings, but must not perform actions without explicit parent confirmation;
@@ -309,7 +310,7 @@ until bedtime
 
 Default bedtime: `21:00`. Bedtime should be configurable in schedule settings.
 
-The Android app is for parent/admin devices only. Sheepfold should not require installing an app on children's phones.
+The main Android app is for parent/admin devices only. Sheepfold must not require installing an app on children's phones for enforcement, because router decisions rely on router-visible data. A separate optional `android-child/` client may show only the child's own router-computed status and explicitly allowed helper flows (§z5ck8mv).
 
 An optional client-facing blocked-page placeholder should be served locally by the router instead of endless page loading. This is not a child control interface; it is only a simple explanation that internet access is currently unavailable. The placeholder text must be configurable by the parent/admin. Non-browser clients must also receive a bounded response: POST/PUT/PATCH/DELETE requests should get a machine-readable 403 JSON response when possible, and game consoles, robot vacuums, speakers, and other IoT devices should get a short predictable response instead of hanging indefinitely.
 

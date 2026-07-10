@@ -92,7 +92,7 @@
 Тег ставится **в тексте абзаца** в скобках, но не в заголовке.
 
 ```markdown
-API-ключи хранятся через Android Keystore (§dpbhsah), никогда не передаются в UCI на роутер.
+AI-запросы идут через роутерный proxy, а ключи провайдера хранятся на роутере (§dpbhsah).
 ```
 
 ### В shell-скриптах
@@ -135,16 +135,16 @@ grep -r '§xaji0y6' .
 
 | Тег | Имя | Тип | Описание |
 |-----|-----|-----|--------|
-| `§xaji0y6` | AI_NO_DIRECT_LLM | архитектура | Android **не ходит напрямую** к LLM — все через `/cgi-bin/sheepfold-api/ai-assistant`. Тег означает: здесь реализуется или проверяется эта прослойка. Файлы: `ai-assistant.ru.md` |
-| `§dpbhsah` | AI_KEYSTORE | безопасность | API-ключи LLM через Android Keystore, **не в UCI**. Тег: здесь работа с хранилищем ключей. Файлы: `ai-assistant.ru.md` |
+| `§xaji0y6` | AI_NO_DIRECT_LLM | архитектура | Android **не ходит напрямую** к LLM — все через `/cgi-bin/sheepfold-api/ai-assistant`. Тег означает: здесь реализуется или проверяется эта прослойка. Файлы: `ai-assistant.ru.md`, `ai-assistant.md`, `ai-dev-guide.ru.md`, `product-requirements.md` |
+| `§dpbhsah` | AI_PROVIDER_KEYS_ON_ROUTER | безопасность | API-ключи LLM хранятся **на роутере в UCI Sheepfold**, потому что Android ходит к LLM только через роутерный proxy endpoint. Android Keystore хранит локальные Android-секреты, но не provider keys. Файлы: `ai-assistant.ru.md`, `ai-assistant.md`, `ai-dev-guide.ru.md`, `product-requirements.md` |
 | `§y41iblj` | AI_ENDPOINT_STUB | статус | `/ai-assistant` сейчас **заглушка** — authenticated API и role-based auth не завершены. Тег: этот код зависит от заглушки и нуждается в обновлении. |
 | `§ikcidkw` | AI_MODEL_CONFIG | конфиг | Имена моделей **не зашиты в код** — в конфиге провайдера. Тег: здесь читается/записывается model ID. Файлы: `ai-assistant.ru.md` |
 | `§t3w5uzb` | AI_PROVIDERS_COUNTRY | конфиг | Провайдеры LLM зависят от **country profile** роутера. Тег: здесь фильтруются провайдеры по стране. Файлы: `ai-assistant.ru.md`, `ai-dev-guide.ru.md` |
 | `§nnhj7xv` | AI_PROMPT_REVIEW | процесс | Промпт перед production должен пройти **ревью семейного психолога**. Тег: это место связано с промптом. Файлы: `ai-assistant.ru.md` |
-| `§pm3kq7r` | CAMELCASE_STYLE | стиль | Стиль проекта — **camelCase**, не snake_case. Все новые UCI-поля, JSON-ключи, переменные в sh — camelCase. Переименование существующих — с осторожностью (нужна миграция). Файлы: `ai-dev-guide.ru.md` |
+| `§pm3kq7r` | NAMING_BY_LAYER | стиль | Именование зависит от слоя: JS/Kotlin/JSON — camelCase; OpenWrt UCI, shell и Makefile — нативный стиль OpenWrt (`snake_case`, shell-переменные, Makefile uppercase). Переименование существующих UCI-полей — только с миграцией. Файлы: `ai-dev-guide.ru.md` |
 | `§vq8xb5d` | AI_OWNERSHIP_THRESHOLD | конфиг | Порог автоназначения владельца устройства (85%) — субъективен. Должен быть в UCI: `sheepfold.global.aiOwnershipAutoAssignThreshold`. Файлы: `ai-dev-guide.ru.md` |
 | `§kj2n6wt` | AI_CHILD_SAFETY_URGENT | безопасность | Уровень `urgent` в child-safety требует **двойной проверки** (второй ИИ-запрос) перед отправкой уведомления. Файлы: `ai-dev-guide.ru.md` |
-| `§c9rf1pe` | AI_PROVIDER_TAB_VISIBLE | UX | Вкладка ИИ-помощника показывается в APK **только если настроен хотя бы один провайдер** (`aiProviderOpenAiKey` / `aiProviderGeminiKey` / `aiProviderYandexGptKey` непустой). Файлы: `ai-dev-guide.ru.md` |
+| `§c9rf1pe` | AI_PROVIDER_TAB_VISIBLE | UX | Вкладка ИИ-помощника может показываться в APK, если на роутере настроен AI-provider. Для детского APK отправка вопроса разрешается только после router-side проверки: устройство зарегистрировано, не админское, не в blocklist, есть родительское согласие и устройство состоит в личной группе. Иначе показывается понятный баннер. Файлы: `ai-dev-guide.ru.md` |
 
 ### Безопасность передачи данных ИИ
 
@@ -166,7 +166,7 @@ grep -r '§xaji0y6' .
 | `§h75lxo6` | API_BEARER_TOKEN | безопасность | Каждый запрос проверяет Bearer-токен, хранящийся как HMAC-хэш. Тег: здесь проверка токена. Файлы: `backend-design.ru.md` |
 | `§qjiujv6` | API_CONFIRM_TOKEN | безопасность | reboot, update, global-block, clear-log требуют отдельный `confirm`-токен. Тег: это «опасное» действие. Файлы: `backend-design.ru.md` |
 | `§oh9sdbd` | API_NO_SECRETS_RESPONSE | безопасность | `router-info` не включает пароли, токены, MAC, имена детей. Тег: здесь формируется ответ API. Файлы: `backend-design.ru.md` |
-| `§b5wkq2e` | API_CLIENT_STATUS_NO_TOKEN | безопасность | `/client-status` не требует Bearer-токена — идентифицирует устройство по IP из DHCP. Это исключение из общего правила токенов. Тег: здесь логика исключения или её последствия. Файлы: `backend-design.ru.md` |
+| `§b5wkq2e` | API_CLIENT_STATUS_NO_TOKEN | безопасность | `/client-status` не требует Bearer-токена — идентифицирует устройство по IP из DHCP. Это исключение из общего правила токенов. Тег: здесь логика исключения или её последствия. Файлы: `backend-design.ru.md`, `apps/android-child-app-ru.md` |
 
 ---
 
@@ -253,7 +253,7 @@ grep -r '§xaji0y6' .
 | `§r2at5nq` | PLAYBOOK_SINGLE_MESSENGER_ADAPTER | архитектура | Один роутер — один активный messenger adapter. Файлы: `agent-playbook.ru.md` |
 | `§t4lq9bw` | PLAYBOOK_AI_ADVISES_NOT_ACTS | безопасность/AI | ИИ-помощник не управляет роутером сам; он советует, а действия применяются только после явного подтверждения parent/admin. Файлы: `agent-playbook.ru.md` |
 | `§u6fj2sr` | PLAYBOOK_AI_NO_AUTO_SENSITIVE_CONTEXT | приватность/AI | MAC/IP/device names/child names/family details/logs/device lists/router settings не отправляются AI автоматически. Файлы: `agent-playbook.ru.md` |
-| `§z5ck8mv` | PLAYBOOK_ANDROID_PARENT_ONLY | Android | Android-приложение ставится только на телефоны родителей-администраторов, не на телефоны детей. Файлы: `agent-playbook.ru.md` |
+| `§z5ck8mv` | PLAYBOOK_ANDROID_PARENT_ADMIN | Android | Основное Android-приложение `android/` — только для телефонов родителей-администраторов. Детское приложение живёт отдельно в `android-child/`, не имеет административных функций и получает только собственный статус через `/client-status`. Файлы: `agent-playbook.ru.md`, `AGENTS.md`, `security.md`, `product-requirements.md` |
 
 ---
 

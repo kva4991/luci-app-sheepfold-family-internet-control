@@ -119,7 +119,9 @@ case "$COMMAND" in
                                 [ "$WATCH_INTERVAL" -lt 5 ] && WATCH_INTERVAL=5
 
                                 if [ -r "$LEASES_FILE" ]; then
-                                        LEASES_STATE="$(wc -c "$LEASES_FILE" 2>/dev/null | awk '{ print $1 }')-$(sed -n '$p' "$LEASES_FILE" 2>/dev/null)"
+                                        # Сравниваем весь файл аренд, а не только размер и последнюю строку:
+                                        # dnsmasq может обновить середину файла, и родитель ждёт реакции сразу.
+                                        LEASES_STATE="$(cksum "$LEASES_FILE" 2>/dev/null | awk '{ print $1 "-" $2 }')"
                                 else
                                         LEASES_STATE="missing"
                                 fi
@@ -130,10 +132,12 @@ case "$COMMAND" in
                                 fi
 
                                 if [ "$LEASES_STATE" != "$LAST_LEASES_STATE" ] || [ "$SIGNALS_CHANGED" = "1" ]; then
-                                        if run_detector scan changed >/dev/null 2>&1; then
+                                        SCAN_SCOPE=changed
+                                        [ "$LAST_FULL_SCAN" -eq 0 ] && SCAN_SCOPE=full
+                                        if run_detector scan "$SCAN_SCOPE" >/dev/null 2>&1; then
                                                 [ "$SIGNALS_CHANGED" = "1" ] && finish_signal_change
                                                 LAST_LEASES_STATE="$LEASES_STATE"
-                                                LAST_FULL_SCAN="$NOW"
+                                                [ "$SCAN_SCOPE" = "full" ] && LAST_FULL_SCAN="$NOW"
                                         elif [ "$SIGNALS_CHANGED" = "1" ]; then
                                                 restore_signal_change
                                         fi

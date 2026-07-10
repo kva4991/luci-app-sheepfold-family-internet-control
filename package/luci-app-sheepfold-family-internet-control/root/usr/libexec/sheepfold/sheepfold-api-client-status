@@ -37,6 +37,35 @@ device_section_for_mac() {
     return 1
 }
 
+personal_group_for_device() {
+    section="$1"
+    mac="$(normalize_mac "$2")"
+    device_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+
+    # Это подсказка для детского APK, а не источник доверия. Финальную проверку
+    # при каждом запросе выполняет sheepfold-ai-gate.
+    for group_section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=personal_group$/\1/p'); do
+        for existing in $(uci -q get "sheepfold.$group_section.deviceMac" 2>/dev/null || true); do
+            [ "$(normalize_mac "$existing")" = "$mac" ] || continue
+            uci -q get "sheepfold.$group_section.displayName" 2>/dev/null || \
+                uci -q get "sheepfold.$group_section.name" 2>/dev/null || \
+                printf '%s' "$group_section"
+            return 0
+        done
+    done
+
+    [ -n "$device_group" ] || return 1
+    for group_section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=group$/\1/p'); do
+        [ "$(uci -q get "sheepfold.$group_section.personal" 2>/dev/null || printf 0)" = 1 ] || continue
+        group_name="$(uci -q get "sheepfold.$group_section.name" 2>/dev/null || printf '%s' "$group_section")"
+        [ "$device_group" = "$group_section" ] || [ "$device_group" = "$group_name" ] || continue
+        printf '%s' "$group_name"
+        return 0
+    done
+
+    return 1
+}
+
 remote_ip="${REMOTE_ADDR:-${1:-}}"
 output="$(/usr/libexec/sheepfold/sheepfold-router-control client-status "$remote_ip" 2>/dev/null || true)"
 status="$(kv_get status "$output")"
@@ -97,10 +126,12 @@ device_id="$device_section"
 device_name=""
 is_administrator=0
 client_role=child
+personal_group_name=""
 if [ -n "$device_section" ]; then
     device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || printf '%s' "$device_section")"
     device_name="$(uci -q get "sheepfold.$device_section.name" 2>/dev/null || true)"
     is_administrator="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
+    personal_group_name="$(personal_group_for_device "$device_section" "$mac" 2>/dev/null || true)"
     if [ "$is_administrator" = 1 ]; then
         client_role=parent
     else
@@ -110,6 +141,18 @@ fi
 if [ -z "$device_name" ] && [ -r /tmp/dhcp.leases ]; then
     device_name="$(awk -v ip="$remote_ip" '$3 == ip { print $4; exit }' /tmp/dhcp.leases)"
     [ "$device_name" != "*" ] || device_name=""
+fi
+
+ai_enabled="$(uci -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)"
+child_ai_consent="$(uci -q get sheepfold.global.child_ai_parental_consent 2>/dev/null || printf 0)"
+child_ai_allowed=0
+personal_group_required=0
+if [ "$client_role" = child ] && [ "$ai_enabled" = 1 ] && [ "$child_ai_consent" = 1 ]; then
+    if [ -n "$personal_group_name" ]; then
+        child_ai_allowed=1
+    else
+        personal_group_required=1
+    fi
 fi
 
 minutes_remaining=null
@@ -131,6 +174,9 @@ printf '"deviceId":"%s",' "$(json_escape "$device_id")"
 printf '"deviceName":"%s",' "$(json_escape "$device_name")"
 printf '"isAdministrator":%s,' "$([ "$is_administrator" = 1 ] && printf true || printf false)"
 printf '"clientRole":"%s",' "$(json_escape "$client_role")"
+printf '"personalGroupName":"%s",' "$(json_escape "$personal_group_name")"
+printf '"childAiAllowed":%s,' "$([ "$child_ai_allowed" = 1 ] && printf true || printf false)"
+printf '"personalGroupRequired":%s,' "$([ "$personal_group_required" = 1 ] && printf true || printf false)"
 printf '"internetState":"%s",' "$(json_escape "$internet_state")"
 printf '"accessMode":"%s",' "$(json_escape "$access_mode")"
 if [ -n "$access_ends_at" ]; then

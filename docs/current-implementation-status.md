@@ -1,11 +1,11 @@
 # Current Implementation Status
 
-Last checked: 2026-07-06.
+Last checked: 2026-07-10.
 
 Current OpenWRT package version in the repository:
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-100_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-125_all.ipk
 ```
 
 The package uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries.

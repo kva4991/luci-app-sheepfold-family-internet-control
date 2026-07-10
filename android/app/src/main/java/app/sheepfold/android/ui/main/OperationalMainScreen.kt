@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import app.sheepfold.android.R
 import app.sheepfold.android.router.AiAssistantClient
 import app.sheepfold.android.router.AiAssistantRequest
+import app.sheepfold.android.router.bearerToken
 import app.sheepfold.android.router.RouterAdminClient
 import app.sheepfold.android.router.RouterConnectionRequest
 import app.sheepfold.android.router.RouterDevice

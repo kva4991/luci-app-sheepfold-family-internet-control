@@ -1,6 +1,6 @@
 # Android App
 
-The Android companion app is planned under the name **Овчарня**.
+The Android companion app is planned under the public name **Sheepfold**.
 
 - Android package: `app.sheepfold.android`
 - Minimum Android version: Android 9.0 Pie
