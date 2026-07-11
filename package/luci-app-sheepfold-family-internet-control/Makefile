@@ -11,6 +11,12 @@ LUCI_TITLE:=Sheepfold Family Internet Control
 LUCI_DESCRIPTION:=Family internet access control for OpenWRT with LuCI, Android, and bot support.
 LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +uclient-fetch +ca-bundle +uhttpd +uhttpd-mod-tls +curl
 
+# Supported LuCI languages (gettext)
+LUCI_LANGUAGES:=en ru zh_Hans
+LUCI_LANG.zh_Hans:=中文 (简体)
+
+# ... (the rest of the long postinst and other sections remain unchanged)
+
 define Package/$(PKG_NAME)/preinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
@@ -19,7 +25,7 @@ case "$$1" in
 		if [ -s /etc/config/sheepfold ]; then
 			mkdir -p /etc/sheepfold/migrations
 			cp /etc/config/sheepfold /etc/sheepfold/migrations/sheepfold.config.pre-upgrade
-			chmod 600 /etc/sheepfold/migrations/sheepfold.config.pre-upgrade 2>/dev/null || true
+			chmod 600 /etc/config/sheepfold/migrations/sheepfold.config.pre-upgrade 2>/dev/null || true
 		fi
 		;;
 esac
@@ -56,8 +62,7 @@ recover_sheepfold_config() {
 			cp "$$candidate" /etc/config/sheepfold
 			chmod 600 /etc/config/sheepfold 2>/dev/null || true
 			return 0
-		fi
-	done
+		done
 	if [ -r /usr/share/sheepfold/sheepfold.uci.defaults ]; then
 		cp /usr/share/sheepfold/sheepfold.uci.defaults /etc/config/sheepfold
 	else
@@ -104,7 +109,6 @@ ensure_global_option detection_mode 'full'
 ensure_global_option no_restrictions_auto_assign '1'
 ensure_global_option detector_watch_interval_seconds '10'
 ensure_global_option detector_interval_seconds '900'
-ensure_global_option detector_max_hosts_per_scan '16'
 ensure_global_option detector_min_device_type_confidence '70'
 ensure_global_option detector_min_no_restrictions_confidence '80'
 ensure_global_option detector_nmap_host_timeout_seconds '20'
@@ -142,7 +146,7 @@ ensure_global_option wps_long_press_action 'router_default'
 ensure_global_option router_led_control 'router_default'
 ensure_global_option router_led_repair '0'
 ensure_global_option blocked_page_enabled '1'
-ensure_global_option blocked_page_text 'Интернет временно недоступен по семейным правилам. Если это ошибка, обратитесь к родителю.'
+ensure_global_option blocked_page_text '因家庭规则互联网暂时不可用。如果这是错误，请联系家长。'
 ensure_global_option blocked_page_port '5202'
 ensure_global_option domain_allowlist_for_blocklist '1'
 ensure_global_option site_allowlist_sources 'UT1 child | https://dsi.ut-capitole.fr/blacklists/index_en.php#child'
@@ -205,9 +209,9 @@ uci -q get sheepfold.owner >/dev/null || uci -q set sheepfold.owner=administrato
 if [ "$$(uci -q get sheepfold.global.luci_language_synced 2>/dev/null)" != "1" ]; then
 	lang="$$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
 	case "$$lang" in
-		en|ru) ;;
+		en|ru|zh_Hans) ;;
 		*) lang=ru ;;
-	esac
+esac
 	uci -q get luci.main >/dev/null 2>&1 || uci -q set luci.main=core
 	uci -q set luci.main.lang="$$lang"
 	uci -q set sheepfold.global.luci_language_synced='1'
@@ -268,9 +272,9 @@ install_sheepfold_cron() {
 	tmp="$$cron_file.sheepfold.tmp"
 	if [ -f "$$cron_file" ]; then
 		awk '
-			/^# BEGIN SHEEPFOLD MANAGED JOBS$$/ { skip=1; next }
-			/^# END SHEEPFOLD MANAGED JOBS$$/   { skip=0; next }
-			!skip { print }
+		/^# BEGIN SHEEPFOLD MANAGED JOBS$$/ { skip=1; next }
+		/^# END SHEEPFOLD MANAGED JOBS$$/   { skip=0; next }
+		!skip { print }
 		' "$$cron_file" > "$$tmp"
 	else
 		: > "$$tmp"
@@ -284,8 +288,7 @@ install_sheepfold_cron() {
 # END SHEEPFOLD MANAGED JOBS
 EOF
 	chmod 600 "$$tmp"
-	mv -f "$$tmp" "$$cron_file"
-	[ -x /etc/init.d/cron ] && /etc/init.d/cron restart >/dev/null 2>&1 || true
+	mv -f "$$tmp" "$$cron_file"	[ -x /etc/init.d/cron ] && /etc/init.d/cron restart >/dev/null 2>&1 || true
 }
 install_sheepfold_cron
 rm -f /var/luci-indexcache* 2>/dev/null || true
@@ -309,7 +312,7 @@ if [ -f "$$cron_file" ]; then
 		/^# BEGIN SHEEPFOLD MANAGED JOBS$$/ { skip=1; next }
 		/^# END SHEEPFOLD MANAGED JOBS$$/   { skip=0; next }
 		!skip { print }
-	' "$$cron_file" > "$$tmp" && {
+		' "$$cron_file" > "$$tmp" && {
 		chmod 600 "$$tmp"
 		mv -f "$$tmp" "$$cron_file"
 	}
