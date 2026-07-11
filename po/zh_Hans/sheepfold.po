@@ -1,0 +1,113 @@
+# Chinese (Simplified) translations for Sheepfold Family Internet Control
+# Copyright (C) 2026 kva4991
+# This file is distributed under the same license as the Sheepfold package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: luci-app-sheepfold-family-internet-control 0.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-11 20:00+0000\n"
+"PO-Revision-Date: 2026-07-11 20:46+0800\n"
+"Last-Translator: Grok (xAI) <grok@x.ai>\n"
+"Language-Team: Chinese (Simplified) <zh@li.org>\n"
+"Language: zh_Hans\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# This is an initial/ starter translation file for zh_Hans.
+# Full translation can be completed by running msgmerge on the .pot template
+# and then translating the remaining strings, or using AI-assisted translation.
+# Key terms translated according to project guidelines (Sheepfold remains 'Sheepfold').
+
+msgid "Sheepfold Family Internet Control"
+msgstr "Sheepfold 家庭互联网控制"
+
+msgid "Family internet access control for OpenWRT with LuCI, Android, and bot support."
+msgstr "基于 OpenWRT 的家庭互联网访问控制系统，支持 LuCI、Android 和机器人集成。"
+
+msgid "Save"
+msgstr "保存"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Add"
+msgstr "添加"
+
+msgid "Delete"
+msgstr "删除"
+
+msgid "Edit"
+msgstr "编辑"
+
+msgid "Allowlist"
+msgstr "白名单"
+
+msgid "Blocklist"
+msgstr "黑名单"
+
+msgid "All devices"
+msgstr "所有设备"
+
+msgid "User lists"
+msgstr "用户列表"
+
+msgid "No restrictions"
+msgstr "无限制"
+
+msgid "Child"
+msgstr "儿童"
+
+msgid "Parent"
+msgstr "家长"
+
+msgid "Guest"
+msgstr "访客"
+
+msgid "Infrastructure"
+msgstr "基础设施"
+
+msgid "Smart home"
+msgstr "智能家居"
+
+msgid "Unknown device type"
+msgstr "未知设备类型"
+
+msgid "Internet temporarily unavailable due to family rules. If this is an error, contact a parent."
+msgstr "因家庭规则，互联网暂时不可用。如果这是错误，请联系家长。"
+
+msgid "Access to emergency-useful sites"
+msgstr "访问紧急有用网站"
+
+msgid "Device detection"
+msgstr "设备检测"
+
+msgid "Schedules"
+msgstr "时间表"
+
+msgid "Temporary access"
+msgstr "临时访问"
+
+msgid "+30 min"
+msgstr "+30 分钟"
+
+msgid "Language"
+msgstr "语言"
+
+msgid "Application language"
+msgstr "应用程序语言"
+
+msgid "Chinese (Simplified)"
+msgstr "中文（简体）"
+
+msgid "English"
+msgstr "英语"
+
+msgid "Russian"
+msgstr "俄语"
+
+# Add more translations as needed. Use msgmerge.sh to update from template.
+# For production, run the i18n scripts and provide high-quality translations for all msgids.
