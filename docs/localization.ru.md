@@ -93,11 +93,11 @@ LuCI подгружает переводы из **`/usr/lib/lua/luci/i18n/sheepf
 
 | Параметр | Где задаётся | Что влияет |
 | --- | --- | --- |
-| `sheepfold.global.language` | Установщик (`install.sh`), настройки приложения | Имена групп по умолчанию при первой установке, часть backend-текстов |
-| `luci.main.lang` | Установщик, настройки Sheepfold, системные настройки LuCI | Какой `.lmo` читает LuCI для `_()` |
-| `sheepfold.global.luci_language_synced` | `postinst`, `install.sh`, сохранение языка в LuCI | Флаг «язык LuCI уже синхронизирован с выбором при установке»; при `1` обновление пакета не перезаписывает `luci.main.lang` |
+| `sheepfold.global.language` | Установщик (`install.sh`), настройки приложения | Язык интерфейса Sheepfold (`sheepfold/i18n/<lang>.json`), имена групп по умолчанию, часть backend-текстов |
+| `luci.main.lang` | Установщик (`install.sh`), системные настройки LuCI | Язык **всего** LuCI (меню OpenWRT, системные экраны) |
+| `sheepfold.global.luci_language_synced` | `postinst`, `install.sh` | Флаг «язык LuCI уже синхронизирован с выбором при установке»; при `1` обновление пакета не перезаписывает `luci.main.lang` |
 
-Для русского интерфейса LuCI нужны **оба**: выбранный язык LuCI (`ru`) **и** установленный `sheepfold.ru.lmo`.
+Для русского интерфейса **Sheepfold** нужны `sheepfold.global.language=ru` и файл `sheepfold/i18n/ru.json` в пакете (плюс `sheepfold.ru.lmo` для совместимости с gettext LuCI). Язык роутера (`luci.main.lang`) при смене языка в настройках Sheepfold **не меняется**.
 
 ### Установка и English
 
@@ -110,7 +110,7 @@ LuCI подгружает переводы из **`/usr/lib/lua/luci/i18n/sheepf
 
 Для **английского** Sheepfold отдельный `sheepfold.en.lmo` не обязателен: msgid в `overview.js` уже на английском. Для **русского** без `sheepfold.ru.lmo` экран останется на msgid.
 
-Меню **всего** OpenWRT/LuCI (вне вкладок Sheepfold) может остаться на языке прошивки; Sheepfold синхронизирует только `luci.main.lang` для своих gettext-строк.
+Меню **всего** OpenWRT/LuCI (вне вкладок Sheepfold) остаётся на `luci.main.lang`. Sheepfold загружает свой каталог переводов по `sheepfold.global.language` через модуль `sheepfold/i18n.js`.
 
 ### Если после установки English UI всё ещё русский
 
@@ -125,11 +125,11 @@ uci commit luci
 rm -f /tmp/luci-* /var/luci-indexcache*
 ```
 
-Либо в Sheepfold: **Настройки → Язык приложения → English → Сохранить** (страница перезагрузится).
+Либо в Sheepfold: **Настройки → Язык приложения → English → Сохранить** (страница перезагрузится; меняется только `sheepfold.global.language`).
 
 Автотест: `tests/installLanguage.test.mjs`.
 
-В **настройках Sheepfold** («Язык приложения») при сохранении значение записывается и в `sheepfold.global.language`, и в `luci.main.lang`, затем страница перезагружается — как при `install.sh`. До сохранения экран остаётся на прежнем языке LuCI.
+В **настройках Sheepfold** («Язык приложения») при сохранении значение записывается только в `sheepfold.global.language`, затем страница перезагружается и подгружает `sheepfold/i18n/<lang>.json`. `luci.main.lang` не трогается. До сохранения экран остаётся на прежнем языке приложения.
 
 ### Что не переводить через gettext
 

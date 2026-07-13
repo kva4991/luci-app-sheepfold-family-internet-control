@@ -46,7 +46,7 @@
 - Строки в JS — только `_('English msgid')`; локальный словарь `T()` **не использовать** (см. [`CODING_RULES.md`](../CODING_RULES.md) §8.2).
 - Русский UI требует бинарного каталога **`/usr/lib/lua/luci/i18n/sheepfold.ru.lmo`** на роутере; без `.lmo` LuCI покажет английские msgid даже при русском языке браузера.
 - Тестовый IPK собирает `.lmo` через `scripts/po2lmo.py` (см. [`docs/agent-environment.ru.md`](agent-environment.ru.md)); тест `tests/testIpkI18n.test.mjs`.
-- Для русского UI нужны `luci.main.lang=ru` и `sheepfold.ru.lmo`. Настройка «Язык приложения» при **Сохранить** синхронизирует `sheepfold.global.language` и `luci.main.lang` и перезагружает страницу (см. [`docs/localization.ru.md`](localization.ru.md)).
+- Для русского UI Sheepfold нужны `sheepfold.global.language=ru` и `sheepfold/i18n/ru.json` (модуль `sheepfold/i18n.js`). `luci.main.lang` меняется только при установке (`install.sh` / `postinst`), не из настроек приложения (см. [`docs/localization.ru.md`](localization.ru.md)).
 
 ### Группы по умолчанию
 

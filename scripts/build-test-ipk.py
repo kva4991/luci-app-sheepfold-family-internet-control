@@ -4,6 +4,7 @@ import gzip
 import io
 import os
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -317,11 +318,27 @@ exit 0
 
 def bundled_i18n_files() -> list[tuple[str, bytes, int]]:
     files: list[tuple[str, bytes, int]] = []
-    po_path = PKG_DIR / "po/ru/sheepfold.po"
-    if po_path.is_file():
+    po_catalogs = [
+        ("ru", PKG_DIR / "po/ru/sheepfold.po"),
+        ("zh_Hans", ROOT_DIR / "po/zh_Hans/sheepfold.po"),
+    ]
+    for lang, po_path in po_catalogs:
+        if not po_path.is_file():
+            continue
         files.append((
-            "./usr/lib/lua/luci/i18n/sheepfold.ru.lmo",
+            f"./usr/lib/lua/luci/i18n/sheepfold.{lang}.lmo",
             compile_po(po_path),
+            0o644,
+        ))
+        json_path = PKG_DIR / f"htdocs/luci-static/resources/sheepfold/i18n/{lang}.json"
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [sys.executable, str(ROOT_DIR / "scripts/po2json.py"), str(po_path), str(json_path)],
+            check=True,
+        )
+        files.append((
+            f"./www/luci-static/resources/sheepfold/i18n/{lang}.json",
+            json_path.read_bytes(),
             0o644,
         ))
     return files

@@ -4,10 +4,15 @@
 'require uci';
 'require fs';
 'require ui';
+'require sheepfold.i18n as sheepfoldI18n';
 
 return view.extend({
 	load: function() {
-		return uci.load('sheepfold');
+		return uci.load('sheepfold').then(function() {
+			return sheepfoldI18n.installApplicationTranslator(
+				uci.get('sheepfold', 'global', 'language') || 'ru'
+			);
+		});
 	},
 
 	render: function() {

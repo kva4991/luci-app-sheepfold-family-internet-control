@@ -19,8 +19,8 @@ const makefile = readFileSync(makefilePath, 'utf8');
 
 test('AI assistant and router memory live in settings second-level tabs', () => {
   assert.match(overview, /settingsTabsSecondary/);
-  assert.match(overview, /\['ai',\s*_\('AI assistant'\)\]/);
-  assert.match(overview, /\['storage',\s*_\('Router memory management'\)\]/);
+  assert.match(overview, /\['ai',\s*'AI assistant'\]/);
+  assert.match(overview, /\['storage',\s*'Router memory management'\]/);
   assert.match(overview, /renderSettingsPanel\('ai',\s*this\.renderSettingsAi\(\)\)/);
   assert.match(overview, /renderSettingsPanel\('storage',\s*this\.renderSettingsStorage\(\)\)/);
   assert.match(overview, /sf-settings-tabs-secondary/);

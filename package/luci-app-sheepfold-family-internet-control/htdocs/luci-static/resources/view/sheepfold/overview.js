@@ -3,6 +3,7 @@
 'require ui';
 'require uci';
 'require fs';
+'require sheepfold.i18n as sheepfoldI18n';
 
 var devices = [];
 var NOT_CONFIGURED_GROUP = 'Not configured';
@@ -65,26 +66,26 @@ var routerInfoState = {
 };
 
 var tabs = [
-        ['users', _('User lists')],
-        ['management', _('User management')],
-        ['wifi', _('Wi-Fi')],
-        ['logs', _('Logs')],
-        ['settings', _('Settings')],
-        ['donation', _('Donation')]
+        ['users', 'User lists'],
+        ['management', 'User management'],
+        ['wifi', 'Wi-Fi'],
+        ['logs', 'Logs'],
+        ['settings', 'Settings'],
+        ['donation', 'Donation']
 ];
 
 var settingsTabsPrimary = [
-        ['info', _('Information')],
-        ['general', _('General')],
-        ['integrations', _('Integrations')],
-        ['messenger', _('Messenger')],
-        ['emergency', _('Emergency-useful sites')],
-        ['misc', _('Misc')]
+        ['info', 'Information'],
+        ['general', 'General'],
+        ['integrations', 'Integrations'],
+        ['messenger', 'Messenger'],
+        ['emergency', 'Emergency-useful sites'],
+        ['misc', 'Misc']
 ];
 
 var settingsTabsSecondary = [
-        ['ai', _('AI assistant')],
-        ['storage', _('Router memory management')]
+        ['ai', 'AI assistant'],
+        ['storage', 'Router memory management']
 ];
 
 function isKnownSettingsTab(tab) {
@@ -93,15 +94,15 @@ function isKnownSettingsTab(tab) {
 }
 
 var userListTabs = [
-        ['devices', _('All devices')],
-        ['allowlist', _('Allowlist')],
-        ['blocklist', _('Blocklist')]
+        ['devices', 'All devices'],
+        ['allowlist', 'Allowlist'],
+        ['blocklist', 'Blocklist']
 ];
 
 var managementTabs = [
-        ['schedules', _('Schedules')],
-        ['groups', _('Groups')],
-        ['admins', _('Administrators')]
+        ['schedules', 'Schedules'],
+        ['groups', 'Groups'],
+        ['admins', 'Administrators']
 ];
 
 function notify(message, level) {
@@ -4959,18 +4960,6 @@ function ensureSheepfoldNamedSection(section, type) {
         }
 }
 
-function normalizeApplicationLanguage(value) {
-        return String(value || '').trim() === 'en' ? 'en' : 'ru';
-}
-
-function ensureLuciMainSection() {
-        try {
-                uci.get('luci', 'main');
-        } catch (e) {
-                uci.set('luci', 'main', 'core');
-        }
-}
-
 function saveGlobalOptions(options) {
         var globalOptions = {};
         var usbOptions = {};
@@ -4993,13 +4982,8 @@ function saveGlobalOptions(options) {
                         globalOptions[key] = options[key];
         });
 
-        if (hasOwn(globalOptions, 'language')) {
-                globalOptions.language = normalizeApplicationLanguage(globalOptions.language);
-                ensureLuciMainSection();
-                uci.set('luci', 'main', 'lang', globalOptions.language);
-                if (configs.indexOf('luci') === -1)
-                        configs.push('luci');
-        }
+        if (hasOwn(globalOptions, 'language'))
+                globalOptions.language = sheepfoldI18n.normalizeApplicationLanguage(globalOptions.language);
 
         Object.keys(globalOptions).forEach(function (option) {
                 uci.set('sheepfold', 'global', option, globalOptions[option]);
@@ -6892,16 +6876,20 @@ return view.extend({
         load: function () {
                 var self = this;
 
-                return Promise.all([
+                return uci.load('sheepfold').then(function () {
+                        self.uciLoadState.sheepfold = true;
+                        return sheepfoldI18n.installApplicationTranslator(
+                                safeUciGet('sheepfold', 'global', 'language', 'ru')
+                        );
+                }, function () {
+                        self.uciLoadState.sheepfold = false;
+                        return sheepfoldI18n.installApplicationTranslator('ru');
+                }).then(function () {
+                        return Promise.all([
                         uci.load('wireless').then(function () {
                                 self.uciLoadState.wireless = true;
                         }, function () {
                                 self.uciLoadState.wireless = false;
-                        }),
-                        uci.load('sheepfold').then(function () {
-                                self.uciLoadState.sheepfold = true;
-                        }, function () {
-                                self.uciLoadState.sheepfold = false;
                         }),
                         uci.load('system').then(function () {
                                 self.uciLoadState.system = true;
@@ -6909,7 +6897,8 @@ return view.extend({
                                 self.uciLoadState.system = false;
                         }),
                         uci.load('dhcp')
-                ]).then(function () {
+                ]);
+                }).then(function () {
                         return Promise.all([
                                 fs.read('/tmp/dhcp.leases').catch(function () {
                                         return '';
@@ -7060,7 +7049,7 @@ return view.extend({
                                         ev.preventDefault();
                                         self.switchTab(ev.currentTarget, tab[0]);
                                 }
-                        }, tab[1]);
+                        }, _(tab[1]));
                 }));
         },
 
@@ -7092,7 +7081,7 @@ return view.extend({
                                         ev.preventDefault();
                                         self.switchSettingsTab(ev.currentTarget, tab[0]);
                                 }
-                        }, tab[1]);
+                        }, _(tab[1]));
                 }));
         },
 
@@ -7121,7 +7110,7 @@ return view.extend({
                                         ev.preventDefault();
                                         self.switchUserListTab(ev.currentTarget, tab[0]);
                                 }
-                        }, tab[1]);
+                        }, _(tab[1]));
                 }));
         },
 
@@ -7150,7 +7139,7 @@ return view.extend({
                                         ev.preventDefault();
                                         self.switchManagementTab(ev.currentTarget, tab[0]);
                                 }
-                        }, tab[1]);
+                        }, _(tab[1]));
                 }));
         },
 
@@ -7644,7 +7633,7 @@ return view.extend({
                         saveSelectGlobalField(_('Application language'), 'language', 'ru', [
                                 ['ru', _('Russian')],
                                 ['en', _('English')]
-                        ], null, null, _('Applies to the Sheepfold LuCI interface after you press Save. The page reloads automatically.')),
+                        ], null, null, _('Applies only to Sheepfold. Does not change the router LuCI language. The page reloads after Save.')),
                         appPortField(),
                         saveSelectGlobalField(_('New device behavior'), 'new_device_policy', 'allow', [
                                 ['allow', _('Allow internet by default')],

@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
 const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/view/sheepfold/overview.js');
+const i18nModulePath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n.js');
+const ruJsonPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n/ru.json');
 const poPath = resolve(packageDir, 'po/ru/sheepfold.po');
 
 function readProjectFile(path) {
@@ -51,7 +53,7 @@ describe('overview localization', () => {
     assert.doesNotMatch(source, /var translations\s*=/);
     assert.doesNotMatch(source, /function T\(/);
     assert.doesNotMatch(source, /\bT\(/);
-    assert.match(source, /_\('User lists'\)/);
+    assert.match(source, /_\('No settings changes to save\.'\)/);
     assert.match(source, /_\(status\)/);
     assert.match(source, /_\(entry\.message\)/);
   });
@@ -72,11 +74,22 @@ describe('overview localization', () => {
     assert.doesNotMatch(xgettext, /переходный словарь T\(\)/);
   });
 
-  it('syncs luci.main.lang when application language is saved', () => {
+  it('loads Sheepfold UI language from sheepfold.global.language without syncing luci.main.lang', () => {
     const source = readFileSync(overviewPath, 'utf8');
+    const i18nModule = readFileSync(i18nModulePath, 'utf8');
 
-    assert.match(source, /function normalizeApplicationLanguage/);
-    assert.match(source, /uci\.set\('luci', 'main', 'lang'/);
-    assert.match(source, /saveUciChanges\(configs\)/);
+    assert.match(source, /require sheepfold\.i18n as sheepfoldI18n/);
+    assert.match(source, /sheepfoldI18n\.installApplicationTranslator/);
+    assert.match(source, /sheepfoldI18n\.normalizeApplicationLanguage/);
+    assert.doesNotMatch(source, /uci\.set\('luci', 'main', 'lang'/);
+    assert.match(i18nModule, /installApplicationTranslator/);
+    assert.match(i18nModule, /sheepfold\/i18n\//);
+  });
+
+  it('ships client-side Russian catalog for Sheepfold-only gettext', () => {
+    const catalog = JSON.parse(readFileSync(ruJsonPath, 'utf8'));
+
+    assert.equal(catalog['User lists'], 'Списки пользователей');
+    assert.equal(catalog.Settings, 'Настройки');
   });
 });

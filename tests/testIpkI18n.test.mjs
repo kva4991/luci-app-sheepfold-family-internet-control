@@ -23,7 +23,7 @@ function buildTestIpk() {
 }
 
 describe('test IPK i18n bundle', () => {
-  it('ships sheepfold.ru.lmo so gettext _() can render Russian', () => {
+  it('ships sheepfold.ru.lmo and client-side ru.json for Sheepfold gettext', () => {
     const ipkPath = buildTestIpk();
     const list = spawnSync('python', ['-c', `
 import gzip, io, sys, tarfile
@@ -33,11 +33,13 @@ with tarfile.open(fileobj=io.BytesIO(raw), mode='r:') as outer:
     data = outer.extractfile('./data.tar.gz')
     with gzip.open(data, 'rb') as gz:
         with tarfile.open(fileobj=gz, mode='r:') as inner:
-            names = [name for name in inner.getnames() if 'sheepfold.ru.lmo' in name]
+            names = [name for name in inner.getnames()
+                     if 'sheepfold.ru.lmo' in name or 'sheepfold/i18n/ru.json' in name]
             print('\\n'.join(names))
 `, ipkPath], { encoding: 'utf8' });
 
     assert.equal(list.status, 0, list.stderr || list.stdout);
     assert.match(list.stdout, /usr\/lib\/lua\/luci\/i18n\/sheepfold\.ru\.lmo/);
+    assert.match(list.stdout, /www\/luci-static\/resources\/sheepfold\/i18n\/ru\.json/);
   });
 });

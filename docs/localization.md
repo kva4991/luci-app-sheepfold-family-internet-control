@@ -93,8 +93,8 @@ Test IPK builds compile `.lmo` via `scripts/po2lmo.py` (`scripts/build-test-ipk.
 
 | Setting | Source | Effect |
 | --- | --- | --- |
-| `sheepfold.global.language` | Installer (`install.sh`), app settings | Default group names on first install, some backend wording |
-| `luci.main.lang` | Installer, Sheepfold settings, LuCI system | Which `.lmo` LuCI loads for `_()` |
+| `sheepfold.global.language` | Installer (`install.sh`), app settings | Sheepfold UI language (`sheepfold/i18n/<lang>.json`), default group names, some backend wording |
+| `luci.main.lang` | Installer (`install.sh`), LuCI system settings | Language of the whole LuCI shell (OpenWRT menus, system pages) |
 | `sheepfold.global.luci_language_synced` | `postinst`, installer | One-time flag: install-time LuCI language was synced |
 
 Russian LuCI UI requires **both**: LuCI language `ru` **and** `sheepfold.ru.lmo` on the router.
@@ -107,7 +107,7 @@ Russian LuCI UI requires **both**: LuCI language `ru` **and** `sheepfold.ru.lmo`
 
 Regression test: `tests/installLanguage.test.mjs`.
 
-Installer “Application language” is synced to LuCI on first install (since 0.1.0-157). Changing language later: Sheepfold settings → Save, or manual `uci set luci.main.lang=…`.
+Installer “Application language” is synced to `luci.main.lang` on first install only (since 0.1.0-157). Changing Sheepfold language later: app settings → Save (updates `sheepfold.global.language` only). Router LuCI language: System → Language, or manual `uci set luci.main.lang=…`.
 
 ### Do not gettext-translate
 
