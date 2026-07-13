@@ -1108,6 +1108,9 @@ msgid "Engineering device"
 msgstr "Инженерное устройство"
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Chinese (Simplified)"
+msgstr "Китайский (упрощённый)"
+
 msgid "English"
 msgstr "Английский"
 

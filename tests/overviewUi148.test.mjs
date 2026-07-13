@@ -76,6 +76,6 @@ describe('overview UI release 148', () => {
     assert.match(po, /msgstr "Порт приложения"/);
     assert.match(po, /msgid "Site list update from allowlist and blocklist sources"/);
     assert.match(po, /msgstr "Обновление списков сайтов из белых и чёрных списков"/);
-    assert.match(makefile, /PKG_RELEASE:=160/);
+    assert.match(makefile, /PKG_RELEASE:=161/);
   });
 });

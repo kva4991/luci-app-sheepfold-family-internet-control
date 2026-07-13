@@ -81,6 +81,7 @@ describe('overview localization', () => {
     assert.match(source, /require sheepfold\.i18n as sheepfoldI18n/);
     assert.match(source, /sheepfoldI18n\.installApplicationTranslator/);
     assert.match(source, /sheepfoldI18n\.normalizeApplicationLanguage/);
+    assert.match(source, /\['zh_Hans',\s*_\('Chinese \(Simplified\)'\)\]/);
     assert.doesNotMatch(source, /uci\.set\('luci', 'main', 'lang'/);
     assert.match(i18nModule, /installApplicationTranslator/);
     assert.match(i18nModule, /sheepfold\/i18n\//);

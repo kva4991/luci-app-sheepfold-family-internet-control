@@ -7632,7 +7632,8 @@ return view.extend({
                 return E('div', { 'class': 'sf-flat-form' }, [
                         saveSelectGlobalField(_('Application language'), 'language', 'ru', [
                                 ['ru', _('Russian')],
-                                ['en', _('English')]
+                                ['en', _('English')],
+                                ['zh_Hans', _('Chinese (Simplified)')]
                         ], null, null, _('Applies only to Sheepfold. Does not change the router LuCI language. The page reloads after Save.')),
                         appPortField(),
                         saveSelectGlobalField(_('New device behavior'), 'new_device_policy', 'allow', [
