@@ -257,6 +257,7 @@ grep -r '§xaji0y6' .
 | `§u6fj2sr` | PLAYBOOK_AI_NO_AUTO_SENSITIVE_CONTEXT | приватность/AI | MAC/IP/device names/child names/family details/logs/device lists/router settings не отправляются AI автоматически. Файлы: `agent-playbook.ru.md` |
 | `§z5ck8mv` | PLAYBOOK_ANDROID_PARENT_ADMIN | Android | Основное Android-приложение `android/` — только для телефонов родителей-администраторов. Детское приложение живёт отдельно в `android-child/`, не имеет административных функций и получает только собственный статус через `/client-status`. Файлы: `agent-playbook.ru.md`, `AGENTS.md`, `security.md`, `product-requirements.md` |
 | `§mrgready` | MERGE_READINESS_PLAN | процесс разработки | Подробная контрольная точка и перечень обязательных проверок перед слиянием `editsByClaude` с `main`, включая причины и критерии готовности. Файл: `merge-readiness-plan.ru.md` |
+| `§revspot` | MERGE_CODE_REVIEW_HOTSPOTS | code review | Карта наиболее рискованных мест и инвариантов, которые надо проверить в коде перед слиянием: installer/UCI, API/auth, HTTPS/pairing, LuCI, Android, detector, AI, журнал и тесты. Файл: `merge-readiness-plan.ru.md` |
 
 ---
 
