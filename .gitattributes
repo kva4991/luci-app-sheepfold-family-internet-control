@@ -14,6 +14,7 @@ Makefile text eol=lf
 *.kt text eol=lf
 *.xml text eol=lf
 *.java text eol=lf
+*.po text eol=lf
 
 package/luci-app-sheepfold-family-internet-control/root/etc/config/* text eol=lf
 package/luci-app-sheepfold-family-internet-control/root/etc/hotplug.d/* text eol=lf

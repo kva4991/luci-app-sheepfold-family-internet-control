@@ -145,8 +145,8 @@ REMOTE_ADDR -> MAC -> UCI device -> server deviceId/admin_device
 
 Sheepfold поднимает отдельный uhttpd listener:
 
-- HTTPS: порт `5200` (основной для Android admin);
-- HTTP: порт `5201` (совместимость LuCI/legacy; admin APK **не** использует cleartext).
+- HTTPS: единый порт приложения `5201` (Android parent/child и локальный Sheepfold API);
+- Cleartext HTTP для Android API не используется.
 
 Android admin (0.1.0-155+):
 
@@ -179,6 +179,6 @@ API не должен открываться на WAN.
 - повторным запуском runtime hardening;
 - проверкой обновления без сброса ключевого материала;
 - проверкой отсутствия секретов в логах, UCI, QR и notice;
-- тестом HTTPS-first и LAN-only HTTP fallback;
+- тестом HTTPS-only и проверкой закреплённого сертификата;
 - тестом несовпадения deviceId/role/admin flag;
 - тестом отказа детскому AI без актуального родительского согласия.

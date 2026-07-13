@@ -28,6 +28,9 @@ describe('AI provider settings', () => {
     assert.match(overview, /settingValue\('ai_provider', 'none'\)/);
     assert.match(overview, /if \(provider === 'deepseek'\)/);
     assert.match(overview, /else if \(provider === 'gemini'\)/);
+    assert.match(overview, /else if \(provider === 'grok'\)/);
+    assert.match(defaults, /option grok_api_url 'https:\/\/api\.x\.ai\/v1\/chat\/completions'/);
+    assert.match(makefile, /ensure_global_option grok_api_key ''/);
     assert.match(overview, /return aiSettingsBox\(\)/);
   });
 
@@ -35,5 +38,15 @@ describe('AI provider settings', () => {
     const aiHandler = readProjectFile(aiHandlerPath);
 
     assert.doesNotMatch(aiHandler, /ai_provider.*printf deepseek/);
+  });
+
+  it('loads versioned prompts and sends Grok through the router proxy', () => {
+    const aiHandler = readProjectFile(aiHandlerPath);
+
+    assert.match(aiHandler, /load_system_prompt/);
+    assert.match(aiHandler, /parent_ai_prompt_version/);
+    assert.match(aiHandler, /child_ai_prompt_version/);
+    assert.match(aiHandler, /grok\)/);
+    assert.match(aiHandler, /grok_api_key_missing/);
   });
 });

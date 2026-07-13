@@ -208,6 +208,7 @@ devices_text_from_uci() {
 
         for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=device$/\1/p"); do
                 count=$((count + 1))
+                device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section")"
                 name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
                 mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
                 ip="$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)"
@@ -216,7 +217,7 @@ devices_text_from_uci() {
                 [ -n "$name" ] || name="$mac"
                 [ -n "$ip" ] || ip="IP неизвестен"
                 [ -n "$group" ] || group="Без группы"
-                output="${output}#${count} ${name}
+                output="${output}#${device_id} ${name}
 IP: ${ip}
 MAC: ${mac}
 Группа: ${group}
@@ -281,10 +282,9 @@ device_section_by_query() {
                         return 1
                         ;;
                 *)
-                        count=0
                         for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=device$/\1/p"); do
-                                count=$((count + 1))
-                                [ "$count" = "$query" ] && {
+                                device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section")"
+                                [ "$device_id" = "$query" ] && {
                                         printf '%s\n' "$section"
                                         return 0
                                 }
@@ -297,11 +297,12 @@ device_section_by_query() {
 
 device_label() {
         section="$1"
+        device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section")"
         name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
         mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
         ip="$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)"
         [ -n "$name" ] || name="$mac"
-        [ -n "$ip" ] && printf '%s (%s, %s)' "$name" "$ip" "$mac" || printf '%s (%s)' "$name" "$mac"
+        [ -n "$ip" ] && printf '#%s %s (%s, %s)' "$device_id" "$name" "$ip" "$mac" || printf '#%s %s (%s)' "$device_id" "$name" "$mac"
 }
 
 set_device_status_by_query() {

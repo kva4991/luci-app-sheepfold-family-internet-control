@@ -19,7 +19,8 @@ data class RouterDevice(
 
 data class RouterSnapshot(
     val routerName: String,
-    val diagnostics: Map<String, String>
+    val diagnostics: Map<String, String>,
+    val globalBlocked: Boolean
 )
 
 /** Все команды выполняются на роутере с Bearer-токеном, а не в локальном состоянии APK. */
@@ -53,6 +54,18 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
         )
     }
 
+    suspend fun allowDevice(mac: String) = deviceAction("allow", mac)
+
+    suspend fun blockDevice(mac: String) = deviceAction("block", mac)
+
+    suspend fun grantTemporaryAccess(mac: String, minutes: Int = 30) = withContext(Dispatchers.IO) {
+        request("POST", "/device/temp-access", mapOf("mac" to mac, "minutes" to minutes.toString()))
+    }
+
+    private suspend fun deviceAction(action: String, mac: String) = withContext(Dispatchers.IO) {
+        request("POST", "/device/$action", mapOf("mac" to mac))
+    }
+
     suspend fun loadRouterInfo(): RouterSnapshot = withContext(Dispatchers.IO) {
         val json = request("GET", "/router-info")
         val diagnosticsObject = json.optJSONObject("diagnostics")
@@ -65,7 +78,11 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
                 }
             }
         }
-        RouterSnapshot(json.optString("routerName", connection.routerName), diagnostics)
+        RouterSnapshot(
+            routerName = json.optString("routerName", connection.routerName),
+            diagnostics = diagnostics,
+            globalBlocked = diagnostics["globalBlocked"] == "1"
+        )
     }
 
     private fun request(
@@ -140,13 +157,7 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
     private fun candidateApiUrls(rawApiUrl: String): List<String> {
         val parsed = URL(rawApiUrl)
         val host = if (parsed.host.contains(':')) "[${parsed.host}]" else parsed.host
-        val explicitPort = parsed.port.takeIf { it > 0 }
-        val httpsPort = when {
-            parsed.protocol == "https" && explicitPort != null -> explicitPort
-            explicitPort == 5201 -> 5200
-            explicitPort != null -> explicitPort
-            else -> 5200
-        }
+        val httpsPort = parsed.port.takeIf { it > 0 } ?: 5201
         return listOf("https://$host:$httpsPort${parsed.path}")
     }
 

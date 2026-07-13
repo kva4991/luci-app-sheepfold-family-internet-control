@@ -13,6 +13,7 @@ CONTROL_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-router-control-legacy)"
 CLIENT_STATUS="$(path /usr/libexec/sheepfold/sheepfold-client-status-effective)"
 SERVICE="$(path /usr/libexec/sheepfold/sheepfold-service)"
 DEVICE_DETECTOR="$(path /usr/libexec/sheepfold/sheepfold-device-detector)"
+DEVICE_ID="$(path /usr/libexec/sheepfold/sheepfold-device-id)"
 DEVICE_CLASSIFIER="$(path /usr/libexec/sheepfold/sheepfold-device-classifier)"
 DEVICE_MDNS="$(path /usr/libexec/sheepfold/sheepfold-device-mdns)"
 DEVICE_MDNS_UCODE="$(path /usr/share/sheepfold/device-mdns.uc)"
@@ -23,6 +24,7 @@ LED_CONTROL="$(path /usr/libexec/sheepfold/sheepfold-led-control)"
 PAIR_ACTIVATE="$(path /usr/libexec/sheepfold/sheepfold-pair-activate)"
 PAIR_DEVICE="$(path /usr/libexec/sheepfold/sheepfold-pair-device)"
 PAIR_COMMON="$(path /usr/libexec/sheepfold/sheepfold-pair-common)"
+TOKEN_COMMON="$(path /usr/libexec/sheepfold/sheepfold-token-common)"
 PAIR_API="$(path /usr/libexec/sheepfold/sheepfold-api-pair)"
 STATUS_API="$(path /usr/libexec/sheepfold/sheepfold-api-client-status)"
 AI_GATE="$(path /usr/libexec/sheepfold/sheepfold-ai-gate)"
@@ -44,10 +46,10 @@ CUDY_FIX_UNINSTALL="$CUDY_PROFILE/fixLed/uninstall"
 
 for required in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
+    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
     "$DEVICE_MDNS_UCODE" "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" \
     "$DHCP_SIGNALS" "$LED_CONTROL" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-    "$PAIR_COMMON" "$PAIR_API" "$STATUS_API" "$AI_GATE" "$AI_HANDLER" \
+    "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$STATUS_API" "$AI_GATE" "$AI_HANDLER" \
     "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" \
     "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$ACL" "$PRIVACY_NOTICE" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND" \
@@ -58,7 +60,7 @@ done
 # Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно.
 for executable in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
+    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
     "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
     "$STATUS_API" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" \
     "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" \
@@ -67,7 +69,7 @@ for executable in \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
-chmod 0644 "$PAIR_COMMON" "$ACL" "$PRIVACY_NOTICE" "$DEVICE_MDNS_UCODE" \
+chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$ACL" "$PRIVACY_NOTICE" "$DEVICE_MDNS_UCODE" \
     "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND"
 
 mkdir -p "$(path /etc/sheepfold/tokens)"
@@ -100,7 +102,7 @@ block_checks="$(grep -c 'pair_list_has_mac blocklist' "$PAIR_DEVICE" || true)"
 ! grep -q 'remove.*blocklist\|delete.*blocklist' "$PAIR_DEVICE" || die "pairing can mutate blocklist"
 grep -q 'pair_store_token' "$PAIR_DEVICE" || die "successful pairing does not store a token hash"
 grep -q 'token_write_bound_file' "$PAIR_COMMON" || die "pairing does not store token device metadata"
-grep -q 'token_device_is_admin_paired' /usr/libexec/sheepfold/sheepfold-token-common || die "token device binding helper is missing"
+grep -q 'token_device_is_admin_paired' "$TOKEN_COMMON" || die "token device binding helper is missing"
 grep -q 'HTTP_X_SHEEPFOLD_DEVICE_ID' "$CGI" || die "API auth does not read bound device id"
 grep -q 'revoke-device-tokens' "$CONTROL" || die "per-device token revoke is missing"
 grep -q 'pair_valid_code' "$PAIR_COMMON" || die "pairing-code alphabet validation is missing"
@@ -131,7 +133,8 @@ grep -q 'detection_fingerprint' "$DEVICE_DETECTOR" || die "device fingerprint pe
 grep -q 'detection_policy_version' "$DEVICE_DETECTOR" || die "classification policy version is not persisted"
 grep -q 'device-detection.last-scan' "$DEVICE_DETECTOR" || die "runtime last-scan state is missing"
 assignment_calls="$(grep -c 'assign_no_restrictions_if_allowed "\$section"' "$DEVICE_DETECTOR" || true)"
-[ "$assignment_calls" -eq 1 ] || die "automatic group assignment can run outside a new classification"
+[ "$assignment_calls" -ge 1 ] || die "automatic group assignment is not connected"
+grep -q 'auto_configure="$(global_get auto_configure 1)"' "$DEVICE_DETECTOR" || die "automatic group assignment ignores auto-configure setting"
 ! grep -q 'revoke_unsafe_auto_assignment' "$DEVICE_DETECTOR" || die "automatic group rollback must not be present"
 grep -q 'classify <name>' "$DEVICE_DETECTOR" || die "detector regression interface is missing"
 
@@ -190,9 +193,9 @@ grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does 
 
 for script in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
+    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
     "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
-    "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+    "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do

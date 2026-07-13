@@ -110,8 +110,8 @@ device_id_for_mac() {
     for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
         existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
         [ "$(normalize_mac "$existing")" = "$wanted" ] || continue
-        device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || printf '%s' "$section")"
-        printf '%s' "$device_id" | tr -cd 'A-Za-z0-9_.-'
+        device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section" 2>/dev/null || true)"
+        printf '%s' "$device_id" | tr -cd '0-9'
         return 0
     done
     printf '%s' "$wanted" | tr -d ':' | tr '[:upper:]' '[:lower:]'

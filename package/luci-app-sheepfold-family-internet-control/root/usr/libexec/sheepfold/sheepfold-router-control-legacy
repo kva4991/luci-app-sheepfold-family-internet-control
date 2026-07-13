@@ -208,6 +208,7 @@ device_section_for_mac() {
                 local existing
                 existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
                 if [ "$(normalize_mac "$existing")" = "$mac" ]; then
+                        /usr/libexec/sheepfold/sheepfold-device-id ensure "$section" >/dev/null
                         printf '%s\n' "$section"
                         return 0
                 fi
@@ -217,6 +218,8 @@ device_section_for_mac() {
         local section
         section="device_$(printf '%s' "$mac" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
         uci -q get "sheepfold.$section" >/dev/null 2>&1 || uci -q set "sheepfold.$section=device"
+        uci -q set "sheepfold.$section.mac=$mac"
+        /usr/libexec/sheepfold/sheepfold-device-id ensure "$section" >/dev/null
         printf '%s\n' "$section"
 }
 
@@ -571,7 +574,8 @@ list_devices() {
         printf '['
 
         for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
-                local mac name ip group device_type device_status admin_device
+                local id mac name ip group device_type device_status admin_device
+                id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section")"
                 mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
                 [ -n "$mac" ] || continue
 
@@ -588,8 +592,8 @@ list_devices() {
                 safe_group="$(printf '%s' "$group" | sed 's/\\/\\\\/g; s/"/\\"/g')"
 
                 [ "$first" = "1" ] || printf ','
-                printf '{"mac":"%s","name":"%s","ip":"%s","group":"%s","deviceType":"%s","status":"%s","adminDevice":%s}' \
-                        "$mac" "$safe_name" "$ip" "$safe_group" "$device_type" "$device_status" \
+                printf '{"id":%s,"mac":"%s","name":"%s","ip":"%s","group":"%s","deviceType":"%s","status":"%s","adminDevice":%s}' \
+                        "$id" "$mac" "$safe_name" "$ip" "$safe_group" "$device_type" "$device_status" \
                         "$([ "$admin_device" = "1" ] && printf true || printf false)"
                 first=0
         done
@@ -614,6 +618,8 @@ device_allow() {
 
         local device_section
         device_section="$(device_section_for_mac "$device_mac")"
+        local device_id
+        device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || true)"
 
         # Администраторское устройство уже в белом списке — ничего не меняем.
         if [ "$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || true)" = "allow" ]; then
@@ -630,7 +636,7 @@ device_allow() {
         add_mac_to_list allowlist "$device_mac"
         uci -q commit sheepfold
 
-        log_event "Устройство добавлено в белый список через Android: $device_mac"
+        log_event "Устройство #${device_id} добавлено в белый список через Android: $device_mac"
         printf 'OK\n'
 }
 
@@ -645,6 +651,8 @@ device_block() {
 
         local device_section
         device_section="$(device_section_for_mac "$device_mac")"
+        local device_id
+        device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || true)"
 
         # Администраторское устройство нельзя заблокировать — иначе родитель потеряет доступ.
         if [ "$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)" = "1" ]; then
@@ -662,7 +670,7 @@ device_block() {
         remove_mac_from_list allowlist "$device_mac"
         uci -q commit sheepfold
 
-        log_event "Устройство заблокировано через Android: $device_mac"
+        log_event "Устройство #${device_id} заблокировано через Android: $device_mac"
         printf 'OK\n'
 }
 
@@ -679,6 +687,8 @@ device_temp_access() {
         repair_sheepfold_uci_sections
         local device_section
         device_section="$(device_section_for_mac "$device_mac")"
+        local device_id
+        device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || true)"
 
         local expires_at
         expires_at=$(( $(date +%s) + minutes * 60 ))
@@ -690,7 +700,7 @@ device_temp_access() {
         add_mac_to_list allowlist "$device_mac"
         uci -q commit sheepfold
 
-        log_event "Временный доступ выдан устройству $device_mac на $minutes мин."
+        log_event "Временный доступ выдан устройству #${device_id} $device_mac на $minutes мин."
         print_kv expires_at "$expires_at"
         print_kv minutes "$minutes"
         printf 'OK\n'
@@ -741,6 +751,8 @@ set_device_status() {
         ensure_list_section blocklist
         local device_section
         device_section="$(device_section_for_mac "$device_mac")"
+        local device_id
+        device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || true)"
 
         if [ "$device_status" = "blocked" ] && \
                 [ "$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)" = "1" ]; then
@@ -773,14 +785,14 @@ set_device_status() {
 
         if [ "$device_status" = "allow" ]; then
                 add_mac_to_list allowlist "$device_mac"
-                log_event "Устройство добавлено в белый список: $device_mac, IP ${device_ip:-неизвестен}"
+                log_event "Устройство #${device_id} добавлено в белый список: $device_mac, IP ${device_ip:-неизвестен}"
         elif [ "$device_status" = "blocked" ]; then
                 add_mac_to_list blocklist "$device_mac"
-                log_event "Устройство добавлено в чёрный список: $device_mac, IP ${device_ip:-неизвестен}"
+                log_event "Устройство #${device_id} добавлено в чёрный список: $device_mac, IP ${device_ip:-неизвестен}"
         else
                 remove_mac_from_list allowlist "$device_mac"
                 remove_mac_from_list blocklist "$device_mac"
-                log_event "Устройство добавлено вручную: $device_mac, IP ${device_ip:-неизвестен}"
+                log_event "Устройство #${device_id} добавлено вручную: $device_mac, IP ${device_ip:-неизвестен}"
         fi
 
         uci -q commit sheepfold
@@ -848,11 +860,12 @@ pair_admin_device() {
                 return 5
         }
 
-        local admin_name device_name device_section
+        local admin_name device_name device_section device_id
         admin_name="$(uci -q get "sheepfold.$admin_section.display_name" 2>/dev/null || printf '%s' "$login")"
         device_name="$(name_for_ip "$remote_ip" | sed -n '1p')"
         [ -n "$device_name" ] && [ "$device_name" != "*" ] || device_name="Телефон администратора"
         device_section="$(device_section_for_mac "$device_mac")"
+        device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$device_section")"
 
         # Привязанный телефон администратора выводим из обычных правил:
         # он не должен зависеть от детских расписаний и должен всегда оставаться
@@ -884,12 +897,13 @@ pair_admin_device() {
         local session_token
         session_token="$(token_issue "$login")"
 
-        log_event "Android-приложение привязало телефон администратора: $device_name, $device_mac, IP ${remote_ip:-?}, администратор $admin_name"
+        log_event "Android-приложение привязало телефон администратора: #${device_id} $device_name, $device_mac, IP ${remote_ip:-?}, администратор $admin_name"
 
         printf 'paired=1\n'
         printf 'admin_name=%s\n' "$admin_name"
         printf 'admin_login=%s\n' "$login"
         printf 'device_name=%s\n' "$device_name"
+        printf 'device_id=%s\n' "$device_id"
         printf 'mac=%s\n' "$device_mac"
         printf 'ip=%s\n' "$remote_ip"
         printf 'token=%s\n' "$session_token"

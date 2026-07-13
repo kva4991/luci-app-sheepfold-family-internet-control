@@ -65,17 +65,17 @@ describe('overview UI release 148', () => {
     assert.match(css, /\.sf-log-filters/);
   });
 
-  it('renames settings labels and bumps package release to 148', () => {
+  it('keeps current settings labels and package release in sync', () => {
     const overview = readFileSync(overviewPath, 'utf8');
     const po = readFileSync(poPath, 'utf8');
     const makefile = readFileSync(makefilePath, 'utf8');
 
     assert.match(overview, /Site list update from allowlist and blocklist sources/);
-    assert.match(overview, /Application port/);
-    assert.match(po, /msgid "Application port"/);
-    assert.match(po, /msgstr "Порт приложения"/);
+    assert.match(overview, /Application HTTPS port/);
+    assert.match(po, /msgid "Application HTTPS port"/);
+    assert.match(po, /msgstr "HTTPS-порт приложения"/);
     assert.match(po, /msgid "Site list update from allowlist and blocklist sources"/);
     assert.match(po, /msgstr "Обновление списков сайтов из белых и чёрных списков"/);
-    assert.match(makefile, /PKG_RELEASE:=161/);
+    assert.match(makefile, /PKG_RELEASE:=162/);
   });
 });

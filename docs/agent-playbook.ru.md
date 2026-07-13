@@ -7,6 +7,7 @@
 Перед любыми крупными изменениями прочитай:
 
 - `AGENTS.md`;
+- `docs/merge-readiness-plan.ru.md`, если работа продолжается в ветке `editsByClaude` до её слияния с `main`;
 - `docs/developer-task.ru.md`;
 - `docs/product-requirements.md`;
 - этот документ;
@@ -217,7 +218,7 @@ Root password gate:
 - показать понятное предупреждение и кнопку/ссылку на стандартную страницу установки пароля OpenWRT;
 - не создавать дефолтные Sheepfold-пароли.
 
-LuCI cache:
+LuCI cache: <!-- §assetv1 -->
 
 - все Sheepfold JS/CSS/static assets используют один suffix `?v=<PKG_VERSION>-<PKG_RELEASE>`;
 - source of truth - версия OpenWRT-пакета;

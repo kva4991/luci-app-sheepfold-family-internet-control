@@ -28,7 +28,7 @@
 $env:SHEEPFOLD_ROUTER_HOST="192.168.2.1"
 $env:SHEEPFOLD_ROUTER_USER="root"
 $env:SHEEPFOLD_ROUTER_SSH_PORT="22"
-$env:SHEEPFOLD_ROUTER_API_URL="http://192.168.2.1/cgi-bin/sheepfold-api"
+$env:SHEEPFOLD_ROUTER_API_URL="https://192.168.2.1:5201/cgi-bin/sheepfold-api"
 ```
 
 Для опасных тестов нужны отдельные флаги:

@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import app.sheepfold.android.notifications.SheepfoldNotifications
 import app.sheepfold.android.router.SheepfoldConnectionStore
 import app.sheepfold.android.security.AppProtectionStore
@@ -29,7 +29,7 @@ import app.sheepfold.android.ui.setup.SafeRouterSetupScreen
 import app.sheepfold.android.ui.theme.SheepfoldTheme
 import app.sheepfold.android.ui.theme.ThemePreferenceStore
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         SheepfoldNotifications.ensureChannels(this)
@@ -43,7 +43,7 @@ private fun SheepfoldRoot() {
     var themeMode by remember { mutableStateOf(ThemePreferenceStore.read(context)) }
     var setupComplete by remember { mutableStateOf(SheepfoldConnectionStore.hasConnection(context)) }
     var connection by remember { mutableStateOf(SheepfoldConnectionStore.read(context)) }
-    var unlocked by remember { mutableStateOf(!AppProtectionStore.requiresSecret(context)) }
+    var unlocked by remember { mutableStateOf(!AppProtectionStore.requiresAuthentication(context)) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -94,7 +94,7 @@ private fun SheepfoldRoot() {
                         revokeCameraPermissionAfterPairing(context)
                         connection = request
                         setupComplete = true
-                        unlocked = !AppProtectionStore.requiresSecret(context)
+                        unlocked = !AppProtectionStore.requiresAuthentication(context)
                     }
                 }
             }

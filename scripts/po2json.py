@@ -24,14 +24,14 @@ def decode_po_string(raw: str) -> str:
 
 def parse_po_entries(source: str) -> dict[str, str]:
     entries: dict[str, str] = {}
-    for block in re.split(r'\n\n+', source):
+    for block in re.split(r'(?:\r?\n){2,}', source):
         msgid_match = re.search(
-            r'^msgid\s+((?:"[^"]*"|""(?:\n"[^"]*")*)+)',
+            r'^msgid\s+((?:"[^"]*"|""(?:\r?\n"[^"]*")*)+)',
             block,
             re.MULTILINE,
         )
         msgstr_match = re.search(
-            r'^msgstr\s+((?:"[^"]*"|""(?:\n"[^"]*")*)+)',
+            r'^msgstr\s+((?:"[^"]*"|""(?:\r?\n"[^"]*")*)+)',
             block,
             re.MULTILINE,
         )

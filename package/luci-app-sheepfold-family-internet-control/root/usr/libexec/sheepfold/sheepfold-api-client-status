@@ -122,13 +122,13 @@ esac
 
 mac="$(mac_for_ip "$remote_ip")"
 device_section="$(device_section_for_mac "$mac" 2>/dev/null || true)"
-device_id="$device_section"
+device_id=""
 device_name=""
 is_administrator=0
 client_role=child
 personal_group_name=""
 if [ -n "$device_section" ]; then
-    device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || printf '%s' "$device_section")"
+    device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$device_section" 2>/dev/null || true)"
     device_name="$(uci -q get "sheepfold.$device_section.name" 2>/dev/null || true)"
     is_administrator="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
     personal_group_name="$(personal_group_for_device "$device_section" "$mac" 2>/dev/null || true)"
@@ -169,7 +169,7 @@ case "$access_ends_at" in
 esac
 
 header_json "200 OK"
-printf '{"ok":true,"apiVersion":"2","serverTime":"%s","data":{' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf '{"app":"sheepfold","ok":true,"apiVersion":"2","serverTime":"%s","data":{' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '"deviceId":"%s",' "$(json_escape "$device_id")"
 printf '"deviceName":"%s",' "$(json_escape "$device_name")"
 printf '"isAdministrator":%s,' "$([ "$is_administrator" = 1 ] && printf true || printf false)"

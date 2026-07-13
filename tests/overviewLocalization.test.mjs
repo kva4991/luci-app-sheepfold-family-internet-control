@@ -17,17 +17,17 @@ function readProjectFile(path) {
 
 function parsePoEntries(source) {
   const entries = new Map();
-  const blocks = source.split(/\n\n+/);
+  const blocks = source.split(/(?:\r?\n){2,}/);
 
   for (const block of blocks) {
-    const msgidMatch = block.match(/^msgid\s+((?:"[^"]*"|""(?:\n"[^"]*")*)+)/m);
-    const msgstrMatch = block.match(/^msgstr\s+((?:"[^"]*"|""(?:\n"[^"]*")*)+)/m);
+    const msgidMatch = block.match(/^msgid\s+((?:"[^"]*"|""(?:\r?\n"[^"]*")*)+)/m);
+    const msgstrMatch = block.match(/^msgstr\s+((?:"[^"]*"|""(?:\r?\n"[^"]*")*)+)/m);
     if (!msgidMatch || !msgstrMatch) {
       continue;
     }
 
     const decode = (raw) => raw
-      .split('\n')
+      .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.startsWith('"'))
       .map((line) => line.slice(1, -1))

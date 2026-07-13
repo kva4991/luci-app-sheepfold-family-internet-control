@@ -29,3 +29,4 @@ Encrypted archives use key material stored on the router. This notice does not c
 - Never include MAC addresses, names, tokens, passwords, account identifiers, or key material.
 - Copy this notice onto the mounted volume after a successful mount; a packaged file placed directly under the mount point becomes hidden by the mounted filesystem.
 - Use authentication, permissions, and encryption for access control. This notice is not an authorization mechanism.
+External storage is disabled by default. If the user explicitly enables Yandex Disk or Google Drive, selected encrypted backups or protected logs may be sent to that provider. Sheepfold does not send those files to the project developer. See the full privacy policy before enabling cloud synchronization. <!-- §cldstor -->

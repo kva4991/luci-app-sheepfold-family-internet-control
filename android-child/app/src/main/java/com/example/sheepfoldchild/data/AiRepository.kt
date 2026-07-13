@@ -7,9 +7,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import javax.net.ssl.HttpsURLConnection
 
 /** Отправляет детский запрос на AI backend Sheepfold через роутер. */
 class AiRepository(private val context: Context) {
@@ -19,8 +19,7 @@ class AiRepository(private val context: Context) {
         private const val AI_ENDPOINT = "/cgi-bin/sheepfold-api/ai-assistant"
         private const val TIMEOUT_MS = 30_000
         private const val CONSENT_VERSION = "child-ai-v1"
-        private const val DEFAULT_HTTPS_PORT = 5200
-        private const val DEFAULT_HTTP_PORT = 5201
+        private const val DEFAULT_HTTPS_PORT = 5201
     }
 
     suspend fun getRouterBaseUrl(): String? =
@@ -66,14 +65,15 @@ class AiRepository(private val context: Context) {
     private fun preferredBaseUrl(rawUrl: String): String = candidateBaseUrls(rawUrl).first()
 
     private fun askOnce(baseUrl: String, formBody: String): Result<String> {
-        var connection: HttpURLConnection? = null
+        var connection: HttpsURLConnection? = null
         return try {
             val url = URL("${baseUrl.trimEnd('/')}$AI_ENDPOINT")
             if (url.protocol != "https") {
                 return Result.failure(IllegalArgumentException("Поддерживается только HTTPS"))
             }
 
-            connection = url.openConnection() as HttpURLConnection
+            val (https, capturedPin) = ChildRouterHttps.open(context, url)
+            connection = https
             connection.requestMethod = "POST"
             connection.doOutput = true
             connection.connectTimeout = TIMEOUT_MS
@@ -97,6 +97,7 @@ class AiRepository(private val context: Context) {
                 if (answer.isNullOrBlank()) {
                     Result.failure(Exception("Провайдер вернул пустой ответ"))
                 } else {
+                    ChildRouterHttps.commitCapturedPin(context, url, capturedPin)
                     Result.success(answer)
                 }
             }
@@ -115,11 +116,7 @@ class AiRepository(private val context: Context) {
             .removeSuffix("/cgi-bin/sheepfold-api/ai-assistant")
             .removeSuffix("/cgi-bin/sheepfold-api")
         val explicitPort = parsed.port.takeIf { it > 0 }
-        val httpsPort = when {
-            explicitPort == DEFAULT_HTTP_PORT -> DEFAULT_HTTPS_PORT
-            explicitPort != null -> explicitPort
-            else -> DEFAULT_HTTPS_PORT
-        }
+        val httpsPort = explicitPort ?: DEFAULT_HTTPS_PORT
         return listOf("https://$host:$httpsPort$path".trimEnd('/'))
     }
 

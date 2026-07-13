@@ -50,7 +50,7 @@ Tokен действует **10 минут** и после успешного с
 Приложение проверяет наличие Sheepfold-роутера в текущей сети через endpoint:
 
 ```
-GET http://<router-ip>/.well-known/sheepfold.json
+GET https://<router-ip>:5201/.well-known/sheepfold.json
 ```
 
 Ожидаемый ответ:

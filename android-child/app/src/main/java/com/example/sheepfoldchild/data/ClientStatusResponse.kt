@@ -5,6 +5,7 @@ package com.example.sheepfoldchild.data
  * MAC определяется на роутере по REMOTE_ADDR — клиент ничего не передаёт.
  */
 data class ClientStatusResponse(
+    val app: String?,
     val ok: Boolean,
     val apiVersion: String?,
     val serverTime: String?,

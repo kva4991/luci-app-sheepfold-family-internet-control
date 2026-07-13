@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -22,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.sheepfold.android.R
@@ -33,6 +36,7 @@ import app.sheepfold.android.router.RouterConnectionRequest
 import app.sheepfold.android.router.RouterDevice
 import app.sheepfold.android.router.RouterSnapshot
 import app.sheepfold.android.ui.theme.ThemeMode
+import app.sheepfold.android.widget.SheepfoldWidgetRenderer
 import kotlinx.coroutines.launch
 
 /** Рабочий экран: данные и команды всегда приходят с подключённого роутера. */
@@ -43,6 +47,7 @@ fun OperationalMainScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     onDisconnect: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val client = remember(connection.apiUrl, connection.bearerToken) { RouterAdminClient(connection) }
     val refreshFailedText = stringResource(R.string.router_refresh_failed)
@@ -51,7 +56,13 @@ fun OperationalMainScreen(
     val tabs = listOf(
         stringResource(R.string.tab_control),
         stringResource(R.string.tab_devices),
+        stringResource(R.string.tab_lists),
+        stringResource(R.string.tab_schedule),
+        stringResource(R.string.tab_groups),
+        stringResource(R.string.tab_administrators),
+        stringResource(R.string.tab_wifi),
         stringResource(R.string.tab_ai),
+        stringResource(R.string.tab_logs),
         stringResource(R.string.tab_info),
         stringResource(R.string.tab_settings)
     )
@@ -67,7 +78,9 @@ fun OperationalMainScreen(
         scope.launch {
             runCatching {
                 devices = client.loadDevices()
-                snapshot = client.loadRouterInfo()
+                snapshot = client.loadRouterInfo().also {
+                    SheepfoldWidgetRenderer.storeState(context, it.globalBlocked)
+                }
             }.onFailure { message = it.message ?: refreshFailedText }
             isLoading = false
         }
@@ -88,6 +101,7 @@ fun OperationalMainScreen(
         when (selectedTab) {
             0 -> ControlTab(
                 routerName = snapshot?.routerName ?: connection.routerName,
+                globalBlocked = snapshot?.globalBlocked ?: false,
                 isLoading = isLoading,
                 message = message,
                 onRefresh = ::refresh,
@@ -97,15 +111,34 @@ fun OperationalMainScreen(
                         runCatching { client.setGlobalBlock(enabled) }
                             .onSuccess {
                                 message = if (enabled) blockEnabledText else internetEnabledText
+                                refresh()
                             }
                             .onFailure { message = it.message }
                         isLoading = false
                     }
                 }
             )
-            1 -> DevicesTab(devices = devices, isLoading = isLoading, onRefresh = ::refresh)
-            2 -> AiTab(connection)
-            3 -> RouterInfoTab(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh)
+            1 -> DevicesTab(devices, isLoading, ::refresh) { device, action ->
+                isLoading = true
+                scope.launch {
+                    runCatching {
+                        when (action) {
+                            "allow" -> client.allowDevice(device.mac)
+                            "block" -> client.blockDevice(device.mac)
+                            else -> client.grantTemporaryAccess(device.mac, 30)
+                        }
+                    }.onFailure { message = it.message }
+                    refresh()
+                }
+            }
+            2 -> DeviceListsTab(devices)
+            3 -> PlaceholderTab(stringResource(R.string.tab_schedule))
+            4 -> PlaceholderTab(stringResource(R.string.tab_groups))
+            5 -> PlaceholderTab(stringResource(R.string.tab_administrators))
+            6 -> PlaceholderTab(stringResource(R.string.tab_wifi))
+            7 -> AiTab(connection)
+            8 -> PlaceholderTab(stringResource(R.string.tab_logs))
+            9 -> RouterInfoTab(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh)
             else -> SettingsTab(themeMode, onThemeModeChange, onDisconnect)
         }
     }
@@ -114,6 +147,7 @@ fun OperationalMainScreen(
 @Composable
 private fun ControlTab(
     routerName: String,
+    globalBlocked: Boolean,
     isLoading: Boolean,
     message: String?,
     onRefresh: () -> Unit,
@@ -128,13 +162,21 @@ private fun ControlTab(
         Button(
             onClick = { onBlock(false) },
             enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(stringResource(R.string.router_enable_internet)) }
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (!globalBlocked) Color(0xFF178447) else Color(0xFFB9DCCB),
+                contentColor = if (!globalBlocked) Color.White else Color(0xFF315B45)
+            )
+        ) { Text(stringResource(R.string.router_internet_is_enabled)) }
         Button(
             onClick = { onBlock(true) },
             enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(stringResource(R.string.router_disable_internet)) }
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (globalBlocked) Color(0xFFC62828) else Color(0xFFE8B9B9),
+                contentColor = if (globalBlocked) Color.White else Color(0xFF6D3030)
+            )
+        ) { Text(stringResource(R.string.router_internet_is_disabled)) }
         OutlinedButton(onClick = onRefresh, enabled = !isLoading, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.action_refresh))
         }
@@ -144,7 +186,12 @@ private fun ControlTab(
 }
 
 @Composable
-private fun DevicesTab(devices: List<RouterDevice>, isLoading: Boolean, onRefresh: () -> Unit) {
+private fun DevicesTab(
+    devices: List<RouterDevice>,
+    isLoading: Boolean,
+    onRefresh: () -> Unit,
+    onAction: (RouterDevice, String) -> Unit
+) {
     val emptyValue = stringResource(R.string.value_empty)
     LazyColumn(
         modifier = Modifier
@@ -174,9 +221,61 @@ private fun DevicesTab(devices: List<RouterDevice>, isLoading: Boolean, onRefres
                     Text(stringResource(R.string.device_ip_format, device.ip.ifBlank { emptyValue }))
                     Text(stringResource(R.string.device_mac_format, device.mac.ifBlank { emptyValue }))
                     Text(stringResource(R.string.device_group_format, device.group.ifBlank { emptyValue }))
+                    if (!device.isAdministrator) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (device.status != "allow") {
+                                OutlinedButton(onClick = { onAction(device, "allow") }, modifier = Modifier.weight(1f)) {
+                                    Text(stringResource(R.string.action_allow))
+                                }
+                            }
+                            if (device.status != "blocked") {
+                                OutlinedButton(onClick = { onAction(device, "block") }, modifier = Modifier.weight(1f)) {
+                                    Text(stringResource(R.string.action_block))
+                                }
+                            }
+                            if (device.status != "allow" && device.status != "blocked") {
+                                OutlinedButton(onClick = { onAction(device, "temp") }, modifier = Modifier.weight(1f)) {
+                                    Text("+30")
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DeviceListsTab(devices: List<RouterDevice>) {
+    var selected by remember { mutableIntStateOf(0) }
+    val labels = listOf(stringResource(R.string.tab_all_devices), stringResource(R.string.tab_allowlist), stringResource(R.string.tab_blocklist))
+    val filtered = when (selected) {
+        1 -> devices.filter { it.status == "allow" }
+        2 -> devices.filter { it.status == "blocked" }
+        else -> devices
+    }
+    Column(Modifier.fillMaxSize()) {
+        ScrollableTabRow(selectedTabIndex = selected) {
+            labels.forEachIndexed { index, label ->
+                Tab(selected = selected == index, onClick = { selected = index }, text = { Text(label) })
+            }
+        }
+        LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(filtered, key = { it.id }) { device ->
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Text("#${device.id} ${device.name}", Modifier.fillMaxWidth().padding(14.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaceholderTab(title: String) {
+    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.section_router_managed))
     }
 }
 

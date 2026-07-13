@@ -7,8 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.net.HttpURLConnection
 import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 
 class ClientStatusRepository(private val context: Context) {
 
@@ -16,8 +16,7 @@ class ClientStatusRepository(private val context: Context) {
         private val KEY_ROUTER_URL = stringPreferencesKey("router_base_url")
         private const val ENDPOINT = "/cgi-bin/sheepfold-api/client-status"
         private const val TIMEOUT_MS = 5000
-        private const val DEFAULT_HTTPS_PORT = 5200
-        private const val DEFAULT_HTTP_PORT = 5201
+        private const val DEFAULT_HTTPS_PORT = 5201
     }
 
     suspend fun getRouterBaseUrl(): String? =
@@ -37,14 +36,15 @@ class ClientStatusRepository(private val context: Context) {
         }
 
     private fun fetchFrom(baseUrl: String): Result<ClientStatusResponse> {
-        var connection: HttpURLConnection? = null
+        var connection: HttpsURLConnection? = null
         return try {
             val url = URL("${baseUrl.trimEnd('/')}$ENDPOINT")
             if (url.protocol != "https") {
                 return Result.failure(IllegalArgumentException("Поддерживается только HTTPS"))
             }
 
-            connection = url.openConnection() as HttpURLConnection
+            val (https, capturedPin) = ChildRouterHttps.open(context, url)
+            connection = https
             connection.connectTimeout = TIMEOUT_MS
             connection.readTimeout = TIMEOUT_MS
             connection.requestMethod = "GET"
@@ -62,6 +62,8 @@ class ClientStatusRepository(private val context: Context) {
             } else {
                 val parsed = parseResponse(body)
                 if (parsed.ok) {
+                    require(parsed.app == "sheepfold") { "Ответ не принадлежит Sheepfold" }
+                    ChildRouterHttps.commitCapturedPin(context, url, capturedPin)
                     Result.success(parsed)
                 } else {
                     Result.failure(Exception(parsed.error?.message ?: "Роутер не вернул статус устройства"))
@@ -89,11 +91,7 @@ class ClientStatusRepository(private val context: Context) {
             .removeSuffix("/cgi-bin/sheepfold-api/client-status")
             .removeSuffix("/cgi-bin/sheepfold-api")
         val explicitPort = parsed.port.takeIf { it > 0 }
-        val httpsPort = when {
-            explicitPort == DEFAULT_HTTP_PORT -> DEFAULT_HTTPS_PORT
-            explicitPort != null -> explicitPort
-            else -> DEFAULT_HTTPS_PORT
-        }
+        val httpsPort = explicitPort ?: DEFAULT_HTTPS_PORT
         val hostForUrl = if (host.contains(':')) "[$host]" else host
         return listOf("https://$hostForUrl:$httpsPort$path".trimEnd('/'))
     }
@@ -150,6 +148,7 @@ class ClientStatusRepository(private val context: Context) {
             )
         }
         return ClientStatusResponse(
+            app = root.optString("app").takeIf { it.isNotBlank() },
             ok = root.optBoolean("ok", false),
             apiVersion = root.optString("apiVersion").takeIf { it.isNotBlank() },
             serverTime = root.optString("serverTime").takeIf { it.isNotBlank() },

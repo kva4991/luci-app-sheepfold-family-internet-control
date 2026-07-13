@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=161
+PKG_RELEASE:=162
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -121,12 +121,17 @@ ensure_global_option ai_rate_limit_window_seconds '3600'
 ensure_global_option ai_individual_logs '0'
 ensure_global_option child_ai_parental_consent '0'
 ensure_global_option child_ai_consent_version 'child-ai-v1'
+ensure_global_option parent_ai_prompt_version 'v2'
+ensure_global_option child_ai_prompt_version 'v1'
 ensure_global_option deepseek_model 'deepseek-chat'
 ensure_global_option deepseek_api_url 'https://api.deepseek.com/chat/completions'
 ensure_global_option deepseek_api_key ''
 ensure_global_option gemini_model 'gemini-2.5-flash'
 ensure_global_option gemini_api_url 'https://generativelanguage.googleapis.com/v1beta/models'
 ensure_global_option gemini_api_key ''
+ensure_global_option grok_model 'grok-3-mini'
+ensure_global_option grok_api_url 'https://api.x.ai/v1/chat/completions'
+ensure_global_option grok_api_key ''
 ensure_global_option vk_access_token ''
 ensure_global_option vk_community_id ''
 ensure_global_option vk_admin_user_id ''
@@ -146,7 +151,7 @@ ensure_global_option wps_long_press_action 'router_default'
 ensure_global_option router_led_control 'router_default'
 ensure_global_option router_led_repair '0'
 ensure_global_option blocked_page_enabled '1'
-ensure_global_option blocked_page_text '因家庭规则互联网暂时不可用。如果这是错误，请联系家长。'
+ensure_global_option blocked_page_text 'Интернет временно недоступен по семейным правилам. Если это ошибка, обратитесь к родителю.'
 ensure_global_option blocked_page_port '5202'
 ensure_global_option domain_allowlist_for_blocklist '1'
 ensure_global_option site_allowlist_sources 'UT1 child | https://dsi.ut-capitole.fr/blacklists/index_en.php#child'
@@ -165,7 +170,7 @@ fi
 ensure_global_option log_retention '3d'
 ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
-ensure_global_option app_https_port '5200'
+uci -q delete sheepfold.global.app_https_port 2>/dev/null || true
 ensure_global_option log_storage 'ram'
 ensure_global_option log_cache_path '/tmp/sheepfold/events.log'
 uci -q get sheepfold.pairing_global >/dev/null || uci -q set sheepfold.pairing_global='pairing'
@@ -214,10 +219,29 @@ ensure_gdrive_option root_folder '/sheepfold'
 ensure_gdrive_option quota_mb '500'
 ensure_gdrive_option authorized '0'
 uci -q get sheepfold.owner >/dev/null || uci -q set sheepfold.owner=administrator
+[ -n "$$(uci -q get sheepfold.owner.id 2>/dev/null)" ] || uci -q set sheepfold.owner.id='1'
 [ -n "$$(uci -q get sheepfold.owner.login 2>/dev/null)" ] || uci -q set sheepfold.owner.login='SuperParent'
 [ -n "$$(uci -q get sheepfold.owner.role 2>/dev/null)" ] || uci -q set sheepfold.owner.role='owner'
 [ -n "$$(uci -q get sheepfold.owner.password_setup_required 2>/dev/null)" ] || uci -q set sheepfold.owner.password_setup_required='1'
+# Администраторы используют ту же понятную числовую схему ID, что и устройства.
+used_admin_ids=' 1 '
+next_admin_id=2
+for section in $$(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$$/\1/p'); do
+	[ "$$section" = owner ] && continue
+	current="$$(uci -q get sheepfold.$$section.id 2>/dev/null || true)"
+	current="$$(printf '%s' "$$current" | sed 's/[^0-9][^0-9]*/ /g' | awk '{print $$NF}' | sed 's/^0*//')"
+	case "$$current" in ''|*[!0-9]*|0) current='' ;; esac
+	case "$$used_admin_ids" in *" $$current "*) current='' ;; esac
+	if [ -z "$$current" ]; then
+		while case "$$used_admin_ids" in *" $$next_admin_id "*) true ;; *) false ;; esac; do next_admin_id=$$((next_admin_id + 1)); done
+		current="$$next_admin_id"
+	fi
+	uci -q set sheepfold.$$section.id="$$current"
+	used_admin_ids="$$used_admin_ids$$current "
+	[ "$$next_admin_id" -gt "$$current" ] || next_admin_id=$$((current + 1))
+done
 [ -x /usr/libexec/sheepfold/sheepfold-default-groups ] && /usr/libexec/sheepfold/sheepfold-default-groups apply
+[ -x /usr/libexec/sheepfold/sheepfold-device-id ] && /usr/libexec/sheepfold/sheepfold-device-id ensure-all
 if [ "$$(uci -q get sheepfold.global.luci_language_synced 2>/dev/null)" != "1" ]; then
 	lang="$$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
 	case "$$lang" in

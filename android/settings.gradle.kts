@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Ovcharnya"
+rootProject.name = "Sheepfold"
 include(":app")

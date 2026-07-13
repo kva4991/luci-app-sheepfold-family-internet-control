@@ -15,7 +15,7 @@ object RouterTlsPin {
     private const val PREFS = "sheepfold-app"
     private const val KEY = "routerTlsPinSha256"
 
-    data class CapturedPin(val value: String)
+    class CapturedPin(var value: String? = null)
 
     fun read(context: Context?): String? =
         context?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -50,7 +50,8 @@ object RouterTlsPin {
         allowTrustOnFirstUse: Boolean
     ): CapturedPin? {
         val normalizedExpected = expectedPin?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
-        var captured: CapturedPin? = null
+        // Handshake происходит после configure(), поэтому возвращаем изменяемый holder заранее.
+        val captured = if (normalizedExpected == null && allowTrustOnFirstUse) CapturedPin() else null
         val trustManager = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
 
@@ -66,7 +67,7 @@ object RouterTlsPin {
                     normalizedExpected == null && !allowTrustOnFirstUse ->
                         throw CertificateException("Для HTTPS нужен сохранённый отпечаток сертификата роутера")
                     normalizedExpected == null && allowTrustOnFirstUse ->
-                        captured = CapturedPin(pin)
+                        captured?.value = pin
                 }
             }
         }

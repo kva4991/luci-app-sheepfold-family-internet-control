@@ -48,10 +48,18 @@ describe('Android HTTPS hardening', () => {
     const aiRepo = readRepoFile(
       'android-child/app/src/main/java/com/example/sheepfoldchild/data/AiRepository.kt',
     );
+    const childHttps = readRepoFile(
+      'android-child/app/src/main/java/com/example/sheepfoldchild/data/ChildRouterHttps.kt',
+    );
 
     assert.match(statusRepo, /Поддерживается только HTTPS/);
     assert.match(aiRepo, /Поддерживается только HTTPS/);
     assert.doesNotMatch(statusRepo, /\+\=\s*"http:\/\/|mutableListOf\("http:\/\//);
     assert.doesNotMatch(aiRepo, /\+\=\s*"http:\/\/|mutableListOf\("http:\/\//);
+    assert.match(statusRepo, /ChildRouterHttps\.open/);
+    assert.match(aiRepo, /ChildRouterHttps\.open/);
+    assert.match(childHttps, /SHA-256/);
+    assert.match(childHttps, /Сертификат роутера изменился/);
+    assert.match(childHttps, /commitCapturedPin/);
   });
 });

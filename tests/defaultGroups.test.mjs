@@ -23,7 +23,7 @@ describe('Default Sheepfold groups', () => {
     assert.doesNotMatch(overview, /ensureVisibleDefaultGroup\(_\('Child number 1'\)/);
   });
 
-  it('creates default group names from install language only when names are missing', () => {
+  it('creates default group names from install language without overwriting custom names', () => {
     const helper = readProjectFile('root/usr/libexec/sheepfold/sheepfold-default-groups');
 
     assert.match(helper, /consume_install_language_pref/);
@@ -31,7 +31,11 @@ describe('Default Sheepfold groups', () => {
     assert.match(helper, /luci\.main\.lang/);
     assert.match(helper, /install\.language/);
     assert.match(helper, /default_owner_display_name/);
-    assert.match(helper, /\[ -n "\$\(uci -q get sheepfold\.no_restrictions\.name/);
+    assert.match(helper, /INSTALL_LANGUAGE_SELECTED/);
+    assert.match(helper, /current_nr/);
+    assert.match(helper, /current_child/);
+    assert.match(helper, /'First child'/);
+    assert.match(helper, /'第一个孩子'/);
     assert.match(helper, /migrate_device_group_aliases/);
     assert.match(helper, /'No restrictions'\|'Без ограничений'/);
     assert.match(helper, /'Не настроено'\)[\s\S]*Not configured/);

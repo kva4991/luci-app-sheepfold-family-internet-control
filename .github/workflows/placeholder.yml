@@ -21,6 +21,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -x install.sh
+          sh -n install.sh
           package_root="package/luci-app-sheepfold-family-internet-control/root"
           find "$package_root/usr/libexec/sheepfold" \
             -type f -print0 | xargs -0 -n1 sh -n

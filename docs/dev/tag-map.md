@@ -137,6 +137,8 @@ grep -r '§xaji0y6' .
 |-----|-----|-----|--------|
 | `§xaji0y6` | AI_NO_DIRECT_LLM | архитектура | Android **не ходит напрямую** к LLM — все через `/cgi-bin/sheepfold-api/ai-assistant`. Тег означает: здесь реализуется или проверяется эта прослойка. Файлы: `ai-assistant.ru.md`, `ai-assistant.md`, `ai-dev-guide.ru.md`, `product-requirements.md` |
 | `§dpbhsah` | AI_PROVIDER_KEYS_ON_ROUTER | безопасность | API-ключи LLM хранятся **на роутере в UCI Sheepfold**, потому что Android ходит к LLM только через роутерный proxy endpoint. Android Keystore хранит локальные Android-секреты, но не provider keys. Файлы: `ai-assistant.ru.md`, `ai-assistant.md`, `ai-dev-guide.ru.md`, `product-requirements.md` |
+| `§cldstor` | EXTERNAL_STORAGE_DISCLOSURE | приватность/legal | Яндекс Диск/Google Drive выключены по умолчанию; до включения нужно явно раскрыть категории передаваемых файлов, папку, объём, хранение, отключение и удаление. Перед публичным релизом проверить шифрование до отправки и юридические тексты. Файлы: `privacy.ru.md`, `user-agreement.ru.md`, `PRIVACY_NOTICE.md` |
+| `§assetv1` | LUCI_ASSET_VERSIONING | LuCI/cache | Версия OpenWrt-пакета является единственным источником `?v=<PKG_VERSION>-<PKG_RELEASE>` для JS/CSS/static assets. Любое изменение LuCI frontend требует bump package release и теста cache busting. Файлы: `agent-playbook.ru.md`, `Makefile`, `luciAssetVersioning.test.mjs` |
 | `§y41iblj` | AI_ENDPOINT_STUB | статус | `/ai-assistant` сейчас **заглушка** — authenticated API и role-based auth не завершены. Тег: этот код зависит от заглушки и нуждается в обновлении. |
 | `§ikcidkw` | AI_MODEL_CONFIG | конфиг | Имена моделей **не зашиты в код** — в конфиге провайдера. Тег: здесь читается/записывается model ID. Файлы: `ai-assistant.ru.md` |
 | `§t3w5uzb` | AI_PROVIDERS_COUNTRY | конфиг | Провайдеры LLM зависят от **country profile** роутера. Тег: здесь фильтруются провайдеры по стране. Файлы: `ai-assistant.ru.md`, `ai-dev-guide.ru.md` |
@@ -254,6 +256,7 @@ grep -r '§xaji0y6' .
 | `§t4lq9bw` | PLAYBOOK_AI_ADVISES_NOT_ACTS | безопасность/AI | ИИ-помощник не управляет роутером сам; он советует, а действия применяются только после явного подтверждения parent/admin. Файлы: `agent-playbook.ru.md` |
 | `§u6fj2sr` | PLAYBOOK_AI_NO_AUTO_SENSITIVE_CONTEXT | приватность/AI | MAC/IP/device names/child names/family details/logs/device lists/router settings не отправляются AI автоматически. Файлы: `agent-playbook.ru.md` |
 | `§z5ck8mv` | PLAYBOOK_ANDROID_PARENT_ADMIN | Android | Основное Android-приложение `android/` — только для телефонов родителей-администраторов. Детское приложение живёт отдельно в `android-child/`, не имеет административных функций и получает только собственный статус через `/client-status`. Файлы: `agent-playbook.ru.md`, `AGENTS.md`, `security.md`, `product-requirements.md` |
+| `§mrgready` | MERGE_READINESS_PLAN | процесс разработки | Подробная контрольная точка и перечень обязательных проверок перед слиянием `editsByClaude` с `main`, включая причины и критерии готовности. Файл: `merge-readiness-plan.ru.md` |
 
 ---
 

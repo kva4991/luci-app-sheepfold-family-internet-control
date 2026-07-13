@@ -381,6 +381,7 @@ router_info_json() {
 	json_pair sheepfoldVersion "$(kv_get sheepfold_version "$info")" ,
 	json_pair internetStatus "$(kv_get internet_status "$info")" ,
 	json_pair internetReason "$(kv_get internet_reason "$info")" ,
+	json_pair globalBlocked "$(uci -q get sheepfold.global.block_on_boot 2>/dev/null || printf 0)" ,
 	json_pair pingYandexMs "$(kv_get ping_yandex_ms "$info")" ,
 	json_pair firmwareVersion "$(kv_get firmware_version "$info")" ,
 	json_pair openwrtRelease "$(kv_get openwrt_release "$info")" ,
@@ -667,7 +668,7 @@ case "$method" in
 			*)
 				# Корневой GET — discovery endpoint.
 				header_json "200 OK"
-				printf '{"app":"sheepfold","ok":true,"service":"sheepfold","routerName":"%s","version":"%s","appPort":"%s","apiPath":"%s","apiUrl":"http://%s%s"}\n' \
+				printf '{"app":"sheepfold","ok":true,"service":"sheepfold","routerName":"%s","version":"%s","appPort":"%s","apiPath":"%s","apiUrl":"https://%s%s"}\n' \
 					"$(json_escape "$router_name")" "$(json_escape "$version")" \
 					"$(json_escape "$app_port")" "$(json_escape "$api_path")" \
 					"$(json_escape "$http_host")" "$(json_escape "$api_path")"

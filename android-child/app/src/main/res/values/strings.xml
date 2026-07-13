@@ -27,7 +27,7 @@
     <!-- Первичная настройка -->
     <string name="setup_title">Настройка</string>
     <string name="setup_hint">Введите адрес роутера, например 192.168.1.1</string>
-    <string name="setup_transport_hint">Сначала используется HTTPS. Если он недоступен, приложение автоматически попробует HTTP только в локальной сети.</string>
+    <string name="setup_transport_hint">Используется HTTPS с закреплением сертификата домашнего роутера.</string>
     <string name="setup_save">Сохранить</string>
 
     <!-- Уведомления -->

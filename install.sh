@@ -5,6 +5,9 @@ OWNER="kva4991"
 REPO="luci-app-sheepfold-family-internet-control"
 PACKAGE="luci-app-sheepfold-family-internet-control"
 AGREEMENT_URL="https://github.com/${OWNER}/${REPO}/blob/main/docs/user-agreement.ru.md"
+RELEASE_API="https://api.github.com/repos/${OWNER}/${REPO}/releases/latest"
+INSTALL_DIR="/tmp/sheepfold-install"
+PACKAGE_FILE="${INSTALL_DIR}/${PACKAGE}.ipk"
 
 echo "Sheepfold Family Internet Control installer"
 echo "Repository: ${OWNER}/${REPO}"
@@ -23,6 +26,7 @@ echo ""
 echo "Choose application language / Выберите язык приложения:"
 echo "  Русский: ru"
 echo "  English: en"
+echo "  简体中文: zh_Hans"
 printf "Language [ru]: "
 if ! read -r APP_LANGUAGE; then
     APP_LANGUAGE=""
@@ -34,6 +38,9 @@ case "${APP_LANGUAGE}" in
         ;;
     en|EN|En)
         APP_LANGUAGE="en"
+        ;;
+    zh_Hans|zh_hans|zh|ZH)
+        APP_LANGUAGE="zh_Hans"
         ;;
     *)
         echo "Unknown language. Using Russian / Неизвестный язык. Используется русский." >&2
@@ -132,7 +139,10 @@ echo "  AdGuard Home: ${ADGUARD_DETECTED}"
 echo "  Podkop: ${PODKOP_DETECTED}"
 echo "Recommended Sheepfold integration mode: ${INTEGRATION_MODE}"
 
-if [ -r /etc/config/sheepfold ] && command -v uci >/dev/null 2>&1; then
+apply_selected_settings() {
+    command -v uci >/dev/null 2>&1 || return 0
+    [ -r /etc/config/sheepfold ] || return 0
+
     echo "Applying detected integration mode to existing Sheepfold config."
     uci -q set sheepfold.global.language="${APP_LANGUAGE}"
     uci -q set sheepfold.global.luci_language_synced='1'
@@ -150,20 +160,71 @@ if [ -r /etc/config/sheepfold ] && command -v uci >/dev/null 2>&1; then
     uci -q set sheepfold.podkop.enabled="${PODKOP_DETECTED}"
     uci -q commit sheepfold
     uci -q commit luci 2>/dev/null || true
-else
+}
+
+if [ ! -r /etc/config/sheepfold ]; then
     mkdir -p /etc/sheepfold
     printf '%s\n' "${APP_LANGUAGE}" > /etc/sheepfold/install.language
     chmod 600 /etc/sheepfold/install.language 2>/dev/null || true
-    echo "Sheepfold config is not installed yet; the package installer should apply this mode after installation."
+    echo "Sheepfold config is not installed yet; selected values will be applied after package installation."
     echo "Automatic setup choice:"
     echo "  language=${APP_LANGUAGE}"
     echo "  auto_configure=${AUTO_CONFIGURE}"
     echo "  detection_mode=${DETECTION_MODE}"
     echo "  no_restrictions_auto_assign=${NO_RESTRICTIONS_AUTO_ASSIGN}"
+else
+    apply_selected_settings
 fi
 
-echo "This is a scaffold installer."
-echo "The first release package is not published yet."
-echo "Next implementation step: download the latest GitHub Release .ipk and install it with opkg."
+fetch_to_file() {
+    url="$1"
+    destination="$2"
+
+    if command -v uclient-fetch >/dev/null 2>&1; then
+        uclient-fetch -q -O "$destination" "$url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q -O "$destination" "$url"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -fL --connect-timeout 20 --max-time 300 -o "$destination" "$url"
+    else
+        echo "ERROR: uclient-fetch, wget, or curl is required." >&2
+        return 1
+    fi
+}
+
+mkdir -p "$INSTALL_DIR"
+release_json="${INSTALL_DIR}/latest-release.json"
+
+echo "Checking the latest stable GitHub release..."
+if ! fetch_to_file "$RELEASE_API" "$release_json"; then
+    echo "ERROR: Failed to download release metadata from GitHub." >&2
+    exit 1
+fi
+
+# GitHub latest excludes drafts and pre-releases. Choose only the architecture-independent
+# OpenWrt package published by this project, as Sheepfold does not contain native binaries.
+package_url="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*luci-app-sheepfold-family-internet-control_[^"]*_all\.ipk\)".*/\1/p' "$release_json" | head -n 1)"
+if [ -z "$package_url" ]; then
+    echo "ERROR: The latest stable release does not contain the Sheepfold all.ipk package." >&2
+    exit 1
+fi
+
+echo "Downloading Sheepfold package..."
+if ! fetch_to_file "$package_url" "$PACKAGE_FILE"; then
+    echo "ERROR: Failed to download Sheepfold package." >&2
+    exit 1
+fi
+
+if [ ! -s "$PACKAGE_FILE" ]; then
+    echo "ERROR: Downloaded package is empty." >&2
+    exit 1
+fi
+
+echo "Installing Sheepfold with opkg..."
+opkg install "$PACKAGE_FILE"
+apply_selected_settings
+rm -rf "$INSTALL_DIR"
+
+echo "Sheepfold installation completed."
 
 exit 0

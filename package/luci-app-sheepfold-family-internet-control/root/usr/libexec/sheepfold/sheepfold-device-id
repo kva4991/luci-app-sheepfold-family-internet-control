@@ -1,0 +1,124 @@
+#!/bin/sh
+set -eu
+
+LOCK_DIR="/tmp/sheepfold-device-id.lock"
+
+is_positive_id() {
+    case "${1:-}" in
+        ''|*[!0-9]*|0) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+numeric_tail() {
+    value="${1:-}"
+    # Старые ID вроде D-0012 мигрируются в 12 целиком, а не в последнюю цифру.
+    candidate="$(printf '%s' "$value" | sed 's/[^0-9][^0-9]*/ /g' | awk '{print $NF}')"
+    candidate="$(printf '%s' "$candidate" | sed 's/^0*//')"
+    is_positive_id "$candidate" || return 1
+    printf '%s\n' "$candidate"
+}
+
+device_sections() {
+    uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'
+}
+
+id_is_used_by_other() {
+    wanted="$1"
+    owner="$2"
+    for section in $(device_sections); do
+        [ "$section" = "$owner" ] && continue
+        current="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
+        current="$(numeric_tail "$current" 2>/dev/null || true)"
+        [ "$current" = "$wanted" ] && return 0
+    done
+    return 1
+}
+
+highest_id() {
+    highest=0
+    for section in $(device_sections); do
+        current="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
+        current="$(numeric_tail "$current" 2>/dev/null || true)"
+        is_positive_id "$current" || continue
+        [ "$current" -gt "$highest" ] && highest="$current"
+    done
+    printf '%s\n' "$highest"
+}
+
+acquire_lock() {
+    attempts=0
+    while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+        attempts=$((attempts + 1))
+        [ "$attempts" -lt 50 ] || {
+            echo "Could not acquire device ID lock." >&2
+            return 1
+        }
+        sleep 1
+    done
+    trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
+}
+
+ensure_global_section() {
+    [ "$(uci -q get sheepfold.global 2>/dev/null || true)" = sheepfold ] || \
+        uci -q set sheepfold.global=sheepfold
+}
+
+ensure_id_locked() {
+    section="$1"
+    [ "$(uci -q get "sheepfold.$section" 2>/dev/null || true)" = device ] || return 1
+
+    current="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
+    candidate="$(numeric_tail "$current" 2>/dev/null || true)"
+    if is_positive_id "$candidate" && ! id_is_used_by_other "$candidate" "$section"; then
+        [ "$current" = "$candidate" ] || uci -q set "sheepfold.$section.id=$candidate"
+    else
+        ensure_global_section
+        next="$(uci -q get sheepfold.global.next_device_id 2>/dev/null || true)"
+        is_positive_id "$next" || next=$(( $(highest_id) + 1 ))
+        while id_is_used_by_other "$next" "$section"; do
+            next=$((next + 1))
+        done
+        candidate="$next"
+        uci -q set "sheepfold.$section.id=$candidate"
+    fi
+
+    ensure_global_section
+    next="$(uci -q get sheepfold.global.next_device_id 2>/dev/null || true)"
+    is_positive_id "$next" || next=1
+    [ "$next" -gt "$candidate" ] || uci -q set "sheepfold.global.next_device_id=$((candidate + 1))"
+    printf '%s\n' "$candidate"
+}
+
+ensure_one() {
+    acquire_lock
+    ensure_id_locked "$1"
+    uci -q commit sheepfold
+}
+
+ensure_all() {
+    acquire_lock
+    for section in $(device_sections); do
+        ensure_id_locked "$section" >/dev/null
+    done
+    uci -q commit sheepfold
+}
+
+case "${1:-}" in
+    ensure)
+        [ -n "${2:-}" ] || exit 2
+        ensure_one "$2"
+        ;;
+    ensure-all)
+        ensure_all
+        ;;
+    get)
+        [ -n "${2:-}" ] || exit 2
+        value="$(uci -q get "sheepfold.$2.id" 2>/dev/null || true)"
+        numeric_tail "$value"
+        ;;
+    *)
+        echo "Usage: $0 ensure <device-section> | ensure-all | get <device-section>" >&2
+        exit 2
+        ;;
+esac

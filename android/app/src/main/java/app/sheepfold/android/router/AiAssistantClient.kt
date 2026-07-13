@@ -136,13 +136,7 @@ object AiAssistantClient {
     private fun candidateApiUrls(rawApiUrl: String): List<String> {
         val parsed = URL(rawApiUrl)
         val host = if (parsed.host.contains(':')) "[${parsed.host}]" else parsed.host
-        val explicitPort = parsed.port.takeIf { it > 0 }
-        val httpsPort = when {
-            parsed.protocol == "https" && explicitPort != null -> explicitPort
-            explicitPort == 5201 -> 5200
-            explicitPort != null -> explicitPort
-            else -> 5200
-        }
+        val httpsPort = parsed.port.takeIf { it > 0 } ?: 5201
         return listOf("https://$host:$httpsPort${parsed.path}")
     }
 

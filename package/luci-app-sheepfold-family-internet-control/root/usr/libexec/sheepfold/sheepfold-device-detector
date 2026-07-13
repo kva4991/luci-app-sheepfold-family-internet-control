@@ -18,6 +18,7 @@ DEFAULT_SCAN_PORTS="22,53,80,81,443,445,548,554,631,1883,3000,3001,5000,5001,535
 POLICY_VERSION="2"
 NEW_DEVICE_BADGE_SECONDS=86400
 DEFAULT_GROUPS="/usr/libexec/sheepfold/sheepfold-default-groups"
+DEVICE_ID_HELPER="/usr/libexec/sheepfold/sheepfold-device-id"
 
 no_restrictions_group_name() {
 	if [ -x /usr/libexec/sheepfold/sheepfold-default-groups ]; then
@@ -96,6 +97,7 @@ section_for_mac() {
 ensure_device_section() {
         mac="$(normalize_mac "$1")"
         if section="$(section_for_mac "$mac")"; then
+                "$DEVICE_ID_HELPER" ensure "$section" >/dev/null
                 printf '%s\n' "$section"
                 return 0
         fi
@@ -105,6 +107,8 @@ ensure_device_section() {
         uci_set_if_changed "sheepfold.$section.mac" "$mac"
         uci_set_if_changed "sheepfold.$section.just_detected" 1
         uci_set_if_changed "sheepfold.$section.first_seen_at" "$(date +%s)"
+        # Постоянный числовой ID выдаётся один раз и больше не зависит от сортировки таблицы.
+        "$DEVICE_ID_HELPER" ensure "$section" >/dev/null
         date +%s > "$NEW_DEVICE_ALERT_FLAG"
         printf '%s\n' "$section"
 }
@@ -300,6 +304,7 @@ assign_no_restrictions_if_allowed() {
         hard_deny="$9"
         no_restrictions_group="$(no_restrictions_group_name)"
         min_score="$(global_get detector_min_no_restrictions_confidence 80)"
+        auto_configure="$(global_get auto_configure 1)"
         enabled="$(global_get no_restrictions_auto_assign 1)"
         current_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
         auto_excluded="$(uci -q get "sheepfold.$section.no_restrictions_auto_excluded" 2>/dev/null || true)"
@@ -309,6 +314,9 @@ assign_no_restrictions_if_allowed() {
         case "$min_score" in ''|*[!0-9]*) min_score=80 ;; esac
 
         [ "$hard_deny" = "0" ] || return 0
+        # Тип устройства можно уточнять всегда, но менять политику доступа можно только
+        # когда родитель явно включил автонастройку новых устройств.
+        [ "$auto_configure" = "1" ] || return 0
         [ "$enabled" = "1" ] || return 0
         [ "$auto_excluded" = "1" ] && return 0
         case "$target_group" in
@@ -334,13 +342,14 @@ assign_no_restrictions_if_allowed() {
         uci_set_if_changed "sheepfold.$section.auto_group_assigned" 1
         uci_set_if_changed "sheepfold.$section.auto_group_reason" "$reason"
 
+        device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section" 2>/dev/null || true)"
         assigned_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
         [ "$assigned_group" = "$target_group" ] || {
-                log_event "Не удалось сохранить группу \"$target_group\" для устройства ${name:-$mac}: UCI вернул \"${assigned_group:-пусто}\""
+                log_event "Не удалось сохранить группу \"$target_group\" для устройства #${device_id} ${name:-$mac}: UCI вернул \"${assigned_group:-пусто}\""
                 return 0
         }
 
-        log_event "Устройство ${name:-$mac}, IP ${ip:-неизвестен} автоматически добавлено в группу \"$target_group\": $reason; score=$auto_score; evidence=$evidence_count"
+        log_event "Устройство #${device_id} ${name:-$mac}, IP ${ip:-неизвестен} автоматически добавлено в группу \"$target_group\": $reason; score=$auto_score; evidence=$evidence_count"
 }
 
 write_common_observation() {
@@ -364,7 +373,8 @@ write_common_observation() {
         fi
 
         if [ "$(uci -q get "sheepfold.$section.just_detected" 2>/dev/null || true)" = "1" ]; then
-                log_event "Обнаружено новое устройство: $mac, IP ${ip:-неизвестен}${name:+, имя $name}"
+                device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
+                log_event "Обнаружено новое устройство: #${device_id}, $mac, IP ${ip:-неизвестен}${name:+, имя $name}"
                 uci_delete_if_present "sheepfold.$section.just_detected"
         fi
 }

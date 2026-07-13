@@ -5,6 +5,14 @@
 
     <string name="tab_control">Управление</string>
     <string name="tab_devices">Устройства</string>
+    <string name="tab_lists">Списки пользователей</string>
+    <string name="tab_groups">Группы</string>
+    <string name="tab_administrators">Администраторы</string>
+    <string name="tab_wifi">Wi-Fi</string>
+    <string name="tab_logs">Журнал</string>
+    <string name="tab_all_devices">Все устройства</string>
+    <string name="tab_allowlist">Белый список</string>
+    <string name="tab_blocklist">Чёрный список</string>
     <string name="tab_schedule">Расписание</string>
     <string name="tab_ai">ИИ-помощник</string>
     <string name="tab_info">Информация</string>
@@ -69,6 +77,36 @@
     <string name="setup_qr_not_recognized">QR-код не распознан. Можно повторить фото или вставить данные вручную.</string>
     <string name="setup_camera_denied">Камера не разрешена. Ручное сопряжение и вставка QR-данных остаются доступными.</string>
     <string name="setup_connection_failed">Не удалось подключиться к роутеру</string>
+    <string name="setup_connected_to">Подключено к серверу (%1$s)</string>
+    <string name="setup_agreement_prefix">Я согласен с </string>
+    <string name="setup_agreement_link">пользовательским соглашением</string>
+    <string name="setup_agreement_suffix"> и обработкой персональных и технических данных, необходимых для работы Sheepfold.</string>
+    <string name="setup_permissions_explanation">Камера нужна для QR-кода, доступ к Wi-Fi — для имени сети и автопоиска роутера, уведомления — для важных событий.</string>
+    <string name="setup_permissions_granted">✓ Разрешения выданы</string>
+    <string name="setup_permissions_request">Выдать разрешения Android</string>
+    <string name="setup_next">Далее</string>
+    <string name="setup_network_title">Подключение к домашней сети</string>
+    <string name="setup_current_connection">Текущее подключение</string>
+    <string name="setup_ethernet">Проводное подключение</string>
+    <string name="setup_cellular_blocked">Через мобильную сеть продолжить не получится.</string>
+    <string name="setup_no_network">Сетевое подключение отсутствует.</string>
+    <string name="setup_unsupported_network">Нужна сеть Wi-Fi или проводное подключение.</string>
+    <string name="setup_server_search">Автопоиск сервера Sheepfold</string>
+    <string name="setup_server_not_found">Сервер пока не найден. Нажмите на блок, чтобы повторить поиск.</string>
+    <string name="setup_important">Важно</string>
+    <string name="setup_wifi_required">Для настройки подключитесь к домашней Wi-Fi сети или по Ethernet.</string>
+    <string name="setup_mac_title">Проверка адреса устройства</string>
+    <string name="setup_ethernet_mac_skipped">Проводная сеть обнаружена. Проверка Wi-Fi MAC не требуется.</string>
+    <string name="setup_wifi_name">Имя Wi-Fi сети</string>
+    <string name="setup_current_mac">MAC телефона в этой сети</string>
+    <string name="setup_mac_hidden">Android не сообщил MAC-адрес приложениям.</string>
+    <string name="setup_mac_warning">Для надёжного распознавания админского телефона желательно выбрать в настройках этой Wi-Fi сети MAC устройства вместо случайного MAC. Продолжить можно и без этого.</string>
+    <string name="setup_open_wifi_settings">Открыть настройки Wi-Fi</string>
+    <string name="setup_pairing_title">Настройка подключения</string>
+    <string name="setup_qr_code">QR-код</string>
+    <string name="setup_qr_scan_title">Сканирование QR-кода</string>
+    <string name="setup_qr_from_file">Загрузить QR-код из файла</string>
+    <string name="setup_port">HTTPS-порт</string>
 
     <string name="protection_title">Защита приложения</string>
     <string name="protection_description">Пароль рекомендуется. Face и Fingerprint можно выбрать, но Sheepfold полагается на системную блокировку телефона и не считает эти режимы усиленной защитой.</string>
@@ -85,6 +123,10 @@
     <string name="unlock_enter_password">Введите пароль</string>
     <string name="unlock_invalid">Неверное значение</string>
     <string name="unlock_open">Открыть</string>
+    <string name="unlock_biometric_prompt">Подтвердите вход системной биометрией телефона</string>
+    <string name="unlock_biometric_retry">Повторить биометрическую проверку</string>
+    <string name="unlock_biometric_failed">Биометрия не распознана</string>
+    <string name="unlock_biometric_unavailable">Биометрическая проверка недоступна на этом устройстве</string>
 
     <string name="router_label_format">Роутер: %1$s</string>
     <string name="router_commands_direct">Команды выполняются непосредственно на OpenWrt-роутере.</string>
@@ -92,6 +134,11 @@
     <string name="router_disable_internet">Отключить интернет для всех</string>
     <string name="router_global_block_enabled">Глобальная блокировка включена на роутере</string>
     <string name="router_internet_enabled">Интернет включён на роутере</string>
+    <string name="router_internet_is_enabled">Интернет включён</string>
+    <string name="router_internet_is_disabled">Интернет отключён</string>
+    <string name="action_allow">Разрешить</string>
+    <string name="action_block">Блокировать</string>
+    <string name="section_router_managed">Раздел использует настройки и данные подключённого OpenWrt-роутера. Расширенное редактирование будет синхронизировано с LuCI API.</string>
     <string name="router_refresh_failed">Не удалось обновить данные</string>
     <string name="router_info_title">Информация о роутере</string>
     <string name="widget_internet_enabled">Виджет включения интернета Sheepfold</string>

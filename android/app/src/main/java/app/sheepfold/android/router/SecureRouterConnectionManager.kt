@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.net.URL
 import java.net.URLEncoder
 
-/** Выполняет сопряжение по HTTPS и автоматически откатывается на LAN HTTP. */
+/** Выполняет сопряжение только по HTTPS и закрепляет сертификат роутера при первом успехе. */
 class SecureRouterConnectionManager {
     suspend fun connect(request: RouterConnectionRequest): RouterConnectionRequest = withContext(Dispatchers.IO) {
         require(!request.administratorLogin.isNullOrBlank()) { "Укажите логин администратора" }
@@ -163,7 +163,7 @@ class SecureRouterConnectionManager {
             trimmed.startsWith("http://", true) || trimmed.startsWith("https://", true)
         ) trimmed else "https://$trimmed"
         val parsed = URL(withScheme)
-        require(parsed.protocol == "http" || parsed.protocol == "https") { "Поддерживаются только HTTP и HTTPS" }
+        require(parsed.protocol == "https" || parsed.protocol == "http") { "Поддерживается только HTTPS" }
         require(parsed.host.isNotBlank()) { "Некорректный адрес роутера" }
         val path = parsed.path.trimEnd('/').let { current ->
             if (current.endsWith("/cgi-bin/sheepfold-api")) current else "$current/cgi-bin/sheepfold-api"
@@ -178,12 +178,7 @@ class SecureRouterConnectionManager {
         val parsed = URL(normalizeApiUrl(rawApiUrl))
         val host = if (parsed.host.contains(':')) "[${parsed.host}]" else parsed.host
         val path = parsed.path
-        val explicitPort = parsed.port.takeIf { it > 0 }
-        val httpsPort = when {
-            explicitPort == 5201 -> 5200
-            explicitPort != null -> explicitPort
-            else -> 5200
-        }
+        val httpsPort = parsed.port.takeIf { it > 0 } ?: 5201
         return listOf("https://$host:$httpsPort$path")
     }
 

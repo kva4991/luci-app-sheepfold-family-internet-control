@@ -28,8 +28,8 @@ Full Android management should be local-network only. Do not design full remote 
 During first setup, Android should try to detect Sheepfold automatically on the currently connected Wi-Fi network before asking the parent to confirm that this is the home network. Detection must verify a Sheepfold-specific endpoint on the router, not just any HTTP/LuCI response. Suggested endpoints:
 
 - `/.well-known/sheepfold.json`
-- `http://<router-host>:5201/cgi-bin/sheepfold-api`
-- later target: `http://<router-host>:5201/api/v1/ping`
+- `https://<router-host>:5201/cgi-bin/sheepfold-api`
+- `https://<router-host>:5201/api/v1/ping`
 
 The response should contain a Sheepfold marker, package version, router name, and API base URL. If detection succeeds, continue to the MAC-check step without asking “are you connected to home Wi-Fi?”. If detection fails, show the manual Wi-Fi confirmation flow.
 
@@ -66,7 +66,7 @@ If the home Wi-Fi network uses randomized/private MAC:
 
 - explain that Sheepfold needs a stable device identifier for reliable rules;
 - guide the parent to Android Wi-Fi network settings;
-- require the parent to switch this home Wi-Fi network to the real device MAC before setup continues;
+- recommend switching this home Wi-Fi network to the real device MAC, but allow the parent to continue after the warning;
 - verify the selected admin device from router-side data after the parent returns to the app.
 
 Do not promise automatic switching from randomized/private MAC to device MAC. Android permissions and manufacturer builds may prevent reliable automatic changes.
@@ -109,7 +109,7 @@ The repository has one Android build root: `android/`.
 
 Inside it, `android/app/` is the application module, not a second separate project. Run Gradle from `android/` so the build always uses `android/settings.gradle.kts`.
 
-This scaffold uses Kotlin and Jetpack Compose. It currently focuses on first-run setup screens, local-network guidance, QR/manual connection setup, basic discovery against the router, and the package/application identity. Real secure pairing, token storage, Android Keystore integration, widgets, notifications, and the full authenticated router API still depend on the OpenWRT backend work described in `docs/android-openwrt-api.ru.md`.
+The application uses Kotlin and Jetpack Compose. It includes the first-run agreement and permission flow, network discovery, Wi-Fi/MAC guidance, camera and file QR scanning, manual pairing, one-time router pairing, TLS pinning, encrypted connection storage, password/PIN/biometric app protection, router-backed device actions, notifications, widgets, and the parent AI assistant routed through OpenWRT. The evolving API contract is documented in `docs/android-openwrt-api.ru.md`.
 
 ## Build
 
@@ -151,7 +151,7 @@ android/app/build/outputs/apk/debug/app-debug.apk
 After `gradle :app:assembleDebug`, the project also copies the APK to:
 
 ```text
-%USERPROFILE%\Downloads\sheepfold-v0.1.24.apk
+%USERPROFILE%\Downloads\sheepfold-v<current-version>.apk
 ```
 
 To copy it somewhere else, set `SHEEPFOLD_APK_OUTPUT_DIR` before building.

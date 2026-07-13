@@ -1,11 +1,16 @@
 #!/bin/sh
 set -eu
 
+INSTALL_LANGUAGE_SELECTED=0
+
 default_group_names_for_language() {
 	lang="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
 	case "$lang" in
 		en)
-			printf '%s\n' 'No restrictions' 'Child number 1'
+			printf '%s\n' 'No restrictions' 'First child'
+			;;
+		zh_Hans)
+			printf '%s\n' '不受限制' '第一个孩子'
 			;;
 		*)
 			printf '%s\n' 'Без ограничений' 'Первый ребёнок'
@@ -18,6 +23,7 @@ no_restrictions_group_name() {
 		lang="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
 		case "$lang" in
 			en) printf 'No restrictions' ;;
+			zh_Hans) printf '不受限制' ;;
 			*) printf 'Без ограничений' ;;
 		esac
 	}
@@ -26,7 +32,7 @@ no_restrictions_group_name() {
 sync_luci_main_lang() {
 	lang="$1"
 	case "$lang" in
-		en|ru) ;;
+		en|ru|zh_Hans) ;;
 		*) return 1 ;;
 	esac
 	uci -q get luci.main >/dev/null 2>&1 || uci -q set luci.main=core
@@ -39,7 +45,8 @@ consume_install_language_pref() {
 	[ -f /etc/sheepfold/install.language ] || return 0
 	lang="$(sed -n '1p' /etc/sheepfold/install.language | tr -d '\r')"
 	case "$lang" in
-		en|ru)
+		en|ru|zh_Hans)
+			INSTALL_LANGUAGE_SELECTED=1
 			uci -q set sheepfold.global.language="$lang"
 			sync_luci_main_lang "$lang"
 			;;
@@ -51,13 +58,18 @@ default_owner_display_name() {
 	lang="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
 	case "$lang" in
 		en) printf 'Parent' ;;
+		zh_Hans) printf '家长' ;;
 		*) printf 'Родитель' ;;
 	esac
 }
 
 ensure_owner_defaults() {
-	[ -n "$(uci -q get sheepfold.owner.display_name 2>/dev/null)" ] || \
-		uci -q set "sheepfold.owner.display_name=$(default_owner_display_name)"
+	current="$(uci -q get sheepfold.owner.display_name 2>/dev/null || true)"
+	desired="$(default_owner_display_name)"
+	if [ -z "$current" ] || { [ "$INSTALL_LANGUAGE_SELECTED" = 1 ] && \
+		case "$current" in Parent|Родитель|家长) true ;; *) false ;; esac; }; then
+		uci -q set "sheepfold.owner.display_name=$desired"
+	fi
 }
 
 ensure_default_groups() {
@@ -68,7 +80,11 @@ ensure_default_groups() {
 	child_name="$(printf '%s' "$names" | sed -n '2p')"
 
 	uci -q get sheepfold.no_restrictions >/dev/null || uci -q set sheepfold.no_restrictions='group'
-	[ -n "$(uci -q get sheepfold.no_restrictions.name 2>/dev/null)" ] || uci -q set "sheepfold.no_restrictions.name=$no_restrictions_name"
+	current_nr="$(uci -q get sheepfold.no_restrictions.name 2>/dev/null || true)"
+	if [ -z "$current_nr" ] || { [ "$INSTALL_LANGUAGE_SELECTED" = 1 ] && \
+		case "$current_nr" in 'No restrictions'|'Без ограничений'|'不受限制') true ;; *) false ;; esac; }; then
+		uci -q set "sheepfold.no_restrictions.name=$no_restrictions_name"
+	fi
 	[ -n "$(uci -q get sheepfold.no_restrictions.protected 2>/dev/null)" ] || uci -q set sheepfold.no_restrictions.protected='1'
 	[ -n "$(uci -q get sheepfold.no_restrictions.personal 2>/dev/null)" ] || uci -q set sheepfold.no_restrictions.personal='0'
 	[ -n "$(uci -q get sheepfold.no_restrictions.auto_assignable 2>/dev/null)" ] || uci -q set sheepfold.no_restrictions.auto_assignable='1'
@@ -77,7 +93,11 @@ ensure_default_groups() {
 	[ -n "$(uci -q get sheepfold.no_restrictions.description 2>/dev/null)" ] || uci -q set sheepfold.no_restrictions.description='Trusted home infrastructure devices that should not be limited unless they are blocklisted'
 
 	uci -q get sheepfold.child_1 >/dev/null || uci -q set sheepfold.child_1='group'
-	[ -n "$(uci -q get sheepfold.child_1.name 2>/dev/null)" ] || uci -q set "sheepfold.child_1.name=$child_name"
+	current_child="$(uci -q get sheepfold.child_1.name 2>/dev/null || true)"
+	if [ -z "$current_child" ] || { [ "$INSTALL_LANGUAGE_SELECTED" = 1 ] && \
+		case "$current_child" in 'First child'|'Child number 1'|'Первый ребёнок'|'Ребёнок номер 1'|'第一个孩子') true ;; *) false ;; esac; }; then
+		uci -q set "sheepfold.child_1.name=$child_name"
+	fi
 	[ -n "$(uci -q get sheepfold.child_1.protected 2>/dev/null)" ] || uci -q set sheepfold.child_1.protected='0'
 	[ -n "$(uci -q get sheepfold.child_1.personal 2>/dev/null)" ] || uci -q set sheepfold.child_1.personal='1'
 	[ -n "$(uci -q get sheepfold.child_1.auto_assignable 2>/dev/null)" ] || uci -q set sheepfold.child_1.auto_assignable='0'
@@ -93,10 +113,10 @@ migrate_device_group_aliases() {
 	for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
 		group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
 		case "$group" in
-			'No restrictions'|'Без ограничений')
+			'No restrictions'|'Без ограничений'|'不受限制')
 				[ -n "$canonical_nr" ] && uci -q set "sheepfold.$section.group=$canonical_nr"
 				;;
-			'Child number 1'|'Первый ребёнок'|'Ребёнок номер 1')
+			'First child'|'Child number 1'|'Первый ребёнок'|'Ребёнок номер 1'|'第一个孩子')
 				[ -n "$canonical_child" ] && uci -q set "sheepfold.$section.group=$canonical_child"
 				;;
 			'Не настроено')

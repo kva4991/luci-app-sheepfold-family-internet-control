@@ -78,6 +78,7 @@ Avoid:
 
 ## Implementation Entry Point
 
+- When continuing work on `editsByClaude` before its merge into `main`, first read `docs/merge-readiness-plan.ru.md`. It records the exact stopping point, unresolved blockers, reasons for every required check, and the recommended reading route for a fresh chat.
 - Before running builds or tests in a fresh local Codex Desktop chat on the user's Windows PC, read `docs/agent-environment.ru.md`. It records the Windows/Codex tooling setup, required programs, common build commands, IPK/APK build notes, and the verification commands that have already worked for this repository. For Linux, WSL, macOS, or GitHub Actions, keep the intent but adapt paths and shell syntax.
 - Read `docs/agent-gotchas.ru.md` when debugging surprising LuCI, i18n, default-group, detector, or test-IPK behavior so earlier traps are not rediscovered from scratch.
 - Future AI developers should start with `docs/developer-task.ru.md`, then read `docs/product-requirements.md` and the relevant focused docs.

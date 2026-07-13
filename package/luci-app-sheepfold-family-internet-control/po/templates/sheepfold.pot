@@ -2679,3 +2679,27 @@ msgstr ""
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
 msgid "Yes"
 msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Application HTTPS port"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "First child"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Grok model"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Grok API key"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The model identifier is configurable because available Grok models may change."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Create the key in the xAI console and save it here. It is stored only on the router."
+msgstr ""

@@ -30,7 +30,7 @@ var emergencySites = [
 
 var admins = [
         {
-                id: 'A-0001',
+                id: '1',
                 name: 'Родитель',
                 login: 'SuperParent',
                 role: 'owner',
@@ -2027,7 +2027,7 @@ function upsertPairedAdminDevice(admin, status) {
         });
 
         if (!device) {
-                nextId = 'D-' + String(devices.length + 1).padStart(4, '0');
+                nextId = String(status.device_id || devices.length + 1);
                 device = {
                         id: nextId,
                         name: status.device_name || mac,
@@ -2377,7 +2377,7 @@ function showPairingModal(device) {
         var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
         var apiPath = '/cgi-bin/sheepfold-api';
-        var apiUrl = 'http://' + routerAddress + ':' + port + apiPath;
+        var apiUrl = 'https://' + routerAddress + ':' + port + apiPath;
         var pairingCode = device.pairingCode || generatePairingCode();
         var pairingPayloadText = pairingPayload(routerAddress, port, device.adminLogin || 'SuperParent', pairingCode);
 
@@ -2412,7 +2412,7 @@ function showAdminSettingsModal(admin) {
         var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
         var apiPath = '/cgi-bin/sheepfold-api';
-        var apiUrl = 'http://' + routerAddress + ':' + port + apiPath;
+        var apiUrl = 'https://' + routerAddress + ':' + port + apiPath;
         var temporaryPassword = admin.temporaryPassword || generatePairingCode();
         var pairingPayloadText = pairingPayload(routerAddress, port, admin.login, temporaryPassword);
         var pairingStartedAt = Math.floor(Date.now() / 1000);
@@ -3052,7 +3052,7 @@ function domainCard(site) {
 }
 
 function deviceDisplayId(device) {
-        var match = String(device.id || '').match(/(\d+)$/);
+        var match = String(device.id || '').match(/^(\d+)$/);
 
         return match ? String(parseInt(match[1], 10)) : String(devices.indexOf(device) + 1);
 }
@@ -3065,9 +3065,12 @@ var DEFAULT_GROUP_SECTION_IDS = ['no_restrictions', 'child_1'];
 var LEGACY_GROUP_ALIASES = {
         'No restrictions': 'no_restrictions',
         'Без ограничений': 'no_restrictions',
+        '不受限制': 'no_restrictions',
+        'First child': 'child_1',
         'Child number 1': 'child_1',
         'Первый ребёнок': 'child_1',
-        'Ребёнок номер 1': 'child_1'
+        'Ребёнок номер 1': 'child_1',
+        '第一个孩子': 'child_1'
 };
 
 function defaultGroupDisplayName(sectionId, fallback) {
@@ -3081,7 +3084,7 @@ function noRestrictionsGroupName() {
 }
 
 function childGroupName() {
-        return defaultGroupDisplayName('child_1', 'Child number 1');
+        return defaultGroupDisplayName('child_1', _('First child'));
 }
 
 function normalizeGroupName(groupName) {
@@ -3801,7 +3804,43 @@ function nextAdminId() {
                 return Math.max(max, idNumber(admin.id));
         }, 0) + 1;
 
-        return 'A-' + String(next).padStart(4, '0');
+        return String(next);
+}
+
+function loadAdministratorsFromUci() {
+        var sections = safeUciSections('sheepfold', 'administrator');
+
+        if (!sections.length)
+                return;
+
+        admins = sections.map(function (section, index) {
+                var parsedId = idNumber(section.id);
+                var id = parsedId === Number.MAX_SAFE_INTEGER ? index + 1 : parsedId;
+                var login = String(section.login || '').trim();
+
+                return {
+                        id: String(id),
+                        name: String(section.display_name || login || _('Parent')),
+                        login: login,
+                        deviceIds: devices.filter(function (device) {
+                                return device.adminDevice && device.adminLogin === login;
+                        }).map(function (device) {
+                                return device.id;
+                        })
+                };
+        }).sort(function (left, right) {
+                return idNumber(left.id) - idNumber(right.id);
+        });
+}
+
+function stageAdministrator(admin) {
+        var sectionName = administratorSectionName(admin);
+
+        uci.set('sheepfold', sectionName, 'id', String(admin.id));
+        uci.set('sheepfold', sectionName, 'display_name', admin.name || '');
+        uci.set('sheepfold', sectionName, 'login', admin.login || '');
+        // Роль остаётся внутренней защитной меткой backend и не показывается родителю в UI.
+        uci.set('sheepfold', sectionName, 'role', admin.login === 'SuperParent' ? 'owner' : 'admin');
 }
 
 function adminLoginExists(login) {
@@ -3882,6 +3921,7 @@ function showAddAdministratorModal(onAdd) {
                 };
 
                 admins.push(admin);
+                stageAdministrator(admin);
                 applyAdminDeviceBindings(admin, selector.selectedDevices(), []).then(function () {
                         if (onAdd)
                                 onAdd(admin);
@@ -4906,20 +4946,23 @@ function siteListsUpdateIntervalField() {
 }
 
 function autoConfigureDevicesField() {
-        var value = settingValue('detection_mode', 'full') === 'reduced' ? 'reduced' : 'full';
+        var enabled = settingValue('auto_configure', '1') === '1';
+        var value = !enabled ? 'disabled' :
+                settingValue('detection_mode', 'full') === 'reduced' ? 'reduced' : 'full';
         var select = E('select', {
                 'class': 'cbi-input-select',
                 'change': function (ev) {
                         var nextValue = ev.currentTarget.value;
-                        var mode = nextValue === 'full' ? 'full' : 'reduced';
+                        var mode = nextValue === 'reduced' ? 'reduced' : 'full';
 
                         setSettingsDraftOptions({
-                                auto_configure: '1',
+                                auto_configure: nextValue === 'disabled' ? '0' : '1',
                                 detection_mode: mode,
-                                no_restrictions_auto_assign: '1'
+                                no_restrictions_auto_assign: nextValue === 'disabled' ? '0' : '1'
                         });
                 }
         }, [
+                E('option', { 'value': 'disabled', 'selected': value === 'disabled' ? 'selected' : null }, _('Disabled')),
                 E('option', { 'value': 'full', 'selected': value === 'full' ? 'selected' : null }, _('Full automatic setup')),
                 E('option', { 'value': 'reduced', 'selected': value === 'reduced' ? 'selected' : null }, _('Reduced automatic setup'))
         ]);
@@ -5205,7 +5248,8 @@ function hasConfiguredAiProvider() {
         if (!provider || provider === 'none')
                 return false;
 
-        var keyOption = provider === 'gemini' ? 'gemini_api_key' : 'deepseek_api_key';
+        var keyOption = provider === 'gemini' ? 'gemini_api_key' :
+                (provider === 'grok' ? 'grok_api_key' : 'deepseek_api_key');
 
         return !!String(settingValue(keyOption, '') || '').trim();
 }
@@ -5231,7 +5275,8 @@ function aiSettingsBox() {
                                 }, [
                                         ['none', _('Not set up')],
                                         ['deepseek', 'DeepSeek'],
-                                        ['gemini', _('Gemini Free')]
+                                        ['gemini', _('Gemini Free')],
+                                        ['grok', 'Grok']
                                 ].map(function (item) {
                                         return E('option', {
                                                 'value': item[0],
@@ -5269,6 +5314,25 @@ function aiSettingsBox() {
                                         '',
                                         'AIza...',
                                         _('Create the key in Google AI Studio and save it here. Free limits depend on Google account and region.'),
+                                        true
+                                )
+                        );
+                } else if (provider === 'grok') {
+                        fields.push(
+                                globalInputOptionField(
+                                        _('Grok model'),
+                                        'grok_model',
+                                        'grok-3-mini',
+                                        'grok-3-mini',
+                                        _('The model identifier is configurable because available Grok models may change.'),
+                                        false
+                                ),
+                                globalInputOptionField(
+                                        _('Grok API key'),
+                                        'grok_api_key',
+                                        '',
+                                        'xai-...',
+                                        _('Create the key in the xAI console and save it here. It is stored only on the router.'),
                                         true
                                 )
                         );
@@ -5504,7 +5568,7 @@ function appPortField() {
         });
 
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, _('Application port')),
+                E('span', {}, _('Application HTTPS port')),
                 input,
                 E('small', {}, _('Used by Android app and pairing QR codes.'))
         ]);
@@ -6511,7 +6575,7 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                         configured.device_type :
                         configured && configured.detected_type ?
                                 configured.detected_type :
-                                inferDeviceType(item, configured);
+                                'unknown';
 
                 if (allowlist[mac])
                         status = 'allow';
@@ -6521,7 +6585,7 @@ function buildRouterDevices(dhcpLeases, arpTable) {
                 var statusBadge = deviceStatusBadge(status, configured);
 
                 return {
-                        id: 'D-' + String(index + 1).padStart(4, '0'),
+                        id: String(configured && configured.id || index + 1),
                         name: configured && configured.name &&
                                 !reservedSheepfoldListSection(configured.name) &&
                                 !isReservedDeviceSourceName(configured.name) ?
@@ -6912,6 +6976,7 @@ return view.extend({
                         ]);
                 }).then(function (results) {
                         devices = buildRouterDevices(results[0], results[1]);
+                        loadAdministratorsFromUci();
                         logEntries = parseRamLog(results[2]);
                 });
         },

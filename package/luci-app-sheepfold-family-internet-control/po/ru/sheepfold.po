@@ -3322,3 +3322,27 @@ msgstr "неизвестная ошибка"
 #: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
 msgid "unknown package"
 msgstr "неизвестный пакет"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Application HTTPS port"
+msgstr "HTTPS-порт приложения"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "First child"
+msgstr "Первый ребёнок"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Grok model"
+msgstr "Модель Grok"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Grok API key"
+msgstr "API-ключ Grok"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The model identifier is configurable because available Grok models may change."
+msgstr "Идентификатор модели можно изменить, потому что список доступных моделей Grok может меняться."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Create the key in the xAI console and save it here. It is stored only on the router."
+msgstr "Создайте ключ в консоли xAI и сохраните его здесь. Он хранится только на роутере."

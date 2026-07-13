@@ -73,6 +73,15 @@ program_log_context() {
     tail -n 80 "$log_file" 2>/dev/null | mask_sensitive
 }
 
+# Версия промпта выбирается в UCI, чтобы обновлять содержание отдельно от API-логики (§nnhj7xv).
+load_system_prompt() {
+    role="$1"
+    version="$2"
+    prompt_file="/usr/share/sheepfold/prompts/$role/$version/system.txt"
+    [ -r "$prompt_file" ] || return 1
+    cat "$prompt_file"
+}
+
 http_post_json() {
     api_url="$1"
     api_key="$2"
@@ -125,11 +134,13 @@ fi
 
 case "$client_role" in
     child)
-        system_prompt="Ты ИИ-помощник Sheepfold для ребёнка. Отвечай спокойно, понятно и без осуждения. Не помогай обходить семейные ограничения, скрывать действия, отключать контроль или получать доступ к чужим данным. Помогай сформулировать вопрос родителю, договориться о правилах и понять оставшееся время доступа. Не ставь диагнозы. При угрозе жизни, насилии, самоповреждении, опасном контакте или другом серьёзном риске советуй немедленно обратиться к доверенному взрослому или экстренной помощи. Не проси личные данные, адрес, школу, пароли или контакты."
+        prompt_version="$(uci -q get sheepfold.global.child_ai_prompt_version 2>/dev/null || printf v1)"
+        system_prompt="$(load_system_prompt child "$prompt_version" || printf '%s' 'Ты ИИ-помощник Sheepfold для ребёнка. Отвечай спокойно, не помогай обходить семейные ограничения и не проси личные данные.')"
         user_text="[Проверенная роль: ребёнок; устройство: $device_id]\n$message"
         ;;
     parent|administrator)
-        system_prompt="Ты ИИ-помощник Sheepfold для родителя. Помогай спокойно разбирать семейные правила интернета, не ставь диагнозы, не изображай психотерапевта, не провоцируй наказания и скандалы. Мягко направляй разговор к причинам конфликта, тревогам ребёнка и постепенной передаче самоконтроля. При риске для жизни, насилии, самоповреждении, наркотиках, экстремизме или тяжёлом состоянии советуй обратиться к очному специалисту или экстренным службам. Не раскрывай технические данные ради любопытства."
+        prompt_version="$(uci -q get sheepfold.global.parent_ai_prompt_version 2>/dev/null || printf v2)"
+        system_prompt="$(load_system_prompt parent "$prompt_version" || printf '%s' 'Ты ИИ-помощник Sheepfold для родителя. Помогай спокойно разбирать семейные правила интернета, не ставь диагнозы и не провоцируй наказания или скандалы.')"
         context_text=""
         [ "$include_info" != 1 ] || context_text="$context_text\n\n[Обезличенное состояние роутера]\n$(router_ai_context)"
         [ "$include_logs" != 1 ] || context_text="$context_text\n\n[Последние обезличенные записи Sheepfold]\n$(program_log_context)"
@@ -160,6 +171,15 @@ case "$provider" in
         api_key="$(uci -q get sheepfold.global.deepseek_api_key 2>/dev/null || true)"
         api_url="$(uci -q get sheepfold.global.deepseek_api_url 2>/dev/null || printf 'https://api.deepseek.com/chat/completions')"
         [ -n "$api_key" ] || { header_json '400 Bad Request'; printf '{"app":"sheepfold","ok":false,"error":"deepseek_api_key_missing"}\n'; exit 0; }
+        payload="$(printf '{"model":"%s","messages":[{"role":"system","content":"%s"},{"role":"user","content":"%s"}],"temperature":0.4}' \
+            "$(json_escape "$model")" "$(json_escape "$system_prompt")" "$(json_escape "$user_text")")"
+        http_post_json "$api_url" "$api_key" bearer "$payload"
+        ;;
+    grok)
+        model="$(uci -q get sheepfold.global.grok_model 2>/dev/null || printf grok-3-mini)"
+        api_key="$(uci -q get sheepfold.global.grok_api_key 2>/dev/null || true)"
+        api_url="$(uci -q get sheepfold.global.grok_api_url 2>/dev/null || printf 'https://api.x.ai/v1/chat/completions')"
+        [ -n "$api_key" ] || { header_json '400 Bad Request'; printf '{"app":"sheepfold","ok":false,"error":"grok_api_key_missing"}\n'; exit 0; }
         payload="$(printf '{"model":"%s","messages":[{"role":"system","content":"%s"},{"role":"user","content":"%s"}],"temperature":0.4}' \
             "$(json_escape "$model")" "$(json_escape "$system_prompt")" "$(json_escape "$user_text")")"
         http_post_json "$api_url" "$api_key" bearer "$payload"
