@@ -1792,6 +1792,21 @@ case "$COMMAND" in
         yandex-disk-sync-status)
                 /usr/libexec/sheepfold/sheepfold-yandex-disk sync-status
                 ;;
+        google-drive-test)
+                /usr/libexec/sheepfold/sheepfold-google-drive test
+                ;;
+        google-drive-list)
+                /usr/libexec/sheepfold/sheepfold-google-drive list
+                ;;
+        google-drive-download)
+                /usr/libexec/sheepfold/sheepfold-google-drive download "${2:-}" "${3:-}"
+                ;;
+        google-drive-restore-config)
+                /usr/libexec/sheepfold/sheepfold-google-drive restore-config "${2:-}"
+                ;;
+        google-drive-sync-status)
+                /usr/libexec/sheepfold/sheepfold-google-drive sync-status
+                ;;
         router-info)
                 router_info
                 ;;

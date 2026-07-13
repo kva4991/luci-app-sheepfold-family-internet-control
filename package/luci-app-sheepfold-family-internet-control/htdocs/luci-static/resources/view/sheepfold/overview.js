@@ -4517,14 +4517,201 @@ function yandexDiskMaintenancePanel() {
         ]);
 }
 
+function googleDiskMaintenancePanel() {
+        var statusNode = E('div', { 'class': 'sf-google-drive-actions-status sf-note' });
+        var syncStatusNode = E('div', { 'class': 'sf-google-drive-sync-status sf-muted' });
+        var listNode = E('div', { 'class': 'sf-google-drive-file-list' });
+        var backupSelect = E('select', { 'class': 'cbi-input-select sf-google-drive-backup-select' }, [
+                E('option', { value: '' }, _('Latest backup'))
+        ]);
+
+        function setStatus(message, tone) {
+                statusNode.textContent = message || '';
+                statusNode.className = 'sf-google-drive-actions-status sf-note' +
+                        (tone ? ' sf-note-' + tone : '');
+        }
+
+        function renderSyncStatus(payload) {
+                var when;
+                var line;
+
+                if (!payload) {
+                        syncStatusNode.textContent = _('Could not read Google Drive sync status.');
+                        syncStatusNode.className = 'sf-google-drive-sync-status sf-note sf-note-warning';
+                        return;
+                }
+
+                if (payload.ok === false && payload.message === 'no sync yet') {
+                        syncStatusNode.textContent = _('No sync to Google Drive yet.');
+                        syncStatusNode.className = 'sf-google-drive-sync-status sf-muted';
+                        return;
+                }
+
+                when = formatYandexSyncAge(payload.at);
+                line = _('Last Google Drive sync:') + ' ' + (when || infoValue(payload.at)) +
+                        (payload.message ? ' — ' + payload.message : '');
+
+                syncStatusNode.textContent = line;
+                syncStatusNode.className = 'sf-google-drive-sync-status sf-note' +
+                        (payload.ok ? ' sf-note-info' : ' sf-note-warning');
+        }
+
+        function refreshSyncStatus() {
+                routerControl(['google-drive-sync-status']).then(function (result) {
+                        renderSyncStatus(parseRouterJsonOutput(result));
+                }, function () {
+                        renderSyncStatus(null);
+                });
+        }
+
+        function populateBackupSelect(backups) {
+                var sorted = (backups || []).slice().sort(function (a, b) {
+                        return String(b.name || '').localeCompare(String(a.name || ''));
+                });
+
+                backupSelect.replaceChildren(E('option', { value: '' }, _('Latest backup')));
+                sorted.forEach(function (item) {
+                        backupSelect.appendChild(E('option', { value: item.name }, item.name));
+                });
+        }
+
+        function restoreSelectedBackup() {
+                var selected = backupSelect.value || '';
+                var confirmMessage = selected ?
+                        _('Restore Sheepfold settings from configuration backup %s on Google Drive?').replace('%s', selected) :
+                        _('Restore Sheepfold settings from the latest configuration backup on Google Drive?');
+
+                if (!window.confirm(confirmMessage))
+                        return;
+
+                setStatus(_('Restoring configuration from Google Drive...'));
+
+                routerControl(selected ?
+                        ['google-drive-restore-config', selected] :
+                        ['google-drive-restore-config']
+                ).then(function (result) {
+                        var payload = parseRouterJsonOutput(result);
+
+                        if (payload && payload.ok) {
+                                setStatus(
+                                        _('Configuration restored from Google Drive:') + ' ' +
+                                                infoValue(payload.restored),
+                                        'info'
+                                );
+                                refreshSyncStatus();
+                                window.setTimeout(function () {
+                                        window.location.reload();
+                                }, 1200);
+                                return;
+                        }
+
+                        setStatus(_('Could not restore configuration from Google Drive.'), 'warning');
+                }, function () {
+                        setStatus(_('Could not restore configuration from Google Drive.'), 'warning');
+                });
+        }
+
+        function renderFileList(payload) {
+                if (!payload || !payload.ok) {
+                        listNode.replaceChildren(E('div', { 'class': 'sf-muted' }, _('Could not read Google Drive file list.')));
+                        return;
+                }
+
+                populateBackupSelect(payload.backups || []);
+                listNode.replaceChildren.apply(listNode, [
+                        [_('Logs on Google Drive'), payload.logs || []],
+                        [_('Configuration backups on Google Drive'), payload.backups || []]
+                ].map(function (section) {
+                        var items = section[1];
+
+                        return E('div', { 'class': 'sf-google-drive-file-group' }, [
+                                E('strong', {}, section[0]),
+                                items.length ?
+                                        E('ul', {}, items.map(function (item) {
+                                                var sizeKb = Math.max(1, Math.round((item.bytes || 0) / 1024));
+
+                                                return E('li', {}, item.name + ' (' + sizeKb + ' KB)');
+                                        })) :
+                                        E('div', { 'class': 'sf-muted' }, _('No files'))
+                        ]);
+                }));
+        }
+
+        window.setTimeout(refreshSyncStatus, 0);
+
+        return E('div', { 'class': 'sf-google-drive-actions' }, [
+                E('div', { 'class': 'sf-toolbar sf-google-drive-toolbar' }, [
+                        E('button', {
+                                'class': 'sf-action sf-action-neutral',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        setStatus(_('Testing Google Drive authorization...'));
+
+                                        routerControl(['google-drive-test']).then(function (result) {
+                                                var payload = parseRouterJsonOutput(result);
+
+                                                if (payload && payload.ok)
+                                                        setStatus(payload.message || _('Google Drive authorization works.'), 'info');
+                                                else
+                                                        setStatus(_('Google Drive authorization failed.'), 'warning');
+                                        }, function () {
+                                                setStatus(_('Google Drive authorization failed.'), 'warning');
+                                        });
+                                }
+                        }, _('Test Google Drive authorization')),
+                        E('button', {
+                                'class': 'sf-action sf-action-neutral',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        setStatus(_('Loading file list from Google Drive...'));
+
+                                        routerControl(['google-drive-list']).then(function (result) {
+                                                var payload = parseRouterJsonOutput(result);
+
+                                                renderFileList(payload);
+                                                if (payload && payload.ok)
+                                                        setStatus(_('Google Drive file list updated.'), 'info');
+                                                else
+                                                        setStatus(_('Could not read Google Drive file list.'), 'warning');
+                                        }, function () {
+                                                setStatus(_('Could not read Google Drive file list.'), 'warning');
+                                        });
+                                }
+                        }, _('Show files on disk')),
+                        E('button', {
+                                'class': 'sf-action sf-action-neutral',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        refreshSyncStatus();
+                                }
+                        }, _('Refresh sync status'))
+                ]),
+                syncStatusNode,
+                E('div', { 'class': 'sf-google-drive-restore-row' }, [
+                        backupSelect,
+                        E('button', {
+                                'class': 'sf-action sf-action-positive',
+                                'click': function (ev) {
+                                        ev.preventDefault();
+                                        restoreSelectedBackup();
+                                }
+                        }, _('Restore configuration backup'))
+                ]),
+                statusNode,
+                listNode
+        ]);
+}
+
 function logStorageLocationField() {
         var currentValue = settingValue('log_storage', 'ram');
         var statusView = logStorageStatusView();
         var yandexBlock = E('div', { 'class': 'sf-yandex-disk-settings' });
+        var googleBlock = E('div', { 'class': 'sf-google-drive-settings' });
         var select;
 
         function syncVisibility() {
                 yandexBlock.hidden = select.value === 'yandex_disk' ? null : 'hidden';
+                googleBlock.hidden = select.value === 'google_drive' ? null : 'hidden';
                 statusView.refresh();
         }
 
@@ -4537,7 +4724,8 @@ function logStorageLocationField() {
         }, [
                 ['ram', _('RAM, router operational memory, cleared on reboot (recommended)')],
                 ['usb', _('USB flash drive')],
-                ['yandex_disk', _('Yandex Disk')]
+                ['yandex_disk', _('Yandex Disk')],
+                ['google_drive', _('Google Drive')]
         ].map(function (item) {
                 return E('option', {
                         'value': item[0],
@@ -4586,6 +4774,56 @@ function logStorageLocationField() {
         ));
         yandexBlock.appendChild(yandexDiskMaintenancePanel());
 
+        googleBlock.appendChild(settingsDivider(_('Google Drive settings')));
+        googleBlock.appendChild(sectionInputField(
+                'gdrive',
+                _('Google OAuth client ID'),
+                'client_id',
+                '',
+                '',
+                _('Create an OAuth client in Google Cloud Console (Desktop app type).')
+        ));
+        googleBlock.appendChild(sectionInputField(
+                'gdrive',
+                _('Google OAuth client secret'),
+                'client_secret',
+                '',
+                '',
+                _('Optional for some clients, but usually required for refresh-token exchange.'),
+                true
+        ));
+        googleBlock.appendChild(sectionInputField(
+                'gdrive',
+                _('Google OAuth refresh token'),
+                'refresh_token',
+                '',
+                '',
+                _('Obtain once on a PC and paste here. Sheepfold stores it only on the router.'),
+                true
+        ));
+        googleBlock.appendChild(sectionInputField(
+                'gdrive',
+                _('Root folder on disk for Sheepfold'),
+                'root_folder',
+                '/sheepfold',
+                '/sheepfold'
+        ));
+        googleBlock.appendChild(saveSelectSectionField(
+                'gdrive',
+                _('Allowed storage for Sheepfold data'),
+                'quota_mb',
+                '500',
+                [
+                        ['50', _('50 MB')],
+                        ['100', _('100 MB')],
+                        ['250', _('250 MB')],
+                        ['500', _('500 MB')],
+                        ['1024', _('1 GB')]
+                ],
+                _('Sheepfold uploads journals, rotated archives and configuration backups within this limit.')
+        ));
+        googleBlock.appendChild(googleDiskMaintenancePanel());
+
         syncVisibility();
 
         return E('div', { 'class': 'sf-log-storage-field-wrap' }, [
@@ -4596,7 +4834,8 @@ function logStorageLocationField() {
                                 statusView.node
                         ])
                 ]),
-                yandexBlock
+                yandexBlock,
+                googleBlock
         ]);
 }
 
@@ -4736,16 +4975,20 @@ function saveGlobalOptions(options) {
         var globalOptions = {};
         var usbOptions = {};
         var cloudOptions = {};
+        var gdriveOptions = {};
         var configs = ['sheepfold'];
 
         Object.keys(options).forEach(function (key) {
                 var usbParts = key.match(/^usb\.(.+)$/);
                 var cloudParts = key.match(/^cloud\.(.+)$/);
+                var gdriveParts = key.match(/^gdrive\.(.+)$/);
 
                 if (usbParts)
                         usbOptions[usbParts[1]] = options[key];
                 else if (cloudParts)
                         cloudOptions[cloudParts[1]] = options[key];
+                else if (gdriveParts)
+                        gdriveOptions[gdriveParts[1]] = options[key];
                 else
                         globalOptions[key] = options[key];
         });
@@ -4784,6 +5027,16 @@ function saveGlobalOptions(options) {
                         uci.set('sheepfold', 'cloud', 'authorized', '0');
                 Object.keys(cloudOptions).forEach(function (option) {
                         uci.set('sheepfold', 'cloud', option, cloudOptions[option]);
+                });
+        }
+
+        if (Object.keys(gdriveOptions).length) {
+                ensureSheepfoldNamedSection('gdrive', 'google_drive');
+                if (hasOwn(gdriveOptions, 'client_id') || hasOwn(gdriveOptions, 'client_secret') ||
+                        hasOwn(gdriveOptions, 'refresh_token'))
+                        uci.set('sheepfold', 'gdrive', 'authorized', '0');
+                Object.keys(gdriveOptions).forEach(function (option) {
+                        uci.set('sheepfold', 'gdrive', option, gdriveOptions[option]);
                 });
         }
 
@@ -7355,7 +7608,7 @@ return view.extend({
                 filterUi = createLogFilterUi(refreshLogView);
 
                 return E('div', { 'class': 'sf-panel' }, [
-                        E('p', { 'class': 'sf-section-intro' }, _('The log is stored in RAM for fast viewing and is cleared after router reboot. When USB flash or Yandex Disk is configured, events are mirrored there too. Export masks sensitive fields.')),
+                        E('p', { 'class': 'sf-section-intro' }, _('The log is stored in RAM for fast viewing and is cleared after router reboot. When USB flash, Yandex Disk, or Google Drive is configured, events are mirrored there too. Export masks sensitive fields.')),
                         E('div', { 'class': 'sf-log-toolbar-row' }, [
                                 filterUi.toggleButton,
                                 E('div', { 'class': 'sf-log-toolbar-actions' }, [
@@ -7419,7 +7672,7 @@ return view.extend({
         renderSettingsStorage: function () {
                 return E('div', { 'class': 'sf-flat-form' }, [
                         E('p', { 'class': 'sf-note' },
-                                _('Store journals in RAM to protect router flash memory. USB or Yandex Disk can archive rotated logs and configuration backups when configured.')),
+                                _('Store journals in RAM to protect router flash memory. USB, Yandex Disk, or Google Drive can archive rotated logs and configuration backups when configured.')),
                         logStorageLocationField(),
                         cachePathField(),
                         saveSelectGlobalField(_('Log retention on router'), 'log_retention', '3d', [

@@ -47,7 +47,8 @@ describe('overview UI release 148', () => {
     assert.match(logHelper, /mirror_to_usb/);
     assert.match(logHelper, /USB_LOG_DIR/);
     assert.match(logHelper, /schedule_yandex_push/);
-    assert.match(logHelper, /YANDEX_PUSH_INTERVAL=300/);
+    assert.match(logHelper, /CLOUD_PUSH_INTERVAL=300/);
+    assert.match(logHelper, /schedule_google_push/);
     assert.match(logHelper, /push-events/);
     assert.match(yandex, /cmd_push_events/);
     assert.match(yandex, /push-events/);
@@ -75,6 +76,6 @@ describe('overview UI release 148', () => {
     assert.match(po, /msgstr "Порт приложения"/);
     assert.match(po, /msgid "Site list update from allowlist and blocklist sources"/);
     assert.match(po, /msgstr "Обновление списков сайтов из белых и чёрных списков"/);
-    assert.match(makefile, /PKG_RELEASE:=158/);
+    assert.match(makefile, /PKG_RELEASE:=159/);
   });
 });

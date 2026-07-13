@@ -2877,6 +2877,114 @@ msgid "Yandex Disk settings"
 msgstr "Настройки Yandex Disk"
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Google Drive"
+msgstr "Google Диск"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Google Drive settings"
+msgstr "Настройки Google Диска"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Google OAuth client ID"
+msgstr "OAuth client ID Google"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Google OAuth client secret"
+msgstr "OAuth client secret Google"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Google OAuth refresh token"
+msgstr "OAuth refresh token Google"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Create an OAuth client in Google Cloud Console (Desktop app type)."
+msgstr "Создайте OAuth-клиент в Google Cloud Console (тип Desktop app)."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Optional for some clients, but usually required for refresh-token exchange."
+msgstr "Для некоторых клиентов необязателен, но обычно нужен для обмена refresh token."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Obtain once on a PC and paste here. Sheepfold stores it only on the router."
+msgstr "Получите один раз на ПК и вставьте сюда. Sheepfold хранит токен только на роутере."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Test Google Drive authorization"
+msgstr "Проверить авторизацию Google Диска"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Testing Google Drive authorization..."
+msgstr "Проверка авторизации Google Диска..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Google Drive authorization works."
+msgstr "Авторизация Google Диска работает."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Google Drive authorization failed."
+msgstr "Не удалось авторизоваться в Google Диске."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Loading file list from Google Drive..."
+msgstr "Загрузка списка файлов с Google Диска..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Google Drive file list updated."
+msgstr "Список файлов Google Диска обновлён."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not read Google Drive file list."
+msgstr "Не удалось прочитать список файлов Google Диска."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not read Google Drive sync status."
+msgstr "Не удалось прочитать статус синхронизации Google Диска."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "No sync to Google Drive yet."
+msgstr "Синхронизации с Google Диском пока не было."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Last Google Drive sync:"
+msgstr "Последняя синхронизация Google Диска:"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Restore Sheepfold settings from configuration backup %s on Google Drive?"
+msgstr "Восстановить настройки Sheepfold из резервной копии %s на Google Диске?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Restore Sheepfold settings from the latest configuration backup on Google Drive?"
+msgstr "Восстановить настройки Sheepfold из последней резервной копии на Google Диске?"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Restoring configuration from Google Drive..."
+msgstr "Восстановление настроек с Google Диска..."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Configuration restored from Google Drive:"
+msgstr "Настройки восстановлены с Google Диска:"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not restore configuration from Google Drive."
+msgstr "Не удалось восстановить настройки с Google Диска."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Logs on Google Drive"
+msgstr "Журналы на Google Диске"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Configuration backups on Google Drive"
+msgstr "Резервные копии настроек на Google Диске"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The log is stored in RAM for fast viewing and is cleared after router reboot. When USB flash, Yandex Disk, or Google Drive is configured, events are mirrored there too. Export masks sensitive fields."
+msgstr "Журнал хранится в RAM для быстрого просмотра и очищается после перезагрузки роутера. При подключённой флешке, Yandex Disk или Google Диске события также дублируются туда. Экспорт маскирует чувствительные поля."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Store journals in RAM to protect router flash memory. USB, Yandex Disk, or Google Drive can archive rotated logs and configuration backups when configured."
+msgstr "Храните журналы в RAM, чтобы не изнашивать flash роутера. USB, Yandex Disk или Google Диск могут архивировать ротированные журналы и резервные копии настроек, если настроены."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
 msgid "Yekaterinburg time"
 msgstr "Екатеринбургское время"
 

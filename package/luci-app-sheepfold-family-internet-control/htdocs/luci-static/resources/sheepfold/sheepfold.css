@@ -372,7 +372,8 @@
         line-height: 1.25;
 }
 
-.sf-yandex-disk-settings[hidden] {
+.sf-yandex-disk-settings[hidden],
+.sf-google-drive-settings[hidden] {
         display: none !important;
 }
 
@@ -1155,6 +1156,53 @@
 }
 
 .sf-yandex-disk-backup-select {
+        min-width: min(100%, 320px);
+        flex: 1 1 220px;
+}
+
+.sf-google-drive-actions,
+.sf-google-drive-toolbar,
+.sf-google-drive-file-list,
+.sf-google-drive-file-group ul,
+.sf-google-drive-sync-status,
+.sf-google-drive-restore-row,
+.sf-google-drive-backup-select {
+        /* Reuse Yandex cloud-disk layout */
+}
+
+.sf-google-drive-actions {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+}
+
+.sf-google-drive-toolbar {
+        flex-wrap: wrap;
+        gap: 8px;
+}
+
+.sf-google-drive-file-list {
+        display: grid;
+        gap: 10px;
+}
+
+.sf-google-drive-file-group ul {
+        margin: 6px 0 0;
+        padding-left: 18px;
+}
+
+.sf-google-drive-sync-status {
+        line-height: 1.4;
+}
+
+.sf-google-drive-restore-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+}
+
+.sf-google-drive-backup-select {
         min-width: min(100%, 320px);
         flex: 1 1 220px;
 }

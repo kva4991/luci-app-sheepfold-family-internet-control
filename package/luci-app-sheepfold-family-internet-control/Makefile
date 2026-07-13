@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=158
+PKG_RELEASE:=159
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -201,6 +201,18 @@ ensure_yandex_option password ''
 ensure_yandex_option root_folder '/sheepfold'
 ensure_yandex_option quota_mb '500'
 ensure_yandex_option authorized '0'
+ensure_named_section gdrive google_drive
+ensure_gdrive_option() {
+	option="$$1"
+	value="$$2"
+	[ -n "$$(uci -q get sheepfold.gdrive.$$option 2>/dev/null)" ] || uci -q set sheepfold.gdrive.$$option="$$value"
+}
+ensure_gdrive_option client_id ''
+ensure_gdrive_option client_secret ''
+ensure_gdrive_option refresh_token ''
+ensure_gdrive_option root_folder '/sheepfold'
+ensure_gdrive_option quota_mb '500'
+ensure_gdrive_option authorized '0'
 uci -q get sheepfold.owner >/dev/null || uci -q set sheepfold.owner=administrator
 [ -n "$$(uci -q get sheepfold.owner.login 2>/dev/null)" ] || uci -q set sheepfold.owner.login='SuperParent'
 [ -n "$$(uci -q get sheepfold.owner.role 2>/dev/null)" ] || uci -q set sheepfold.owner.role='owner'

@@ -38,24 +38,31 @@ test('AI provider defaults to not configured in UCI templates', () => {
 test('storage backends are reachable from LuCI ACL and have default UCI sections', () => {
   assert.match(acl, /sheepfold-usb-storage/);
   assert.match(acl, /sheepfold-yandex-disk/);
+  assert.match(acl, /sheepfold-google-drive/);
   assert.match(acl, /sheepfold-log-storage/);
   assert.match(makefile, /ensure_named_section usb usb/);
   assert.match(makefile, /ensure_named_section cloud yandex_disk/);
+  assert.match(makefile, /ensure_named_section gdrive google_drive/);
   assert.match(defaults, /option log_storage 'ram'/);
   assert.match(defaults, /config yandex_disk 'cloud'/);
+  assert.match(defaults, /config google_drive 'gdrive'/);
 });
 
-test('storage tab exposes Yandex Disk and storage status UI', () => {
+test('storage tab exposes cloud storage backends and storage status UI', () => {
   assert.match(overview, /logStorageLocationField/);
   assert.match(overview, /yandex_disk/);
+  assert.match(overview, /google_drive/);
   assert.match(overview, /sf-storage-status-lamp/);
   assert.match(overview, /router operational memory, cleared on reboot/);
   assert.match(overview, /yandexDiskMaintenancePanel/);
+  assert.match(overview, /googleDiskMaintenancePanel/);
   assert.match(overview, /yandex-disk-test/);
-  assert.match(overview, /yandex-disk-list/);
-  assert.match(overview, /yandex-disk-restore-config/);
-  assert.match(overview, /yandex-disk-sync-status/);
+  assert.match(overview, /google-drive-test/);
+  assert.match(overview, /google-drive-list/);
+  assert.match(overview, /google-drive-restore-config/);
+  assert.match(overview, /google-drive-sync-status/);
   assert.match(overview, /sf-yandex-disk-backup-select/);
+  assert.match(overview, /sf-google-drive-backup-select/);
   assert.match(overview, /Refresh sync status/);
   assert.doesNotMatch(overview, /RAM only \(recommended\)/);
 });

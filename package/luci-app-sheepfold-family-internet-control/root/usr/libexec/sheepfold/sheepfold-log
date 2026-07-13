@@ -5,9 +5,12 @@ DEFAULT_LOG="/tmp/sheepfold/events.log"
 USB_MOUNT_POINT="/mnt/sheepfold-usb"
 USB_LOG_DIR="${USB_MOUNT_POINT}/sheepfold/logs"
 YANDEX_PUSH="/usr/libexec/sheepfold/sheepfold-yandex-disk"
+GOOGLE_PUSH="/usr/libexec/sheepfold/sheepfold-google-drive"
 YANDEX_PUSH_LOCK="/tmp/sheepfold/.yandex-push.scheduled"
 YANDEX_PUSH_STAMP="/tmp/sheepfold/.yandex-push.last"
-YANDEX_PUSH_INTERVAL=300
+GOOGLE_PUSH_LOCK="/tmp/sheepfold/.google-push.scheduled"
+GOOGLE_PUSH_STAMP="/tmp/sheepfold/.google-push.last"
+CLOUD_PUSH_INTERVAL=300
 MESSAGE="${*:-}"
 
 log_path() {
@@ -56,7 +59,7 @@ schedule_yandex_push() {
                 case "$last" in ''|*[!0-9]*) last=0 ;; esac
         fi
 
-        if [ "$now" -gt 0 ] && [ "$last" -gt 0 ] && [ $((now - last)) -lt "$YANDEX_PUSH_INTERVAL" ]; then
+        if [ "$now" -gt 0 ] && [ "$last" -gt 0 ] && [ $((now - last)) -lt "$CLOUD_PUSH_INTERVAL" ]; then
                 return 0
         fi
 
@@ -67,6 +70,40 @@ schedule_yandex_push() {
                 "$YANDEX_PUSH" push-events >/dev/null 2>&1 || true
                 date +%s >"$YANDEX_PUSH_STAMP" 2>/dev/null || true
                 rm -f "$YANDEX_PUSH_LOCK"
+        ) &
+}
+
+schedule_google_push() {
+        now=0
+        last=0
+
+        case "$(log_storage_backend)" in
+                google_drive) ;;
+                *) return 0 ;;
+        esac
+
+        [ -x "$GOOGLE_PUSH" ] || return 0
+        [ -f "$GOOGLE_PUSH_LOCK" ] && return 0
+
+        now="$(date +%s 2>/dev/null || printf 0)"
+        case "$now" in ''|*[!0-9]*) now=0 ;; esac
+
+        if [ -f "$GOOGLE_PUSH_STAMP" ]; then
+                last="$(cat "$GOOGLE_PUSH_STAMP" 2>/dev/null || printf 0)"
+                case "$last" in ''|*[!0-9]*) last=0 ;; esac
+        fi
+
+        if [ "$now" -gt 0 ] && [ "$last" -gt 0 ] && [ $((now - last)) -lt "$CLOUD_PUSH_INTERVAL" ]; then
+                return 0
+        fi
+
+        mkdir -p /tmp/sheepfold 2>/dev/null || true
+        : >"$GOOGLE_PUSH_LOCK"
+
+        (
+                "$GOOGLE_PUSH" push-events >/dev/null 2>&1 || true
+                date +%s >"$GOOGLE_PUSH_STAMP" 2>/dev/null || true
+                rm -f "$GOOGLE_PUSH_LOCK"
         ) &
 }
 
@@ -84,3 +121,4 @@ logger -t sheepfold "$MESSAGE" 2>/dev/null || true
 
 mirror_to_usb "$LINE"
 schedule_yandex_push
+schedule_google_push

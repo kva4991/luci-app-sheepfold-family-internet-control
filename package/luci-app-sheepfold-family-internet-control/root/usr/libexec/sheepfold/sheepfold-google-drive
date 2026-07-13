@@ -1,0 +1,803 @@
+#!/bin/sh
+# Архивирование журналов и резервных копий настроек в Google Drive через Drive API v3.
+set -eu
+
+DRIVE_API="https://www.googleapis.com/drive/v3"
+DRIVE_UPLOAD="https://www.googleapis.com/upload/drive/v3"
+TOKEN_URL="https://oauth2.googleapis.com/token"
+RAM_ARCHIVE_DIR="/tmp/sheepfold/.private/archive"
+EVENTS_LOG="/tmp/sheepfold/events.log"
+BACKUP_STAGING="/tmp/sheepfold/.gdrive-backup-staging"
+SYNC_STATUS_FILE="/tmp/sheepfold/.gdrive-sync-status.json"
+TOKEN_CACHE="/tmp/sheepfold/.gdrive-token.json"
+FOLDER_CACHE="/tmp/sheepfold/.gdrive-folders.json"
+
+uci_get() {
+	uci -q get "sheepfold.gdrive.$1" 2>/dev/null || printf '%s' "${2:-}"
+}
+
+global_get() {
+	uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "${2:-}"
+}
+
+json_escape() {
+	printf '%s' "$1" | tr '\r\n\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+have_curl() {
+	command -v curl >/dev/null 2>&1
+}
+
+credentials_ready() {
+	client_id="$(uci_get client_id '')"
+	refresh_token="$(uci_get refresh_token '')"
+	[ -n "$client_id" ] && [ -n "$refresh_token" ]
+}
+
+normalize_root_folder() {
+	folder="$(uci_get root_folder '/sheepfold')"
+	folder="${folder#/}"
+	folder="${folder%/}"
+	[ -n "$folder" ] || folder="sheepfold"
+	printf '%s' "$folder"
+}
+
+quota_mb() {
+	quota="$(uci_get quota_mb '500')"
+	case "$quota" in
+		50|100|250|500|1024) printf '%s' "$quota" ;;
+		*) printf '500' ;;
+	esac
+}
+
+require_tooling() {
+	if ! have_curl; then
+		printf '{"ok":false,"error":"curl_required"}\n'
+		return 1
+	fi
+	if ! credentials_ready; then
+		printf '{"ok":false,"error":"credentials_missing"}\n'
+		return 1
+	fi
+	return 0
+}
+
+json_get_string() {
+	key="$1"
+	printf '%s' "$2" | sed -n "s/.*\"$key\":\"\\([^\"]*\\)\".*/\\1/p" | head -1
+}
+
+json_get_number() {
+	key="$1"
+	printf '%s' "$2" | sed -n "s/.*\"$key\":\\([0-9][0-9]*\\).*/\\1/p" | head -1
+}
+
+access_token() {
+	now expires_at cached_token response new_token expires_in client_id client_secret refresh_token
+
+	require_tooling || return 1
+	now="$(date +%s 2>/dev/null || printf 0)"
+	case "$now" in ''|*[!0-9]*) now=0 ;; esac
+
+	if [ -r "$TOKEN_CACHE" ]; then
+		cached_token="$(json_get_string access_token "$(cat "$TOKEN_CACHE" 2>/dev/null || true)")"
+		expires_at="$(json_get_number expires_at "$(cat "$TOKEN_CACHE" 2>/dev/null || true)")"
+		case "$expires_at" in ''|*[!0-9]*) expires_at=0 ;; esac
+		if [ -n "$cached_token" ] && [ "$now" -gt 0 ] && [ "$expires_at" -gt "$now" ]; then
+			printf '%s' "$cached_token"
+			return 0
+		fi
+	fi
+
+	client_id="$(uci_get client_id '')"
+	client_secret="$(uci_get client_secret '')"
+	refresh_token="$(uci_get refresh_token '')"
+
+	response="$(curl -sS -m 30 -X POST "$TOKEN_URL" \
+		-d "client_id=$client_id" \
+		-d "client_secret=$client_secret" \
+		-d "refresh_token=$refresh_token" \
+		-d "grant_type=refresh_token" 2>/dev/null || true)"
+
+	new_token="$(json_get_string access_token "$response")"
+	expires_in="$(json_get_number expires_in "$response")"
+	case "$expires_in" in ''|*[!0-9]*) expires_in=3000 ;; esac
+
+	if [ -z "$new_token" ]; then
+		printf '{"ok":false,"error":"token_refresh_failed"}\n' >&2
+		return 1
+	fi
+
+	expires_at=$((now + expires_in - 60))
+	mkdir -p /tmp/sheepfold 2>/dev/null || true
+	printf '{"access_token":"%s","expires_at":%s}\n' "$(json_escape "$new_token")" "$expires_at" >"$TOKEN_CACHE"
+	chmod 600 "$TOKEN_CACHE" 2>/dev/null || true
+	printf '%s' "$new_token"
+}
+
+drive_request() {
+	method="$1"
+	url="$2"
+	extra="${3:-}"
+	token
+
+	token="$(access_token)" || return 1
+	# shellcheck disable=SC2086
+	curl -sS -m 120 -H "Authorization: Bearer $token" -X "$method" $extra "$url"
+}
+
+drive_upload_media() {
+	file_id="$1"
+	local_path="$2"
+	token response code
+
+	token="$(access_token)" || return 1
+	code="$(curl -sS -m 120 -o /dev/null -w '%{http_code}' -X PATCH \
+		-H "Authorization: Bearer $token" \
+		-H "Content-Type: application/octet-stream" \
+		--data-binary "@$local_path" \
+		"$DRIVE_UPLOAD/files/$file_id?uploadType=media" 2>/dev/null || printf 000)"
+	printf '%s' "$code"
+}
+
+drive_create_file() {
+	folder_id="$1"
+	local_path="$2"
+	filename="$3"
+	boundary body_file token code response file_id size
+
+	boundary="sheepfold_gdrive_$$"
+	body_file="/tmp/sheepfold/.gdrive-multipart-$$"
+	token="$(access_token)" || return 1
+
+	{
+		printf -- '--%s\r\n' "$boundary"
+		printf 'Content-Type: application/json; charset=UTF-8\r\n\r\n'
+		printf '{"name":"%s","parents":["%s"]}\r\n' "$(json_escape "$filename")" "$folder_id"
+		printf -- '--%s\r\n' "$boundary"
+		printf 'Content-Type: application/octet-stream\r\n\r\n'
+		cat "$local_path"
+		printf '\r\n--%s--\r\n' "$boundary"
+	} >"$body_file"
+
+	code="$(curl -sS -m 120 -o /tmp/sheepfold/.gdrive-create-response-$$ -w '%{http_code}' -X POST \
+		-H "Authorization: Bearer $token" \
+		-H "Content-Type: multipart/related; boundary=$boundary" \
+		--data-binary "@$body_file" \
+		"$DRIVE_UPLOAD/files?uploadType=multipart&fields=id,size" 2>/dev/null || printf 000)"
+	rm -f "$body_file"
+
+	case "$code" in
+		200|201)
+			response="$(cat /tmp/sheepfold/.gdrive-create-response-$$ 2>/dev/null || true)"
+			rm -f /tmp/sheepfold/.gdrive-create-response-$$
+			file_id="$(json_get_string id "$response")"
+			size="$(json_get_number size "$response")"
+			printf '%s\t%s\n' "$file_id" "${size:-0}"
+			return 0
+			;;
+	esac
+	rm -f /tmp/sheepfold/.gdrive-create-response-$$
+	return 1
+}
+
+find_folder_id() {
+	parent_id="$1"
+	name="$2"
+	query response folder_id
+
+	query="$(printf "name='%s' and mimeType='application/vnd.google-apps.folder' and '%s' in parents and trashed=false" \
+		"$(printf '%s' "$name" | sed "s/'/\\\\'/g")" "$parent_id")"
+	response="$(drive_request GET "$DRIVE_API/files?q=$(printf '%s' "$query" | sed 's/ /%20/g;s/'\''/%27/g')&fields=files(id,name)&pageSize=1" 2>/dev/null || true)"
+	folder_id="$(printf '%s' "$response" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)"
+	[ -n "$folder_id" ] || return 1
+	printf '%s' "$folder_id"
+}
+
+create_folder_id() {
+	parent_id="$1"
+	name="$2"
+	token response folder_id code
+
+	token="$(access_token)" || return 1
+	response="$(curl -sS -m 60 -X POST \
+		-H "Authorization: Bearer $token" \
+		-H "Content-Type: application/json" \
+		-d "{\"name\":\"$(json_escape "$name")\",\"mimeType\":\"application/vnd.google-apps.folder\",\"parents\":[\"$parent_id\"]}" \
+		"$DRIVE_API/files?fields=id" 2>/dev/null || true)"
+	folder_id="$(json_get_string id "$response")"
+	[ -n "$folder_id" ] || return 1
+	printf '%s' "$folder_id"
+}
+
+ensure_folder_id() {
+	parent_id="$1"
+	name="$2"
+	folder_id
+
+	folder_id="$(find_folder_id "$parent_id" "$name" 2>/dev/null || true)"
+	if [ -n "$folder_id" ]; then
+		printf '%s' "$folder_id"
+		return 0
+	fi
+	create_folder_id "$parent_id" "$name"
+}
+
+cache_folder_ids() {
+	root_name root_id logs_id backups_id
+
+	root_name="$(normalize_root_folder)"
+	root_id="$(ensure_folder_id root "$root_name")" || return 1
+	logs_id="$(ensure_folder_id "$root_id" logs)" || return 1
+	backups_id="$(ensure_folder_id "$root_id" backups)" || return 1
+
+	mkdir -p /tmp/sheepfold 2>/dev/null || true
+	printf '{"root":"%s","logs":"%s","backups":"%s","root_name":"%s"}\n' \
+		"$root_id" "$logs_id" "$backups_id" "$(json_escape "$root_name")" >"$FOLDER_CACHE"
+	chmod 600 "$FOLDER_CACHE" 2>/dev/null || true
+}
+
+folder_id_from_cache() {
+	key="$1"
+	[ -r "$FOLDER_CACHE" ] || cache_folder_ids || return 1
+	json_get_string "$key" "$(cat "$FOLDER_CACHE" 2>/dev/null || true)"
+}
+
+remote_name_allowed() {
+	name="$1"
+	case "$name" in
+		*/*|*..*) return 1 ;;
+	esac
+	return 0
+}
+
+resolve_remote_name() {
+	spec="$1"
+	case "$spec" in
+		logs/*) printf '%s' "${spec#logs/}" ;;
+		backups/*) printf '%s' "${spec#backups/}" ;;
+		*) printf '%s' "$spec" ;;
+	esac
+}
+
+find_file_in_folder() {
+	folder_id="$1"
+	name="$2"
+	query response file_id
+
+	query="$(printf "name='%s' and '%s' in parents and trashed=false" \
+		"$(printf '%s' "$name" | sed "s/'/\\\\'/g")" "$folder_id")"
+	response="$(drive_request GET "$DRIVE_API/files?q=$(printf '%s' "$query" | sed 's/ /%20/g;s/'\''/%27/g')&fields=files(id,name,size,modifiedTime)&pageSize=1" 2>/dev/null || true)"
+	file_id="$(printf '%s' "$response" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)"
+	[ -n "$file_id" ] || return 1
+	printf '%s' "$file_id"
+}
+
+folder_list_json_array() {
+	folder_id="$1"
+	response
+
+	response="$(drive_request GET "$DRIVE_API/files?q=$(printf "'%s' in parents and trashed=false" "$folder_id" | sed 's/ /%20/g')&fields=files(name,size,modifiedTime)&pageSize=200&orderBy=modifiedTime desc" 2>/dev/null || true)"
+	printf '%s' "$response" | awk '
+		function json_escape(value) {
+			gsub(/\\/, "\\\\", value)
+			gsub(/"/, "\\\"", value)
+			return value
+		}
+		BEGIN { items = "" }
+		/"name":"/ {
+			line = $0
+			sub(/.*"name":"/, "", line)
+			sub(/".*/, "", line)
+			name = line
+			getline
+			line = $0
+			size = 0
+			if (line ~ /"size":/) {
+				sub(/.*"size":/, "", line)
+				sub(/,.*/, "", line)
+				size = line
+			}
+			modified = ""
+			if (line ~ /"modifiedTime":/) {
+				sub(/.*"modifiedTime":"/, "", line)
+				sub(/".*/, "", line)
+				modified = line
+			} else {
+				getline
+				line = $0
+				if (line ~ /"modifiedTime":/) {
+					sub(/.*"modifiedTime":"/, "", line)
+					sub(/".*/, "", line)
+					modified = line
+				}
+			}
+			if (name != "") {
+				if (items != "") items = items ","
+				items = items sprintf("{\"name\":\"%s\",\"bytes\":%s,\"modified\":\"%s\"}",
+					json_escape(name), (size == "" ? 0 : size), json_escape(modified))
+			}
+		}
+		END { printf "%s", items }
+	'
+}
+
+folder_used_bytes() {
+	logs_id backups_id used
+
+	logs_id="$(folder_id_from_cache logs)" || return 1
+	backups_id="$(folder_id_from_cache backups)" || return 1
+	used=0
+	for folder_id in "$logs_id" "$backups_id"; do
+		response="$(drive_request GET "$DRIVE_API/files?q=$(printf "'%s' in parents and trashed=false" "$folder_id" | sed 's/ /%20/g')&fields=files(size)&pageSize=200" 2>/dev/null || true)"
+		used=$((used + $(printf '%s' "$response" | sed -n 's/.*"size":\([0-9][0-9]*\).*/\1/p' | awk '{s+=$1} END {print s+0}')))
+	done
+	printf '%s' "$used"
+}
+
+usage_state() {
+	used_bytes="$1"
+	quota_bytes="$2"
+	[ "$quota_bytes" -gt 0 ] || { printf 'error\t0\n'; return; }
+	pct=$((used_bytes * 100 / quota_bytes))
+	if [ "$used_bytes" -ge "$quota_bytes" ]; then
+		printf 'error\t%s\n' "$pct"
+	elif [ "$pct" -ge 80 ]; then
+		printf 'warn\t%s\n' "$pct"
+	else
+		printf 'ok\t%s\n' "$pct"
+	fi
+}
+
+write_sync_status() {
+	command_name="$1"
+	ok="$2"
+	message="$3"
+	mkdir -p /tmp/sheepfold 2>/dev/null || true
+	printf '{"command":"%s","ok":%s,"message":"%s","at":"%s"}\n' \
+		"$(json_escape "$command_name")" "$ok" "$(json_escape "$message")" "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
+		>"$SYNC_STATUS_FILE"
+	chmod 600 "$SYNC_STATUS_FILE" 2>/dev/null || true
+}
+
+verify_upload() {
+	local_path="$1"
+	remote_bytes="$2"
+	local_bytes
+
+	[ -f "$local_path" ] || {
+		printf '{"ok":false,"error":"local_missing"}\n'
+		return 1
+	}
+
+	local_bytes="$(wc -c <"$local_path" | tr -d ' ')"
+	case "$local_bytes" in ''|*[!0-9]*) local_bytes=0 ;; esac
+	case "$remote_bytes" in ''|*[!0-9]*) remote_bytes=0 ;; esac
+
+	if [ "$local_bytes" -gt 0 ] && [ "$local_bytes" -eq "$remote_bytes" ]; then
+		printf '{"ok":true,"local_bytes":%s,"remote_bytes":%s}\n' "$local_bytes" "$remote_bytes"
+		return 0
+	fi
+
+	printf '{"ok":false,"error":"size_mismatch","local_bytes":%s,"remote_bytes":%s}\n' \
+		"$local_bytes" "$remote_bytes"
+	return 1
+}
+
+upload_file_to_folder() {
+	folder_id="$1"
+	local_path="$2"
+	filename="$3"
+	file_id code result remote_bytes
+
+	file_id="$(find_file_in_folder "$folder_id" "$filename" 2>/dev/null || true)"
+	if [ -n "$file_id" ]; then
+		code="$(drive_upload_media "$file_id" "$local_path")"
+		case "$code" in
+			200|201|204) ;;
+			*) printf '{"ok":false,"http":%s}\n' "$code"; return 1 ;;
+		esac
+	else
+		result="$(drive_create_file "$folder_id" "$local_path" "$filename" 2>/dev/null || true)"
+		file_id="${result%%	*}"
+		remote_bytes="${result#*	}"
+		[ -n "$file_id" ] || {
+			printf '{"ok":false,"error":"create_failed"}\n'
+			return 1
+		}
+	fi
+
+	remote_bytes="$(wc -c <"$local_path" | tr -d ' ')"
+	printf '%s\t%s\n' "$file_id" "$remote_bytes"
+}
+
+upload_and_verify() {
+	folder_id="$1"
+	local_path="$2"
+	filename="$3"
+	result remote_bytes verify_json
+
+	result="$(upload_file_to_folder "$folder_id" "$local_path" "$filename")" || {
+		printf '%s\n' "$result"
+		return 1
+	}
+	remote_bytes="${result#*	}"
+	verify_json="$(verify_upload "$local_path" "$remote_bytes" 2>/dev/null || true)"
+	case "$verify_json" in
+		*"\"ok\":true"*) printf '%s\n' "$verify_json"; return 0 ;;
+	esac
+	printf '%s\n' "$verify_json"
+	return 1
+}
+
+create_config_backup() {
+	mkdir -p "$BACKUP_STAGING"
+	backup_file="$BACKUP_STAGING/sheepfold-config-$(date +%Y%m%d-%H%M%S).tar.gz"
+	if command -v gzip >/dev/null 2>&1; then
+		tar -C /etc/config -czf "$backup_file" sheepfold 2>/dev/null || return 1
+	else
+		backup_file="${backup_file%.gz}"
+		tar -C /etc/config -cf "$backup_file" sheepfold 2>/dev/null || return 1
+	fi
+	printf '%s' "$backup_file"
+}
+
+cmd_test() {
+	require_tooling || return 1
+	if access_token >/dev/null 2>&1; then
+		printf '{"ok":true,"message":"Google Drive authorization works"}\n'
+		cache_folder_ids >/dev/null 2>&1 || true
+		return 0
+	fi
+	printf '{"ok":false,"error":"auth_failed"}\n'
+	return 1
+}
+
+cmd_list() {
+	root logs_json backups_json root_name
+
+	require_tooling || return 1
+	cache_folder_ids || return 1
+	root_name="$(normalize_root_folder)"
+	logs_json="$(folder_list_json_array "$(folder_id_from_cache logs)")"
+	backups_json="$(folder_list_json_array "$(folder_id_from_cache backups)")"
+	[ -n "$logs_json" ] || logs_json=""
+	[ -n "$backups_json" ] || backups_json=""
+	printf '{"ok":true,"root":"%s","logs":[%s],"backups":[%s]}\n' \
+		"$(json_escape "/$root_name")" "$logs_json" "$backups_json"
+}
+
+cmd_download() {
+	remote_spec="$1"
+	local_path="$2"
+	folder_id filename file_id token code
+
+	require_tooling || return 1
+	[ -n "$remote_spec" ] && [ -n "$local_path" ] || {
+		printf '{"ok":false,"error":"usage","hint":"download <remote> <local>"}\n'
+		return 1
+	}
+
+	filename="$(resolve_remote_name "$remote_spec")"
+	remote_name_allowed "$filename" || {
+		printf '{"ok":false,"error":"path_not_allowed"}\n'
+		return 1
+	}
+
+	case "$remote_spec" in
+		logs/*) folder_id="$(folder_id_from_cache logs)" ;;
+		backups/*) folder_id="$(folder_id_from_cache backups)" ;;
+		*) folder_id="$(folder_id_from_cache backups)" ;;
+	esac
+
+	file_id="$(find_file_in_folder "$folder_id" "$filename")" || {
+		printf '{"ok":false,"error":"remote_missing"}\n'
+		return 1
+	}
+
+	case "$local_path" in
+		/tmp/*|/tmp/sheepfold/*) ;;
+		*)
+			printf '{"ok":false,"error":"local_path_not_allowed"}\n'
+			return 1
+			;;
+	esac
+
+	mkdir -p "${local_path%/*}" 2>/dev/null || true
+	token="$(access_token)" || return 1
+	code="$(curl -sS -m 120 -o "$local_path" -w '%{http_code}' \
+		-H "Authorization: Bearer $token" \
+		"$DRIVE_API/files/$file_id?alt=media" 2>/dev/null || printf 000)"
+	case "$code" in
+		200)
+			printf '{"ok":true,"remote":"%s","local":"%s","bytes":%s}\n' \
+				"$(json_escape "$filename")" "$(json_escape "$local_path")" "$(wc -c <"$local_path" | tr -d ' ')"
+			;;
+		*)
+			rm -f "$local_path"
+			printf '{"ok":false,"error":"download_failed","http":%s}\n' "$code"
+			return 1
+			;;
+	esac
+}
+
+latest_backup_name() {
+	backups_id response
+
+	backups_id="$(folder_id_from_cache backups)" || return 1
+	folder_list_json_array "$backups_id" |
+		sed -n 's/.*"name":"\([^"]*\)".*/\1/p' |
+		grep '^sheepfold-config-.*\.tar' |
+		sort |
+		tail -1
+}
+
+cmd_restore_config() {
+	requested="$1"
+	remote_spec local_archive safety_backup restore_dir tar_extract_flags=""
+
+	require_tooling || return 1
+	cache_folder_ids || return 1
+	mkdir -p "$BACKUP_STAGING" 2>/dev/null || true
+
+	if [ -n "$requested" ]; then
+		remote_spec="backups/$requested"
+	else
+		requested="$(latest_backup_name 2>/dev/null || true)"
+		[ -n "$requested" ] || {
+			printf '{"ok":false,"error":"no_backups"}\n'
+			return 1
+		}
+		remote_spec="backups/$requested"
+	fi
+
+	local_archive="$BACKUP_STAGING/restore-config-$$.tar.gz"
+	cmd_download "$remote_spec" "$local_archive" >/dev/null || return 1
+
+	if tar -tzf "$local_archive" 2>/dev/null | grep -Eq '^sheepfold$'; then
+		tar_extract_flags="-xzf"
+	elif tar -tf "$local_archive" 2>/dev/null | grep -Eq '^sheepfold$'; then
+		tar_extract_flags="-xf"
+	else
+		rm -f "$local_archive"
+		printf '{"ok":false,"error":"invalid_backup_archive"}\n'
+		return 1
+	fi
+
+	safety_backup="/tmp/sheepfold/sheepfold-config-before-restore-$(date +%Y%m%d-%H%M%S).tar.gz"
+	mkdir -p /tmp/sheepfold 2>/dev/null || true
+	if command -v gzip >/dev/null 2>&1; then
+		tar -C /etc/config -czf "$safety_backup" sheepfold 2>/dev/null || safety_backup=""
+	else
+		safety_backup="${safety_backup%.gz}"
+		tar -C /etc/config -cf "$safety_backup" sheepfold 2>/dev/null || safety_backup=""
+	fi
+
+	restore_dir="$BACKUP_STAGING/restore-config-extract-$$"
+	mkdir -p "$restore_dir"
+	if ! tar -C "$restore_dir" $tar_extract_flags "$local_archive" sheepfold 2>/dev/null; then
+		rm -rf "$restore_dir" "$local_archive"
+		printf '{"ok":false,"error":"extract_failed"}\n'
+		return 1
+	fi
+
+	if [ ! -f "$restore_dir/sheepfold" ]; then
+		rm -rf "$restore_dir" "$local_archive"
+		printf '{"ok":false,"error":"missing_sheepfold_config"}\n'
+		return 1
+	fi
+
+	cp "$restore_dir/sheepfold" /etc/config/sheepfold
+	chmod 600 /etc/config/sheepfold 2>/dev/null || true
+	rm -rf "$restore_dir" "$local_archive"
+
+	if [ -x /etc/init.d/sheepfold ]; then
+		/etc/init.d/sheepfold restart >/dev/null 2>&1 || true
+	fi
+
+	printf '{"ok":true,"restored":"%s","safety_backup":"%s"}\n' \
+		"$(json_escape "$requested")" "$(json_escape "${safety_backup:-}")"
+}
+
+cmd_status() {
+	backend="google_drive"
+	authorized=0
+	state="error"
+	message="Google Drive is not configured"
+	used_mb=0
+	quota="$(quota_mb)"
+	free_pct=100
+
+	if [ "$(global_get log_storage ram)" != "google_drive" ]; then
+		message="Google Drive is selected only when log storage is set to Google Drive"
+		printf '{"backend":"%s","state":"%s","message":"%s","authorized":%s,"used_mb":%s,"quota_mb":%s,"free_pct":%s}\n' \
+			"$backend" "$state" "$(json_escape "$message")" "$authorized" "$used_mb" "$quota" "$free_pct"
+		return 0
+	fi
+
+	if ! have_curl; then
+		message="curl is required for Google Drive on the router"
+		printf '{"backend":"%s","state":"%s","message":"%s","authorized":%s,"used_mb":%s,"quota_mb":%s,"free_pct":%s}\n' \
+			"$backend" "$state" "$(json_escape "$message")" "$authorized" "$used_mb" "$quota" "$free_pct"
+		return 0
+	fi
+
+	if ! credentials_ready; then
+		message="Enter Google OAuth client ID and refresh token"
+		printf '{"backend":"%s","state":"%s","message":"%s","authorized":%s,"used_mb":%s,"quota_mb":%s,"free_pct":%s}\n' \
+			"$backend" "$state" "$(json_escape "$message")" "$authorized" "$used_mb" "$quota" "$free_pct"
+		return 0
+	fi
+
+	if ! access_token >/dev/null 2>&1; then
+		message="Google Drive authorization failed"
+		printf '{"backend":"%s","state":"error","message":"%s","authorized":0,"used_mb":0,"quota_mb":%s,"free_pct":0}\n' \
+			"$backend" "$(json_escape "$message")" "$quota"
+		return 0
+	fi
+
+	authorized=1
+	cache_folder_ids >/dev/null 2>&1 || {
+		message="Cannot prepare Google Drive folders"
+		printf '{"backend":"%s","state":"error","message":"%s","authorized":0,"used_mb":0,"quota_mb":%s,"free_pct":0}\n' \
+			"$backend" "$(json_escape "$message")" "$quota"
+		return 0
+	}
+
+	used_bytes="$(folder_used_bytes 2>/dev/null || printf 0)"
+	case "$used_bytes" in ''|*[!0-9]*) used_bytes=0 ;; esac
+	used_mb=$((used_bytes / 1024 / 1024))
+	quota_bytes=$((quota * 1024 * 1024))
+	state_line="$(usage_state "$used_bytes" "$quota_bytes")"
+	state="${state_line%%	*}"
+	used_pct="${state_line#*	}"
+	free_pct=$((100 - used_pct))
+	[ "$free_pct" -ge 0 ] || free_pct=0
+
+	case "$state" in
+		ok) message="Connected, ${used_mb} MB of ${quota} MB used" ;;
+		warn) message="Low space soon, ${used_mb} MB of ${quota} MB used" ;;
+		error) message="Sheepfold quota exceeded (${used_mb} MB of ${quota} MB)" ;;
+	esac
+
+	uci -q set sheepfold.gdrive.authorized='1' 2>/dev/null || true
+	uci -q commit sheepfold 2>/dev/null || true
+
+	printf '{"backend":"%s","state":"%s","message":"%s","authorized":%s,"used_mb":%s,"quota_mb":%s,"free_pct":%s}\n' \
+		"$backend" "$state" "$(json_escape "$message")" "$authorized" "$used_mb" "$quota" "$free_pct"
+}
+
+drive_delete_file() {
+	file_id="$1"
+	token code
+
+	token="$(access_token)" || return 1
+	code="$(curl -sS -m 60 -o /dev/null -w '%{http_code}' -X DELETE \
+		-H "Authorization: Bearer $token" \
+		"$DRIVE_API/files/$file_id" 2>/dev/null || printf 000)"
+	case "$code" in
+		200|204) return 0 ;;
+	esac
+	return 1
+}
+
+prune_remote_logs() {
+	quota_bytes="$1"
+	logs_id used_bytes response
+
+	logs_id="$(folder_id_from_cache logs)" || return 0
+	used_bytes="$(folder_used_bytes 2>/dev/null || printf 0)"
+	[ "$used_bytes" -le "$quota_bytes" ] && return 0
+
+	response="$(drive_request GET "$DRIVE_API/files?q=$(printf "'%s' in parents and trashed=false" "$logs_id" | sed 's/ /%20/g')&fields=files(id,name,modifiedTime)&pageSize=200&orderBy=modifiedTime" 2>/dev/null || true)"
+	printf '%s' "$response" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | while IFS= read -r file_id; do
+		[ -n "$file_id" ] || continue
+		drive_delete_file "$file_id" >/dev/null 2>&1 || true
+		used_bytes="$(folder_used_bytes 2>/dev/null || printf 0)"
+		[ "$used_bytes" -le "$quota_bytes" ] && break
+	done
+}
+
+cmd_push_events() {
+	logs_id verify_json
+
+	[ "$(global_get log_storage ram)" = "google_drive" ] || return 0
+	[ -f "$EVENTS_LOG" ] || return 0
+	require_tooling || return 1
+
+	cache_folder_ids || return 1
+	logs_id="$(folder_id_from_cache logs)" || return 1
+
+	verify_json="$(upload_and_verify "$logs_id" "$EVENTS_LOG" events.log)" || {
+		write_sync_status push-events false "upload verify failed"
+		printf '%s\n' "$verify_json"
+		return 1
+	}
+
+	write_sync_status push-events true "events.log uploaded"
+	printf '%s\n' "$verify_json"
+}
+
+cmd_archive_push() {
+	[ "$(global_get log_storage ram)" = "google_drive" ] || return 0
+	[ "$(uci_get authorized '0')" = "1" ] || cmd_status >/dev/null 2>&1 || true
+	[ "$(uci_get authorized '0')" = "1" ] || return 0
+	require_tooling || return 1
+
+	cache_folder_ids || return 1
+	logs_id="$(folder_id_from_cache logs)" || return 1
+	backups_id="$(folder_id_from_cache backups)" || return 1
+	quota_bytes=$(( $(quota_mb) * 1024 * 1024 ))
+
+	pushed=0
+	errors=0
+
+	for archive in "$RAM_ARCHIVE_DIR"/*.tar.gz "$RAM_ARCHIVE_DIR"/*.tar; do
+		[ -f "$archive" ] || continue
+		if upload_and_verify "$logs_id" "$archive" "$(basename "$archive")" >/dev/null 2>&1; then
+			rm -f "$archive"
+			pushed=$((pushed + 1))
+		else
+			errors=$((errors + 1))
+		fi
+	done
+
+	if [ -f "$EVENTS_LOG" ]; then
+		events_copy="$BACKUP_STAGING/events-$(date +%Y%m%d-%H%M%S).log"
+		mkdir -p "$BACKUP_STAGING"
+		cp "$EVENTS_LOG" "$events_copy"
+		if upload_and_verify "$logs_id" "$events_copy" "$(basename "$events_copy")" >/dev/null 2>&1; then
+			pushed=$((pushed + 1))
+		else
+			errors=$((errors + 1))
+		fi
+		rm -f "$events_copy"
+	fi
+
+	backup_file="$(create_config_backup 2>/dev/null || true)"
+	if [ -n "$backup_file" ] && [ -f "$backup_file" ]; then
+		if upload_and_verify "$backups_id" "$backup_file" "$(basename "$backup_file")" >/dev/null 2>&1; then
+			pushed=$((pushed + 1))
+		else
+			errors=$((errors + 1))
+		fi
+		rm -f "$backup_file"
+	fi
+
+	prune_remote_logs "$quota_bytes" || true
+
+	if [ "$errors" -gt 0 ]; then
+		write_sync_status archive-push false "completed with errors"
+		printf '{"ok":false,"pushed":%d,"errors":%d}\n' "$pushed" "$errors"
+		return 1
+	fi
+
+	write_sync_status archive-push true "archive push completed"
+	printf '{"ok":true,"pushed":%d,"errors":0}\n' "$pushed"
+}
+
+cmd_sync_status() {
+	if [ -r "$SYNC_STATUS_FILE" ]; then
+		cat "$SYNC_STATUS_FILE"
+		return 0
+	fi
+	printf '{"ok":false,"message":"no sync yet"}\n'
+}
+
+command_name="${1:-}"
+shift || true
+case "$command_name" in
+	status) cmd_status ;;
+	test) cmd_test ;;
+	list) cmd_list ;;
+	download) cmd_download "$1" "$2" ;;
+	restore-config) cmd_restore_config "$1" ;;
+	sync-status) cmd_sync_status ;;
+	verify) verify_upload "$1" "$2" ;;
+	push-events) cmd_push_events ;;
+	archive-push) cmd_archive_push ;;
+	*)
+		echo "Usage: sheepfold-google-drive <status|test|list|download|restore-config|sync-status|verify|push-events|archive-push>" >&2
+		exit 1
+		;;
+esac

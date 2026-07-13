@@ -1,9 +1,10 @@
 #!/bin/sh
-# Единый статус и выгрузка журналов для RAM / USB / Yandex Disk.
+# Единый статус и выгрузка журналов для RAM / USB / Yandex Disk / Google Drive.
 set -eu
 
 USB_STORAGE="/usr/libexec/sheepfold/sheepfold-usb-storage"
 YANDEX_DISK="/usr/libexec/sheepfold/sheepfold-yandex-disk"
+GOOGLE_DRIVE="/usr/libexec/sheepfold/sheepfold-google-drive"
 RAM_ARCHIVE_DIR="/tmp/sheepfold/.private/archive"
 EVENTS_LOG="/tmp/sheepfold/events.log"
 
@@ -93,6 +94,10 @@ cmd_status() {
 			[ -x "$YANDEX_DISK" ] && exec "$YANDEX_DISK" status
 			printf '{"backend":"yandex_disk","state":"error","message":"Yandex Disk helper is missing","authorized":0,"used_mb":0,"quota_mb":0,"free_pct":0}\n'
 			;;
+		google_drive)
+			[ -x "$GOOGLE_DRIVE" ] && exec "$GOOGLE_DRIVE" status
+			printf '{"backend":"google_drive","state":"error","message":"Google Drive helper is missing","authorized":0,"used_mb":0,"quota_mb":0,"free_pct":0}\n'
+			;;
 		*) ram_status_json ;;
 	esac
 }
@@ -105,6 +110,9 @@ cmd_archive_push() {
 			;;
 		yandex_disk)
 			[ -x "$YANDEX_DISK" ] && "$YANDEX_DISK" archive-push
+			;;
+		google_drive)
+			[ -x "$GOOGLE_DRIVE" ] && "$GOOGLE_DRIVE" archive-push
 			;;
 	esac
 }
