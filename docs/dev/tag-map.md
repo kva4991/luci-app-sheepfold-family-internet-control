@@ -259,6 +259,8 @@ grep -r '§xaji0y6' .
 | `§mrgready` | MERGE_READINESS_PLAN | процесс разработки | Подробная контрольная точка и перечень обязательных проверок перед слиянием `editsByClaude` с `main`, включая причины и критерии готовности. Файл: `merge-readiness-plan.ru.md` |
 | `§revspot` | MERGE_CODE_REVIEW_HOTSPOTS | code review | Карта наиболее рискованных мест и инвариантов, которые надо проверить в коде перед слиянием: installer/UCI, API/auth, HTTPS/pairing, LuCI, Android, detector, AI, журнал и тесты. Файл: `merge-readiness-plan.ru.md` |
 | `§toolwin` | WINDOWS_REPOSITORY_TOOLCHAIN | окружение | Воспроизводимое Windows-окружение ставится/проверяется через `tools/windows/`; Android-проекты используют Gradle Wrapper, а тяжёлые SDK и кэши не коммитятся. Файлы: `tools/README.ru.md`, `agent-environment.ru.md`, `AGENTS.md` |
+| `§zipps51` | WINDOWS_ANDROID_ZIP_EXTRACTION | окружение/Windows | Android command-line tools распаковываются через `.NET ZipFile` в короткий `%TEMP%`-путь; `Expand-Archive` Windows PowerShell 5 здесь запрещён из-за внутренней ошибки `Remove-Item`. Файлы: `tools/windows/setup.ps1`, `tools/README.ru.md`, `agent-gotchas.ru.md` |
+| `§fastagt` | AGENT_FAST_START | процесс разработки | Новый агент начинает с короткой карты, точечного поиска и послойных тестов, а не читает и запускает весь проект без необходимости. Файлы: `agent-fast-start.ru.md`, `AGENTS.md`, `developer-task.ru.md` |
 
 ---
 

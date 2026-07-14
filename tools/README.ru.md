@@ -37,6 +37,8 @@ powershell -ExecutionPolicy Bypass -File tools\windows\setup.ps1 -Install -Accep
 
 Обычные программы устанавливаются через `winget`. Android command-line tools выбираются из официального Google Android SDK repository XML, а скачанный архив проверяется по опубликованной там контрольной сумме.
 
+Архив Android распаковывается системным `.NET ZipFile` во временный короткий путь. Не заменяйте этот код на `Expand-Archive`: модуль `Microsoft.PowerShell.Archive` из Windows PowerShell 5 может падать на официальном Android ZIP с ошибкой внутреннего `Remove-Item`, особенно в длинном пути рабочего каталога. (§zipps51)
+
 Флаг `-AcceptAndroidLicenses` означает, что пользователь предварительно прочитал и согласен с лицензиями Android SDK. Скрипт намеренно не принимает их молча. Без флага он установит только command-line tools, покажет объяснение и не станет устанавливать SDK packages.
 
 По умолчанию Android SDK располагается здесь:

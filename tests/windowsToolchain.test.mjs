@@ -34,6 +34,9 @@ describe('Windows repository toolchain', () => {
     assert.match(setup, /\[switch\]\$AcceptAndroidLicenses/);
     assert.match(setup, /repository2-1\.xml|androidSdk\.repositoryUrl/);
     assert.match(setup, /Get-FileHash/);
+    assert.match(setup, /System\.IO\.Compression\.ZipFile.*ExtractToDirectory/s);
+    assert.match(setup, /GetTempPath/);
+    assert.doesNotMatch(setup, /Expand-Archive\s+-LiteralPath/);
     assert.match(setup, /Set-UserEnvironmentVariable -Name 'JAVA_HOME'/);
     assert.match(setup, /Set-UserEnvironmentVariable -Name 'ANDROID_HOME'/);
     assert.match(setup, /Add-UserPathEntry/);

@@ -36,6 +36,7 @@
 | Yandex Disk, зеркалирование журнала, бэкапы | [`docs/yandex-disk-storage.ru.md`](yandex-disk-storage.ru.md) |
 | Продуктовые решения, scope | [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) |
 | Стиль кода, тесты, ревью | [`CODING_RULES.md`](../CODING_RULES.md) |
+| Быстрый вход нового агента без повторного чтения всего проекта | [`docs/agent-fast-start.ru.md`](agent-fast-start.ru.md) |
 
 ## Зафиксированные мелочи
 
@@ -63,6 +64,7 @@
 
 ### Сборка и пакет
 
+- В Windows PowerShell 5 не распаковывать Android command-line tools через `Expand-Archive`: официальный ZIP способен вызвать внутреннюю ошибку `Remove-Item`. Установщик использует `.NET ZipFile` и короткий `%TEMP%`-путь; тест не даёт вернуть проблемную реализацию (см. [`tools/README.ru.md`](../tools/README.ru.md)). (§zipps51)
 - После изменения LuCI JS/CSS поднимать **`PKG_RELEASE`** и синхронный **`ui_asset_version`** (см. [`docs/luci-cache.ru.md`](luci-cache.ru.md), тест `tests/luciAssetVersioning.test.mjs`).
 - Локальный тестовый `.ipk` — gzip-tar с `debian-binary` / `data.tar.gz` / `control.tar.gz`; по умолчанию пишется в `Downloads`, не в `dist\` (см. [`docs/agent-environment.ru.md`](agent-environment.ru.md)).
 - Тестовый IPK: все `usr/libexec/sheepfold/*` — **0755** в архиве + `find … chmod 0755` в `postinst`; иначе `router-control-legacy: Permission denied` (тест `tests/testIpkPermissions.test.mjs`).

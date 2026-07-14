@@ -218,9 +218,18 @@ function Install-AndroidCommandLineTools {
         throw "Контрольная сумма Android command-line tools не совпала. Файл оставлен для проверки: $archivePath"
     }
 
-    $extractRoot = Join-Path $cacheRoot ("extract-" + [Guid]::NewGuid().ToString('N'))
+    # Windows PowerShell 5 Expand-Archive ломается на некоторых каталогах Android ZIP.
+    # Распаковываем через .NET и в короткий TEMP-путь: это также снижает риск MAX_PATH. §zipps51
+    $extractBase = Join-Path ([IO.Path]::GetTempPath()) 'sheepfold-android-sdk'
+    $extractRoot = Join-Path $extractBase ([Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
-    Expand-Archive -LiteralPath $archivePath -DestinationPath $extractRoot -Force
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    try {
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $extractRoot)
+    }
+    catch {
+        throw "Не удалось распаковать Android command-line tools. Временные файлы оставлены для диагностики: $extractRoot. $($_.Exception.Message)"
+    }
     $extractedTools = Join-Path $extractRoot 'cmdline-tools'
     if (-not (Test-Path -LiteralPath (Join-Path $extractedTools 'bin\sdkmanager.bat'))) {
         throw 'Скачанный Android command-line tools archive имеет неожиданную структуру.'
@@ -236,10 +245,10 @@ function Install-AndroidCommandLineTools {
     }
     Move-Item -LiteralPath $extractedTools -Destination $target
 
-    # Удаляем только уникальный временный каталог внутри repository-local cache.
-    $resolvedCache = [IO.Path]::GetFullPath($cacheRoot).TrimEnd('\') + '\'
+    # Удаляем только уникальный временный каталог внутри выделенного TEMP-каталога.
+    $resolvedExtractBase = [IO.Path]::GetFullPath($extractBase).TrimEnd('\') + '\'
     $resolvedExtract = [IO.Path]::GetFullPath($extractRoot)
-    if ($resolvedExtract.StartsWith($resolvedCache, [StringComparison]::OrdinalIgnoreCase)) {
+    if ($resolvedExtract.StartsWith($resolvedExtractBase, [StringComparison]::OrdinalIgnoreCase)) {
         Remove-Item -LiteralPath $extractRoot -Recurse -Force
     }
 

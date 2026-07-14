@@ -78,6 +78,7 @@ Avoid:
 
 ## Implementation Entry Point
 
+- In a fresh chat, read `docs/agent-fast-start.ru.md` first. It is the short route through the repository: gather evidence with targeted searches, read only the focused docs linked by relevant §-tags, and scale tests with the changed surface. Do not repeatedly read the whole documentation tree. (§fastagt)
 - When continuing work on `editsByClaude` before its merge into `main`, first read `docs/merge-readiness-plan.ru.md`. It records the exact stopping point, unresolved blockers, reasons for every required check, and the recommended reading route for a fresh chat.
 - On Windows, prefer the repository-managed environment scripts in `tools/windows/` and the checked-in Gradle Wrapper. Read `tools/README.ru.md`; do not commit downloaded SDKs, caches, JDKs, Node.js, Python, Git distributions, APKs, or IPKs.
 - In a fresh Windows Codex chat, run the full toolchain setup command from `tools/README.ru.md` yourself when execution and network permissions are available. If the environment cannot install software or the user must approve licenses interactively, give the exact command to the user, explain that it must be run from the repository root in PowerShell, and then ask them to reopen the terminal/chat before continuing. Do not merely report that tools are missing without offering this path.
