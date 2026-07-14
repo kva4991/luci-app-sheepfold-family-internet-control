@@ -18,6 +18,8 @@ describe('Windows repository toolchain', () => {
       'OpenJS.NodeJS.LTS',
       'EclipseAdoptium.Temurin.17.JDK',
       'GitHub.cli',
+      '7zip.7zip',
+      'BurntSushi.ripgrep.MSVC',
     ]);
     assert.equal(manifest.gradleWrapperVersion, '8.10.2');
     assert.deepEqual(manifest.androidSdk.packages, [
@@ -25,6 +27,8 @@ describe('Windows repository toolchain', () => {
       'platforms;android-35',
       'build-tools;35.0.0',
     ]);
+    assert.deepEqual(manifest.windowsPackages.find((entry) => entry.command === '7z').versionArguments, ['i']);
+    assert.deepEqual(manifest.windowsPackages.find((entry) => entry.command === 'rg').disallowedPathFragments, ['\\OpenAI\\Codex\\bin\\']);
   });
 
   it('keeps installation explicit, verified and environment-aware', () => {
@@ -40,6 +44,11 @@ describe('Windows repository toolchain', () => {
     assert.match(setup, /Set-UserEnvironmentVariable -Name 'JAVA_HOME'/);
     assert.match(setup, /Set-UserEnvironmentVariable -Name 'ANDROID_HOME'/);
     assert.match(setup, /Add-UserPathEntry/);
+    assert.match(setup, /Find-WingetCommand/);
+    assert.match(setup, /Microsoft\\WinGet\\Links/);
+    assert.match(setup, /disallowedPathFragments/);
+    assert.match(setup, /foreach \(\$attempt in 1\.\.2\)/);
+    assert.match(setup, /--disable-interactivity/);
     assert.match(check, /Android Platform 35/);
     assert.match(check, /Gradle Wrapper: \$project/);
   });

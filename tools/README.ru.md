@@ -14,7 +14,7 @@ powershell -ExecutionPolicy Bypass -File tools\windows\setup.ps1 -Install -Accep
 
 Это команда полной автоматической установки для стандартного пользовательского пути. Более короткая команда без `-AndroidSdkRoot` делает то же самое, потому что этот путь задан по умолчанию.
 
-Скрипт автоматически задаёт пользовательские `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT` и добавляет в `PATH` найденные каталоги Git, Git Bash, Python, Node.js, GitHub CLI, JDK, `adb` и `sdkmanager`. Повторные запуски не создают дубли в `PATH`.
+Скрипт автоматически задаёт пользовательские `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT` и добавляет в `PATH` найденные каталоги Git, Git Bash, Python, Node.js, GitHub CLI, 7-Zip, ripgrep, JDK, `adb` и `sdkmanager`. Повторные запуски не создают дубли в `PATH`.
 
 Если работу начинает новый чат Codex на Windows, агент должен сначала попробовать выполнить эту команду сам, запросив необходимые разрешения на сеть и установку. Если установка из среды агента недоступна или пользователь должен лично подтвердить лицензии, агент обязан дать пользователю полную команду выше и кратко объяснить:
 
@@ -30,12 +30,20 @@ powershell -ExecutionPolicy Bypass -File tools\windows\setup.ps1 -Install -Accep
 - Node.js LTS;
 - Temurin JDK 17;
 - GitHub CLI;
+- 7-Zip для диагностики архивов, APK и IPK;
+- ripgrep (`rg`) для быстрого точечного поиска по репозиторию;
 - Android SDK command-line tools;
 - Android Platform 35;
 - Android Build Tools 35.0.0;
 - Android Platform Tools (`adb`).
 
 Обычные программы устанавливаются через `winget`. Android command-line tools выбираются из официального Google Android SDK repository XML, а скачанный архив проверяется по опубликованной там контрольной сумме.
+
+Если `winget` установлен вместе с Microsoft App Installer, но не виден в `PATH` текущего процесса Codex, скрипт находит его через пакет App Installer. Каталоги WindowsApps и WinGet Links также добавляются в пользовательский `PATH`. (§toolwin)
+
+При сетевой ошибке `winget` автоматически повторяет установку один раз через 10 секунд. Если обе попытки завершились ошибкой наподобие `0x80072ee2`, проверьте доступ к интернету и повторите всю команду: уже установленные компоненты заново скачиваться не будут.
+
+7-Zip используется только для просмотра и ручной диагностики архивов. Не собирайте им `.ipk`: Sheepfold использует `python scripts/build-test-ipk.py`, чтобы сохранить совместимый с OpenWrt формат и Unix-права файлов.
 
 Архив Android распаковывается системным `.NET ZipFile` во временный короткий путь. Не заменяйте этот код на `Expand-Archive`: модуль `Microsoft.PowerShell.Archive` из Windows PowerShell 5 может падать на официальном Android ZIP с ошибкой внутреннего `Remove-Item`, особенно в длинном пути рабочего каталога. (§zipps51)
 

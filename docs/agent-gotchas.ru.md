@@ -64,6 +64,7 @@
 
 ### Сборка и пакет
 
+- Процесс Codex может не видеть `winget` в `PATH` и одновременно видеть временный встроенный `rg`. Установщик находит `winget` через Microsoft App Installer и не принимает Codex-копию `rg` за пользовательскую установку (см. [`tools/README.ru.md`](../tools/README.ru.md)). (§toolwin)
 - В Windows PowerShell 5 не распаковывать Android command-line tools через `Expand-Archive`: официальный ZIP способен вызвать внутреннюю ошибку `Remove-Item`. Установщик использует `.NET ZipFile` и короткий `%TEMP%`-путь; тест не даёт вернуть проблемную реализацию (см. [`tools/README.ru.md`](../tools/README.ru.md)). (§zipps51)
 - После изменения LuCI JS/CSS поднимать **`PKG_RELEASE`** и синхронный **`ui_asset_version`** (см. [`docs/luci-cache.ru.md`](luci-cache.ru.md), тест `tests/luciAssetVersioning.test.mjs`).
 - Локальный тестовый `.ipk` — gzip-tar с `debian-binary` / `data.tar.gz` / `control.tar.gz`; по умолчанию пишется в `Downloads`, не в `dist\` (см. [`docs/agent-environment.ru.md`](agent-environment.ru.md)).

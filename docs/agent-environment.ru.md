@@ -54,6 +54,7 @@ powershell -ExecutionPolicy Bypass -File tools\windows\check.ps1
 Полезно дополнительно:
 
 - GitHub CLI `gh` для просмотра логов GitHub Actions;
+- 7-Zip для ручной проверки архивов и ripgrep (`rg`) для быстрого поиска; оба устанавливаются общим Windows-скриптом;
 - Android Studio для удобной установки SDK компонентов и принятия лицензий.
 
 Проверка окружения:

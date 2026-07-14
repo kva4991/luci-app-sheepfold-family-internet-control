@@ -33,6 +33,20 @@
       "command": "gh",
       "wingetId": "GitHub.cli",
       "required": false
+    },
+    {
+      "name": "7-Zip",
+      "command": "7z",
+      "versionArguments": ["i"],
+      "wingetId": "7zip.7zip",
+      "required": true
+    },
+    {
+      "name": "ripgrep",
+      "command": "rg",
+      "wingetId": "BurntSushi.ripgrep.MSVC",
+      "disallowedPathFragments": ["\\OpenAI\\Codex\\bin\\"],
+      "required": true
     }
   ],
   "gradleWrapperVersion": "8.10.2",

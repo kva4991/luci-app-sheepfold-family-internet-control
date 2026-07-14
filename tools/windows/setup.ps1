@@ -17,6 +17,29 @@ function Refresh-ProcessPath {
     $env:Path = (@($machinePath, $userPath) | Where-Object { $_ }) -join ';'
 }
 
+function Find-WingetCommand {
+    $command = Get-Command winget -ErrorAction SilentlyContinue
+    if ($command -and $command.Source) {
+        return $command.Source
+    }
+
+    # Codex и некоторые старые PowerShell-сессии не наследуют WindowsApps в PATH,
+    # хотя App Installer и winget у пользователя уже установлены. §toolwin
+    $appInstaller = if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
+        Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction SilentlyContinue |
+            Sort-Object Version -Descending |
+            Select-Object -First 1
+    }
+    else { $null }
+    if ($appInstaller) {
+        $candidate = Join-Path $appInstaller.InstallLocation 'winget.exe'
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
 function Add-UserPathEntry {
     param([string]$Path)
 
@@ -75,7 +98,7 @@ function Get-WorkingCommandVersion {
         if ($exitCode -ne 0) {
             return $null
         }
-        return (($output | Select-Object -First 1) -as [string]).Trim()
+        return (($output | Where-Object { $_ -as [string] } | Select-Object -First 1) -as [string]).Trim()
     }
     catch {
         $ErrorActionPreference = $previousErrorAction
@@ -86,8 +109,20 @@ function Get-WorkingCommandVersion {
 function Test-PackageReady {
     param([object]$Package)
 
-    $arguments = if ($Package.command -eq 'java') { @('-version') } else { @('--version') }
+    $arguments = if ($Package.versionArguments) {
+        @($Package.versionArguments | ForEach-Object { [string]$_ })
+    }
+    elseif ($Package.command -eq 'java') { @('-version') }
+    else { @('--version') }
     $command = [string]$Package.command
+    $resolvedCommand = Get-Command $command -ErrorAction SilentlyContinue
+    if ($resolvedCommand -and $Package.disallowedPathFragments) {
+        foreach ($fragment in $Package.disallowedPathFragments) {
+            if ($resolvedCommand.Source.IndexOf([string]$fragment, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                return $false
+            }
+        }
+    }
     if ($command -eq 'java' -and $env:JAVA_HOME) {
         $javaFromHome = Join-Path $env:JAVA_HOME 'bin\java.exe'
         if (Test-Path -LiteralPath $javaFromHome) {
@@ -123,11 +158,20 @@ function Install-WingetPackage {
     )
 
     Write-Host "Устанавливается: $Name ($PackageId)" -ForegroundColor Cyan
-    & winget install --id $PackageId --exact --source winget --accept-source-agreements --accept-package-agreements --silent
-    if ($LASTEXITCODE -ne 0) {
-        throw "winget не смог установить $Name ($PackageId), код $LASTEXITCODE."
+    $exitCode = 1
+    foreach ($attempt in 1..2) {
+        & $script:WingetCommand install --id $PackageId --exact --source winget --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0) {
+            Refresh-ProcessPath
+            return
+        }
+        if ($attempt -lt 2) {
+            Write-Host "Загрузка $Name не удалась. Повтор через 10 секунд..." -ForegroundColor Yellow
+            Start-Sleep -Seconds 10
+        }
     }
-    Refresh-ProcessPath
+    throw "winget не смог установить $Name ($PackageId) после двух попыток, код $exitCode. Проверьте интернет-соединение и повторите запуск."
 }
 
 function Find-JavaHome {
@@ -260,7 +304,8 @@ if (-not $Install) {
     exit $LASTEXITCODE
 }
 
-if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+$script:WingetCommand = Find-WingetCommand
+if (-not $script:WingetCommand) {
     throw 'winget не найден. Установите или обновите Microsoft App Installer, затем повторите команду.'
 }
 
@@ -279,11 +324,21 @@ foreach ($gitPath in @('C:\Program Files\Git\bin', 'C:\Program Files\Git\usr\bin
     }
 }
 
+foreach ($toolPath in @(
+    (Join-Path $env:ProgramFiles '7-Zip'),
+    (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'),
+    (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps')
+)) {
+    if (Test-Path -LiteralPath $toolPath) {
+        Add-UserPathEntry -Path $toolPath
+    }
+}
+
 Refresh-ProcessPath
 
 # winget-пакеты обычно настраивают PATH сами, но Sheepfold не полагается на это:
 # явно закрепляем каталоги реально найденных инструментов без дубликатов.
-foreach ($commandName in @('git', 'bash', 'python', 'node', 'gh')) {
+foreach ($commandName in @('git', 'bash', 'python', 'node', 'gh', '7z', 'rg')) {
     $command = Get-Command $commandName -ErrorAction SilentlyContinue
     if ($command -and $command.Source) {
         Add-UserPathEntry -Path (Split-Path $command.Source -Parent)

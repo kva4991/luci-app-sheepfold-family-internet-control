@@ -89,6 +89,17 @@ Avoid:
 - Keep `docs/developer-task.ru.md` updated when project-level decisions change.
 - Do not replace the focused docs with the developer task; it is an entrypoint and summary, not the source of every detail.
 
+## Repository Tool Conventions
+
+<!-- §toolwin -->
+
+- Use `rg` / `rg --files` as the default repository search tool. Do not recursively dump the whole tree or read every document when a focused search and §-tag can locate the relevant contract.
+- Use 7-Zip only to inspect or manually extract archives, APKs, and IPKs. Never use 7-Zip to build a Sheepfold `.ipk`; on Windows use `python scripts/build-test-ipk.py`, which preserves the OpenWrt gzip-tar layout and Unix modes.
+- Use `node --test <target>` while developing and `npm.cmd test` once before publication when the changed surface requires the full suite. In PowerShell prefer `npm.cmd` over `npm` if execution policy blocks `npm.ps1`.
+- Use the checked-in `android\gradlew.bat` and `android-child\gradlew.bat`; do not require or invoke a global Gradle installation.
+- Use Git Bash for shell syntax/behavior checks, `gh` for GitHub Actions and PR evidence, and Windows OpenSSH `ssh`/`scp` for approved live-router checks. Do not install duplicate replacements unless a task demonstrates a missing capability.
+- The canonical Windows installer and readiness check are `tools\windows\setup.ps1` and `tools\windows\check.ps1`. Update their manifest, tests, documentation, and `§toolwin` references together when the tool contract changes.
+
 ## Agent Playbook
 
 - `docs/agent-playbook.ru.md` is the detailed repository-wide task brief for AI agents.

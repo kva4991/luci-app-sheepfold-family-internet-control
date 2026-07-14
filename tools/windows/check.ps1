@@ -45,7 +45,7 @@ function Get-CommandVersion {
         if ($exitCode -ne 0) {
             return $null
         }
-        return (($output | Select-Object -First 1) -as [string]).Trim()
+        return (($output | Where-Object { $_ -as [string] } | Select-Object -First 1) -as [string]).Trim()
     }
     catch {
         $ErrorActionPreference = $previousErrorAction
@@ -82,19 +82,34 @@ function Test-PackageVersion {
 }
 
 foreach ($package in $manifest.windowsPackages) {
-    $arguments = if ($package.command -eq 'java') { @('-version') } else { @('--version') }
+    $arguments = if ($package.versionArguments) {
+        @($package.versionArguments | ForEach-Object { [string]$_ })
+    }
+    elseif ($package.command -eq 'java') { @('-version') }
+    else { @('--version') }
     $command = [string]$package.command
+    $resolvedCommand = Get-Command $command -ErrorAction SilentlyContinue
+    $temporaryCommand = $false
+    if ($resolvedCommand -and $package.disallowedPathFragments) {
+        foreach ($fragment in $package.disallowedPathFragments) {
+            if ($resolvedCommand.Source.IndexOf([string]$fragment, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $temporaryCommand = $true
+                break
+            }
+        }
+    }
     if ($command -eq 'java' -and $env:JAVA_HOME) {
         $javaFromHome = Join-Path $env:JAVA_HOME 'bin\java.exe'
         if (Test-Path -LiteralPath $javaFromHome) {
             $command = $javaFromHome
         }
     }
-    $version = Get-CommandVersion -Command $command -Arguments $arguments
+    $version = if ($temporaryCommand) { $null } else { Get-CommandVersion -Command $command -Arguments $arguments }
     $ready = Test-PackageVersion -Package $package -VersionText $version
     Add-ToolResult -Name $package.name -Required ([bool]$package.required) -Ready $ready -Details $(
         if ($ready) { $version }
         elseif ($version) { "Неподходящая версия: $version" }
+        elseif ($temporaryCommand) { "Найдена только временная копия Codex; нужна пользовательская установка" }
         else { "Команда $($package.command) не работает" }
     )
 }
