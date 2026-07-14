@@ -137,8 +137,6 @@ jobs:
           java-version: '17'
 
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
 
       - name: Build debug APK
-        run: gradle -p "${{ matrix.project }}" assembleDebug --stacktrace
+        run: ./${{ matrix.project }}/gradlew -p "${{ matrix.project }}" assembleDebug --stacktrace

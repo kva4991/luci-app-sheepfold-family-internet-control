@@ -900,16 +900,17 @@ Import:
 Структура:
 
 - `package/` - OpenWRT/LuCI package;
-- `android/` - единственный Android build root;
-- `android/app/` - Android application module;
+- `android/` - Android build root родительского/admin-приложения;
+- `android-child/` - отдельный Android build root детского приложения без административных функций;
+- `android/app/` и `android-child/app/` - application modules;
 - `bot/` - messenger adapters;
 - `docs/` - продуктовые и технические документы;
 - `scripts/` - helper scripts.
 
 Android:
 
-- build from `android/`;
-- command: `gradle :app:assembleDebug`;
+- использовать Gradle Wrapper из соответствующего Android build root;
+- Windows commands: `android\gradlew.bat -p android :app:assembleDebug` и `android-child\gradlew.bat -p android-child :app:assembleDebug`;
 - локальный `android/local.properties` не коммитить;
 - APK/build outputs не коммитить.
 

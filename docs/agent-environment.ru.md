@@ -23,6 +23,24 @@ git remote -v
 
 ## Что должно быть установлено на Windows
 
+<!-- §toolwin -->
+
+Рекомендуемый способ — использовать сценарий из репозитория. Он проверяет окружение и скачивает только отсутствующие компоненты:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\windows\setup.ps1 -Install -AcceptAndroidLicenses -AndroidSdkRoot "$env:LOCALAPPDATA\Android\Sdk"
+```
+
+Новый чат Codex на Windows должен либо самостоятельно выполнить эту команду с нужными разрешениями, либо передать её пользователю и объяснить, что команду запускают из корня репозитория в PowerShell. После установки надо открыть новый терминал/чат, чтобы он увидел обновлённые `PATH`, `JAVA_HOME`, `ANDROID_HOME` и `ANDROID_SDK_ROOT`.
+
+Только проверка без скачивания и установки:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\windows\check.ps1
+```
+
+Подробности, состав и правила лицензирования: [`tools/README.ru.md`](../tools/README.ru.md). Тяжёлые программы и Android SDK не хранятся в истории Git; в репозитории находятся installer/check scripts, manifest версий и Gradle Wrapper.
+
 Минимальный набор:
 
 - Git for Windows с Git Bash в `PATH`;
@@ -204,13 +222,13 @@ find /usr/libexec/sheepfold -type f -exec chmod 0755 {} +
 Родительское приложение:
 
 ```powershell
-gradle -p android assembleDebug --stacktrace
+android\gradlew.bat -p android assembleDebug --stacktrace
 ```
 
 Детское приложение:
 
 ```powershell
-gradle -p android-child assembleDebug --stacktrace
+android-child\gradlew.bat -p android-child assembleDebug --stacktrace
 ```
 
 В Codex sandbox Gradle может не иметь доступа к `C:\Users\User\AppData\Local\Android\Sdk`. Если видишь `Permission denied` к SDK, повтори сборку вне песочницы через escalated command.

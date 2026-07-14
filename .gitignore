@@ -31,6 +31,10 @@ artifacts/
 **/__pycache__/
 *.pyc
 
+# Repository-local tool downloads. Scripts and manifests in tools/ are tracked.
+tools/.cache/
+tools/local/
+
 # Secrets and local configs
 *.env
 *.local

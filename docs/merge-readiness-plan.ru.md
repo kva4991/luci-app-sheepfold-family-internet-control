@@ -60,7 +60,7 @@ rg "TODO|FIXME|placeholder|stub|not implemented" .
 1. Выполнить `git status --short` и убедиться, что работа продолжается с коммита контрольной точки в ветке `editsByClaude`, а не с `main`.
 2. Прочитать раздел «С чего следующему чату начать знакомство с проектом» выше и затем посмотреть `git show --stat HEAD` и `git diff origin/main...HEAD`.
 3. Не повторять уже закрытый локальный прогон без причины: на контрольной точке `87/87` Node-тестов и 44 shell entrypoints зелёные. Повторить их после новых правок либо перед следующим push.
-4. Первой сборкой выполнить `gradle -p android-child :app:assembleDebug --stacktrace`. Причина: предыдущий запуск был сознательно остановлен после добавления задачи копирования `sheepfold-child-v1.2.apk` в Downloads.
+4. Первой сборкой выполнить `android-child\gradlew.bat -p android-child :app:assembleDebug --stacktrace`. Причина: предыдущий запуск был сознательно остановлен после добавления задачи копирования `sheepfold-child-v1.2.apk` в Downloads.
 5. Проверить наличие `C:\Users\User\Downloads\sheepfold-child-v1.2.apk`; затем при необходимости повторить родительскую сборку и проверить `sheepfold-v0.1.33.apk`.
 6. Собрать финальный тестовый IPK командой `python scripts/build-test-ipk.py --out-dir artifacts`, проверить имя `0.1.0-162_all.ipk`, содержимое `control.tar.gz`/`data.tar.gz`, права postinst/libexec и скопировать пакет в Downloads.
 7. После локальных сборок перейти к BLOCKER-пунктам ниже, начиная с обновления `origin/main` и живого тестового роутера. Не сливать ветку только на основании успешной компиляции.
@@ -351,8 +351,8 @@ git diff --check origin/main...HEAD
 npm test
 sh -n install.sh
 sh tests/runtime-hardening.sh
-gradle -p android :app:assembleDebug
-gradle -p android-child :app:assembleDebug
+android\gradlew.bat -p android :app:assembleDebug
+android-child\gradlew.bat -p android-child :app:assembleDebug
 python scripts/build-test-ipk.py --out-dir artifacts
 git diff --check
 git status --short

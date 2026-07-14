@@ -129,17 +129,10 @@ sdk.dir=C\:\\Users\\User\\AppData\\Local\\Android\\Sdk
 
 Do not commit `android/local.properties`.
 
-Build from the `android/` directory:
+Build with the checked-in Gradle Wrapper from the repository root:
 
 ```powershell
-cd android
-gradle :app:assembleDebug
-```
-
-If a Gradle wrapper is added later, use:
-
-```powershell
-.\gradlew.bat :app:assembleDebug
+android\gradlew.bat -p android :app:assembleDebug --stacktrace
 ```
 
 Debug APK output:
@@ -148,7 +141,7 @@ Debug APK output:
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-After `gradle :app:assembleDebug`, the project also copies the APK to:
+After the wrapper build, the project also copies the APK to:
 
 ```text
 %USERPROFILE%\Downloads\sheepfold-v<current-version>.apk

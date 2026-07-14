@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "windowsPackages": [
+    {
+      "name": "Git и Git Bash",
+      "command": "git",
+      "wingetId": "Git.Git",
+      "required": true
+    },
+    {
+      "name": "Python",
+      "command": "python",
+      "wingetId": "Python.Python.3.13",
+      "required": true,
+      "minimumVersion": "3.11"
+    },
+    {
+      "name": "Node.js LTS",
+      "command": "node",
+      "wingetId": "OpenJS.NodeJS.LTS",
+      "required": true,
+      "minimumVersion": "22.0"
+    },
+    {
+      "name": "Temurin JDK 17",
+      "command": "java",
+      "wingetId": "EclipseAdoptium.Temurin.17.JDK",
+      "required": true,
+      "requiredMajorVersion": "17"
+    },
+    {
+      "name": "GitHub CLI",
+      "command": "gh",
+      "wingetId": "GitHub.cli",
+      "required": false
+    }
+  ],
+  "gradleWrapperVersion": "8.10.2",
+  "androidSdk": {
+    "repositoryUrl": "https://dl.google.com/android/repository/repository2-1.xml",
+    "archiveBaseUrl": "https://dl.google.com/android/repository/",
+    "compileSdk": 35,
+    "buildToolsVersion": "35.0.0",
+    "packages": [
+      "platform-tools",
+      "platforms;android-35",
+      "build-tools;35.0.0"
+    ]
+  }
+}

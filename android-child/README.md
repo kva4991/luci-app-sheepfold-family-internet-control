@@ -76,14 +76,13 @@ Cleartext HTTP не используется.
 
 ## Сборка
 
-Gradle wrapper пока не хранится в репозитории. Используйте Android Studio либо установленный Gradle 8.9:
+Используйте Gradle Wrapper 8.10.2 из репозитория. На Windows из корня репозитория:
 
-```bash
-cd android-child
-gradle assembleDebug
+```powershell
+android-child\gradlew.bat -p android-child :app:assembleDebug --stacktrace
 ```
 
-CI использует ту же команду через `gradle/actions/setup-gradle`.
+Глобальный Gradle не требуется. CI использует этот же wrapper через `gradle/actions/setup-gradle`.
 
 ## Endpoint статуса
 

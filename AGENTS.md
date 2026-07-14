@@ -79,6 +79,8 @@ Avoid:
 ## Implementation Entry Point
 
 - When continuing work on `editsByClaude` before its merge into `main`, first read `docs/merge-readiness-plan.ru.md`. It records the exact stopping point, unresolved blockers, reasons for every required check, and the recommended reading route for a fresh chat.
+- On Windows, prefer the repository-managed environment scripts in `tools/windows/` and the checked-in Gradle Wrapper. Read `tools/README.ru.md`; do not commit downloaded SDKs, caches, JDKs, Node.js, Python, Git distributions, APKs, or IPKs.
+- In a fresh Windows Codex chat, run the full toolchain setup command from `tools/README.ru.md` yourself when execution and network permissions are available. If the environment cannot install software or the user must approve licenses interactively, give the exact command to the user, explain that it must be run from the repository root in PowerShell, and then ask them to reopen the terminal/chat before continuing. Do not merely report that tools are missing without offering this path.
 - Before running builds or tests in a fresh local Codex Desktop chat on the user's Windows PC, read `docs/agent-environment.ru.md`. It records the Windows/Codex tooling setup, required programs, common build commands, IPK/APK build notes, and the verification commands that have already worked for this repository. For Linux, WSL, macOS, or GitHub Actions, keep the intent but adapt paths and shell syntax.
 - Read `docs/agent-gotchas.ru.md` when debugging surprising LuCI, i18n, default-group, detector, or test-IPK behavior so earlier traps are not rediscovered from scratch.
 - Future AI developers should start with `docs/developer-task.ru.md`, then read `docs/product-requirements.md` and the relevant focused docs.
@@ -187,10 +189,10 @@ Avoid:
 
 ## Android Pairing And Wi-Fi MAC
 
-- Keep exactly one Android build root: `android/`.
-- `android/app/` is the application module inside that build, not a second project.
+- Keep the two intentional Android build roots: `android/` for the parent/admin application and `android-child/` for the non-admin child application. Do not merge their permissions, credentials, or responsibilities.
+- `android/app/` and `android-child/app/` are application modules inside those builds, not additional projects.
 - Do not add root-level Gradle files for Android unless the project owner explicitly changes the repository layout.
-- Run Android builds from `android/`, for example `gradle :app:assembleDebug`.
+- Use the checked-in wrappers, for example `android\gradlew.bat -p android :app:assembleDebug` and `android-child\gradlew.bat -p android-child :app:assembleDebug` on Windows.
 - First Android setup should be initiated locally from LuCI by scanning an admin-device pairing QR code or entering manual settings.
 - Android first setup screen order is: agreement, home local network connection, real Wi-Fi MAC check/guidance when applicable, router setup by QR/manual entry, then local app password/PIN.
 - Android first setup must require Wi-Fi or wired Ethernet/local network access to the router. Do not allow continuing setup over cellular/mobile data.

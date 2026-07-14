@@ -478,9 +478,11 @@ node --test tests/*.test.mjs
 ### Android
 
 ```sh
-gradle -p android assembleDebug
-gradle -p android-child assembleDebug
+android/gradlew -p android assembleDebug
+android-child/gradlew -p android-child assembleDebug
 ```
+
+На Windows использовать одноимённые `gradlew.bat`. Глобальный Gradle не является частью обязательного окружения.
 
 ### Package
 

@@ -1,8 +1,14 @@
 # Сборка SheepfoldChild
 
-Проект использует Android Gradle Plugin 8.7.3, Kotlin 2.0.21 и Java 11. Version catalog находится в `gradle/libs.versions.toml`.
+Проект использует Android Gradle Plugin 8.7.3, Kotlin 2.0.21, JDK 17 для запуска Gradle и JVM target 11 для приложения. Version catalog находится в `gradle/libs.versions.toml`.
 
-Бинарный Gradle wrapper пока не хранится в репозитории. Проект можно открыть в Android Studio или один раз создать wrapper локально совместимым Gradle 8.9, после чего собрать debug APK обычной задачей `assembleDebug`.
+Стандартный Gradle Wrapper 8.10.2 хранится в репозитории. Сборка из корня репозитория на Windows:
+
+```powershell
+android-child\gradlew.bat -p android-child :app:assembleDebug --stacktrace
+```
+
+Глобальный Gradle не требуется.
 
 ## Контракты роутера
 

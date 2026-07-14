@@ -43,6 +43,7 @@ The package uses `Architecture: all` because it contains LuCI assets, shell scri
 - Router-proxied DeepSeek, Gemini, and Grok providers with versioned parent/child runtime prompts and provider keys stored only on the router.
 - Parent Android onboarding, live/file QR scanner, manual pairing, encrypted connection storage, password/PIN/biometric app protection, device actions, notifications, and three internet-state home-screen widgets.
 - Separate child Android application with HTTPS status lookup and parent-controlled AI access for devices in a personal group.
+- Repository-managed Windows toolchain checks/install scripts and Gradle Wrapper 8.10.2 for both Android applications; Android SDK packages remain outside Git and are installed from Google's verified repository metadata.
 - Minimal Telegram adapter through outgoing long polling: configured from LuCI, test message button, chat ID discovery when empty, bot command menu sync, commands for status, device list, internet on/off, Wi-Fi on/off, and support.
 - Uninstall script that removes the OpenWRT package while preserving Sheepfold settings/client lists and printing a remaining-settings report.
 
