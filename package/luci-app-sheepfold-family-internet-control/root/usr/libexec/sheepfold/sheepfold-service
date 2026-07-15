@@ -8,6 +8,7 @@ PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
 SCAN_LOCK="/tmp/sheepfold/device-detection.lock"
 UPDATER="/usr/libexec/sheepfold/sheepfold-updater"
 ROUTER_CONTROL="/usr/libexec/sheepfold/sheepfold-router-control"
+FIREWALL_HELPER="/usr/libexec/sheepfold/sheepfold-firewall"
 LEASES_FILE="/tmp/dhcp.leases"
 SIGNAL_CHANGE_FLAG="/tmp/sheepfold/device-signals.changed"
 SIGNAL_PROCESSING_FLAG="/tmp/sheepfold/device-signals.processing"
@@ -59,6 +60,9 @@ handle_router_control() {
         "$ROUTER_CONTROL" expire-temp-access >/dev/null 2>&1 || true
         "$ROUTER_CONTROL" led-apply >/dev/null 2>&1 || true
         "$ROUTER_CONTROL" blocked-page-apply >/dev/null 2>&1 || true
+        # Проверка дешёвая: при неизменном checksum helper не пишет nft. После
+        # чужого firewall reload она восстанавливает только Sheepfold sets. §v7x2k9p
+        [ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
 }
 
 run_detector() (

@@ -44,6 +44,10 @@ start_service() {
         apply_led_repair
         apply_led_settings
 
+        [ -x /usr/libexec/sheepfold/sheepfold-firewall ] &&
+                /usr/libexec/sheepfold/sheepfold-firewall ensure >/dev/null 2>&1 ||
+                logger -t sheepfold "Sheepfold firewall sets could not be loaded"
+
         [ -x /usr/libexec/sheepfold/sheepfold-site-lists ] &&
                 /usr/libexec/sheepfold/sheepfold-site-lists cron-apply >/dev/null 2>&1 || true
 
@@ -83,6 +87,8 @@ reload_service() {
 }
 
 stop_service() {
+        [ -x /usr/libexec/sheepfold/sheepfold-firewall ] &&
+                /usr/libexec/sheepfold/sheepfold-firewall clear >/dev/null 2>&1 || true
         [ -x /usr/libexec/sheepfold/sheepfold-router-control ] &&
                 /usr/libexec/sheepfold/sheepfold-router-control blocked-page-stop >/dev/null 2>&1 || true
 }

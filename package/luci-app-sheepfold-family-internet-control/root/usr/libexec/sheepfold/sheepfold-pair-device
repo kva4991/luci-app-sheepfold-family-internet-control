@@ -107,6 +107,13 @@ if ! uci -q commit sheepfold; then
     exit 6
 fi
 
+# Сопряжение уже успешно и одноразовый код сожжён. Firewall синхронизируем сразу,
+# а при внешнем reload состояние безопасно восстановит фоновый сервис. §v7x2k9p
+if [ -x /usr/libexec/sheepfold/sheepfold-firewall ]; then
+    /usr/libexec/sheepfold/sheepfold-firewall sync >/dev/null 2>&1 || \
+        logger -t sheepfold "Administrator pairing firewall sync will be retried"
+fi
+
 pair_log_event "Android-приложение привязало телефон администратора: #${device_id} $device_name, $device_mac, IP ${remote_ip:-?}, администратор $admin_name" || true
 
 pair_print_kv paired 1

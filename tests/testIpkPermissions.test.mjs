@@ -51,6 +51,16 @@ describe('test IPK executable permissions', () => {
     assert.equal(mode, '0o755');
   });
 
+  it('ships the fw4 synchronizer as executable in data.tar.gz', () => {
+    const ipkPath = buildTestIpk();
+    const mode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-firewall',
+    );
+
+    assert.equal(mode, '0o755');
+  });
+
   it('postinst chmods all libexec helpers after install', () => {
     const buildPy = readFileSync(buildScript, 'utf8');
     const buildSh = readFileSync(resolve(repoRoot, 'scripts/build-test-ipk.sh'), 'utf8');

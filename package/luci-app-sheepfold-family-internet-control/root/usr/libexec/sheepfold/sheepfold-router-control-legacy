@@ -33,6 +33,7 @@ BLOCKED_HTTPD_ROOT="$RUNTIME_DIR/blocked-www"
 WAN_STATE_FILE="$RUNTIME_DIR/wan-state"
 TOKEN_DIR="$RUNTIME_DIR/tokens"
 LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
+FIREWALL_HELPER="/usr/libexec/sheepfold/sheepfold-firewall"
 
 mkdir -p "$RUNTIME_DIR"
 
@@ -50,6 +51,14 @@ log_event() {
         else
                 log "$*"
         fi
+}
+
+sync_firewall() {
+        [ -x "$FIREWALL_HELPER" ] || {
+                echo "Sheepfold firewall helper is unavailable." >&2
+                return 1
+        }
+        "$FIREWALL_HELPER" sync
 }
 
 # -----------------------------------------------------------------------------
@@ -648,6 +657,7 @@ device_allow() {
         uci -q set "sheepfold.$device_section.status=allow"
         add_mac_to_list allowlist "$device_mac"
         uci -q commit sheepfold
+        sync_firewall
 
         log_event "Устройство #${device_id} добавлено в белый список через Android: $device_mac"
         printf 'OK\n'
@@ -682,6 +692,7 @@ device_block() {
         add_mac_to_list blocklist "$device_mac"
         remove_mac_from_list allowlist "$device_mac"
         uci -q commit sheepfold
+        sync_firewall
 
         log_event "Устройство #${device_id} заблокировано через Android: $device_mac"
         printf 'OK\n'
@@ -738,6 +749,7 @@ device_temp_access() {
         fi
         uci -q set "sheepfold.$device_section.status=temp_access"
         uci -q commit sheepfold
+        sync_firewall
 
         log_event "Временный доступ выдан устройству #${device_id} $device_mac на $minutes мин."
         print_kv expires_at "$expires_at"
@@ -788,7 +800,10 @@ expire_temp_access() {
                 changed=1
         done
 
-        [ "$changed" = "1" ] && uci -q commit sheepfold
+        if [ "$changed" = "1" ]; then
+                uci -q commit sheepfold
+                sync_firewall
+        fi
         printf 'OK\n'
 }
 
@@ -800,6 +815,7 @@ expire_temp_access() {
 global_block_on() {
         uci -q set sheepfold.global.block_on_boot='1'
         uci -q commit sheepfold
+        sync_firewall
         log_event "Глобальная блокировка интернета включена через Android"
         printf 'OK\n'
 }
@@ -807,6 +823,7 @@ global_block_on() {
 global_block_off() {
         uci -q set sheepfold.global.block_on_boot='0'
         uci -q commit sheepfold
+        sync_firewall
         log_event "Глобальная блокировка интернета выключена через Android"
         printf 'OK\n'
 }
@@ -887,6 +904,7 @@ set_device_status() {
         local saved_status
         saved_status="$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || printf '')"
         [ "$saved_status" = "$device_status" ] || { echo "UCI write verification failed" >&2; exit 1; }
+        sync_firewall
 
         printf 'OK\n'
 }
@@ -978,6 +996,7 @@ pair_admin_device() {
         uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
         uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
         uci -q commit sheepfold
+        sync_firewall || log "Administrator device firewall state will be retried by sheepfold-service"
 
         # Выдаём долгоживущий Bearer-токен для последующих API-запросов.
         local session_token
@@ -1107,6 +1126,7 @@ wifi_disable() {
 global_internet_enable() {
         uci -q set sheepfold.global.block_on_boot='0'
         uci -q commit sheepfold
+        sync_firewall
         log_event "Глобальная блокировка интернета выключена"
         printf 'OK\n'
 }
@@ -1114,6 +1134,7 @@ global_internet_enable() {
 global_internet_disable() {
         uci -q set sheepfold.global.block_on_boot='1'
         uci -q commit sheepfold
+        sync_firewall
         log_event "Глобальная блокировка интернета включена"
         printf 'OK\n'
 }

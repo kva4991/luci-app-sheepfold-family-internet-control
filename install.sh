@@ -143,14 +143,21 @@ apply_selected_settings() {
     command -v uci >/dev/null 2>&1 || return 0
     [ -r /etc/config/sheepfold ] || return 0
 
-    echo "Applying detected integration mode to existing Sheepfold config."
+    echo "Applying selected Sheepfold settings to existing config."
     uci -q set sheepfold.global.language="${APP_LANGUAGE}"
     uci -q set sheepfold.global.luci_language_synced='1'
     # Тот же выбор применяем и к языку интерфейса LuCI, чтобы админка сразу
     # открывалась на выбранном языке, а не только внутренние строки Sheepfold.
     uci -q get luci.main >/dev/null 2>&1 || uci -q set luci.main=core
     uci -q set luci.main.lang="${APP_LANGUAGE}" 2>/dev/null || true
-    uci -q set sheepfold.global.integration_mode="${INTEGRATION_MODE}"
+    # Повторная установка не должна отменять ручной выбор четырёх режимов совместимости.
+    if [ "$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null || printf 0)" != "1" ]; then
+        uci -q set sheepfold.global.integration_mode="${INTEGRATION_MODE}"
+        uci -q set sheepfold.global.integration_mode_source='detected'
+        uci -q set sheepfold.global.integration_mode_user_set='0'
+    else
+        echo "Keeping manually selected integration mode: $(uci -q get sheepfold.global.integration_mode 2>/dev/null || printf none)"
+    fi
     uci -q set sheepfold.global.adguard_integration="${ADGUARD_DETECTED}"
     uci -q set sheepfold.global.podkop_compatibility="${PODKOP_DETECTED}"
     uci -q set sheepfold.global.auto_configure="${AUTO_CONFIGURE}"

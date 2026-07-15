@@ -68,6 +68,8 @@ schedule_name="$(uci -q get "sheepfold.$device_section.active_schedule" 2>/dev/n
 next_change_at="$(uci -q get "sheepfold.$device_section.next_change_at" 2>/dev/null || true)"
 temp_access_until="$(uci -q get "sheepfold.$device_section.temp_access_until" 2>/dev/null || printf 0)"
 admin_device="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
+device_group="$(uci -q get "sheepfold.$device_section.group" 2>/dev/null || true)"
+no_restrictions_group="$(uci -q get sheepfold.no_restrictions.name 2>/dev/null || printf 'No restrictions')"
 global_block="$(uci -q get sheepfold.global.block_on_boot 2>/dev/null || printf 0)"
 now="$(date +%s)"
 
@@ -83,6 +85,20 @@ if list_has_mac blocklist "$client_mac" || [ "$raw_status" = blocked ] || [ "$ra
 elif [ "$admin_device" = 1 ]; then
     status=allow
     reason=administrator_device
+elif [ "$raw_status" = allow ] || {
+    [ "$raw_status" != temp_access ] && [ "$raw_status" != temp-access ] && [ "$raw_status" != temporary ] &&
+        list_has_mac allowlist "$client_mac"
+}; then
+    status=allow
+    reason=allowlist
+elif [ -n "$device_group" ] && [ "$device_group" = "$no_restrictions_group" ]; then
+    status=allow
+    reason=no_restrictions_group
+elif [ "$global_block" = 1 ]; then
+    # Глобальная кнопка сильнее временных +N минут; исключения только явные:
+    # allowlist, администраторы и группа «Без ограничений». §84azytj
+    status=blocked
+    reason=global_block
 elif [ "$raw_status" = temp_access ] || [ "$raw_status" = temp-access ] || [ "$raw_status" = temporary ]; then
     if [ "$temp_access_until" -gt "$now" ]; then
         status=temporary
@@ -95,12 +111,6 @@ elif [ "$raw_status" = temp_access ] || [ "$raw_status" = temp-access ] || [ "$r
         reason=temporary_access_expired
         next_change_at=""
     fi
-elif list_has_mac allowlist "$client_mac" || [ "$raw_status" = allow ]; then
-    status=allow
-    reason=allowlist
-elif [ "$global_block" = 1 ]; then
-    status=blocked
-    reason=global_block
 elif [ "$raw_status" = scheduled ]; then
     # Без результата вычислителя расписаний нельзя утверждать, что интернет включён.
     status=scheduled

@@ -1,0 +1,209 @@
+#!/bin/sh
+set -eu
+
+COMMAND="${1:-sync}"
+STATE_DIR="/tmp/sheepfold/firewall"
+STATE_HASH="$STATE_DIR/state.cksum"
+NFT_TABLE="inet fw4"
+
+normalize_mac() {
+        printf '%s' "${1:-}" | tr '[:lower:]' '[:upper:]'
+}
+
+valid_mac() {
+        printf '%s' "${1:-}" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'
+}
+
+valid_iface() {
+        printf '%s' "${1:-}" | grep -Eq '^[A-Za-z0-9_.:@-]{1,15}$'
+}
+
+append_unique() {
+        local file="$1" value="$2"
+        [ -n "$value" ] || return 0
+        grep -qxF "$value" "$file" 2>/dev/null || printf '%s\n' "$value" >> "$file"
+}
+
+device_status_for_mac() {
+        local wanted section current
+        wanted="$(normalize_mac "$1")"
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+                current="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
+                [ "$current" = "$wanted" ] || continue
+                uci -q get "sheepfold.$section.status" 2>/dev/null || true
+                return 0
+        done
+}
+
+collect_lan_interfaces() {
+        local output="$1" zone_name zone_section network_name device
+        local zones
+        zones="$(uci -q get sheepfold.global.lan_firewall_zones 2>/dev/null || printf lan)"
+
+        for zone_name in $zones; do
+                zone_section=""
+                for candidate in $(uci -q show firewall 2>/dev/null | sed -n 's/^firewall\.\([^.=]*\)=zone$/\1/p'); do
+                        [ "$(uci -q get "firewall.$candidate.name" 2>/dev/null || true)" = "$zone_name" ] || continue
+                        zone_section="$candidate"
+                        break
+                done
+                [ -n "$zone_section" ] || continue
+
+                for network_name in $(uci -q get "firewall.$zone_section.network" 2>/dev/null || true); do
+                        device="$(uci -q get "network.$network_name.device" 2>/dev/null || \
+                                uci -q get "network.$network_name.ifname" 2>/dev/null || true)"
+                        for iface in $device; do
+                                valid_iface "$iface" && append_unique "$output" "$iface"
+                        done
+                done
+        done
+}
+
+sets_available() {
+        command -v nft >/dev/null 2>&1 || return 1
+        nft list set inet fw4 sheepfold_block_macs >/dev/null 2>&1 &&
+                nft list set inet fw4 sheepfold_exempt_macs >/dev/null 2>&1 &&
+                nft list set inet fw4 sheepfold_global_ifaces >/dev/null 2>&1
+}
+
+ensure_sets() {
+        sets_available && return 0
+
+        # Используем штатную пересборку fw4 только когда package drop-in ещё не загружен.
+        # Обычная синхронизация меняет лишь элементы Sheepfold sets и не трогает Podkop marks/table. §v7x2k9p
+        [ -x /etc/init.d/firewall ] || return 1
+        /etc/init.d/firewall reload >/dev/null 2>&1 || return 1
+        sets_available
+}
+
+join_macs() {
+        awk 'BEGIN { first=1 } { if (!first) printf ", "; printf "%s", $0; first=0 }' "$1"
+}
+
+join_ifaces() {
+        awk 'BEGIN { first=1 } { if (!first) printf ", "; printf "\"%s\"", $0; first=0 }' "$1"
+}
+
+write_add_command() {
+        local kind="$1" set_name="$2" file="$3"
+        [ -s "$file" ] || return 0
+        printf 'add element inet fw4 %s { ' "$set_name"
+        if [ "$kind" = ifname ]; then
+                join_ifaces "$file"
+        else
+                join_macs "$file"
+        fi
+        printf ' }\n'
+}
+
+collect_state() {
+        local block_file="$1" exempt_file="$2" global_iface_file="$3"
+        local mac status section group no_restrictions_name admin_device
+
+        for mac in $(uci -q get sheepfold.blocklist.mac 2>/dev/null || true); do
+                mac="$(normalize_mac "$mac")"
+                valid_mac "$mac" && append_unique "$block_file" "$mac"
+        done
+
+        no_restrictions_name="$(uci -q get sheepfold.no_restrictions.name 2>/dev/null || printf 'No restrictions')"
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+                mac="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
+                valid_mac "$mac" || continue
+                status="$(uci -q get "sheepfold.$section.status" 2>/dev/null || true)"
+                group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+                admin_device="$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)"
+
+                if [ "$status" = blocked ] || [ "$status" = block ]; then
+                        append_unique "$block_file" "$mac"
+                fi
+
+                # Временный доступ технически добавляет MAC в allowlist, но global block
+                # сильнее временного доступа. Поэтому temp_access не попадает в exempt set. §84azytj
+                if [ "$status" = allow ] || [ "$admin_device" = 1 ] || \
+                        { [ -n "$group" ] && [ "$group" = "$no_restrictions_name" ]; }; then
+                        append_unique "$exempt_file" "$mac"
+                fi
+        done
+
+        for mac in $(uci -q get sheepfold.allowlist.mac 2>/dev/null || true); do
+                mac="$(normalize_mac "$mac")"
+                valid_mac "$mac" || continue
+                status="$(device_status_for_mac "$mac")"
+                case "$status" in temp_access|temp-access|temporary|blocked|block) continue ;; esac
+                append_unique "$exempt_file" "$mac"
+        done
+
+        if [ "$(uci -q get sheepfold.global.block_on_boot 2>/dev/null || printf 0)" = 1 ]; then
+                collect_lan_interfaces "$global_iface_file"
+        fi
+}
+
+sync_sets() {
+        mkdir -p "$STATE_DIR"
+        chmod 700 "$STATE_DIR" 2>/dev/null || true
+
+        local block_file exempt_file global_iface_file batch current_hash previous_hash
+        block_file="$STATE_DIR/block.macs"
+        exempt_file="$STATE_DIR/exempt.macs"
+        global_iface_file="$STATE_DIR/global.ifaces"
+        batch="$STATE_DIR/update.nft"
+        : > "$block_file"
+        : > "$exempt_file"
+        : > "$global_iface_file"
+        collect_state "$block_file" "$exempt_file" "$global_iface_file"
+
+        # Нельзя подтверждать глобальную блокировку, если не найден ни один LAN-интерфейс:
+        # интерфейс показал бы включённый режим, хотя nftables фактически никого не ограничивает. §84azytj
+        if [ "$(uci -q get sheepfold.global.block_on_boot 2>/dev/null || printf 0)" = 1 ] && \
+                [ ! -s "$global_iface_file" ]; then
+                logger -t sheepfold "Global block is enabled, but no LAN interface was resolved"
+                return 1
+        fi
+
+        current_hash="$(cat "$block_file" "$exempt_file" "$global_iface_file" | cksum | awk '{ print $1 ":" $2 }')"
+        previous_hash="$(cat "$STATE_HASH" 2>/dev/null || true)"
+        if [ "$current_hash" = "$previous_hash" ] && sets_available; then
+                return 0
+        fi
+
+        ensure_sets || {
+                logger -t sheepfold "Could not load Sheepfold fw4 sets"
+                return 1
+        }
+
+        {
+                printf 'flush set inet fw4 sheepfold_block_macs\n'
+                printf 'flush set inet fw4 sheepfold_exempt_macs\n'
+                printf 'flush set inet fw4 sheepfold_global_ifaces\n'
+                write_add_command mac sheepfold_block_macs "$block_file"
+                write_add_command mac sheepfold_exempt_macs "$exempt_file"
+                write_add_command ifname sheepfold_global_ifaces "$global_iface_file"
+        } > "$batch"
+
+        nft -f "$batch"
+        printf '%s\n' "$current_hash" > "$STATE_HASH"
+}
+
+clear_sets() {
+        sets_available || return 0
+        nft flush set inet fw4 sheepfold_block_macs
+        nft flush set inet fw4 sheepfold_exempt_macs
+        nft flush set inet fw4 sheepfold_global_ifaces
+        rm -f "$STATE_HASH"
+}
+
+status() {
+        local mode
+        mode="$(uci -q get sheepfold.global.integration_mode 2>/dev/null || printf none)"
+        case "$mode" in none|adguard|podkop|adguard_podkop) ;; *) mode=none ;; esac
+        printf 'integration_mode=%s\n' "$mode"
+        printf 'fw4_sets=%s\n' "$(sets_available && printf ready || printf missing)"
+        printf 'global_block=%s\n' "$(uci -q get sheepfold.global.block_on_boot 2>/dev/null || printf 0)"
+}
+
+case "$COMMAND" in
+        ensure|sync) sync_sets ;;
+        clear) clear_sets ;;
+        status) status ;;
+        *) echo "Usage: sheepfold-firewall [ensure|sync|clear|status]" >&2; exit 2 ;;
+esac

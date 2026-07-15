@@ -1,0 +1,21 @@
+set sheepfold_block_macs {
+	type ether_addr
+}
+
+set sheepfold_exempt_macs {
+	type ether_addr
+}
+
+set sheepfold_global_ifaces {
+	type ifname
+}
+
+chain sheepfold_forward_guard {
+	ether saddr @sheepfold_block_macs counter drop comment "Sheepfold blocklist"
+	iifname @sheepfold_global_ifaces ether saddr @sheepfold_exempt_macs return comment "Sheepfold global exemptions"
+	iifname @sheepfold_global_ifaces counter drop comment "Sheepfold global internet block"
+}
+
+chain sheepfold_input_guard {
+	ether saddr @sheepfold_block_macs counter drop comment "Sheepfold router access block"
+}

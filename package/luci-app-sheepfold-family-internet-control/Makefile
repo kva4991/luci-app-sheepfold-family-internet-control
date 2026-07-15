@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=163
+PKG_RELEASE:=164
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -103,6 +103,10 @@ ensure_global_option() {
 ensure_global_option enabled '0'
 ensure_global_option language 'ru'
 ensure_global_option block_on_boot '0'
+ensure_global_option lan_firewall_zones 'lan'
+ensure_global_option integration_mode 'none'
+ensure_global_option integration_mode_source 'default'
+ensure_global_option integration_mode_user_set '0'
 ensure_global_option new_device_policy 'allow'
 ensure_global_option auto_configure '1'
 ensure_global_option detection_mode 'full'
@@ -324,7 +328,8 @@ install_sheepfold_cron() {
 # END SHEEPFOLD MANAGED JOBS
 EOF
 	chmod 600 "$$tmp"
-	mv -f "$$tmp" "$$cron_file"	[ -x /etc/init.d/cron ] && /etc/init.d/cron restart >/dev/null 2>&1 || true
+	mv -f "$$tmp" "$$cron_file"
+	[ -x /etc/init.d/cron ] && /etc/init.d/cron restart >/dev/null 2>&1 || true
 }
 install_sheepfold_cron
 rm -f /var/luci-indexcache* 2>/dev/null || true
@@ -341,6 +346,10 @@ endef
 define Package/$(PKG_NAME)/prerm
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
+# До удаления исполняемых файлов очищаем только собственные наборы Sheepfold.
+# Чужие таблицы, правила и packet marks, включая Podkop, не изменяются. §v7x2k9p
+[ -x /usr/libexec/sheepfold/sheepfold-firewall ] && \
+	/usr/libexec/sheepfold/sheepfold-firewall clear >/dev/null 2>&1 || true
 cron_file='/etc/crontabs/root'
 if [ -f "$$cron_file" ]; then
 	tmp="$$cron_file.sheepfold.tmp"

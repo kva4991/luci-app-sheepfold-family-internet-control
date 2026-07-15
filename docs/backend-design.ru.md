@@ -30,6 +30,34 @@
 
 ---
 
+## Firewall4 и четыре режима совместимости
+
+Sheepfold использует штатные package-author drop-in файлы `firewall4`:
+
+- `usr/share/nftables.d/table-pre/30-sheepfold.nft` — только собственные sets/chains;
+- `usr/share/nftables.d/chain-pre/forward/30-sheepfold.nft` — переход в forward guard;
+- `usr/share/nftables.d/chain-pre/input/30-sheepfold.nft` — запрет доступа blocklist к роутеру;
+- `sheepfold-firewall sync` — изменение только элементов `sheepfold_*` sets.
+
+Запрещено выполнять `flush ruleset`, удалять чужие таблицы, менять `meta mark`/`ct mark`, `ip rule`, `ip route`, Dnsmasq или sing-box. Это сохраняет таблицу и маркировку Podkop. Blocklist проверяется первым; затем настоящий allowlist, администраторы и группа «Без ограничений» образуют исключения глобальной блокировки. Временный доступ не является исключением глобальной кнопки (§84azytj, §v7x2k9p).
+
+Один firewall-движок работает во всех четырёх `integration_mode`:
+
+| Режим | Что меняет Sheepfold |
+| --- | --- |
+| `none` | Только собственные правила доступа устройств в fw4 |
+| `adguard` | Те же правила; AdGuard Home остаётся DNS-фильтром |
+| `podkop` | Те же правила; Podkop сохраняет собственную маршрутизацию и packet marks |
+| `adguard_podkop` | Sheepfold решает доступ устройства, AdGuard фильтрует DNS, Podkop маршрутизирует разрешённый трафик |
+
+Автоопределение выбирает профиль при первой установке. `integration_mode_user_set=1` защищает ручной выбор от повторной установки. Менять конфиги AdGuard Home или Podkop без отдельного подтверждения запрещено.
+
+Четыре режима не являются четырьмя копиями firewall-кода. Они задают совместимость и подсказки интеграции, а решение о доступе устройства всегда применяет один `sheepfold-firewall`. Это уменьшает риск, что исправление приоритета blocklist попадёт только в часть комбинаций.
+
+Текущий firewall-этап ещё не реализует исключения по аварийно-полезным доменам и вычисление расписаний; до их появления нельзя считать весь access engine завершённым. Официальный механизм drop-in: <https://openwrt.org/docs/guide-user/firewall/firewall_configuration>. Рекомендованная DNS-связка Podkop/AdGuard Home: <https://podkop.net/docs/adguard/>.
+
+---
+
 ## CGI-эндпоинты (`/cgi-bin/sheepfold-api/`)
 
 ### Обязательные эндпоинты MVP

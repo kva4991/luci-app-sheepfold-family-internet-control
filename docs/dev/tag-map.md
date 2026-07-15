@@ -178,7 +178,7 @@ grep -r '§xaji0y6' .
 
 | Тег | Имя | Описание |
 |-----|-----|--------|
-| `§84azytj` | ACCESS_PRIORITY_ORDER | Полный порядок: blocklist → allowlist → no-restrictions → global-block → temp-access → schedule → default. Тег: здесь одно из звеньев. Файлы: `backend-design.ru.md` |
+| `§84azytj` | ACCESS_PRIORITY_ORDER | Полный порядок: blocklist → allowlist → no-restrictions → global-block → temp-access → schedule → default. Тег: здесь одно из звеньев. Файлы: `backend-design.ru.md`, `sheepfold-client-status-effective`, `sheepfold-firewall` |
 | `§xepq85j` | ACCESS_BLOCKLIST_FINAL | Blocklist **не переопределяется ничем**. Тег: здесь логика, которую можно ошибочно обойти. Файлы: `backend-design.ru.md` |
 | `§sg65kxv` | ACCESS_ALLOWLIST_BYPASS | Allowlist обходит расписания и global-block, но не blocklist. Тег: здесь bypass для allowlist. Файлы: `backend-design.ru.md` |
 
@@ -238,7 +238,7 @@ grep -r '§xaji0y6' .
 
 | Тег | Имя | Тип | Описание |
 |-----|-----|-----|--------|
-| `§v7x2k9p` | PLAYBOOK_TRAFFIC_CHAIN | архитектура | Цепочка трафика и ответственности: Sheepfold принимает решение по устройству, затем AdGuard Home фильтрует DNS, затем Podkop маршрутизирует разрешённый трафик. Файлы: `agent-playbook.ru.md` |
+| `§v7x2k9p` | PLAYBOOK_TRAFFIC_CHAIN | архитектура | Цепочка трафика и ответственности: Sheepfold принимает решение по устройству, затем AdGuard Home фильтрует DNS, затем Podkop маршрутизирует разрешённый трафик. Файлы: `agent-playbook.ru.md`, `backend-design.ru.md`, `live-router-testing.ru.md`, `sheepfold-firewall`, `sheepfold-service`, `sheepfold-pair-device` |
 | `§q3nj8wd` | PLAYBOOK_NO_DEV_CLOUD | архитектура | Не добавлять developer-operated cloud backend; проект остаётся self-hosted на роутере пользователя. Файлы: `agent-playbook.ru.md` |
 | `§k5rf0hb` | PLAYBOOK_LOCAL_FULL_CONTROL | архитектура | Полное управление через LuCI/Android только в локальной сети; вне дома — короткие подтверждаемые команды через мессенджер. Файлы: `agent-playbook.ru.md` |
 | `§b3nw8vp` | PLAYBOOK_ADMIN_LOG_NO_SECRETS | безопасность | Административные действия логируются, но без секретов, токенов, паролей и лишних чувствительных данных. Файлы: `agent-playbook.ru.md` |
