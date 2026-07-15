@@ -24,6 +24,7 @@
 | Автоопределение | detector-скрипты, `docs/device-detection.ru.md` |
 | Сборка и окружение | `tools/README.ru.md`, `docs/agent-environment.ru.md` |
 | Известная странность | `docs/agent-gotchas.ru.md`, затем поиск по указанному §-тегу |
+| Ошибка команды, сборки, установки или сохранения | `docs/troubleshooting.ru.md` (§trouble) |
 
 ## Проверки по слоям
 

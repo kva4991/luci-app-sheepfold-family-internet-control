@@ -37,6 +37,7 @@
 | Продуктовые решения, scope | [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) |
 | Стиль кода, тесты, ревью | [`CODING_RULES.md`](../CODING_RULES.md) |
 | Быстрый вход нового агента без повторного чтения всего проекта | [`docs/agent-fast-start.ru.md`](agent-fast-start.ru.md) |
+| Ошибки Windows, тестов, Android, IPK, UCI, LuCI, Git и сети | [`docs/troubleshooting.ru.md`](troubleshooting.ru.md) |
 
 ## Зафиксированные мелочи
 

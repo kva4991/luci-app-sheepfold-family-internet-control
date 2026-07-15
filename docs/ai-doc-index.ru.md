@@ -90,6 +90,7 @@
 | [`docs/testing-cases.ru.md`](testing-cases.ru.md) | Тест-кейсы (чеклист перед PR) |
 | [`docs/live-router-testing.ru.md`](live-router-testing.ru.md) | Тестирование на живом роутере |
 | [`docs/agent-environment.ru.md`](agent-environment.ru.md) | Окружение агента, нужные программы, сборка IPK/APK и рабочие команды проверок |
+| [`docs/troubleshooting.ru.md`](troubleshooting.ru.md) | Справочник ошибок Windows, тестов, Android, IPK/OpenWRT, UCI, LuCI, Git и сети |
 
 ### Прочее
 

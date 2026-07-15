@@ -261,6 +261,7 @@ grep -r '§xaji0y6' .
 | `§toolwin` | WINDOWS_REPOSITORY_TOOLCHAIN | окружение | Воспроизводимое Windows-окружение ставится/проверяется через `tools/windows/`; скрипт устанавливает 7-Zip/ripgrep, находит скрытый от Codex `winget`, выбирает Python/JDK 17 без конфликта версий, бережно повторяет Android SDK-загрузки и прогревает Gradle Wrapper. Тяжёлые SDK и кэши не коммитятся. Файлы: `tools/README.ru.md`, `agent-environment.ru.md`, `agent-gotchas.ru.md`, `AGENTS.md` |
 | `§zipps51` | WINDOWS_ANDROID_ZIP_EXTRACTION | окружение/Windows | Android command-line tools распаковываются через `.NET ZipFile` в короткий `%TEMP%`-путь; `Expand-Archive` Windows PowerShell 5 здесь запрещён из-за внутренней ошибки `Remove-Item`. Файлы: `tools/windows/setup.ps1`, `tools/README.ru.md`, `agent-gotchas.ru.md` |
 | `§fastagt` | AGENT_FAST_START | процесс разработки | Новый агент начинает с короткой карты, точечного поиска и послойных тестов, а не читает и запускает весь проект без необходимости. Файлы: `agent-fast-start.ru.md`, `AGENTS.md`, `developer-task.ru.md` |
+| `§trouble` | TROUBLESHOOTING_HANDBOOK | диагностика | Справочник уже встречавшихся ошибок: точный симптом, причина, проверка и безопасное исправление для Windows, тестов, Android, IPK/OpenWRT, UCI, LuCI, Git и сети. Файлы: `troubleshooting.ru.md`, `AGENTS.md`, `agent-fast-start.ru.md`, `developer-task.ru.md` |
 
 ---
 
