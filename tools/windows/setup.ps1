@@ -357,13 +357,14 @@ function Ensure-Winget {
 }
 
 function Test-Java17Home {
-    param([string]$Home)
+    # $HOME - встроенная read-only переменная PowerShell, поэтому имя параметра должно отличаться. §toolwin
+    param([string]$JavaHomePath)
 
-    if (-not $Home) {
+    if (-not $JavaHomePath) {
         return $false
     }
-    $java = Join-Path $Home 'bin\java.exe'
-    $javac = Join-Path $Home 'bin\javac.exe'
+    $java = Join-Path $JavaHomePath 'bin\java.exe'
+    $javac = Join-Path $JavaHomePath 'bin\javac.exe'
     if (-not (Test-Path -LiteralPath $java) -or -not (Test-Path -LiteralPath $javac)) {
         return $false
     }
@@ -375,7 +376,7 @@ function Find-JavaHome {
     $javaCommand = Get-Command java -ErrorAction SilentlyContinue
     if ($javaCommand) {
         $candidate = Split-Path (Split-Path $javaCommand.Source -Parent) -Parent
-        if (Test-Java17Home -Home $candidate) {
+        if (Test-Java17Home -JavaHomePath $candidate) {
             return $candidate
         }
     }
@@ -385,7 +386,7 @@ function Find-JavaHome {
         Where-Object { $_.Name -like 'jdk-17*' } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
-    if ($candidate -and (Test-Java17Home -Home $candidate.FullName)) {
+    if ($candidate -and (Test-Java17Home -JavaHomePath $candidate.FullName)) {
         return $candidate.FullName
     }
     return $null

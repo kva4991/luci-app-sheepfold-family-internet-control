@@ -75,6 +75,8 @@ describe('Windows repository toolchain', () => {
     assert.match(setup, /Write-Progress -Activity \$Label/);
     assert.match(setup, /\$maxAttempts = 5/);
     assert.match(setup, /function Test-Java17Home/);
+    assert.doesNotMatch(setup, /param\(\[string\]\$Home\)/);
+    assert.match(setup, /Test-Java17Home -JavaHomePath/);
     assert.match(setup, /Select-Object -First 1/);
     assert.match(check, /Android Platform 35/);
     assert.match(check, /Gradle Wrapper: \$project/);
