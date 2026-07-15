@@ -30,6 +30,8 @@ describe('Deprecation guards', () => {
     assert.match(apiLegacy, /read_request_body_checked/);
     assert.match(apiLegacy, /request_too_large/);
     assert.match(apiLegacy, /413 Payload Too Large/);
+    assert.match(apiLegacy, /body="\$\(read_request_body\)" \|\| status=\$\?/);
+    assert.doesNotMatch(apiLegacy, /body="\$\(read_request_body_checked\)" \|\| status=\$\?/);
   });
 
   it('blocks deprecated HTTP routes inside api-legacy and CGI', () => {

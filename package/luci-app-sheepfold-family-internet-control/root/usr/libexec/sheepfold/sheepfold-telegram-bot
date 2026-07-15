@@ -346,10 +346,11 @@ grant_time_by_query() {
         [ "$minutes" -gt 0 ] || minutes=30
         [ "$minutes" -le 720 ] || minutes=720
 
-        until_ts="$(($(date +%s) + minutes * 60))"
-        uci -q set "sheepfold.$section.temporary_access_until=$until_ts"
-        uci -q set "sheepfold.$section.temporary_access_minutes=$minutes"
-        uci -q commit sheepfold
+        mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+        if [ -z "$mac" ] || ! [ -x "$ROUTER_CONTROL" ] || ! "$ROUTER_CONTROL" device-temp-access "$mac" "$minutes" >/dev/null 2>&1; then
+                printf 'Не удалось дать время устройству. Проверьте, что оно не в чёрном списке.'
+                return 1
+        fi
         log_event "Telegram: администратор дал +$minutes минут устройству $(device_label "$section")"
 
         printf 'Готово: устройству %s дано +%s минут.' "$(device_label "$section")" "$minutes"

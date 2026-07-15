@@ -33,6 +33,14 @@ powershell -ExecutionPolicy Bypass -File tools\windows\setup.ps1 -Install -Accep
 
 Новый чат Codex на Windows должен либо самостоятельно выполнить эту команду с нужными разрешениями, либо передать её пользователю и объяснить, что команду запускают из корня репозитория в PowerShell. После установки надо открыть новый терминал/чат, чтобы он увидел обновлённые `PATH`, `JAVA_HOME`, `ANDROID_HOME` и `ANDROID_SDK_ROOT`.
 
+Если агент продолжает работу в текущем PowerShell/Codex shell без перезапуска, перед проверками и сборками нужно один раз перечитать системный и пользовательский `PATH`:
+
+```powershell
+$env:Path = ([Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'))
+```
+
+Иначе свежеустановленные Git, Git Bash, Node.js, Python, JDK и Android SDK могут уже быть на диске, но команды `git`, `bash`, `node`, `python`, `java`, `adb` и `sdkmanager` в текущем процессе всё ещё будут не видны.
+
 Только проверка без скачивания и установки:
 
 ```powershell
@@ -47,7 +55,7 @@ powershell -ExecutionPolicy Bypass -File tools\windows\check.ps1
 - Python 3 в `PATH`;
 - Node.js, подходящий для `node --test`;
 - JDK 17;
-- Gradle;
+- Gradle Wrapper из `android/` и `android-child/`, прогретый через `setup.ps1`;
 - Android SDK с установленными platform/build-tools, которые требуют Android-проекты;
 - Android SDK licenses должны быть приняты.
 
@@ -65,7 +73,8 @@ bash --version
 python --version
 node --version
 java -version
-gradle -v
+android\gradlew.bat -p android --version
+android-child\gradlew.bat -p android-child --version
 adb version
 sdkmanager --list
 ```

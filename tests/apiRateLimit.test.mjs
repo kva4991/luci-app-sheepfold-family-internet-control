@@ -37,6 +37,8 @@ describe('API rate limit', () => {
     assert.match(cgi, /enforce_rate_limit api_write 90 60/);
     assert.match(cgi, /rate_limited/);
     assert.match(cgi, /429 Too Many Requests/);
+    assert.match(cgi, /Retry-After: %s/);
+    assert.match(cgi, /header_json "429 Too Many Requests" "60"/);
   });
 
   it('uses a fixed window counter per bucket and client id', () => {

@@ -16,12 +16,22 @@ powershell -ExecutionPolicy Bypass -File tools\windows\setup.ps1 -Install -Accep
 
 Скрипт автоматически задаёт пользовательские `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT` и добавляет в `PATH` найденные каталоги Git, Git Bash, Python, Node.js, GitHub CLI, 7-Zip, ripgrep, JDK, `adb` и `sdkmanager`. Повторные запуски не создают дубли в `PATH`.
 
+Если Windows установлена без Microsoft Store и `winget`, скрипт сначала пробует восстановить Windows Package Manager через официальный PowerShell-модуль `Microsoft.WinGet.Client`, затем продолжает обычную установку. На стандартной Windows с уже установленным `winget` этот шаг пропускается.
+
 Если работу начинает новый чат Codex на Windows, агент должен сначала попробовать выполнить эту команду сам, запросив необходимые разрешения на сеть и установку. Если установка из среды агента недоступна или пользователь должен лично подтвердить лицензии, агент обязан дать пользователю полную команду выше и кратко объяснить:
 
 1. открыть PowerShell;
 2. перейти командой `cd` в корень репозитория;
 3. выполнить команду установки;
 4. после успешного завершения закрыть и заново открыть PowerShell или чат Codex, чтобы обновились переменные окружения.
+
+Если агент продолжает работу в уже открытом shell сразу после установки, он обязан один раз обновить окружение текущего процесса перед проверками и сборками:
+
+```powershell
+$env:Path = ([Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'))
+```
+
+Это не заменяет новый терминал, но позволяет текущему PowerShell увидеть только что установленные `git`, `node`, `python`, `java`, `adb` и `sdkmanager`.
 
 Скрипт проверит и при необходимости скачает/установит:
 
@@ -36,12 +46,13 @@ powershell -ExecutionPolicy Bypass -File tools\windows\setup.ps1 -Install -Accep
 - Android Platform 35;
 - Android Build Tools 35.0.0;
 - Android Platform Tools (`adb`).
+- Gradle Wrapper cache для `android` и `android-child`.
 
 Обычные программы устанавливаются через `winget`. Android command-line tools выбираются из официального Google Android SDK repository XML, а скачанный архив проверяется по опубликованной там контрольной сумме.
 
 Если `winget` установлен вместе с Microsoft App Installer, но не виден в `PATH` текущего процесса Codex, скрипт находит его через пакет App Installer. Каталоги WindowsApps и WinGet Links также добавляются в пользовательский `PATH`. (§toolwin)
 
-При сетевой ошибке `winget` автоматически повторяет установку один раз через 10 секунд. Если обе попытки завершились ошибкой наподобие `0x80072ee2`, проверьте доступ к интернету и повторите всю команду: уже установленные компоненты заново скачиваться не будут.
+При сетевой ошибке `winget`, `sdkmanager` или Gradle Wrapper автоматически повторяют операцию до 5 раз с паузой 10 секунд. Если попытки завершились ошибкой наподобие `0x80072ee2`, проверьте доступ к интернету и повторите всю команду: уже установленные компоненты заново скачиваться не будут.
 
 7-Zip используется только для просмотра и ручной диагностики архивов. Не собирайте им `.ipk`: Sheepfold использует `python scripts/build-test-ipk.py`, чтобы сохранить совместимый с OpenWrt формат и Unix-права файлов.
 
@@ -74,7 +85,7 @@ powershell -ExecutionPolicy Bypass -File tools\windows\check.ps1
 
 ## Gradle
 
-Глобальный Gradle больше не обязателен. В обоих Android-проектах хранится стандартный Gradle Wrapper версии `8.10.2`. При первой сборке wrapper скачивает официальный Gradle distribution в пользовательский Gradle cache.
+Глобальный Gradle больше не обязателен. В обоих Android-проектах хранится стандартный Gradle Wrapper версии `8.10.2`. Полный `setup.ps1 -Install -AcceptAndroidLicenses` заранее запускает оба wrapper-а с `--version`, показывает путь wrapper-а, project dir, URL дистрибутива и Gradle cache, а официальный Gradle distribution скачивается в пользовательский cache.
 
 ```powershell
 android\gradlew.bat -p android assembleDebug --stacktrace

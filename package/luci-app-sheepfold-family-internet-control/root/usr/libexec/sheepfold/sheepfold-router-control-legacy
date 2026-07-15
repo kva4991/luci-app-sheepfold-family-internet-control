@@ -158,6 +158,19 @@ list_has_mac() {
         return 1
 }
 
+device_has_blocked_status() {
+        local mac section existing
+        mac="$(normalize_mac "$1")"
+        valid_mac "$mac" || return 1
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+                existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+                [ "$(normalize_mac "$existing")" = "$mac" ] || continue
+                [ "$(uci -q get "sheepfold.$section.status" 2>/dev/null || true)" = "blocked" ] && return 0
+        done
+        return 1
+}
+
 add_mac_to_list() {
         local list_name="$1"
         local mac
@@ -685,24 +698,97 @@ device_temp_access() {
         [ "$minutes" -le 1440 ] || minutes=1440
 
         repair_sheepfold_uci_sections
+        ensure_list_section allowlist
+        ensure_list_section blocklist
         local device_section
         device_section="$(device_section_for_mac "$device_mac")"
         local device_id
         device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || true)"
 
+        if list_has_mac blocklist "$device_mac" || \
+                [ "$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || true)" = "blocked" ]; then
+                echo "Device is in blocklist. Temporary access cannot override blocklist." >&2
+                return 3
+        fi
+
         local expires_at
         expires_at=$(( $(date +%s) + minutes * 60 ))
+        local previous_status previous_added previous_was_temp
+        previous_status="$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || printf restricted)"
+        previous_added="$(uci -q get "sheepfold.$device_section.temp_access_allowlist_added" 2>/dev/null || true)"
+        previous_was_temp=0
+        case "$previous_status" in
+                temp_access|temp-access|temporary)
+                        previous_was_temp=1
+                        previous_status="$(uci -q get "sheepfold.$device_section.temp_access_previous_status" 2>/dev/null || printf restricted)"
+                        ;;
+        esac
 
         # Временный доступ сохраняется как поле temp_access_until.
-        # sheepfold-device-detector проверяет это поле и снимает доступ по истечении.
+        # Если backend временно добавил MAC в allowlist, очистка после срока снимет только этот временный доступ.
         uci -q set "sheepfold.$device_section.temp_access_until=$expires_at"
+        uci -q set "sheepfold.$device_section.temp_access_previous_status=$previous_status"
+        if [ "$previous_added" = "1" ] || { [ "$previous_was_temp" = "1" ] && [ -z "$previous_added" ]; }; then
+                uci -q set "sheepfold.$device_section.temp_access_allowlist_added=1"
+        elif list_has_mac allowlist "$device_mac"; then
+                uci -q set "sheepfold.$device_section.temp_access_allowlist_added=0"
+        else
+                uci -q set "sheepfold.$device_section.temp_access_allowlist_added=1"
+                add_mac_to_list allowlist "$device_mac"
+        fi
         uci -q set "sheepfold.$device_section.status=temp_access"
-        add_mac_to_list allowlist "$device_mac"
         uci -q commit sheepfold
 
         log_event "Временный доступ выдан устройству #${device_id} $device_mac на $minutes мин."
         print_kv expires_at "$expires_at"
         print_kv minutes "$minutes"
+        printf 'OK\n'
+}
+
+expire_temp_access() {
+        repair_sheepfold_uci_sections
+        ensure_list_section allowlist
+
+        local now changed
+        now="$(date +%s)"
+        changed=0
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+                local status expires_at mac added previous_status device_id
+                status="$(uci -q get "sheepfold.$section.status" 2>/dev/null || true)"
+                case "$status" in
+                        temp_access|temp-access|temporary) ;;
+                        *) continue ;;
+                esac
+
+                expires_at="$(uci -q get "sheepfold.$section.temp_access_until" 2>/dev/null || printf 0)"
+                case "$expires_at" in ''|*[!0-9]*) expires_at=0 ;; esac
+                [ "$expires_at" -le "$now" ] || continue
+
+                mac="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
+                added="$(uci -q get "sheepfold.$section.temp_access_allowlist_added" 2>/dev/null || printf 1)"
+                if [ "$added" = "1" ] && valid_mac "$mac"; then
+                        remove_mac_from_list allowlist "$mac"
+                fi
+
+                previous_status="$(uci -q get "sheepfold.$section.temp_access_previous_status" 2>/dev/null || printf restricted)"
+                case "$previous_status" in
+                        allow|blocked|restricted|scheduled|new) ;;
+                        *) previous_status=restricted ;;
+                esac
+
+                # Старые версии могли оставить временный MAC в allowlist навсегда; этот проход чинит состояние.
+                uci -q set "sheepfold.$section.status=$previous_status"
+                uci -q delete "sheepfold.$section.temp_access_until" 2>/dev/null || true
+                uci -q delete "sheepfold.$section.temp_access_previous_status" 2>/dev/null || true
+                uci -q delete "sheepfold.$section.temp_access_allowlist_added" 2>/dev/null || true
+                /usr/libexec/sheepfold/sheepfold-device-id ensure "$section" >/dev/null 2>&1 || true
+                device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || printf '?')"
+                log_event "Временный доступ завершён для устройства #${device_id} $mac; восстановлен статус $previous_status."
+                changed=1
+        done
+
+        [ "$changed" = "1" ] && uci -q commit sheepfold
         printf 'OK\n'
 }
 
@@ -1610,6 +1696,10 @@ wps_allowlist_window() {
         snapshot_leases | while read -r mac; do
                 [ -n "$mac" ] || continue
                 grep -qx "$mac" "$WPS_LEASES_SNAPSHOT" 2>/dev/null && continue
+                if list_has_mac blocklist "$mac" || device_has_blocked_status "$mac"; then
+                        log_event "WPS-окно не добавило устройство из чёрного списка: $mac"
+                        continue
+                fi
                 add_mac_to_allowlist "$mac"
         done
 
@@ -1711,6 +1801,9 @@ case "$COMMAND" in
                 ;;
         device-temp-access)
                 device_temp_access "${2:-}" "${3:-30}"
+                ;;
+        expire-temp-access)
+                expire_temp_access
                 ;;
 
         # --- Глобальная блокировка интернета ---------------------------------
@@ -1886,7 +1979,7 @@ case "$COMMAND" in
                 echo "" >&2
                 echo "Токены:           check-token <bearer>  |  revoke-tokens <login>" >&2
                 echo "Клиент (APK):     client-status <ip>" >&2
-                echo "Устройства:       list-devices  |  device-allow <mac>  |  device-block <mac>  |  device-temp-access <mac> [min]" >&2
+                echo "Устройства:       list-devices  |  device-allow <mac>  |  device-block <mac>  |  device-temp-access <mac> [min]  |  expire-temp-access" >&2
                 echo "Блокировка:       global-block-on  |  global-block-off  |  internet-enable  |  internet-disable  |  internet-status" >&2
                 echo "Сопряжение:       pair-admin-device  |  activate-admin-pairing-code  |  admin-pairing-status" >&2
                 echo "Wi-Fi:            wifi-enable  |  wifi-disable  |  wifi-automation-tick" >&2

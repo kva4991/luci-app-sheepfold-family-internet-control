@@ -100,7 +100,7 @@ read_request_body_checked() {
 	body=""
 	status=0
 
-	body="$(read_request_body_checked)" || status=$?
+	body="$(read_request_body)" || status=$?
 	case "$status" in
 		2)
 			header_json "413 Payload Too Large"

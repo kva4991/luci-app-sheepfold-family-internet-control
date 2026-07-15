@@ -219,6 +219,8 @@ config pairing_global 'pairing_global'  # (§w2pcn9t)
 6. **Расписание** — применяется к устройствам, не охваченным выше.
 7. **По умолчанию** (`new_device_behavior`) — для новых устройств.
 
+Временный доступ хранится в UCI как `temp_access_until` и `status=temp_access`. Если backend временно добавляет MAC в `allowlist`, он помечает это флагом `temp_access_allowlist_added=1`, чтобы `expire-temp-access` удалил только временное разрешение и не тронул ручной allowlist. Команда вызывается из `sheepfold-service` на каждом tick; blocklist и `status=blocked` всегда сильнее временного доступа. WPS-режим `allow_wifi_and_allowlist` тоже не добавляет устройство из blocklist или с `status=blocked`.
+
 ---
 
 ## Диагностическая цепочка интернет-соединения (§f1t2tal)

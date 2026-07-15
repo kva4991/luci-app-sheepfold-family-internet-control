@@ -65,6 +65,9 @@
 ### Сборка и пакет
 
 - Процесс Codex может не видеть `winget` в `PATH` и одновременно видеть временный встроенный `rg`. Установщик находит `winget` через Microsoft App Installer и не принимает Codex-копию `rg` за пользовательскую установку (см. [`tools/README.ru.md`](../tools/README.ru.md)). (§toolwin)
+- После установки Windows toolchain текущий PowerShell/Codex-процесс может не видеть уже установленные `git`, `node`, `python`, `java`, `adb` и `sdkmanager`; один раз перечитать Machine/User `PATH` или открыть новый shell (см. [`docs/agent-environment.ru.md`](agent-environment.ru.md)). (§toolwin)
+- Windows `setup.ps1` прогревает Gradle Wrapper запуском `gradlew.bat --version`: wrapper-файлы остаются в Git, а скачанный Gradle distribution живёт только в `%USERPROFILE%\.gradle\wrapper\dists` и не коммитится (см. [`tools/README.ru.md`](../tools/README.ru.md)). (§toolwin)
+- Fallback-поиск Windows toolchain выбирает одну наиболее новую установку Python и только JDK 17; повтор `sdkmanager` удаляет лишь неполный компонент, а не уже исправные Android SDK-пакеты. (§toolwin)
 - В Windows PowerShell 5 не распаковывать Android command-line tools через `Expand-Archive`: официальный ZIP способен вызвать внутреннюю ошибку `Remove-Item`. Установщик использует `.NET ZipFile` и короткий `%TEMP%`-путь; тест не даёт вернуть проблемную реализацию (см. [`tools/README.ru.md`](../tools/README.ru.md)). (§zipps51)
 - После изменения LuCI JS/CSS поднимать **`PKG_RELEASE`** и синхронный **`ui_asset_version`** (см. [`docs/luci-cache.ru.md`](luci-cache.ru.md), тест `tests/luciAssetVersioning.test.mjs`).
 - Локальный тестовый `.ipk` — gzip-tar с `debian-binary` / `data.tar.gz` / `control.tar.gz`; по умолчанию пишется в `Downloads`, не в `dist\` (см. [`docs/agent-environment.ru.md`](agent-environment.ru.md)).
@@ -74,6 +77,7 @@
 
 - `sheepfold-router-control-legacy` и `sheepfold-api-legacy` — **текущий рабочий монолит** за фасадом, не «совместимость со старым релизом» (см. [`CODING_RULES.md`](../CODING_RULES.md) §8.4).
 - Устаревшие маршруты (`/pair-token`, `/settings/save`, `token=` в query) должны отдавать **404/410/400**, а не оставаться рабочими.
+- Временный доступ не должен превращаться в постоянный allowlist: backend ставит `temp_access_allowlist_added`, `sheepfold-service` вызывает `expire-temp-access`, а blocklist/`status=blocked` остаются сильнее временного доступа и WPS allowlist-режима (см. [`docs/backend-design.ru.md`](backend-design.ru.md) §84azytj).
 
 ### Хранение журналов и Yandex Disk
 

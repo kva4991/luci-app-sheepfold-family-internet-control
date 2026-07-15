@@ -7,7 +7,7 @@ Before merging the current `editsByClaude` branch into `main`, follow the eviden
 Current OpenWRT package version in the repository:
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-162_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-163_all.ipk
 ```
 
 The package uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries.
@@ -25,6 +25,7 @@ The package uses `Architecture: all` because it contains LuCI assets, shell scri
 - Configurable blocked-page responder on port `5202`.
 - Router-control backend command for Wi-Fi enable/disable, Wi-Fi automation tick, WPS actions, LED actions, blocked-page service, WAN status tick, router diagnostics, and device status changes.
 - Device add/status backend action: create or update a device by MAC, add to allowlist, add to blocklist, or add as a known restricted device.
+- Temporary access backend action for Android/LuCI/Telegram: stores an expiry, blocks blocklisted devices, marks temporary allowlist membership, and cleans it from the service tick after expiry.
 - Backend protection that prevents administrator devices from being added to the blocklist.
 - LuCI buttons for adding devices to allowlist/blocklist through the backend command.
 - Manual device add from LuCI by MAC/name/IP/type.
@@ -50,7 +51,7 @@ The package uses `Architecture: all` because it contains LuCI assets, shell scri
 ## Still Target / Incomplete
 
 - Real firewall/nftables enforcement for all access rules is not complete.
-- Temporary access such as `+30 min` is still a target feature.
+- End-to-end live-router verification is still needed for temporary access traffic enforcement because nftables/firewall integration is not complete.
 - Full schedule editor and schedule enforcement are still target features.
 - A future `/api/v1/*` alias, refresh-token flow, and complete Android editors for every LuCI section remain target work; current authenticated CGI routes cover pairing, devices, global internet state, router information, and AI.
 - VK and MAX messenger adapters are documented but not implemented.
