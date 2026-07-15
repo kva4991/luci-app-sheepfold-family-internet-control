@@ -2,6 +2,8 @@
 
 > **Точка входа для нового разработчика и AI-агента.**
 > Читайте этот файл первым, затем переходите по ссылкам на детальные документы.
+>
+> План разделения одного общего кода на `Sheepfold` и `Sheepfold - AI Support`: [`product-variants.ru.md`](product-variants.ru.md). Прямое задание и боевой промпт: [`product-variants-implementation-task.ru.md`](product-variants-implementation-task.ru.md) (§prodvar).
 
 ---
 

@@ -9,6 +9,13 @@
 - Android app: `Sheepfold`
 - Android package: `app.sheepfold.android`
 
+## Product Variants
+
+- `Sheepfold` is the Standard product: all family internet-control functions, without AI UI/backend, provider settings, prompts, or detailed per-device activity collection.
+- `Sheepfold - AI Support` contains the identical shared control core plus the AI assistant and explicit opt-in context/activity features.
+- Both products must be built from one shared source repository and one common control implementation. See [`product-variants.ru.md`](product-variants.ru.md) (§prodvar).
+- The ordinary administrative/system event journal remains available in both products; it must not be confused with detailed AI activity logs.
+
 ## Core Features
 
 - Manage family internet access through an OpenWRT router and its LuCI web interface.

@@ -13,6 +13,8 @@
 | [`docs/developer-task.ru.md`](developer-task.ru.md) | Точка входа: что делаем, порядок чтения, фокус следующего этапа |
 | [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) | Детальный плейбук: продуктовые решения из обсуждения с владельцем |
 | [`docs/product-requirements.md`](product-requirements.md) | Полные требования к продукту |
+| [`docs/product-variants.ru.md`](product-variants.ru.md) | Граница Sheepfold Standard и Sheepfold - AI Support, единое ядро и релизная модель |
+| [`docs/product-variants-implementation-task.ru.md`](product-variants-implementation-task.ru.md) | Поэтапная задача разделения и боевой промпт |
 
 ---
 

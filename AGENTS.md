@@ -8,6 +8,8 @@ These rules apply to the whole repository.
 - Use `Sheepfold` as the public Android app name too.
 - In LuCI Russian UI headings, keep the product word in English: `Sheepfold`.
 - Do not use `Овчарня` in public product text unless the owner explicitly asks to discuss the old/internal name.
+- Sheepfold has two planned deliverables from one shared source tree: `Sheepfold` and `Sheepfold - AI Support`. Do not create independently maintained copies of common device-control code or a second repository merely to publish the AI variant. Follow `docs/product-variants.ru.md` (§prodvar).
+- Standard Sheepfold must not ship AI backend, AI prompts, provider-key settings, AI UI, or detailed per-device activity collection. The ordinary administrative/system event journal remains part of both variants.
 
 Correct examples:
 

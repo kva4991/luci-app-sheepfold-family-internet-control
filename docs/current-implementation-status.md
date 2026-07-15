@@ -12,6 +12,8 @@ luci-app-sheepfold-family-internet-control_0.1.0-165_all.ipk
 
 The package uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries.
 
+The planned `Sheepfold` / `Sheepfold - AI Support` product boundary is documented in [`product-variants.ru.md`](product-variants.ru.md). It is **not implemented yet**: the current OpenWRT package and parent APK still contain both common control and AI functionality. Do not describe the Standard artifact as AI-free until archive-level negative tests prove it (§prodvar).
+
 ## Working In The Current Package
 
 - LuCI entry point for `Sheepfold Family Internet Control`.
