@@ -42,6 +42,7 @@ Avoid:
 ## Coding Style
 
 - Use camelCase for JavaScript/Kotlin variables, functions, object fields, and UI state names whenever the surrounding platform does not require another convention.
+- Variable names must tell a human reviewer what the value contains. For new project-owned local variables and private fields, keep the name at 15 characters or fewer; if the meaning does not fit, simplify the scope or use an established domain term instead of stacking words. Never satisfy the limit with cryptic abbreviations. External contracts, generated names, constants, and platform-required identifiers are exempt (§pm3kq7r).
 - Keep OpenWRT/UCI/package keys in their native format, usually snake_case or uppercase Make variables, for example `app_port`, `ui_asset_version`, `PKG_RELEASE`, and `SHEEPFOLD_UI_ASSET_VERSION`.
 - Do not convert external API fields, UCI options, package metadata, Android resource names, or documented protocol keys to camelCase unless the external contract itself uses camelCase.
 - When fixing non-obvious code in this repository, leave short Russian comments explaining why the fix is needed and why this approach is used. Do not comment obvious assignments or noise.

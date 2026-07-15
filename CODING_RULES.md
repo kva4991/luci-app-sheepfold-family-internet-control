@@ -54,12 +54,12 @@ SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
   - Kotlin: `UPPER_SNAKE_CASE`;
   - legacy JavaScript: сохранять стиль файла.
 - Булевы значения называть как утверждение: `isEnabled`, `hasToken`, `canPair`, `shouldRefresh`.
-- Коллекции называть во множественном числе: `devices`, `archiveFiles`, `administratorSections`.
-- Экземпляр класса называть по имени класса в lowerCamelCase без лишнего суффикса `Model`:
+- Коллекции называть во множественном числе: `devices`, `archiveFiles`, `adminSections`.
+- Экземпляр класса называть по его понятной предметной роли в lowerCamelCase без лишнего суффикса `Model`. Если полное имя класса слишком длинное, использовать устойчивый термин роли:
 
 ```text
-ExemptionFormSearchModel -> exemptionFormSearch
-RouterConnectionManager -> routerConnectionManager
+ExemptionFormSearchModel -> exemptionSearch
+RouterConnectionManager -> routerClient
 ```
 
 - jQuery-объекты в legacy-коде называть с префиксом `$`.
@@ -92,12 +92,50 @@ data, item, model, value, result
 Лучше:
 
 ```text
-clientStatus, deviceEntry, administrator, pairingCode, encryptionResult
+clientStatus, deviceEntry, administrator, pairingCode, cryptResult
 ```
 
 Имена `data`, `item`, `value`, `result` допустимы в небольших общих helpers и callbacks, когда их смысл однозначен из сигнатуры и контекста.
 
 Короткие имена `i`, `j`, `x`, `y` допустимы для индексов, координат и математических выражений.
+
+### 3.4. Понятность и длина переменных
+
+<!-- §pm3kq7r -->
+
+Имя переменной должно позволять человеку при инспекции кода понять, что именно в ней хранится, без поиска каждого присваивания. Говорящее имя важнее минимальной длины, но составные имена тоже нельзя растягивать без меры.
+
+Для новых переменных, созданных внутри проекта:
+
+1. Локальная переменная или приватное поле — не более **15 символов**.
+2. Имя описывает содержимое или роль, а не способ получения: `deviceMac`, `routerAddr`, `pairingCode`, а не `data`, `response2`, `processedValue`.
+3. Нельзя укладываться в лимит с помощью непонятных сокращений вроде `admDevCfgLst`.
+4. Допустимы общеупотребительные термины проекта: `api`, `id`, `ip`, `mac`, `url`, `uci`, `rpc`, `ui`, `tls`, `qr`, `wan`, `lan`, `admin`, `config`.
+5. Если точное имя не помещается в 15 символов, сначала проверить, не делает ли переменная сразу несколько вещей и нельзя ли сузить функцию, блок или структуру данных.
+6. При правке старого кода применять правило к новым и непосредственно затронутым переменным. Не устраивать массовое переименование в несвязанном функциональном PR.
+
+Хорошо:
+
+```text
+deviceMac
+routerAddr
+pairingCode
+adminList
+isOnline
+nextRunAt
+```
+
+Плохо:
+
+```text
+d
+tmpValue2
+administratorDeviceConfiguration
+selectedDeviceCollection
+admDevCfgLst
+```
+
+Лимит не применяется к именам внешнего API, UCI и файловых форматов, сгенерированному коду, обязательным platform callbacks, публичным типам, именам функций и классов, константам и Makefile/environment identifiers. Для них всё равно действует требование понятности и разумной длины.
 
 ## 4. Комментарии и todo
 

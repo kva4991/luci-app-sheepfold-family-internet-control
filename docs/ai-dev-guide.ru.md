@@ -26,8 +26,10 @@
 
 Стиль проекта зависит от слоя (§pm3kq7r). В JS/Kotlin/JSON-моделях используем camelCase, потому что это привычный стиль для LuCI frontend, Android и HTTP API. В OpenWrt/UCI, shell-скриптах и Makefile сохраняем привычный для OpenWrt стиль: `snake_case` для UCI-опций и shell-переменных, верхний регистр для Makefile-переменных. Не переименовывать существующие UCI-поля без миграции.
 
+Новые локальные переменные и приватные поля должны иметь понятное человеку имя длиной не более 15 символов. Не сокращать их до нечитаемого набора букв ради лимита: использовать устойчивые термины проекта (`deviceMac`, `routerAddr`, `adminList`) или упростить слишком широкий блок кода. Внешние контракты, generated code, constants и platform identifiers под этот числовой лимит не попадают.
+
 Примеры правильных имён:
-- JS/Kotlin/JSON: `deviceId`, `displayName`, `personalGroupId`, `ownershipUpdatedAt`, `activeMessenger`, `adminDevice`;
+- JS/Kotlin: `deviceId`, `displayName`, `personalGroupId`, `ownerChangedAt`, `activeMessenger`, `adminDevice`;
 - UCI/shell: `device_id`, `display_name`, `personal_group_id`, `active_messenger`, `admin_device`;
 - Makefile: `PKG_RELEASE`, `SHEEPFOLD_UI_ASSET_VERSION`.
 
