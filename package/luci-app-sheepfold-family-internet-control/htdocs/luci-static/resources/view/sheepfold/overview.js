@@ -49,6 +49,7 @@ var logViewFilters = {
 };
 var wifiNetworkEditors = [];
 var wifiIsSaving = false;
+var activeOverviewView = null;
 
 var rootPasswordIsSet = true;
 // Настройки на этой странице сначала живут в черновике, а не сразу пишутся в UCI.
@@ -430,9 +431,10 @@ function deviceStatusBadge(status, configured) {
         return deviceShowsNewBadge(configured, status) ? 'new' : '';
 }
 
-function metric(label, value, tone, handler) {
+function metric(label, value, tone, handler, key) {
         return E('button', {
                 'class': 'sf-metric sf-metric-' + tone,
+                'data-metric': key || '',
                 'click': function (ev) {
                         ev.preventDefault();
                         if (handler)
@@ -442,6 +444,44 @@ function metric(label, value, tone, handler) {
                 E('span', {}, label),
                 E('strong', {}, value)
         ]);
+}
+
+function refreshUserListsWithoutPageReload() {
+        var page = document.querySelector('.sf-page');
+        var panelDefinitions;
+
+        if (!page || !activeOverviewView)
+                return;
+
+        panelDefinitions = {
+                devices: activeOverviewView.renderDevices(true),
+                allowlist: activeOverviewView.renderAllowlist(true),
+                blocklist: activeOverviewView.renderBlocklist(true)
+        };
+
+        Object.keys(panelDefinitions).forEach(function (tab) {
+                var current = page.querySelector('[data-user-list-panel="' + tab + '"]');
+                var replacement;
+
+                if (!current)
+                        return;
+
+                replacement = activeOverviewView.renderUserListPanel(tab, panelDefinitions[tab]);
+                current.replaceWith(replacement);
+        });
+
+        [
+                ['devices', devices.length],
+                ['allowlist', devices.filter(function (device) { return device.status === 'allow'; }).length],
+                ['blocklist', devices.filter(function (device) { return device.status === 'blocked'; }).length],
+                ['restricted', devices.filter(function (device) {
+                        return device.status === 'restricted' || device.status === 'scheduled';
+                }).length]
+        ].forEach(function (item) {
+                var value = page.querySelector('[data-metric="' + item[0] + '"] strong');
+                if (value)
+                        value.textContent = String(item[1]);
+        });
 }
 
 function actionButton(label, tone, message) {
@@ -2638,11 +2678,14 @@ function showManualListDeviceModal(targetStatus) {
                 }
 
                 persistDeviceListMembership(selectedDevices, targetStatus).then(function () {
+                        // UCI уже подтверждён роутером; обновляем только связанные таблицы,
+                        // чтобы добавление в список не перезапускало всю страницу LuCI.
+                        selectedDevices.forEach(function (device) {
+                                device.status = targetStatus;
+                        });
                         notify(isAllowlist ? _('Device added to allowlist.') : _('Device added to blocklist.'), 'info');
                         ui.hideModal();
-                        window.setTimeout(function () {
-                                window.location.reload();
-                        }, 700);
+                        refreshUserListsWithoutPageReload();
                 }, function (error) {
                         notify(commandErrorText(error, _('Could not add device.')), 'warning');
                 });
@@ -6412,10 +6455,9 @@ function removeDeviceFromAccessList(device, listName) {
         uci.set('sheepfold', sectionName, 'status', 'new');
 
         saveUciChanges(['sheepfold']).then(function () {
+                device.status = 'new';
                 notify(successText, 'info');
-                window.setTimeout(function () {
-                        window.location.reload();
-                }, 500);
+                refreshUserListsWithoutPageReload();
         }, function () {
                 notify(_('Could not remove device from list.'), 'warning');
         });
@@ -7902,6 +7944,7 @@ return view.extend({
                 }).length;
                 var cssHref = L.resource('sheepfold/sheepfold.css') + '?v=' + encodeURIComponent(assetVersion);
                 var page;
+                activeOverviewView = this;
                 var header = E('div', { 'class': 'sf-header' }, [
                         E('div', {}, [
                                 E('h2', {}, _('Sheepfold Family Internet Control')),
@@ -7930,16 +7973,16 @@ return view.extend({
                         E('div', { 'class': 'sf-metrics' }, [
                                 metric(_('Devices'), String(devices.length), 'neutral', function (button) {
                                         self.openUserListMetric(button, 'devices');
-                                }),
+                                }, 'devices'),
                                 metric(_('Allowlist'), String(allowlistCount), 'positive', function (button) {
                                         self.openUserListMetric(button, 'allowlist');
-                                }),
+                                }, 'allowlist'),
                                 metric(_('Restricted'), String(restrictedCount), 'warning', function (button) {
                                         self.openUserListMetric(button, 'devices');
-                                }),
+                                }, 'restricted'),
                                 metric(_('Blocklist'), String(blocklistCount), 'danger', function (button) {
                                         self.openUserListMetric(button, 'blocklist');
-                                })
+                                }, 'blocklist')
                         ]),
                         this.renderTabs(),
                         E('div', { 'class': 'sf-panels' }, this.renderPanels())

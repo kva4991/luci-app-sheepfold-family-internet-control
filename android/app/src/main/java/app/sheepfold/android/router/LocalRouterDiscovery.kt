@@ -57,28 +57,66 @@ object LocalRouterDiscovery {
             return@withContext null
         }
         val host = state.gatewayHost ?: return@withContext null
-        val url = URL("https://$host:5201/.well-known/sheepfold.json")
+
+        // Сначала читаем discovery через штатный HTTPS LuCI. Порт Sheepfold может быть
+        // изменён, поэтому начинать поиск только с жёстко заданного :5201 нельзя. §dscqr01
+        val discoveryUrls = listOf(
+            URL("https://$host/.well-known/sheepfold.json"),
+            URL("https://$host:5201/.well-known/sheepfold.json")
+        )
+        for (url in discoveryUrls) {
+            val json = readSheepfoldJson(url) ?: continue
+            val port = json.optString("httpsPort")
+                .ifBlank { json.optString("appPort") }
+                .toIntOrNull()
+                ?.takeIf { it in 1..65535 }
+                ?: 5201
+            val path = json.optString("apiPath")
+                .ifBlank { json.optString("apiBase") }
+                .ifBlank { "/cgi-bin/sheepfold-api" }
+                .let { if (it.startsWith('/')) it else "/$it" }
+            val apiUrl = "https://$host:$port$path"
+
+            // Наличие статического JSON ещё не означает, что отдельный API-uhttpd запущен.
+            // Проверяем сам endpoint, иначе следующий экран обещает найденный сервер зря.
+            if (!isSheepfoldApi(URL(apiUrl))) continue
+
+            return@withContext LocalSheepfoldDiscovery(
+                gatewayHost = host,
+                apiUrl = apiUrl,
+                routerName = json.optString("routerName").ifBlank { host }
+            )
+        }
+
+        null
+    }
+
+    private fun readSheepfoldJson(url: URL): JSONObject? = runCatching {
         val (connection, _) = RouterHttps.open(url, tlsPinSha256 = null, allowTrustOnFirstUse = true)
         try {
             connection.connectTimeout = 2500
             connection.readTimeout = 2500
             connection.requestMethod = "GET"
-            val code = connection.responseCode
-            if (code !in 200..299) return@withContext null
-            val body = connection.inputStream.bufferedReader().use { it.readText() }
-            val json = JSONObject(body)
-            if (!json.optString("service").equals("sheepfold", ignoreCase = true)) return@withContext null
-            val port = json.optString("httpsPort").ifBlank { json.optString("appPort") }.ifBlank { "5201" }
-            val path = json.optString("apiPath").ifBlank { "/cgi-bin/sheepfold-api" }
-            LocalSheepfoldDiscovery(
-                gatewayHost = host,
-                apiUrl = "https://$host:$port${if (path.startsWith('/')) path else "/$path"}",
-                routerName = json.optString("routerName").ifBlank { host }
-            )
-        } catch (_: Exception) {
-            null
+            if (connection.responseCode !in 200..299) return@runCatching null
+            val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+            json.takeIf { it.optString("service").equals("sheepfold", ignoreCase = true) }
         } finally {
             connection.disconnect()
         }
-    }
+    }.getOrNull()
+
+    private fun isSheepfoldApi(url: URL): Boolean = runCatching {
+        val (connection, _) = RouterHttps.open(url, tlsPinSha256 = null, allowTrustOnFirstUse = true)
+        try {
+            connection.connectTimeout = 2500
+            connection.readTimeout = 2500
+            connection.requestMethod = "GET"
+            if (connection.responseCode !in 200..299) return@runCatching false
+            val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+            json.optString("service").equals("sheepfold", ignoreCase = true) ||
+                json.optString("app").equals("sheepfold", ignoreCase = true)
+        } finally {
+            connection.disconnect()
+        }
+    }.getOrDefault(false)
 }

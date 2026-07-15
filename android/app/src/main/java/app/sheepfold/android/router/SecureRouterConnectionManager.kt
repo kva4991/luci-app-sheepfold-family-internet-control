@@ -3,8 +3,12 @@ package app.sheepfold.android.router
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.net.URL
 import java.net.URLEncoder
+import javax.net.ssl.SSLException
 
 /** Выполняет сопряжение только по HTTPS и закрепляет сертификат роутера при первом успехе. */
 class SecureRouterConnectionManager {
@@ -16,7 +20,7 @@ class SecureRouterConnectionManager {
         for (apiUrl in candidateApiUrls(request.apiUrl)) {
             val result = runCatching { pair(request, apiUrl) }
             if (result.isSuccess) return@withContext result.getOrThrow()
-            lastError = result.exceptionOrNull()
+            lastError = friendlyConnectionError(result.exceptionOrNull(), apiUrl)
         }
         throw lastError ?: IllegalStateException("Не удалось подключиться к роутеру Sheepfold")
     }
@@ -124,11 +128,9 @@ class SecureRouterConnectionManager {
                 .orEmpty()
             val json = runCatching { JSONObject(responseBody) }.getOrNull()
             if (responseCode !in 200..299 || json?.optBoolean("paired", false) != true) {
-                val message = json?.optString("message")
-                    ?.ifBlank { json.optString("error") }
-                    .orEmpty()
-                    .ifBlank { responseBody.ifBlank { "HTTP $responseCode" } }
-                throw IllegalStateException(message)
+                val errorCode = json?.optString("error").orEmpty()
+                val serverMessage = json?.optString("message").orEmpty()
+                throw IllegalStateException(pairingErrorMessage(errorCode, serverMessage, responseCode))
             }
 
             val token = json.optString("token").trim()
@@ -180,6 +182,37 @@ class SecureRouterConnectionManager {
         val path = parsed.path
         val httpsPort = parsed.port.takeIf { it > 0 } ?: 5201
         return listOf("https://$host:$httpsPort$path")
+    }
+
+    // Backend-коды переводим здесь, чтобы QR-экран не показывал родителю null/undefined. §dscqr01
+    private fun pairingErrorMessage(errorCode: String, serverMessage: String, responseCode: Int): String =
+        when (errorCode.trim()) {
+            "device_not_resolved" -> "Роутер Sheepfold найден, но пока не определил этот телефон в локальной сети. Подождите несколько секунд и повторите сканирование."
+            "device_blocklisted" -> "Это устройство находится в чёрном списке и не может быть назначено администратору."
+            "rate_limited" -> "Слишком много попыток подключения. Подождите несколько минут и попробуйте снова."
+            "invalid_login" -> "В QR-коде указан некорректный логин администратора. Создайте новый код в LuCI."
+            "invalid_code", "pairing_rejected" -> "Временный код недействителен или уже использован. Закройте и снова откройте настройки администратора в LuCI, затем отсканируйте новый QR-код."
+            "token_generation_failed" -> "Роутер не смог завершить привязку устройства. Проверьте журнал Sheepfold в LuCI."
+            else -> serverMessage.trim()
+                .takeUnless { it.isBlank() || it.equals("undefined", true) || it.equals("null", true) }
+                ?: "Роутер Sheepfold отклонил подключение (HTTP $responseCode). Создайте новый QR-код и повторите попытку."
+        }
+
+    private fun friendlyConnectionError(error: Throwable?, apiUrl: String): Throwable {
+        if (error is IllegalStateException && !error.message.isNullOrBlank()) return error
+
+        val host = runCatching { URL(apiUrl).let { "${it.host}:${it.port.takeIf { port -> port > 0 } ?: 443}" } }
+            .getOrDefault("роутеру")
+        val message = when (error) {
+            is SocketTimeoutException -> "Роутер Sheepfold не ответил вовремя по адресу $host. Проверьте порт приложения в LuCI."
+            is ConnectException -> "Не удалось подключиться к Sheepfold по адресу $host. Убедитесь, что сервис запущен на роутере."
+            is UnknownHostException -> "Не удалось найти роутер Sheepfold в текущей сети."
+            is SSLException -> "Не удалось установить защищённое соединение с роутером Sheepfold."
+            else -> error?.message
+                ?.takeUnless { it.isBlank() || it.equals("undefined", true) || it.equals("null", true) }
+                ?: "Не удалось подключиться к роутеру Sheepfold по адресу $host."
+        }
+        return IllegalStateException(message, error)
     }
 
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())

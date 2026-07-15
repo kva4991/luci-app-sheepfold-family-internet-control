@@ -47,11 +47,15 @@ Tokен действует **10 минут** и после успешного с
 
 ## Обнаружение роутера в сети
 
-Приложение проверяет наличие Sheepfold-роутера в текущей сети через endpoint:
+<!-- §dscqr01 -->
+
+Приложение сначала проверяет discovery-файл через штатный HTTPS-порт роутера:
 
 ```
-GET https://<router-ip>:5201/.well-known/sheepfold.json
+GET https://<router-ip>/.well-known/sheepfold.json
 ```
+
+Если штатный HTTPS недоступен, дополнительно проверяется `https://<router-ip>:5201/.well-known/sheepfold.json`. Из ответа приложение узнаёт фактический `appPort`/`httpsPort`, после чего обязательно проверяет сам `/cgi-bin/sheepfold-api`. Статический JSON без работающего API не считается найденным сервером.
 
 Ожидаемый ответ:
 
@@ -67,9 +71,7 @@ GET https://<router-ip>:5201/.well-known/sheepfold.json
 }
 ```
 
-Если файл недоступен — пробуются fallback-пути:
-- `/cgi-bin/luci/admin/services/sheepfold/api/ping`
-- `/cgi-bin/luci/admin/sheepfold/api/ping`
+HTTP fallback не используется: автопоиск и сопряжение остаются только на HTTPS.
 
 ---
 

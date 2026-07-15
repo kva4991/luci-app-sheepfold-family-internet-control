@@ -78,7 +78,7 @@ describe('fw4 access enforcement and integration profiles', () => {
   });
 
   it('ships migration defaults and a new package release', () => {
-    assert.match(makefile, /PKG_RELEASE:=164/);
+    assert.match(makefile, /PKG_RELEASE:=165/);
     assert.match(makefile, /ensure_global_option lan_firewall_zones 'lan'/);
     assert.match(makefile, /ensure_global_option integration_mode 'none'/);
     assert.doesNotMatch(makefile, /mv -f "\$\$tmp" "\$\$cron_file"[^\r\n]*\[ -x \/etc\/init\.d\/cron/);

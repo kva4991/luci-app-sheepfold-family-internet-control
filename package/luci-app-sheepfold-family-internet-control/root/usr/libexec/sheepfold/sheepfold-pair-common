@@ -90,6 +90,10 @@ pair_mac_for_ip() {
     [ -n "$ip" ] || return 1
     mac=""
     [ ! -r /tmp/dhcp.leases ] || mac="$(awk -v ip="$ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases)"
+    # На современных OpenWrt запись уже может быть в neighbour table, но ещё отсутствовать в старой /proc/net/arp. §dscqr01
+    if [ -z "$mac" ] && command -v ip >/dev/null 2>&1; then
+        mac="$(ip neigh show "$ip" 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == "lladdr") { print toupper($(i + 1)); exit } }')"
+    fi
     [ -n "$mac" ] || [ ! -r /proc/net/arp ] || mac="$(awk -v ip="$ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp)"
     printf '%s' "$mac"
 }

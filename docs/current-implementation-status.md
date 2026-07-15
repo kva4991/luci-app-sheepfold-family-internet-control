@@ -7,7 +7,7 @@ Before merging the current `editsByClaude` branch into `main`, follow the eviden
 Current OpenWRT package version in the repository:
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-164_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-165_all.ipk
 ```
 
 The package uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries.

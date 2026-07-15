@@ -19,6 +19,7 @@ describe('Administrator token device binding', () => {
 
     assert.match(pairCommon, /token_write_bound_file/);
     assert.match(pairCommon, /PAIR_TOKEN_LOGIN/);
+    assert.match(pairCommon, /ip neigh show "\$ip"/);
     assert.match(pairDevice, /PAIR_TOKEN_DEVICE_ID="\$device_id"/);
     assert.match(pairDevice, /PAIR_TOKEN_MAC="\$device_mac"/);
     assert.match(tokenCommon, /token_device_is_admin_paired/);
