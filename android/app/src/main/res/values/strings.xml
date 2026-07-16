@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Sheepfold</string>
     <string name="app_tagline">Семейный интернет-контроль</string>
 
     <string name="tab_control">Управление</string>
@@ -14,7 +13,6 @@
     <string name="tab_allowlist">Белый список</string>
     <string name="tab_blocklist">Чёрный список</string>
     <string name="tab_schedule">Расписание</string>
-    <string name="tab_ai">ИИ-помощник</string>
     <string name="tab_info">Информация</string>
     <string name="tab_settings">Настройки</string>
 
@@ -34,19 +32,6 @@
     <string name="schedule_add">Добавить правило</string>
     <string name="schedule_empty">Правила не настроены</string>
 
-    <string name="ai_title">ИИ-помощник</string>
-    <string name="ai_parent_title">ИИ-помощник для родителя</string>
-    <string name="ai_parent_privacy_default">По умолчанию передаётся только вопрос и проверенная роль устройства.</string>
-    <string name="ai_hint">Задайте вопрос…</string>
-    <string name="ai_question">Вопрос</string>
-    <string name="ai_send">Отправить</string>
-    <string name="ai_ask">Спросить</string>
-    <string name="ai_answer_failed">Не удалось получить ответ</string>
-    <string name="ai_privacy_title">Конфиденциальность</string>
-    <string name="ai_privacy_router">Включить данные роутера</string>
-    <string name="ai_privacy_log">Включить журнал программы</string>
-    <string name="ai_provider_label">Провайдер ИИ</string>
-    <string name="ai_beta_label">Скоро</string>
 
     <string name="settings_title">Настройки</string>
     <string name="settings_router_ip">IP-адрес роутера</string>
@@ -153,4 +138,36 @@
     <string name="error_auth">Неверный пароль</string>
     <string name="loading">Загрузка…</string>
     <string name="value_empty">—</string>
+    <string name="tab_feedback">Отзыв / предложения</string>
+    <string name="feedback_title">Отзыв / предложения</string>
+    <string name="feedback_intro">Расскажите разработчику о проблеме или предложите улучшение. Вместе с полями формы роутер отправит версию Sheepfold и случайный идентификатор установки, не основанный на данных устройств.</string>
+    <string name="feedback_type_label">Тип сообщения</string>
+    <string name="feedback_type_suggestion">Предложение</string>
+    <string name="feedback_type_problem">Проблема или ошибка</string>
+    <string name="feedback_type_question">Вопрос</string>
+    <string name="feedback_type_other">Другое</string>
+    <string name="feedback_subject">Тема</string>
+    <string name="feedback_message">Сообщение</string>
+    <string name="feedback_contact">Контакт для ответа</string>
+    <string name="feedback_contact_hint">Необязательно. Оставьте поле пустым, если ответ не нужен. Контакт сохранится вместе с сообщением в Yandex Cloud.</string>
+    <string name="feedback_diagnostics_hint">Приложить диагностический отчёт (рекомендуется при проблеме): состояние роутера и сети, версии, ресурсы, безопасные настройки Sheepfold и количество устройств и правил. Пароли, токены, MAC/IP-адреса, имена, SSID, журналы и история сайтов не отправляются.</string>
+    <string name="feedback_send">Отправить сообщение</string>
+    <string name="feedback_sending">Отправка…</string>
+    <string name="feedback_sent">Спасибо. Сообщение отправлено разработчику Sheepfold.</string>
+    <string name="feedback_invalid">Заполните тему и введите сообщение длиной от 10 до 4000 символов.</string>
+    <string name="app_name">Sheepfold</string>
+    <string name="tab_ai">ИИ-помощник</string>
+    <string name="ai_title">ИИ-помощник</string>
+    <string name="ai_parent_title">ИИ-помощник для родителя</string>
+    <string name="ai_parent_privacy_default">По умолчанию передаётся только вопрос и проверенная роль устройства.</string>
+    <string name="ai_hint">Задайте вопрос…</string>
+    <string name="ai_question">Вопрос</string>
+    <string name="ai_send">Отправить</string>
+    <string name="ai_ask">Спросить</string>
+    <string name="ai_answer_failed">Не удалось получить ответ</string>
+    <string name="ai_privacy_title">Конфиденциальность</string>
+    <string name="ai_privacy_router">Включить данные роутера</string>
+    <string name="ai_privacy_log">Включить журнал программы</string>
+    <string name="ai_provider_label">Провайдер ИИ</string>
+    <string name="ai_beta_label">Скоро</string>
 </resources>

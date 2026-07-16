@@ -10,9 +10,18 @@ CLIENT_STATUS="/usr/libexec/sheepfold/sheepfold-client-status-effective"
 DEVICE_RECLASSIFY="/usr/libexec/sheepfold/sheepfold-device-reclassify"
 DEVICE_PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
 LED_CONTROL="/usr/libexec/sheepfold/sheepfold-led-control"
+FEEDBACK="/usr/libexec/sheepfold/sheepfold-feedback"
 TOKEN_STATE_DIR="/etc/sheepfold/tokens"
 TOKEN_RUNTIME_LINK="/tmp/sheepfold/tokens"
 command="${1:-status}"
+
+root_password_status() {
+    password_field="$(awk -F: '$1 == "root" { print $2; exit }' /etc/shadow 2>/dev/null || true)"
+    case "$password_field" in
+        ''|'!'|'*'|'!!'|'x') printf 'unset\n' ;;
+        *) printf 'set\n' ;;
+    esac
+}
 
 ensure_token_storage() {
     umask 077
@@ -74,6 +83,27 @@ check_token() {
     printf 'fail\n'
 }
 
+token_login() {
+    bearer="${1:-}"
+    client_device_id="${2:-}"
+    client_mac="${3:-}"
+
+    [ -n "$bearer" ] || return 1
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$/\1/p'); do
+        login="$(uci -q get "sheepfold.$section.login" 2>/dev/null || true)"
+        [ -n "$login" ] || continue
+        hash="$(sha256_value "$login:$bearer")" || return 1
+        token_file="$TOKEN_STATE_DIR/$hash"
+        [ -f "$token_file" ] || continue
+        if token_bound_file_valid "$token_file" "$client_device_id" "$client_mac" "$(date +%s)"; then
+            printf '%s\n' "$login"
+            return 0
+        fi
+        return 1
+    done
+    return 1
+}
+
 revoke_tokens() {
     login="${1:-}"
     token_file file_login
@@ -113,8 +143,14 @@ revoke_device_tokens() {
 ensure_token_storage
 
 case "$command" in
+    root-password-status)
+        root_password_status
+        ;;
     check-token)
         check_token "${2:-}" "${3:-}" "${4:-}"
+        ;;
+    token-login)
+        token_login "${2:-}" "${3:-}" "${4:-}"
         ;;
     revoke-tokens)
         revoke_tokens "${2:-}"
@@ -156,6 +192,13 @@ case "$command" in
         ;;
     led-apply)
         exec "$LED_CONTROL" apply
+        ;;
+    feedback-status)
+        exec "$FEEDBACK" status
+        ;;
+    feedback-submit)
+        shift
+        exec "$FEEDBACK" submit "$@"
         ;;
     *)
         exec "$LEGACY" "$@"

@@ -4,16 +4,35 @@ set -eu
 COMMAND="${1:-check}"
 OWNER="kva4991"
 REPO="luci-app-sheepfold-family-internet-control"
-PACKAGE="luci-app-sheepfold-family-internet-control"
-WORK_DIR="/tmp/sheepfold/update"
-RUNTIME_DIR="/tmp/sheepfold"
-API_URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/latest"
+PRODUCT_VARIANT="$(uci -q get sheepfold.global.product_variant 2>/dev/null || printf sheepfold)"
+case "$PRODUCT_VARIANT" in
+        sheepfoldAi) ASSET_PACKAGE="luci-app-sheepfold-ai-support" ;;
+        *) ASSET_PACKAGE="luci-app-sheepfold-family-internet-control" ;;
+esac
+INSTALLED_PACKAGE="luci-app-sheepfold-family-internet-control"
+WORK_DIR="${SHEEPFOLD_UPDATE_WORK_DIR:-/tmp/sheepfold/update}"
+RUNTIME_DIR="${SHEEPFOLD_UPDATE_RUNTIME_DIR:-/tmp/sheepfold}"
+API_URL="${SHEEPFOLD_UPDATE_API_URL:-https://api.github.com/repos/${OWNER}/${REPO}/releases/latest}"
 RELEASE_JSON="${WORK_DIR}/latest-release.json"
-PACKAGE_FILE="${WORK_DIR}/${PACKAGE}-latest.ipk"
+PACKAGE_FILE="${WORK_DIR}/${ASSET_PACKAGE}-latest.ipk"
 LOG_FILE="${RUNTIME_DIR}/update.log"
 STATUS_FILE="${RUNTIME_DIR}/update.status"
 PID_FILE="${RUNTIME_DIR}/update.pid"
+CONFIG_FILE="${SHEEPFOLD_UPDATE_CONFIG_FILE:-/etc/config/sheepfold}"
+MIGRATION_CONFIG_BACKUP="${SHEEPFOLD_UPDATE_MIGRATION_BACKUP:-/etc/sheepfold/migrations/sheepfold.config.pre-upgrade}"
+CONFIG_BACKUP="${WORK_DIR}/sheepfold-config-before-update"
+CONFIG_BACKUP_STATE="${WORK_DIR}/sheepfold-config-before-update.state"
+SHEEPFOLD_INIT="${SHEEPFOLD_UPDATE_SERVICE_INIT:-/etc/init.d/sheepfold}"
+RPCD_INIT="${SHEEPFOLD_UPDATE_RPCD_INIT:-/etc/init.d/rpcd}"
 LANGUAGE="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
+DOWNLOAD_TIMEOUT_SECONDS="${SHEEPFOLD_UPDATE_DOWNLOAD_TIMEOUT:-120}"
+MAX_DOWNLOAD_BYTES="${SHEEPFOLD_UPDATE_MAX_DOWNLOAD_BYTES:-67108864}"
+
+case "$DOWNLOAD_TIMEOUT_SECONDS" in ''|*[!0-9]*) DOWNLOAD_TIMEOUT_SECONDS=120 ;; esac
+case "$MAX_DOWNLOAD_BYTES" in ''|*[!0-9]*) MAX_DOWNLOAD_BYTES=67108864 ;; esac
+[ "$DOWNLOAD_TIMEOUT_SECONDS" -ge 1 ] || DOWNLOAD_TIMEOUT_SECONDS=1
+[ "$MAX_DOWNLOAD_BYTES" -ge 1 ] || MAX_DOWNLOAD_BYTES=1
+MAX_DOWNLOAD_BLOCKS=$((MAX_DOWNLOAD_BYTES / 512 + 1))
 
 mkdir -p "$RUNTIME_DIR" "$WORK_DIR"
 chmod 700 "$WORK_DIR"
@@ -28,7 +47,8 @@ text() {
                         checking_release) printf '%s' "Проверка последнего релиза GitHub..." ;;
                         downloading) printf 'Загрузка: %s' "$1" ;;
                         download_failed) printf 'Загрузка через %s не удалась, код выхода %s.' "$1" "$2" ;;
-                        no_downloader) printf '%s' "Не найден загрузчик. Установите uclient-fetch или wget." ;;
+                        no_downloader) printf '%s' "Не найден загрузчик. Установите uclient-fetch, curl или wget." ;;
+                        download_too_large) printf 'Загрузка превышает безопасный размер %s байт.' "$1" ;;
                         no_tag) printf '%s' "Не удалось прочитать тег последнего stable-релиза с GitHub." ;;
                         no_package) printf 'Последний stable-релиз %s не содержит пакет Sheepfold .ipk.' "$1" ;;
                         no_package_version) printf '%s' "Не удалось прочитать версию пакета Sheepfold из имени файла релиза." ;;
@@ -40,7 +60,14 @@ text() {
                         no_updates) printf '%s' "Обновлений нет. Установленная версия уже актуальна." ;;
                         downloading_package) printf '%s' "Загрузка пакета..." ;;
                         empty_package) printf '%s' "Загруженный пакет пустой." ;;
+                        invalid_package) printf 'Загруженный IPK не прошёл проверку: %s.' "$1" ;;
+                        untrusted_package_url) printf '%s' "GitHub вернул адрес пакета вне официального раздела релизов Sheepfold." ;;
                         installing_package) printf '%s' "Установка пакета..." ;;
+                        install_failed) printf 'Установка пакета завершилась ошибкой, код %s.' "$1" ;;
+                        config_backup_failed) printf '%s' "Не удалось создать резервную копию настроек; установка не запущена." ;;
+                        config_restored) printf '%s' "Предыдущие настройки Sheepfold восстановлены." ;;
+                        config_restore_failed) printf '%s' "Не удалось автоматически восстановить предыдущие настройки Sheepfold." ;;
+                        installed_version_mismatch) printf 'После установки роутер сообщает версию %s вместо ожидаемой %s.' "$1" "$2" ;;
                         reloading_service) printf '%s' "Перезапуск сервиса Sheepfold..." ;;
                         update_completed) printf '%s' "Обновление завершено." ;;
                         already_running) printf 'Обновление уже выполняется. PID: %s' "$1" ;;
@@ -56,7 +83,8 @@ text() {
                 checking_release) printf '%s' "Checking latest GitHub release..." ;;
                 downloading) printf 'Downloading: %s' "$1" ;;
                 download_failed) printf 'Download failed with %s, exit code %s.' "$1" "$2" ;;
-                no_downloader) printf '%s' "No downloader found. Install uclient-fetch or wget." ;;
+                no_downloader) printf '%s' "No downloader found. Install uclient-fetch, curl, or wget." ;;
+                download_too_large) printf 'Download exceeds the safe size of %s bytes.' "$1" ;;
                 no_tag) printf '%s' "Could not read latest stable release tag from GitHub." ;;
                 no_package) printf 'Latest stable release %s does not contain a Sheepfold .ipk package.' "$1" ;;
                 no_package_version) printf '%s' "Could not read Sheepfold package version from release asset name." ;;
@@ -68,7 +96,14 @@ text() {
                 no_updates) printf '%s' "No updates available. Installed version is already current." ;;
                 downloading_package) printf '%s' "Downloading package..." ;;
                 empty_package) printf '%s' "Downloaded package is empty." ;;
+                invalid_package) printf 'Downloaded IPK validation failed: %s.' "$1" ;;
+                untrusted_package_url) printf '%s' "GitHub returned a package URL outside the official Sheepfold release path." ;;
                 installing_package) printf '%s' "Installing package..." ;;
+                install_failed) printf 'Package installation failed with exit code %s.' "$1" ;;
+                config_backup_failed) printf '%s' "Could not back up settings; installation was not started." ;;
+                config_restored) printf '%s' "Previous Sheepfold settings were restored." ;;
+                config_restore_failed) printf '%s' "Could not automatically restore previous Sheepfold settings." ;;
+                installed_version_mismatch) printf 'Router reports version %s after installation, expected %s.' "$1" "$2" ;;
                 reloading_service) printf '%s' "Reloading Sheepfold service..." ;;
                 update_completed) printf '%s' "Update completed." ;;
                 already_running) printf 'Update is already running. PID: %s' "$1" ;;
@@ -88,34 +123,257 @@ fetch() {
         output="$2"
 
         say downloading "$url"
+        rm -f "$output"
         if command -v uclient-fetch >/dev/null 2>&1; then
-                if uclient-fetch -q -O "$output" "$url"; then
-                        return
+                if (
+                        ulimit -f "$MAX_DOWNLOAD_BLOCKS" 2>/dev/null || true
+                        uclient-fetch -q -T "$DOWNLOAD_TIMEOUT_SECONDS" -O "$output" "$url"
+                ); then
+                        code=0
+                else
+                        # Код нужно забирать именно в else: после завершившегося if некоторые sh уже вернут 0.
+                        code="$?"
                 fi
-                code="$?"
-                say download_failed uclient-fetch "$code" >&2
-                exit "$code"
+                downloader=uclient-fetch
+        elif command -v curl >/dev/null 2>&1; then
+                if (
+                        ulimit -f "$MAX_DOWNLOAD_BLOCKS" 2>/dev/null || true
+                        curl -fsSL --connect-timeout 15 --max-time "$DOWNLOAD_TIMEOUT_SECONDS" -o "$output" "$url"
+                ); then
+                        code=0
+                else
+                        code="$?"
+                fi
+                downloader=curl
+        elif command -v wget >/dev/null 2>&1; then
+                if (
+                        ulimit -f "$MAX_DOWNLOAD_BLOCKS" 2>/dev/null || true
+                        wget -q -T "$DOWNLOAD_TIMEOUT_SECONDS" -O "$output" "$url"
+                ); then
+                        code=0
+                else
+                        code="$?"
+                fi
+                downloader=wget
+        else
+                say no_downloader >&2
+                return 1
         fi
 
-        if command -v wget >/dev/null 2>&1; then
-                if wget -q -O "$output" "$url"; then
-                        return
-                fi
-                code="$?"
-                say download_failed wget "$code" >&2
-                exit "$code"
+        if [ "$code" -ne 0 ]; then
+                rm -f "$output"
+                say download_failed "$downloader" "$code" >&2
+                return "$code"
         fi
 
-        say no_downloader >&2
-        exit 1
+        download_size="$(wc -c < "$output" | tr -d ' ')"
+        case "$download_size" in ''|*[!0-9]*) download_size=0 ;; esac
+        if [ "$download_size" -gt "$MAX_DOWNLOAD_BYTES" ]; then
+                rm -f "$output"
+                say download_too_large "$MAX_DOWNLOAD_BYTES" >&2
+                return 1
+        fi
+        return 0
 }
 
 current_version() {
-        opkg status "$PACKAGE" 2>/dev/null | sed -n 's/^Version: //p' | sed -n '1p'
+        opkg status "$INSTALLED_PACKAGE" 2>/dev/null | sed -n 's/^Version: //p' | sed -n '1p'
 }
 
 latest_package_version() {
-        basename "$PACKAGE_URL" | sed -n "s/^${PACKAGE}_\\([^_]*\\)_all\\.ipk$/\\1/p" | sed -n '1p'
+        basename "$PACKAGE_URL" | sed -n "s/^${ASSET_PACKAGE}_\\([^_]*\\)_all\\.ipk$/\\1/p" | sed -n '1p'
+}
+
+trusted_package_url() {
+        # Одного JSON от API недостаточно: opkg получает только asset из официального release path (§updsafe).
+        trusted_prefix="https://github.com/${OWNER}/${REPO}/releases/download/"
+        case "$PACKAGE_URL" in
+                "$trusted_prefix"*/"${ASSET_PACKAGE}_"*_all.ipk) return 0 ;;
+                *) return 1 ;;
+        esac
+}
+
+archive_member() {
+        wanted="$1"
+        awk -v wanted="$wanted" '
+                {
+                        original = $0
+                        normalized = $0
+                        sub(/^\.\//, "", normalized)
+                        if (normalized == wanted) {
+                                count++
+                                member = original
+                        }
+                }
+                END {
+                        if (count == 1) print member
+                        else exit 1
+                }
+        '
+}
+
+archive_paths_safe() {
+        awk '
+                {
+                        path = $0
+                        sub(/^\.\//, "", path)
+                        if (path == "" || path ~ /^\//) exit 1
+                        # tar может повторить запись каталога при добавлении нескольких деревьев,
+                        # но два одноимённых файла делают содержимое неоднозначным.
+                        if (seen[path]++ && path !~ /\/$/) exit 1
+                        count = split(path, parts, "/")
+                        for (i = 1; i <= count; i++)
+                                if (parts[i] == "..") exit 1
+                }
+        '
+}
+
+package_validation_reason() {
+        reason="$1"
+        if [ "$LANGUAGE" = ru ]; then
+                case "$reason" in
+                        outer_archive) printf '%s' 'повреждён внешний архив' ;;
+                        missing_parts) printf '%s' 'отсутствуют обязательные части пакета' ;;
+                        format_version) printf '%s' 'неверная версия формата пакета' ;;
+                        control_archive) printf '%s' 'повреждён control.tar.gz' ;;
+                        control_description) printf '%s' 'не читается описание пакета' ;;
+                        package_name) printf '%s' 'имя пакета не совпадает с выбранным вариантом' ;;
+                        package_version) printf '%s' 'версия внутри пакета не совпадает с именем файла' ;;
+                        architecture) printf '%s' 'неподдерживаемая архитектура пакета' ;;
+                        data_archive) printf '%s' 'повреждён или небезопасен data.tar.gz' ;;
+                        *) printf '%s' 'неизвестная ошибка структуры пакета' ;;
+                esac
+                return
+        fi
+        case "$reason" in
+                outer_archive) printf '%s' 'outer archive is damaged' ;;
+                missing_parts) printf '%s' 'required package members are missing' ;;
+                format_version) printf '%s' 'package format version is invalid' ;;
+                control_archive) printf '%s' 'control.tar.gz is damaged' ;;
+                control_description) printf '%s' 'package metadata cannot be read' ;;
+                package_name) printf '%s' 'package name does not match the selected product' ;;
+                package_version) printf '%s' 'embedded version does not match the asset filename' ;;
+                architecture) printf '%s' 'package architecture is unsupported' ;;
+                data_archive) printf '%s' 'data.tar.gz is damaged or unsafe' ;;
+                *) printf '%s' 'unknown package structure error' ;;
+        esac
+}
+
+validation_error() {
+        say invalid_package "$(package_validation_reason "$1")" >&2
+        rm -f "$WORK_DIR"/validate-*.$$ 2>/dev/null || true
+}
+
+validate_package() {
+        outer_list="$WORK_DIR/validate-outer.$$.list"
+        control_archive="$WORK_DIR/validate-control.$$.tar.gz"
+        control_list="$WORK_DIR/validate-control.$$.list"
+        control_file="$WORK_DIR/validate-control.$$.txt"
+        data_archive="$WORK_DIR/validate-data.$$.tar.gz"
+        data_list="$WORK_DIR/validate-data.$$.list"
+        rm -f "$WORK_DIR"/validate-*.$$ 2>/dev/null || true
+
+        if ! tar -tzf "$PACKAGE_FILE" > "$outer_list" 2>/dev/null || ! archive_paths_safe < "$outer_list"; then
+                validation_error outer_archive
+                return 1
+        fi
+        if ! debian_member="$(archive_member debian-binary < "$outer_list")" || \
+           ! control_member="$(archive_member control.tar.gz < "$outer_list")" || \
+           ! data_member="$(archive_member data.tar.gz < "$outer_list")"; then
+                validation_error missing_parts
+                return 1
+        fi
+
+        debian_version="$(tar -xzOf "$PACKAGE_FILE" "$debian_member" 2>/dev/null | tr -d '\r\n' || true)"
+        if [ "$debian_version" != 2.0 ]; then
+                validation_error format_version
+                return 1
+        fi
+        if ! (
+                ulimit -f "$MAX_DOWNLOAD_BLOCKS" 2>/dev/null || true
+                tar -xzOf "$PACKAGE_FILE" "$control_member"
+        ) > "$control_archive" 2>/dev/null || \
+           ! tar -tzf "$control_archive" > "$control_list" 2>/dev/null || \
+           ! archive_paths_safe < "$control_list" || \
+           ! package_control_member="$(archive_member control < "$control_list")"; then
+                validation_error control_archive
+                return 1
+        fi
+        if ! tar -xzOf "$control_archive" "$package_control_member" > "$control_file" 2>/dev/null; then
+                validation_error control_description
+                return 1
+        fi
+
+        package_name="$(sed -n 's/^Package:[[:space:]]*//p' "$control_file" | sed -n '1p')"
+        package_version="$(sed -n 's/^Version:[[:space:]]*//p' "$control_file" | sed -n '1p')"
+        package_architecture="$(sed -n 's/^Architecture:[[:space:]]*//p' "$control_file" | sed -n '1p')"
+        package_name_count="$(grep -c '^Package:' "$control_file" 2>/dev/null || true)"
+        package_version_count="$(grep -c '^Version:' "$control_file" 2>/dev/null || true)"
+        package_architecture_count="$(grep -c '^Architecture:' "$control_file" 2>/dev/null || true)"
+        if [ "$package_name_count" != 1 ] || [ "$package_version_count" != 1 ] || [ "$package_architecture_count" != 1 ]; then
+                validation_error control_description
+                return 1
+        fi
+        if [ "$package_name" != "$INSTALLED_PACKAGE" ]; then
+                validation_error package_name
+                return 1
+        fi
+        if [ "$package_version" != "$LATEST_VERSION" ]; then
+                validation_error package_version
+                return 1
+        fi
+        if [ "$package_architecture" != all ]; then
+                validation_error architecture
+                return 1
+        fi
+
+        if ! (
+                ulimit -f "$MAX_DOWNLOAD_BLOCKS" 2>/dev/null || true
+                tar -xzOf "$PACKAGE_FILE" "$data_member"
+        ) > "$data_archive" 2>/dev/null || \
+           ! tar -tzf "$data_archive" > "$data_list" 2>/dev/null || \
+           ! archive_paths_safe < "$data_list"; then
+                validation_error data_archive
+                return 1
+        fi
+
+        rm -f "$outer_list" "$control_archive" "$control_list" "$control_file" "$data_archive" "$data_list"
+        return 0
+}
+
+backup_config() {
+        rm -f "$CONFIG_BACKUP" "$CONFIG_BACKUP_STATE"
+        umask 077
+        if [ -r "$CONFIG_FILE" ]; then
+                cp "$CONFIG_FILE" "$CONFIG_BACKUP" || return 1
+                printf 'present\n' > "$CONFIG_BACKUP_STATE" || return 1
+        else
+                printf 'absent\n' > "$CONFIG_BACKUP_STATE" || return 1
+        fi
+        chmod 600 "$CONFIG_BACKUP" "$CONFIG_BACKUP_STATE" 2>/dev/null || true
+}
+
+restore_config() {
+        [ -r "$CONFIG_BACKUP_STATE" ] || return 1
+        config_parent="${CONFIG_FILE%/*}"
+        [ "$config_parent" != "$CONFIG_FILE" ] || config_parent=.
+        mkdir -p "$config_parent"
+        case "$(sed -n '1p' "$CONFIG_BACKUP_STATE")" in
+                present)
+                        restore_source="$CONFIG_BACKUP"
+                        [ -s "$restore_source" ] || restore_source="$MIGRATION_CONFIG_BACKUP"
+                        [ -s "$restore_source" ] || return 1
+                        cp "$restore_source" "$CONFIG_FILE" || return 1
+                        chmod 600 "$CONFIG_FILE" 2>/dev/null || true
+                        ;;
+                absent) rm -f "$CONFIG_FILE" || return 1 ;;
+                *) return 1 ;;
+        esac
+        return 0
+}
+
+cleanup_install_files() {
+        rm -f "$PACKAGE_FILE" "$CONFIG_BACKUP" "$CONFIG_BACKUP_STATE" "$WORK_DIR"/validate-*.$$ 2>/dev/null || true
 }
 
 version_is_newer() {
@@ -133,7 +391,7 @@ read_release_info() {
         fetch "$API_URL" "$RELEASE_JSON"
 
         TAG="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RELEASE_JSON" | sed -n '1p')"
-        PACKAGE_URL="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*luci-app-sheepfold-family-internet-control[^"]*_all\.ipk\)".*/\1/p' "$RELEASE_JSON" | sed -n '1p')"
+        PACKAGE_URL="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*_all\.ipk\)".*/\1/p' "$RELEASE_JSON" | grep "/${ASSET_PACKAGE}_" | sed -n '1p')"
         LATEST_VERSION="$(latest_package_version)"
 
         if [ -z "${TAG:-}" ]; then
@@ -143,6 +401,11 @@ read_release_info() {
 
         if [ -z "${PACKAGE_URL:-}" ]; then
                 say no_package "$TAG" >&2
+                exit 1
+        fi
+
+        if ! trusted_package_url; then
+                say untrusted_package_url >&2
                 exit 1
         fi
 
@@ -187,19 +450,53 @@ install_update() {
                 exit 1
         fi
 
-        if [ -r /etc/config/sheepfold ]; then
-                cp /etc/config/sheepfold "${WORK_DIR}/sheepfold-config-before-update"
-                chmod 600 "${WORK_DIR}/sheepfold-config-before-update"
+        # Не полагаемся на сообщение opkg о malformed package: до установки проверяем
+        # контейнер, метаданные и оба вложенных архива самостоятельно (§updsafe).
+        if ! validate_package; then
+                cleanup_install_files
+                return 1
+        fi
+
+        if ! backup_config; then
+                say config_backup_failed >&2
+                cleanup_install_files
+                return 1
         fi
 
         say installing_package
-        opkg install "$PACKAGE_FILE"
+        if opkg install "$PACKAGE_FILE"; then
+                install_code=0
+        else
+                install_code="$?"
+        fi
+        if [ "$install_code" -ne 0 ]; then
+                say install_failed "$install_code" >&2
+                if restore_config; then
+                        say config_restored
+                else
+                        say config_restore_failed >&2
+                fi
+                cleanup_install_files
+                return "$install_code"
+        fi
 
-        rm -f "$PACKAGE_FILE" "${WORK_DIR}/sheepfold-config-before-update" 2>/dev/null || true
+        INSTALLED_VERSION="$(current_version || true)"
+        if [ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]; then
+                say installed_version_mismatch "${INSTALLED_VERSION:-unknown}" "$LATEST_VERSION" >&2
+                if restore_config; then
+                        say config_restored
+                else
+                        say config_restore_failed >&2
+                fi
+                cleanup_install_files
+                return 1
+        fi
+
+        cleanup_install_files
 
         say reloading_service
-        [ -x /etc/init.d/sheepfold ] && /etc/init.d/sheepfold restart || true
-        [ -x /etc/init.d/rpcd ] && /etc/init.d/rpcd reload || true
+        [ -x "$SHEEPFOLD_INIT" ] && "$SHEEPFOLD_INIT" restart || true
+        [ -x "$RPCD_INIT" ] && "$RPCD_INIT" reload || true
 
         say update_completed
 }

@@ -125,9 +125,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project:
-          - android
-          - android-child
+        include:
+          - project: android
+            task: assembleDebug
+            kind: parent
+            apk: android/app/build/outputs/apk/debug/app-debug.apk
+          - project: android-child
+            task: assembleDebug
+            kind: child
+            apk: android-child/app/build/outputs/apk/debug/app-debug.apk
     steps:
       - uses: actions/checkout@v4
 
@@ -139,4 +145,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build debug APK
-        run: ./${{ matrix.project }}/gradlew -p "${{ matrix.project }}" assembleDebug --stacktrace
+        run: ./${{ matrix.project }}/gradlew -p "${{ matrix.project }}" ${{ matrix.task }} --stacktrace
+
+      - name: Verify product boundary inside APK
+        run: python3 scripts/verify-android-variant.py --kind "${{ matrix.kind }}" "${{ matrix.apk }}"

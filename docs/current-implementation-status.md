@@ -1,66 +1,79 @@
 # Current Implementation Status
 
-Last checked: 2026-07-13.
+Last checked: 2026-07-16.
 
 Before merging the current `editsByClaude` branch into `main`, follow the evidence-based checklist in [`merge-readiness-plan.ru.md`](merge-readiness-plan.ru.md). It separates locally verified work from scenarios that still require a live OpenWRT router or a real Android device.
 
 Current OpenWRT package version in the repository:
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-165_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-185_all.ipk
 ```
 
 The package uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries.
 
-The planned `Sheepfold` / `Sheepfold - AI Support` product boundary is documented in [`product-variants.ru.md`](product-variants.ru.md). It is **not implemented yet**: the current OpenWRT package and parent APK still contain both common control and AI functionality. Do not describe the Standard artifact as AI-free until archive-level negative tests prove it (§prodvar).
+The `Sheepfold` / `Sheepfold - AI Support` boundary is implemented for two router release artifacts and documented in [`product-variants.ru.md`](product-variants.ru.md). Both IPKs use the same installed package identity, so Standard ↔ AI Support is an upgrade/reinstall that preserves `/etc/config/sheepfold`; their filenames and payloads remain distinct. Android now produces one parent and one child APK; both contain the small AI client and reveal it only after the router reports a positive capability. Archive-level negative tests verify that Standard excludes AI handlers, prompts, routes, settings, and activity logging (§prodvar). A live-router round-trip migration and capability test is still required before a public stable release.
 
 ## Working In The Current Package
 
 - LuCI entry point for `Sheepfold Family Internet Control`.
 - UCI config `/etc/config/sheepfold` with default app settings.
 - Asset cache busting through `ui_asset_version` and JS/CSS query suffixes.
+- LuCI modularization (§frontmod): `overview.js` was reduced from 8624 to about 6580 physical lines. In addition to router backend/info/maintenance, QR, secure random, device types, logs and shared controls, focused modules now own device inventory merging (§devinv), access-list normalization/conflict checks (§lstxcl1), schedule calculations and panel, group/admin models and panels, device table/selection behavior, editable Wi-Fi cards, messenger settings, site-list runtime status, and the settings draft lifecycle.
 - HTTPS-only local Android discovery/API service on the configurable Sheepfold port, default `5201`, with certificate pinning in both Android applications.
 - Public discovery data through `/.well-known/sheepfold.json`.
+- Parent Android recovery after a configured Sheepfold port change: the client re-reads pinned HTTPS discovery, stores the new endpoint, and does not retry commands after an ambiguous timeout.
 - CGI endpoint `/cgi-bin/sheepfold-api` with current router/app metadata and `/cgi-bin/sheepfold-api/router-info` diagnostics snapshot for Android/APK AI-preview flows.
 - Real parent Android pairing through a short-lived one-time code, single-use backend consumption, token hash storage, and token binding to numeric device ID and MAC.
 - Numeric stable device IDs starting at `1`, migrated from legacy display formats and included in device-related log events.
 - Configurable blocked-page responder on port `5202`.
 - Router-control backend command for Wi-Fi enable/disable, Wi-Fi automation tick, WPS actions, LED actions, blocked-page service, WAN status tick, router diagnostics, and device status changes.
 - Device add/status backend action: create or update a device by MAC, add to allowlist, add to blocklist, or add as a known restricted device.
-- Temporary access backend action for Android/LuCI/Telegram: stores an expiry, blocks blocklisted devices, marks temporary allowlist membership, and cleans it from the service tick after expiry.
+- Allowlist/blocklist and administrator-device changes apply UCI and synchronize nftables immediately without reloading the LuCI page.
+- Temporary access backend action for Android/LuCI/Telegram: stores an expiry in a separate temporary status, never overrides the device blocklist or global internet block, does not pollute the user allowlist, and is cleaned by the service tick after expiry.
 - Backend protection that prevents administrator devices from being added to the blocklist.
-- Initial real fw4/nftables enforcement for the device blocklist, router-interface denial for blocklisted devices, and the global internet block. Sheepfold uses only its own fw4 sets/chains and does not alter Podkop packet marks or routing tables.
+- Real fw4/nftables enforcement with separate sets for the device blocklist and internet-only restrictions. The device blocklist denies forwarding and router input; schedules, restricted status, and the configured new-device restriction deny only internet forwarding. The global block keeps its explicit exemptions. Sheepfold uses only its own fw4 sets/chains and does not alter Podkop packet marks or routing tables.
+- Schedule evaluator for device/group targets, overnight ranges, configurable same-level conflict result (`off` by default), conflict journaling, effective client status, and scheduled firewall synchronization. Live-router timing and transition tests are still required.
 - LuCI buttons for adding devices to allowlist/blocklist through the backend command.
 - Manual device add from LuCI by MAC/name/IP/type.
 - Quick allowlist modal that collects newly connected candidates and adds only the selected candidate.
 - Export of settings and known UI data to readable JSON with secret fields masked.
+- Import/export v2 for all Sheepfold sections, static DHCP leases and Wi-Fi UCI: readable JSON masks secrets, while the full backup uses password-derived AES-256-GCM. Import validates the payload, rejects conflicting device lists, preserves matching masked secrets, applies UCI changes, and refreshes router services (§cfgbak1).
 - Log clearing and masked log export.
 - Router reboot button through a queued command path.
-- Update button that calls the installed updater service and checks GitHub stable releases.
+- Update button that calls the installed updater service and checks GitHub stable releases. Before `opkg`, the updater validates the official asset path, package structure, product name/version/architecture and archive paths; a failed installation restores the previous Sheepfold config but does not claim a binary rollback (§updsafe).
 - Wi-Fi page that reads router wireless UCI settings and shows connection QR codes.
+- Persistent emergency-useful site cards and initial runtime enforcement: UCI-backed domains, dnsmasq nftset integration when supported, base-domain resolver fallback, and narrow TCP/UDP web exceptions that do not open LuCI/SSH/API (§emerg1). Shared-CDN and multi-domain sites still require live-router verification.
 - WPS button behavior settings.
 - Router LED behavior settings.
 - WAN connectivity event logging.
 - LuCI settings tab `Information` showing router time, Sheepfold version, internet status, ping to `ya.ru`, OpenWRT/firmware/kernel/model, Wi-Fi radio status, LAN ports, Podkop/AdGuard Home installation/version, uptime/load/memory, and a safe AI context preview for APK.
 - Device detection helper with heuristic device types and optional `No restrictions` auto-assignment.
 - Auto-assignment to `No restrictions` only when automatic setup of new devices is enabled; a device name alone is not sufficient evidence.
-- Router-proxied DeepSeek, Gemini, and Grok providers with versioned parent/child runtime prompts and provider keys stored only on the router.
+- Router-proxied DeepSeek, Gemini, and Grok providers with versioned parent/child runtime prompts and provider keys stored only on the router. The exact implemented request path and its current limits are recorded in [`ai-assistant-development/current-implementation.ru.md`](ai-assistant-development/current-implementation.ru.md) (§aiimpl1).
 - Parent Android onboarding, live/file QR scanner, manual pairing, encrypted connection storage, password/PIN/biometric app protection, device actions, notifications, and three internet-state home-screen widgets.
 - Separate child Android application with HTTPS status lookup and parent-controlled AI access for devices in a personal group.
 - Repository-managed Windows toolchain checks/install scripts and Gradle Wrapper 8.10.2 for both Android applications; Android SDK packages remain outside Git and are installed from Google's verified repository metadata.
 - Minimal Telegram adapter through outgoing long polling: configured from LuCI, test message button, chat ID discovery when empty, bot command menu sync, commands for status, device list, internet on/off, Wi-Fi on/off, and support.
+- Resilient per-source site-list updater: bounded downloads and archive extraction, format normalization, deduplication, atomic last-known-good caches, background cache bootstrap after reboot, daily retry after failure, authenticated failure/recovery notifications, and rejection of unexpectedly shortened large sources until explicit acceptance (§slstres).
+- Transactional runtime application of site allowlists/blocklists: local dnsmasq `nftset` plus Sheepfold-owned nftables sets in `none`/`podkop`, explicit AdGuard Home delegation in `adguard`/`adguard_podkop`, fail-open behavior before a verified allowlist exists, and rollback of DNS/readiness/firewall state after an application failure (§dompol). Live-router validation remains required.
+- Standard and AI Support test packages now keep their runtime jobs separate, while both declare the HTTPS and network-client dependencies required on a clean router.
+- Optional `Feedback / suggestions` tab in LuCI and the parent APK. The authenticated router backend validates and rate-limits messages, then forwards only the displayed fields to a configurable Yandex Cloud Function/API Gateway endpoint; the child APK has no feedback tab (§feedback).
 - Uninstall script that removes the OpenWRT package while preserving Sheepfold settings/client lists and printing a remaining-settings report.
 
 ## Still Target / Incomplete
 
-- Firewall enforcement is not complete for schedules and emergency-useful domain exceptions; those scenarios still require implementation and live-router verification.
+- LuCI modularization is not finished. The next step is moving schedule/group/administrator editor modals, followed by storage and device-mutation orchestration. Keep explicit data/callback contracts and do not let feature modules read arbitrary `overview.js` globals (§frontmod).
+- Emergency-useful domain exceptions and schedule enforcement are implemented initially but still require live-router verification for DNS variants, shared CDN addresses, time transitions, overnight ranges, conflict changes, firewall reload, and interaction with all higher-priority rules (§emerg1).
 - End-to-end live-router verification is still needed for blocklist, global block, temporary access, firewall reload recovery, and all four AdGuard Home/Podkop profiles.
-- Full schedule editor and schedule enforcement are still target features.
+- LuCI has a functional UCI schedule editor with allow/block actions, group or device targets, weekday selection, multiple intervals, overnight ranges, duplication, deletion, and disabling without deletion. `Settings → Misc` also controls whether internet stays off or on for a same-level schedule conflict while preserving the warning and journal event.
+- `Settings → Misc` shows the fixed order that effective-status and firewall currently enforce. Editing is intentionally disabled until one configurable `access_priority` implementation is shared by LuCI, status API, schedules, and nftables.
 - A future `/api/v1/*` alias, refresh-token flow, and complete Android editors for every LuCI section remain target work; current authenticated CGI routes cover pairing, devices, global internet state, router information, and AI.
+- Parent Android tabs for schedules, groups, administrators, Wi-Fi and logs are currently placeholders; the complete editors still exist only in LuCI.
 - VK and MAX messenger adapters are documented but not implemented.
 - Telegram adapter is not a complete production adapter yet: dangerous actions still need confirmation flows, richer admin binding, better command parsing, and stronger backend enforcement.
 - AdGuard Home and Podkop status checks/integration preparation are documented and partially represented in LuCI, but automatic integration changes are not implemented.
-- Import currently validates the Sheepfold export file shape in LuCI but does not apply settings through a backend confirmation flow yet.
+- Site allowlist/blocklist source files are consumed by the runtime domain policy, and LuCI reports whether filtering is active, delegated, waiting, unsupported, or failed. The four modes still require live-router tests; DNS-level filtering does not inspect URLs/content and does not yet prevent external DNS, DoH, VPN, proxy, or direct-IP bypass (§slstres, §dompol, §uirunfx).
 - The installer downloads the `.ipk` from the latest normal GitHub Release, installs it with `opkg`, then applies the chosen language, automatic detection mode, and detected AdGuard Home/Podkop combination. It intentionally ignores pre-releases because updates use the stable `releases/latest` channel.
 - Country-aware connectivity diagnostics are partially implemented for router info/WAN checks with Russia-relevant defaults such as `ya.ru`, `gosuslugi.ru`, and `ntp1.vniiftri.ru`; full country-profile configuration is still target work.
 - Router time setup is partially implemented through LuCI/backend NTP/timezone controls; first-run country-aware automatic timezone selection still needs completion.
@@ -68,3 +81,5 @@ The planned `Sheepfold` / `Sheepfold - AI Support` product boundary is documente
 ## Documentation Reading Rule
 
 Documents under `docs/` mix current implementation notes and target product requirements. When a document describes an API, schedule engine, messenger bot, AI assistant, or complete enforcement behavior, treat it as the intended contract unless this status file says the feature is already implemented.
+
+The latest evidence-based local verification is recorded in [`implementation-audit-2026-07-16.ru.md`](implementation-audit-2026-07-16.ru.md) (§implaudit).

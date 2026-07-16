@@ -2,247 +2,812 @@
 set -eu
 
 COMMAND="${1:-status}"
-RUNTIME_DIR="/tmp/sheepfold/site-lists"
+RUNTIME_DIR="${SHEEPFOLD_SITE_LIST_RUNTIME_DIR:-/tmp/sheepfold/site-lists}"
 RAW_DIR="$RUNTIME_DIR/raw"
+SOURCE_CACHE_DIR="$RUNTIME_DIR/sources"
+STATE_DIR="${SHEEPFOLD_SITE_LIST_STATE_DIR:-/etc/sheepfold/site-list-state}"
 ALLOWLIST_CACHE="$RUNTIME_DIR/allowlist.domains"
 BLOCKLIST_CACHE="$RUNTIME_DIR/blocklist.domains"
 STATUS_FILE="$RUNTIME_DIR/status"
-LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
-CRON_COMMAND="/usr/libexec/sheepfold/sheepfold-site-lists update"
+LOG_HELPER="${SHEEPFOLD_LOG_HELPER:-/usr/libexec/sheepfold/sheepfold-log}"
+NOTIFICATION_HELPER="${SHEEPFOLD_NOTIFICATION_HELPER:-/usr/libexec/sheepfold/sheepfold-admin-notification}"
+POLICY_HELPER="${SHEEPFOLD_DOMAIN_POLICY_HELPER:-/usr/libexec/sheepfold/sheepfold-domain-policy}"
+FETCH_HELPER="${SHEEPFOLD_SITE_LIST_FETCHER:-}"
+UCI_HELPER="${SHEEPFOLD_SITE_LIST_UCI_HELPER:-uci}"
+SORT_HELPER="${SHEEPFOLD_SITE_LIST_SORT_HELPER:-sort}"
+CRON_PROGRAM="/usr/libexec/sheepfold/sheepfold-site-lists"
+UPDATE_COMMAND="$CRON_PROGRAM update"
+RETRY_COMMAND="$CRON_PROGRAM retry"
+RETRY_SECONDS=86400
+MAX_SOURCE_BYTES="${SHEEPFOLD_SITE_LIST_MAX_SOURCE_BYTES:-16777216}"
+MAX_PAYLOAD_BYTES="${SHEEPFOLD_SITE_LIST_MAX_PAYLOAD_BYTES:-33554432}"
+MAX_DOMAINS_PER_SOURCE="${SHEEPFOLD_SITE_LIST_MAX_DOMAINS:-250000}"
+MAX_TOTAL_DOMAINS="${SHEEPFOLD_SITE_LIST_MAX_TOTAL_DOMAINS:-500000}"
+MAX_SOURCES_PER_KIND="${SHEEPFOLD_SITE_LIST_MAX_SOURCES:-16}"
+DOWNLOAD_ATTEMPTS="${SHEEPFOLD_SITE_LIST_DOWNLOAD_ATTEMPTS:-2}"
+DOWNLOAD_RETRY_DELAY="${SHEEPFOLD_SITE_LIST_DOWNLOAD_RETRY_DELAY:-2}"
+DOWNLOAD_TIMEOUT_SECONDS="${SHEEPFOLD_SITE_LIST_DOWNLOAD_TIMEOUT:-120}"
+BOOTSTRAP_DELAY="${SHEEPFOLD_SITE_LIST_BOOTSTRAP_DELAY:-30}"
+SHRINK_CHECK_MIN_DOMAINS="${SHEEPFOLD_SITE_LIST_SHRINK_CHECK_MIN_DOMAINS:-1000}"
+MIN_RETAINED_PERCENT="${SHEEPFOLD_SITE_LIST_MIN_RETAINED_PERCENT:-25}"
+ACCEPT_SUSPICIOUS_SHRINK=0
+[ "${2:-}" = "--accept-shrink" ] && ACCEPT_SUSPICIOUS_SHRINK=1
 
-mkdir -p "$RAW_DIR"
+for numeric_value in MAX_SOURCE_BYTES MAX_PAYLOAD_BYTES MAX_DOMAINS_PER_SOURCE MAX_TOTAL_DOMAINS MAX_SOURCES_PER_KIND DOWNLOAD_ATTEMPTS DOWNLOAD_RETRY_DELAY DOWNLOAD_TIMEOUT_SECONDS BOOTSTRAP_DELAY SHRINK_CHECK_MIN_DOMAINS MIN_RETAINED_PERCENT; do
+	eval "value=\${$numeric_value}"
+	case "$value" in ''|*[!0-9]*) echo "Invalid numeric setting: $numeric_value" >&2; exit 2 ;; esac
+done
+[ "$DOWNLOAD_ATTEMPTS" -ge 1 ] || DOWNLOAD_ATTEMPTS=1
+[ "$DOWNLOAD_TIMEOUT_SECONDS" -ge 1 ] || DOWNLOAD_TIMEOUT_SECONDS=1
+[ "$MAX_SOURCES_PER_KIND" -ge 1 ] || MAX_SOURCES_PER_KIND=1
+[ "$SHRINK_CHECK_MIN_DOMAINS" -ge 1 ] || SHRINK_CHECK_MIN_DOMAINS=1
+[ "$MIN_RETAINED_PERCENT" -ge 1 ] || MIN_RETAINED_PERCENT=1
+[ "$MIN_RETAINED_PERCENT" -le 100 ] || MIN_RETAINED_PERCENT=100
+
+mkdir -p "$RAW_DIR" "$SOURCE_CACHE_DIR" "$STATE_DIR"
+chmod 700 "$STATE_DIR" 2>/dev/null || true
 
 log_event() {
-        if [ -x "$LOG_HELPER" ]; then
-                "$LOG_HELPER" "$*"
-        else
-                logger -t sheepfold-site-lists "$*"
-        fi
+	if [ -x "$LOG_HELPER" ]; then
+		"$LOG_HELPER" "$*"
+	else
+		logger -t sheepfold-site-lists "$*"
+	fi
 }
 
 global_get() {
-        uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "$2"
+	"$UCI_HELPER" -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "$2"
 }
 
 trim() {
-        sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+	sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
-download_to_file() {
-        url="$1"
-        output="$2"
-
-        if command -v uclient-fetch >/dev/null 2>&1; then
-                uclient-fetch -q -O "$output" "$url"
-        elif command -v wget >/dev/null 2>&1; then
-                wget -q -O "$output" "$url"
-        elif command -v curl >/dev/null 2>&1; then
-                curl -fsSL -o "$output" "$url"
-        else
-                return 1
-        fi
+safe_text() {
+	printf '%s' "$1" | tr '\n\r\t=' '    ' | cut -c1-500
 }
 
-source_url() {
-        line="$(printf '%s' "$1" | trim)"
-        [ -n "$line" ] || return 1
-
-        case "$line" in
-                *'|'*) line="${line##*|}" ;;
-        esac
-
-        line="$(printf '%s' "$line" | trim)"
-        case "$line" in
-                http://*|https://*) printf '%s\n' "$line" ;;
-                *) return 1 ;;
-        esac
+value_from_file() {
+	key="$1"
+	file="$2"
+	sed -n "s/^$key=//p" "$file" 2>/dev/null | sed -n '1p'
 }
 
-sources_to_urls() {
-        option="$1"
-        sources="$(global_get "$option" '')"
+source_record() {
+	line="$(printf '%s' "$1" | trim)"
+	[ -n "$line" ] || return 1
 
-        printf '%s\n' "$sources" |
-                tr ';' '\n' |
-                while IFS= read -r line; do
-                        source_url "$line" || true
-                done
+	case "$line" in
+		*'|'*)
+			label="$(printf '%s' "${line%%|*}" | trim)"
+			url="$(printf '%s' "${line##*|}" | trim)"
+			;;
+		*)
+			label="$line"
+			url="$line"
+			;;
+	esac
+	case "$url" in http://*|https://*) ;; *) return 1 ;; esac
+	case "$url" in *[[:space:]]*) return 1 ;; esac
+	[ "${#url}" -le 2048 ] || return 1
+	[ -n "$label" ] || label="$url"
+	printf '%s\t%s\n' "$(safe_text "$label")" "$url"
+}
+
+source_key() {
+	printf '%s' "$1|$2" | cksum | awk -v kind="$1" '{print kind "-" $1}'
+}
+
+state_file_for() {
+	printf '%s/%s.state\n' "$STATE_DIR" "$1"
+}
+
+reason_text() {
+	case "$1" in
+		download_tool_missing) printf 'на роутере нет программы для скачивания по HTTPS' ;;
+		download_failed) printf 'сервер источника не ответил или соединение оборвалось' ;;
+		download_timed_out) printf 'сервер источника не успел ответить за отведённое время' ;;
+		empty_download) printf 'источник вернул пустой файл' ;;
+		source_too_large) printf 'скачанный файл превышает безопасный размер для роутера' ;;
+		payload_too_large) printf 'распакованный файл превышает безопасный размер для роутера' ;;
+		unsupported_archive) printf 'формат архива пока не поддерживается' ;;
+		invalid_archive) printf 'архив повреждён или не может быть безопасно распакован' ;;
+		unsafe_archive_entry) printf 'архив содержит небезопасное имя файла' ;;
+		archive_missing_domains) printf 'в архиве не найден файл с доменами' ;;
+		html_document) printf 'вместо списка сервер вернул обычную HTML-страницу' ;;
+		no_valid_domains) printf 'в файле не найдено ни одного корректного домена' ;;
+		too_many_domains) printf 'список содержит слишком много доменов для безопасной обработки на роутере' ;;
+		too_many_total_domains) printf 'суммарный список содержит слишком много доменов для безопасной обработки на роутере' ;;
+		too_many_sources) printf 'в настройке указано слишком много источников одного типа' ;;
+		suspicious_shrink) printf 'новый файл неожиданно содержит намного меньше доменов, поэтому сохранена предыдущая рабочая копия' ;;
+		invalid_source) printf 'адрес источника заполнен неверно' ;;
+		*) printf 'неизвестная ошибка обработки' ;;
+	esac
+}
+
+kind_text() {
+	case "$1" in
+		allowlist) printf 'белого списка сайтов' ;;
+		blocklist) printf 'чёрного списка сайтов' ;;
+		*) printf 'списка сайтов' ;;
+	esac
+}
+
+write_failure_state() {
+	state_file="$1"
+	count="$2"
+	first_failed_at="$3"
+	next_retry_at="$4"
+	notified="$5"
+	kind="$6"
+	label="$7"
+	url="$8"
+	reason="$9"
+	tmp="$state_file.tmp.$$"
+	umask 077
+	{
+		printf 'count=%s\n' "$count"
+		printf 'first_failed_at=%s\n' "$first_failed_at"
+		printf 'last_failed_at=%s\n' "$(date +%s)"
+		printf 'next_retry_at=%s\n' "$next_retry_at"
+		printf 'notified=%s\n' "$notified"
+		printf 'kind=%s\n' "$(safe_text "$kind")"
+		printf 'label=%s\n' "$(safe_text "$label")"
+		printf 'url=%s\n' "$(safe_text "$url")"
+		printf 'reason=%s\n' "$(safe_text "$reason")"
+	} > "$tmp"
+	chmod 600 "$tmp" 2>/dev/null || true
+	mv -f "$tmp" "$state_file"
+}
+
+record_failure() {
+	rf_key="$1"
+	rf_kind="$2"
+	rf_label="$3"
+	rf_url="$4"
+	rf_reason="$5"
+	rf_state="$(state_file_for "$rf_key")"
+	rf_now="$(date +%s)"
+	rf_count="$(value_from_file count "$rf_state")"
+	rf_first="$(value_from_file first_failed_at "$rf_state")"
+	rf_notified="$(value_from_file notified "$rf_state")"
+	case "$rf_count" in ''|*[!0-9]*) rf_count=0 ;; esac
+	case "$rf_first" in ''|*[!0-9]*) rf_first="$rf_now" ;; esac
+	[ "$rf_notified" = 1 ] || rf_notified=0
+	rf_count=$((rf_count + 1))
+	rf_next=$((rf_now + RETRY_SECONDS))
+
+	write_failure_state "$rf_state" "$rf_count" "$rf_first" "$rf_next" "$rf_notified" \
+		"$rf_kind" "$rf_label" "$rf_url" "$rf_reason"
+
+	if [ "$rf_count" -ge 3 ] && [ "$rf_notified" != 1 ] && [ -x "$NOTIFICATION_HELPER" ]; then
+		rf_title="Не обновляется $(kind_text "$rf_kind")"
+		rf_message="Источник «$rf_label» не обновился три раза подряд. Причина: $(reason_text "$rf_reason"). Sheepfold продолжает использовать последнюю рабочую копию и попробует снова через сутки."
+		if "$NOTIFICATION_HELPER" enqueue site_list_update \
+			"site-list:$rf_key:$rf_first" "$rf_title" "$rf_message" >/dev/null 2>&1; then
+			rf_notified=1
+			write_failure_state "$rf_state" "$rf_count" "$rf_first" "$rf_next" "$rf_notified" \
+				"$rf_kind" "$rf_label" "$rf_url" "$rf_reason"
+		fi
+	fi
+
+	printf '%s\t%s\t%s\t%s\t%s\n' "$rf_kind" "$(safe_text "$rf_label")" "$rf_reason" "$rf_count" "$rf_next" >> "$RAW_DIR/current-problems"
+	FAILURE_COUNT="$rf_count"
+	NEXT_RETRY_AT="$rf_next"
+}
+
+clear_failure() {
+	cf_key="$1"
+	cf_state="$(state_file_for "$cf_key")"
+	[ -f "$cf_state" ] || return 0
+	cf_notified="$(value_from_file notified "$cf_state")"
+	if [ "$cf_notified" = 1 ] && [ -x "$NOTIFICATION_HELPER" ]; then
+		cf_kind="$(value_from_file kind "$cf_state")"
+		cf_label="$(value_from_file label "$cf_state")"
+		cf_first="$(value_from_file first_failed_at "$cf_state")"
+		[ -n "$cf_label" ] || cf_label="$cf_key"
+		[ -n "$cf_first" ] || cf_first=unknown
+		cf_title="Обновление $(kind_text "$cf_kind") восстановлено"
+		cf_message="Источник «$cf_label» снова успешно обновляется. Sheepfold заменил сохранённую рабочую копию актуальными данными."
+		"$NOTIFICATION_HELPER" enqueue site_list_recovered \
+			"site-list-recovered:$cf_key:$cf_first" "$cf_title" "$cf_message" >/dev/null 2>&1 || true
+	fi
+	rm -f "$cf_state"
+}
+
+run_limited_download() {
+	rld_url="$1"
+	rld_output="$2"
+	rld_blocks=$((MAX_SOURCE_BYTES / 512 + 1))
+
+	(
+		ulimit -f "$rld_blocks" 2>/dev/null || true
+		if [ -n "$FETCH_HELPER" ]; then
+			[ -x "$FETCH_HELPER" ] || exit 127
+			if command -v timeout >/dev/null 2>&1; then
+				timeout "$DOWNLOAD_TIMEOUT_SECONDS" "$FETCH_HELPER" "$rld_url" "$rld_output"
+			else
+				"$FETCH_HELPER" "$rld_url" "$rld_output"
+			fi
+		elif command -v uclient-fetch >/dev/null 2>&1; then
+			uclient-fetch -q -T "$DOWNLOAD_TIMEOUT_SECONDS" -O "$rld_output" "$rld_url"
+		elif command -v wget >/dev/null 2>&1; then
+			wget -q -T "$DOWNLOAD_TIMEOUT_SECONDS" -O "$rld_output" "$rld_url"
+		elif command -v curl >/dev/null 2>&1; then
+			curl -fsSL --connect-timeout 15 --max-time "$DOWNLOAD_TIMEOUT_SECONDS" -o "$rld_output" "$rld_url"
+		else
+			exit 127
+		fi
+	)
+}
+
+download_with_retries() {
+	dwr_url="$1"
+	dwr_output="$2"
+	dwr_attempt=1
+	DOWNLOAD_ERROR=download_failed
+
+	while [ "$dwr_attempt" -le "$DOWNLOAD_ATTEMPTS" ]; do
+		rm -f "$dwr_output"
+		if run_limited_download "$dwr_url" "$dwr_output"; then
+			[ -s "$dwr_output" ] || { DOWNLOAD_ERROR=empty_download; return 1; }
+			dwr_size="$(wc -c < "$dwr_output" | tr -d ' ')"
+			[ "$dwr_size" -le "$MAX_SOURCE_BYTES" ] || { DOWNLOAD_ERROR=source_too_large; rm -f "$dwr_output"; return 1; }
+			return 0
+		else
+			dwr_result=$?
+			[ "$dwr_result" -ne 127 ] || DOWNLOAD_ERROR=download_tool_missing
+			[ "$dwr_result" -ne 124 ] || DOWNLOAD_ERROR=download_timed_out
+		fi
+		[ "$dwr_attempt" -ge "$DOWNLOAD_ATTEMPTS" ] || sleep "$DOWNLOAD_RETRY_DELAY"
+		dwr_attempt=$((dwr_attempt + 1))
+	done
+	rm -f "$dwr_output"
+	return 1
+}
+
+prepare_payload() {
+	pp_download="$1"
+	pp_payload="$2"
+	pp_blocks=$((MAX_PAYLOAD_BYTES / 512 + 1))
+	pp_expanded="$pp_payload.expanded.$$"
+	PAYLOAD_ERROR=unsupported_archive
+	rm -f "$pp_payload" "$pp_expanded"
+
+	if [ "$(head -c 2 "$pp_download" 2>/dev/null || true)" = "$(printf '\037\213')" ]; then
+		# Сначала ограниченно распаковываем gzip целиком. Иначе маленькая gzip-бомба
+		# заставит слабый роутер многократно распаковывать огромный поток при проверке tar.
+		if ! (
+			ulimit -f "$pp_blocks" 2>/dev/null || true
+			gzip -dc "$pp_download"
+		) > "$pp_expanded" 2>/dev/null; then
+			PAYLOAD_ERROR=invalid_archive
+			rm -f "$pp_expanded"
+			return 1
+		fi
+		pp_expanded_size="$(wc -c < "$pp_expanded" | tr -d ' ')"
+		[ "$pp_expanded_size" -le "$MAX_PAYLOAD_BYTES" ] || {
+			PAYLOAD_ERROR=payload_too_large
+			rm -f "$pp_expanded"
+			return 1
+		}
+
+		if tar -tf "$pp_expanded" >/dev/null 2>&1; then
+			pp_entry="$(tar -tf "$pp_expanded" 2>/dev/null | awk '/(^|\/)domains$/ {print; exit}')"
+			[ -n "$pp_entry" ] || {
+				PAYLOAD_ERROR=archive_missing_domains
+				rm -f "$pp_expanded"
+				return 1
+			}
+			case "$pp_entry" in
+				-*|/*|*..*|*[!A-Za-z0-9._/-]*)
+					PAYLOAD_ERROR=unsafe_archive_entry
+					rm -f "$pp_expanded"
+					return 1
+					;;
+			esac
+			(
+				ulimit -f "$pp_blocks" 2>/dev/null || true
+				tar -xOf "$pp_expanded" "$pp_entry"
+			) > "$pp_payload" 2>/dev/null || {
+				PAYLOAD_ERROR=invalid_archive
+				rm -f "$pp_payload" "$pp_expanded"
+				return 1
+			}
+			rm -f "$pp_expanded"
+		else
+			mv -f "$pp_expanded" "$pp_payload"
+		fi
+	else
+		case "$(head -c 2 "$pp_download" 2>/dev/null || true)" in PK) PAYLOAD_ERROR=unsupported_archive; return 1 ;; esac
+		cp "$pp_download" "$pp_payload"
+	fi
+
+	[ -s "$pp_payload" ] || { PAYLOAD_ERROR=empty_download; rm -f "$pp_payload"; return 1; }
+	pp_size="$(wc -c < "$pp_payload" | tr -d ' ')"
+	[ "$pp_size" -le "$MAX_PAYLOAD_BYTES" ] || { PAYLOAD_ERROR=payload_too_large; rm -f "$pp_payload"; return 1; }
+	if head -c 4096 "$pp_payload" | grep -Eiq '<[[:space:]]*(!doctype|html|head|body)([[:space:]>])'; then
+		PAYLOAD_ERROR=html_document
+		return 1
+	fi
+	return 0
 }
 
 normalize_domains() {
-        awk '
-        function trim(s) {
-                gsub(/^[ \t]+|[ \t]+$/, "", s)
-                return s
-        }
-        function clean(candidate, lower) {
-                candidate = trim(candidate)
-                if (candidate == "")
-                        return
+	awk '
+	function trim(s) {
+		gsub(/^[ \t]+|[ \t]+$/, "", s)
+		return s
+	}
+	function clean(candidate, lower, labelCount, labels, i) {
+		candidate = trim(candidate)
+		if (candidate == "")
+			return
 
-                lower = tolower(candidate)
-                gsub(/\r/, "", lower)
-                sub(/^https?:\/\//, "", lower)
-                sub(/^www\./, "", lower)
-                sub(/\/.*$/, "", lower)
-                sub(/:[0-9]+$/, "", lower)
-                sub(/^\|\|/, "", lower)
-                sub(/\^.*$/, "", lower)
-                sub(/^\*\./, "", lower)
-                sub(/^\./, "", lower)
-                sub(/\.$/, "", lower)
+		lower = tolower(candidate)
+		gsub(/\r/, "", lower)
+		sub(/^https?:\/\//, "", lower)
+		sub(/^address=\//, "", lower)
+		sub(/^www\./, "", lower)
+		sub(/\/.*$/, "", lower)
+		sub(/:[0-9]+$/, "", lower)
+		sub(/^\|\|/, "", lower)
+		sub(/\^.*$/, "", lower)
+		sub(/\$.*/, "", lower)
+		sub(/^\*\./, "", lower)
+		sub(/^\./, "", lower)
+		sub(/\.$/, "", lower)
 
-                if (lower ~ /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/)
-                        print lower
-        }
-        {
-                line = $0
-                gsub(/\r/, "", line)
-                line = trim(line)
-                if (line == "" || line ~ /^#/ || line ~ /^!/ || line ~ /^\[/ || line ~ /^@@/)
-                        next
+		if (length(lower) > 253 || lower ~ /^[0-9.]+$/ || index(lower, ":") > 0)
+			return
+		labelCount = split(lower, labels, ".")
+		for (i = 1; i <= labelCount; i++)
+			if (length(labels[i]) < 1 || length(labels[i]) > 63)
+				return
 
-                sub(/[ \t]+#.*/, "", line)
-                sub(/[ \t]+\/\/.*/, "", line)
+		if (lower ~ /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/)
+			print lower
+	}
+	function isAddress(value) {
+		return value == "0" || value ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ || index(value, ":") > 0
+	}
+	{
+		line = $0
+		gsub(/\r/, "", line)
+		line = trim(line)
+		if (line == "" || line ~ /^#/ || line ~ /^!/ || line ~ /^\[/ || line ~ /^@@/)
+			next
 
-                split(line, fields, /[ \t]+/)
-                if (fields[1] ~ /^(0\.0\.0\.0|127\.0\.0\.1|::1)$/ && fields[2] != "") {
-                        clean(fields[2])
-                        next
-                }
+		sub(/[ \t]+#.*/, "", line)
+		sub(/[ \t]+\/\/.*/, "", line)
 
-                if (line ~ /^\|\|/) {
-                        clean(line)
-                        next
-                }
+		split(line, fields, /[ \t]+/)
+		if (isAddress(fields[1]) && fields[2] != "") {
+			clean(fields[2])
+			next
+		}
 
-                if (line ~ /^https?:\/\//) {
-                        clean(line)
-                        next
-                }
+		if (line ~ /^\|\|/ || line ~ /^https?:\/\// || line ~ /^address=\//) {
+			clean(line)
+			next
+		}
 
-                clean(fields[1])
-        }'
+		clean(fields[1])
+	}'
 }
 
-build_list() {
-        kind="$1"
-        option="$2"
-        output="$3"
-        raw_combined="$RAW_DIR/$kind.raw"
-        normalized="$RAW_DIR/$kind.normalized"
-        tmp_output="$output.tmp"
-        urls_file="$RAW_DIR/$kind.urls"
-        count=0
-        failed=0
-        index=0
+install_source_cache() {
+	isc_payload="$1"
+	isc_cache="$2"
+	isc_candidate="$isc_cache.candidate.$$"
+	isc_unsorted="$isc_cache.unsorted.$$"
+	rm -f "$isc_candidate" "$isc_unsorted"
+	normalize_domains < "$isc_payload" > "$isc_unsorted"
+	isc_count="$(wc -l < "$isc_unsorted" | tr -d ' ')"
+	[ "$isc_count" -gt 0 ] || { CACHE_ERROR=no_valid_domains; rm -f "$isc_unsorted"; return 1; }
+	[ "$isc_count" -le "$MAX_DOMAINS_PER_SOURCE" ] || { CACHE_ERROR=too_many_domains; rm -f "$isc_unsorted"; return 1; }
+	"$SORT_HELPER" -u "$isc_unsorted" > "$isc_candidate"
+	rm -f "$isc_unsorted"
+	isc_candidate_count="$(wc -l < "$isc_candidate" | tr -d ' ')"
 
-        : > "$raw_combined"
-        sources_to_urls "$option" > "$urls_file"
+	if [ -s "$isc_cache" ] && [ "$ACCEPT_SUSPICIOUS_SHRINK" != 1 ]; then
+		isc_previous_count="$(wc -l < "$isc_cache" | tr -d ' ')"
+		case "$isc_previous_count" in ''|*[!0-9]*) isc_previous_count=0 ;; esac
+		# Короткая страница ошибки иногда содержит несколько похожих на домены строк. Не заменяем ею большой рабочий список (§slstres).
+		if [ "$isc_previous_count" -ge "$SHRINK_CHECK_MIN_DOMAINS" ] && \
+			[ $((isc_candidate_count * 100)) -lt $((isc_previous_count * MIN_RETAINED_PERCENT)) ]; then
+			CACHE_ERROR=suspicious_shrink
+			rm -f "$isc_candidate"
+			return 1
+		fi
+	fi
 
-        while IFS= read -r url; do
-                index=$((index + 1))
-                target="$RAW_DIR/$kind-$index.download"
+	# Как у зрелых DNS-фильтров: старый файл остаётся активным до полного разбора нового.
+	if [ -s "$isc_cache" ] && command -v cmp >/dev/null 2>&1 && cmp -s "$isc_cache" "$isc_candidate"; then
+		rm -f "$isc_candidate"
+	else
+		mv -f "$isc_candidate" "$isc_cache"
+	fi
+	SOURCE_DOMAIN_COUNT="$(wc -l < "$isc_cache" | tr -d ' ')"
+	return 0
+}
 
-                if download_to_file "$url" "$target" && [ -s "$target" ]; then
-                        cat "$target" >> "$raw_combined"
-                        printf '\n' >> "$raw_combined"
-                else
-                        failed=$((failed + 1))
-                        printf '%s\n' "$url" >> "$RAW_DIR/$kind.failed"
-                fi
-        done < "$urls_file"
+process_source() {
+	ps_kind="$1"
+	ps_label="$2"
+	ps_url="$3"
+	ps_key="$(source_key "$ps_kind" "$ps_url")"
+	ps_cache="$SOURCE_CACHE_DIR/$ps_key.domains"
+	ps_download="$RAW_DIR/$ps_key.download"
+	ps_payload="$RAW_DIR/$ps_key.payload"
+	ps_reason=''
 
-        if [ -s "$raw_combined" ]; then
-                normalize_domains < "$raw_combined" | sort -u > "$normalized"
-        else
-                : > "$normalized"
-        fi
+	printf '%s\n' "$ps_key" >> "$pk_active_keys"
+	if download_with_retries "$ps_url" "$ps_download"; then
+		if prepare_payload "$ps_download" "$ps_payload"; then
+			CACHE_ERROR=no_valid_domains
+			if install_source_cache "$ps_payload" "$ps_cache"; then
+				clear_failure "$ps_key"
+				pk_success=$((pk_success + 1))
+				printf '%s\n' "$ps_cache" >> "$pk_active_paths"
+				ps_meta="$SOURCE_CACHE_DIR/$ps_key.meta"
+				ps_meta_tmp="$ps_meta.tmp.$$"
+				{
+					printf 'label=%s\n' "$(safe_text "$ps_label")"
+					printf 'url=%s\n' "$(safe_text "$ps_url")"
+					printf 'count=%s\n' "$SOURCE_DOMAIN_COUNT"
+					printf 'updated_at=%s\n' "$(date +%s)"
+				} > "$ps_meta_tmp"
+				mv -f "$ps_meta_tmp" "$ps_meta"
+				rm -f "$ps_download" "$ps_payload"
+				return 0
+			fi
+			ps_reason="$CACHE_ERROR"
+		else
+			ps_reason="$PAYLOAD_ERROR"
+		fi
+	else
+		ps_reason="$DOWNLOAD_ERROR"
+	fi
 
-        mv "$normalized" "$tmp_output"
-        mv "$tmp_output" "$output"
-        count="$(wc -l < "$output" | tr -d ' ')"
+	pk_failed=$((pk_failed + 1))
+	FAILURE_COUNT=0
+	NEXT_RETRY_AT=0
+	record_failure "$ps_key" "$ps_kind" "$ps_label" "$ps_url" "$ps_reason"
+	if [ -s "$ps_cache" ]; then
+		# Ошибка источника не выкидывает его прошлые домены из общего списка.
+		printf '%s\n' "$ps_cache" >> "$pk_active_paths"
+		pk_retained=$((pk_retained + 1))
+	fi
+	rm -f "$ps_download" "$ps_payload"
+	return 0
+}
 
-        printf '%s_count=%s\n' "$kind" "$count"
-        [ "$failed" = "0" ] || printf '%s_failed=%s\n' "$kind" "$failed"
+cleanup_removed_sources() {
+	crs_kind="$1"
+	crs_active="$2"
+	for crs_state in "$STATE_DIR/$crs_kind-"*.state; do
+		[ -f "$crs_state" ] || continue
+		crs_key="$(basename "$crs_state" .state)"
+		grep -Fxq "$crs_key" "$crs_active" 2>/dev/null || rm -f "$crs_state"
+	done
+	for crs_cache in "$SOURCE_CACHE_DIR/$crs_kind-"*.domains; do
+		[ -f "$crs_cache" ] || continue
+		crs_key="$(basename "$crs_cache" .domains)"
+		if ! grep -Fxq "$crs_key" "$crs_active" 2>/dev/null; then
+			rm -f "$crs_cache" "$SOURCE_CACHE_DIR/$crs_key.meta"
+		fi
+	done
+}
+
+combine_active_sources() {
+	cas_output="$1"
+	cas_paths="$2"
+	cas_source_count="$3"
+	cas_tmp="$cas_output.tmp.$$"
+	cas_raw="$cas_output.raw.$$"
+	cas_total=0
+	COMBINE_ERROR=''
+	rm -f "$cas_tmp" "$cas_raw"
+
+	if [ "$cas_source_count" -eq 0 ]; then
+		: > "$cas_tmp"
+		mv -f "$cas_tmp" "$cas_output"
+		return 0
+	fi
+
+	# До объединения считаем верхнюю границу без сортировки многомиллионного файла.
+	# Дубли тоже считаются: это намеренно консервативная защита слабого роутера.
+	while IFS= read -r cas_path; do
+		[ -s "$cas_path" ] || continue
+		cas_count="$(wc -l < "$cas_path" | tr -d ' ')"
+		cas_total=$((cas_total + cas_count))
+		if [ "$cas_total" -gt "$MAX_TOTAL_DOMAINS" ]; then
+			COMBINE_ERROR=too_many_total_domains
+			rm -f "$cas_tmp" "$cas_raw"
+			[ -e "$cas_output" ] || : > "$cas_output"
+			return 2
+		fi
+	done < "$cas_paths"
+
+	while IFS= read -r cas_path; do
+		[ -s "$cas_path" ] && cat "$cas_path" >> "$cas_raw"
+	done < "$cas_paths"
+	if [ -s "$cas_raw" ]; then
+		"$SORT_HELPER" -u "$cas_raw" > "$cas_tmp"
+		mv -f "$cas_tmp" "$cas_output"
+		rm -f "$cas_raw"
+		return 0
+	fi
+
+	# Если все источники сломались, даже пустой временный файл не должен стереть рабочий кэш.
+	rm -f "$cas_tmp" "$cas_raw"
+	[ -e "$cas_output" ] || : > "$cas_output"
+	return 1
+}
+
+process_kind() {
+	pk_kind="$1"
+	pk_option="$2"
+	pk_output="$3"
+	pk_records="$RAW_DIR/$pk_kind.records"
+	pk_active_paths="$RAW_DIR/$pk_kind.active-paths"
+	pk_active_keys="$RAW_DIR/$pk_kind.active-keys"
+	pk_source_lines="$RAW_DIR/$pk_kind.source-lines"
+	pk_result="$RAW_DIR/$pk_kind.result"
+	pk_sources=0
+	pk_success=0
+	pk_failed=0
+	pk_retained=0
+	: > "$pk_active_paths"
+	: > "$pk_active_keys"
+	: > "$pk_records"
+	printf '%s\n' "$(global_get "$pk_option" '')" | tr ';' '\n' > "$pk_source_lines"
+	pk_configured="$(awk '{ line=$0; gsub(/^[ \t]+|[ \t]+$/, "", line); if (line != "") count++ } END { print count + 0 }' "$pk_source_lines")"
+	pk_limit_key="$(source_key "$pk_kind" '__source_limit__')"
+	if [ "$pk_configured" -gt "$MAX_SOURCES_PER_KIND" ]; then
+		# Не обновляем даже первые записи частично: иначе случайно длинная настройка
+		# незаметно отбросит хвост ранее рабочего списка.
+		pk_sources="$pk_configured"
+		pk_failed=1
+		record_failure "$pk_limit_key" "$pk_kind" 'Настройка источников' \
+			"configured:$pk_configured" too_many_sources
+		[ -e "$pk_output" ] || : > "$pk_output"
+		[ -s "$pk_output" ] && pk_retained=1
+		pk_count="$(wc -l < "$pk_output" | tr -d ' ')"
+		{
+			printf '%s_count=%s\n' "$pk_kind" "$pk_count"
+			printf '%s_sources=%s\n' "$pk_kind" "$pk_sources"
+			printf '%s_succeeded=0\n' "$pk_kind"
+			printf '%s_failed=1\n' "$pk_kind"
+			printf '%s_retained=%s\n' "$pk_kind" "$pk_retained"
+		} > "$pk_result"
+		return 0
+	fi
+	clear_failure "$pk_limit_key"
+
+	while IFS= read -r pk_source_line; do
+		pk_source_line="$(printf '%s' "$pk_source_line" | trim)"
+		[ -n "$pk_source_line" ] || continue
+		pk_sources=$((pk_sources + 1))
+		if pk_record="$(source_record "$pk_source_line")"; then
+			printf '%s\n' "$pk_record" >> "$pk_records"
+			continue
+		fi
+
+		# Ошибка одной записи не мешает соседним источникам, но и не превращает
+		# полностью сломанную настройку в намеренно пустой список.
+		pk_invalid_key="$(source_key "$pk_kind" "invalid:$pk_source_line")"
+		pk_invalid_label="$(printf '%s' "${pk_source_line%%|*}" | trim)"
+		[ -n "$pk_invalid_label" ] || pk_invalid_label='Некорректный источник'
+		printf '%s\n' "$pk_invalid_key" >> "$pk_active_keys"
+		pk_failed=$((pk_failed + 1))
+		record_failure "$pk_invalid_key" "$pk_kind" "$pk_invalid_label" "$pk_source_line" invalid_source
+	done < "$pk_source_lines"
+
+	while IFS="$(printf '\t')" read -r pk_label pk_url; do
+		[ -n "$pk_url" ] || continue
+		process_source "$pk_kind" "$pk_label" "$pk_url"
+	done < "$pk_records"
+
+	pk_combined_key="$(source_key "$pk_kind" '__combined_limit__')"
+	printf '%s\n' "$pk_combined_key" >> "$pk_active_keys"
+	cleanup_removed_sources "$pk_kind" "$pk_active_keys"
+	if combine_active_sources "$pk_output" "$pk_active_paths" "$pk_sources"; then
+		clear_failure "$pk_combined_key"
+	elif [ -n "$COMBINE_ERROR" ]; then
+		pk_failed=$((pk_failed + 1))
+		record_failure "$pk_combined_key" "$pk_kind" 'Итоговый список' \
+			"combined:$pk_kind" "$COMBINE_ERROR"
+	fi
+	pk_count="$(wc -l < "$pk_output" | tr -d ' ')"
+	{
+		printf '%s_count=%s\n' "$pk_kind" "$pk_count"
+		printf '%s_sources=%s\n' "$pk_kind" "$pk_sources"
+		printf '%s_succeeded=%s\n' "$pk_kind" "$pk_success"
+		printf '%s_failed=%s\n' "$pk_kind" "$pk_failed"
+		printf '%s_retained=%s\n' "$pk_kind" "$pk_retained"
+	} > "$pk_result"
+}
+
+write_status() {
+	ws_attempted="$1"
+	ws_last_success="$2"
+	ws_tmp="$STATUS_FILE.tmp.$$"
+	{
+		printf 'attempted_at=%s\n' "$ws_attempted"
+		printf 'last_success_at=%s\n' "$ws_last_success"
+		# updated_at остаётся совместимым именем и означает именно последнее полностью успешное обновление.
+		printf 'updated_at=%s\n' "$ws_last_success"
+		cat "$RAW_DIR/allowlist.result"
+		cat "$RAW_DIR/blocklist.result"
+		problem_index=0
+		while IFS="$(printf '\t')" read -r problem_kind problem_label problem_reason problem_count problem_retry; do
+			[ -n "$problem_kind" ] || continue
+			problem_index=$((problem_index + 1))
+			printf 'problem_%s=%s|%s|%s|%s|%s\n' "$problem_index" \
+				"$(safe_text "$problem_kind")" "$(safe_text "$problem_label")" \
+				"$(safe_text "$problem_reason")" "$problem_count" "$problem_retry"
+		done < "$RAW_DIR/current-problems"
+		printf 'problem_count=%s\n' "$problem_index"
+	} > "$ws_tmp"
+	mv -f "$ws_tmp" "$STATUS_FILE"
+}
+
+acquire_update_lock() {
+	aul_lock="$RUNTIME_DIR/update.lock"
+	if mkdir "$aul_lock" 2>/dev/null; then
+		printf '%s\n' "$$" > "$aul_lock/pid"
+		return 0
+	fi
+
+	# После SIGKILL каталог мог остаться навсегда. Даём параллельному процессу
+	# закончить запись PID и удаляем только доказанно осиротевший lock.
+	sleep 1
+	aul_pid="$(sed -n '1p' "$aul_lock/pid" 2>/dev/null || true)"
+	case "$aul_pid" in
+		''|*[!0-9]*) ;;
+		*) kill -0 "$aul_pid" 2>/dev/null && return 1 ;;
+	esac
+	rm -f "$aul_lock/pid"
+	rmdir "$aul_lock" 2>/dev/null || return 1
+	mkdir "$aul_lock" 2>/dev/null || return 1
+	printf '%s\n' "$$" > "$aul_lock/pid"
+}
+
+release_update_lock() {
+	rul_lock="$RUNTIME_DIR/update.lock"
+	rm -f "$rul_lock/pid"
+	rmdir "$rul_lock" 2>/dev/null || true
 }
 
 update_lists() {
-        mkdir -p "$RAW_DIR"
-        rm -f "$RAW_DIR"/*.failed
+	if ! acquire_update_lock; then
+		echo 'Site list update is already running' >&2
+		return 2
+	fi
+	trap 'release_update_lock' 0
+	trap 'exit 1' 1 2 3 15
+	: > "$RAW_DIR/current-problems"
 
-        allow_result="$(build_list allowlist site_allowlist_sources "$ALLOWLIST_CACHE")"
-        block_result="$(build_list blocklist site_blocklist_sources "$BLOCKLIST_CACHE")"
+	ul_now="$(date +%s)"
+	ul_previous_success="$(value_from_file last_success_at "$STATUS_FILE")"
+	case "$ul_previous_success" in *[!0-9]*) ul_previous_success='' ;; esac
+	process_kind allowlist site_allowlist_sources "$ALLOWLIST_CACHE"
+	process_kind blocklist site_blocklist_sources "$BLOCKLIST_CACHE"
+	ul_allow_failed="$(value_from_file allowlist_failed "$RAW_DIR/allowlist.result")"
+	ul_block_failed="$(value_from_file blocklist_failed "$RAW_DIR/blocklist.result")"
+	ul_failed=$((ul_allow_failed + ul_block_failed))
+	if [ "$ul_failed" -eq 0 ]; then
+		ul_last_success="$ul_now"
+	else
+		ul_last_success="$ul_previous_success"
+	fi
+	write_status "$ul_now" "$ul_last_success"
+	ul_policy=unavailable
+	if [ -x "$POLICY_HELPER" ]; then
+		if "$POLICY_HELPER" apply >/dev/null 2>&1; then
+			ul_policy="$("$POLICY_HELPER" status 2>/dev/null | sed -n 's/^backend=//p' | sed -n '1p')"
+			[ -n "$ul_policy" ] || ul_policy=unknown
+		else
+			ul_policy=error
+			log_event "Списки сайтов обновлены, но применить DNS-политику Sheepfold не удалось"
+		fi
+	fi
 
-        {
-                printf 'updated_at=%s\n' "$(date +%s)"
-                printf '%s\n' "$allow_result"
-                printf '%s\n' "$block_result"
-        } > "$STATUS_FILE"
-
-        log_event "Списки сайтов Sheepfold обновлены: $(printf '%s' "$allow_result" | tr '\n' ' '), $(printf '%s' "$block_result" | tr '\n' ' ')"
-        printf '%s\n%s\n' "$allow_result" "$block_result"
+	if [ "$ul_failed" -eq 0 ]; then
+		log_event "Белый и чёрный списки сайтов Sheepfold успешно обновлены"
+	else
+		log_event "Обновление списков сайтов завершилось с ошибками: $ul_failed источник(а); сохранены последние рабочие данные"
+	fi
+	cat "$RAW_DIR/allowlist.result"
+	cat "$RAW_DIR/blocklist.result"
+	printf 'domain_policy=%s\n' "$ul_policy"
+	[ "$ul_failed" -eq 0 ] && [ "$ul_policy" != error ]
 }
 
 cron_line_for_interval() {
-        interval="$(global_get site_lists_update_interval weekly)"
-
-        case "$interval" in
-                daily)
-                        printf '17 4 * * * %s\n' "$CRON_COMMAND"
-                        ;;
-                3days)
-                        printf '17 4 */3 * * %s\n' "$CRON_COMMAND"
-                        ;;
-                weekly|*)
-                        printf '17 4 * * 0 %s\n' "$CRON_COMMAND"
-                        ;;
-        esac
+	interval="$(global_get site_lists_update_interval weekly)"
+	case "$interval" in
+		daily) printf '17 4 * * * %s\n' "$UPDATE_COMMAND" ;;
+		3days) printf '17 4 */3 * * %s\n' "$UPDATE_COMMAND" ;;
+		weekly|*) printf '17 4 * * 0 %s\n' "$UPDATE_COMMAND" ;;
+	esac
 }
 
 cron_apply() {
-        line="$(cron_line_for_interval)"
-
-        {
-                crontab -l 2>/dev/null | grep -v "$CRON_COMMAND" || true
-                printf '%s\n' "$line"
-        } | crontab -
-
-        /etc/init.d/cron restart >/dev/null 2>&1 || true
-        printf 'OK\n'
+	line="$(cron_line_for_interval)"
+	{
+		crontab -l 2>/dev/null | grep -v '/usr/libexec/sheepfold/sheepfold-site-lists ' || true
+		printf '%s\n' "$line"
+		# Отдельная ежедневная проверка выполняет только уже назначенные повторы после ошибки.
+		printf '23 5 * * * %s\n' "$RETRY_COMMAND"
+	} | crontab -
+	/etc/init.d/cron restart >/dev/null 2>&1 || true
+	printf 'OK\n'
 }
 
 cron_remove() {
-        (crontab -l 2>/dev/null | grep -v "$CRON_COMMAND" || true) | crontab -
-        /etc/init.d/cron restart >/dev/null 2>&1 || true
-        printf 'OK\n'
+	(crontab -l 2>/dev/null | grep -v '/usr/libexec/sheepfold/sheepfold-site-lists ' || true) | crontab -
+	/etc/init.d/cron restart >/dev/null 2>&1 || true
+	printf 'OK\n'
+}
+
+retry_due() {
+	rd_now="$(date +%s)"
+	for rd_state in "$STATE_DIR"/*.state; do
+		[ -f "$rd_state" ] || continue
+		rd_next="$(value_from_file next_retry_at "$rd_state")"
+		case "$rd_next" in ''|*[!0-9]*) continue ;; esac
+		[ "$rd_next" -gt "$rd_now" ] || return 0
+	done
+	return 1
+}
+
+retry_failed() {
+	if retry_due; then
+		update_lists
+	elif [ -x "$POLICY_HELPER" ] && [ "$("$POLICY_HELPER" status 2>/dev/null | sed -n 's/^backend=//p' | sed -n '1p')" = error ]; then
+		# Ошибка применения не делает рабочий источник "битым", но ежедневная
+		# попытка нужна после временного сбоя dnsmasq/firewall. §dompol
+		"$POLICY_HELPER" apply
+	else
+		printf 'No site list retry is due\n'
+	fi
+}
+
+bootstrap_missing() {
+	[ ! -e "$ALLOWLIST_CACHE" ] || [ ! -e "$BLOCKLIST_CACHE" ] || {
+		printf 'Site list caches already exist\n'
+		return 0
+	}
+	[ "$BOOTSTRAP_DELAY" -eq 0 ] || sleep "$BOOTSTRAP_DELAY"
+	update_lists
 }
 
 status() {
-        if [ -r "$STATUS_FILE" ]; then
-                cat "$STATUS_FILE"
-        else
-                printf 'updated_at=\nallowlist_count=0\nblocklist_count=0\n'
-        fi
-        printf 'allowlist_cache=%s\n' "$ALLOWLIST_CACHE"
-        printf 'blocklist_cache=%s\n' "$BLOCKLIST_CACHE"
+	if [ -r "$STATUS_FILE" ]; then
+		cat "$STATUS_FILE"
+	else
+		printf 'attempted_at=\nlast_success_at=\nupdated_at=\nallowlist_count=0\nblocklist_count=0\nproblem_count=0\n'
+	fi
+	printf 'allowlist_cache=%s\n' "$ALLOWLIST_CACHE"
+	printf 'blocklist_cache=%s\n' "$BLOCKLIST_CACHE"
+	if [ -x "$POLICY_HELPER" ]; then
+		"$POLICY_HELPER" status 2>/dev/null | sed 's/^/policy_/'
+	fi
 }
 
 case "$COMMAND" in
-        update)
-                update_lists
-                ;;
-        cron-apply)
-                cron_apply
-                ;;
-        cron-remove)
-                cron_remove
-                ;;
-        status)
-                status
-                ;;
-        *)
-                echo "Usage: sheepfold-site-lists [update|cron-apply|cron-remove|status]" >&2
-                exit 1
-                ;;
+	update) update_lists ;;
+	retry) retry_failed ;;
+	bootstrap) bootstrap_missing ;;
+	cron-apply) cron_apply ;;
+	cron-remove) cron_remove ;;
+	status) status ;;
+	normalize) normalize_domains ;;
+	*)
+		echo "Usage: sheepfold-site-lists [update [--accept-shrink]|retry|bootstrap|cron-apply|cron-remove|status|normalize]" >&2
+		exit 1
+		;;
 esac

@@ -10,6 +10,8 @@ const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/view/shee
 const defaultsPath = resolve(packageDir, 'root/usr/share/sheepfold/sheepfold.uci.defaults');
 const makefilePath = resolve(packageDir, 'Makefile');
 const aiHandlerPath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-ai-handler');
+const parentPromptV1Path = resolve(packageDir, 'root/usr/share/sheepfold/prompts/parent/v1/system.txt');
+const parentPromptV2Path = resolve(packageDir, 'root/usr/share/sheepfold/prompts/parent/v2/system.txt');
 
 function readProjectFile(path) {
   return readFileSync(path, 'utf8');
@@ -32,6 +34,9 @@ describe('AI provider settings', () => {
     assert.match(defaults, /option grok_api_url 'https:\/\/api\.x\.ai\/v1\/chat\/completions'/);
     assert.match(makefile, /ensure_global_option grok_api_key ''/);
     assert.match(overview, /return aiSettingsBox\(\)/);
+    assert.match(overview, /AI assistant prompt version/);
+    assert.match(overview, /parent_ai_prompt_version/);
+    assert.match(overview, /Version 2 \(recommended\)/);
   });
 
   it('does not fall back to DeepSeek on the router when provider is unset', () => {
@@ -48,5 +53,7 @@ describe('AI provider settings', () => {
     assert.match(aiHandler, /child_ai_prompt_version/);
     assert.match(aiHandler, /grok\)/);
     assert.match(aiHandler, /grok_api_key_missing/);
+    assert.ok(readProjectFile(parentPromptV1Path).trim().length > 300);
+    assert.ok(readProjectFile(parentPromptV2Path).trim().length > 300);
   });
 });

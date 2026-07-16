@@ -10,7 +10,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -28,13 +27,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.sheepfold.android.R
-import app.sheepfold.android.router.AiAssistantClient
-import app.sheepfold.android.router.AiAssistantRequest
 import app.sheepfold.android.router.bearerToken
 import app.sheepfold.android.router.RouterAdminClient
 import app.sheepfold.android.router.RouterConnectionRequest
 import app.sheepfold.android.router.RouterDevice
 import app.sheepfold.android.router.RouterSnapshot
+import app.sheepfold.android.notifications.SheepfoldNotifications
 import app.sheepfold.android.ui.theme.ThemeMode
 import app.sheepfold.android.widget.SheepfoldWidgetRenderer
 import kotlinx.coroutines.launch
@@ -49,10 +47,17 @@ fun OperationalMainScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val client = remember(connection.apiUrl, connection.bearerToken) { RouterAdminClient(connection) }
+    val client = remember(connection.apiUrl, connection.bearerToken) {
+        RouterAdminClient(connection, context.applicationContext)
+    }
     val refreshFailedText = stringResource(R.string.router_refresh_failed)
     val blockEnabledText = stringResource(R.string.router_global_block_enabled)
     val internetEnabledText = stringResource(R.string.router_internet_enabled)
+    var devices by remember { mutableStateOf<List<RouterDevice>>(emptyList()) }
+    var snapshot by remember { mutableStateOf<RouterSnapshot?>(null) }
+    // APK один для обоих IPK: вкладка появляется только после подтверждения
+    // capability от уже авторизованного роутера. §prodvar
+    val productTab = productFeatureTab(connection, snapshot?.aiAvailable == true)
     val tabs = listOf(
         stringResource(R.string.tab_control),
         stringResource(R.string.tab_devices),
@@ -60,17 +65,20 @@ fun OperationalMainScreen(
         stringResource(R.string.tab_schedule),
         stringResource(R.string.tab_groups),
         stringResource(R.string.tab_administrators),
-        stringResource(R.string.tab_wifi),
-        stringResource(R.string.tab_ai),
+        stringResource(R.string.tab_wifi)
+    ) + listOfNotNull(productTab?.title) + listOf(
         stringResource(R.string.tab_logs),
         stringResource(R.string.tab_info),
+        stringResource(R.string.tab_feedback),
         stringResource(R.string.tab_settings)
     )
     var selectedTab by remember { mutableIntStateOf(0) }
-    var devices by remember { mutableStateOf<List<RouterDevice>>(emptyList()) }
-    var snapshot by remember { mutableStateOf<RouterSnapshot?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    val featureIndex = if (productTab == null) -1 else 7
+    val logsIndex = if (productTab == null) 7 else 8
+    val infoIndex = logsIndex + 1
+    val feedbackIndex = infoIndex + 1
 
     fun refresh() {
         isLoading = true
@@ -80,6 +88,12 @@ fun OperationalMainScreen(
                 devices = client.loadDevices()
                 snapshot = client.loadRouterInfo().also {
                     SheepfoldWidgetRenderer.storeState(context, it.globalBlocked)
+                }
+                client.loadChildAccessRequests().forEach { request ->
+                    SheepfoldNotifications.notifyAccessRequestOnce(context, request)
+                }
+                client.loadAdminNotifications().forEach { event ->
+                    SheepfoldNotifications.notifyAdminEventOnce(context, event)
                 }
             }.onFailure { message = it.message ?: refreshFailedText }
             isLoading = false
@@ -136,9 +150,10 @@ fun OperationalMainScreen(
             4 -> PlaceholderTab(stringResource(R.string.tab_groups))
             5 -> PlaceholderTab(stringResource(R.string.tab_administrators))
             6 -> PlaceholderTab(stringResource(R.string.tab_wifi))
-            7 -> AiTab(connection)
-            8 -> PlaceholderTab(stringResource(R.string.tab_logs))
-            9 -> RouterInfoTab(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh)
+            featureIndex -> productTab?.content?.invoke()
+            logsIndex -> PlaceholderTab(stringResource(R.string.tab_logs))
+            infoIndex -> RouterInfoTab(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh)
+            feedbackIndex -> FeedbackTab(client)
             else -> SettingsTab(themeMode, onThemeModeChange, onDisconnect)
         }
     }
@@ -276,59 +291,6 @@ private fun PlaceholderTab(title: String) {
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(title, style = MaterialTheme.typography.headlineSmall)
         Text(stringResource(R.string.section_router_managed))
-    }
-}
-
-@Composable
-private fun AiTab(connection: RouterConnectionRequest) {
-    val scope = rememberCoroutineScope()
-    val answerFailedText = stringResource(R.string.ai_answer_failed)
-    var question by remember { mutableStateOf("") }
-    var answer by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier.padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(stringResource(R.string.ai_parent_title), style = MaterialTheme.typography.headlineSmall)
-        Text(stringResource(R.string.ai_parent_privacy_default))
-        OutlinedTextField(
-            value = question,
-            onValueChange = { question = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.ai_question)) },
-            minLines = 3
-        )
-        Button(
-            enabled = question.isNotBlank() && !isLoading,
-            onClick = {
-                isLoading = true
-                scope.launch {
-                    answer = runCatching {
-                        AiAssistantClient.ask(
-                            AiAssistantRequest(
-                                connection = connection,
-                                provider = "",
-                                model = "",
-                                message = question,
-                                includeRouterInfo = false,
-                                includeProgramLog = false,
-                                googleAccount = ""
-                            )
-                        )
-                    }.getOrElse { it.message ?: answerFailedText }
-                    isLoading = false
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(stringResource(R.string.ai_ask)) }
-        if (isLoading) CircularProgressIndicator()
-        if (answer.isNotBlank()) {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Text(answer, modifier = Modifier.padding(14.dp))
-            }
-        }
     }
 }
 

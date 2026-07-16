@@ -1,7 +1,7 @@
 import org.gradle.api.tasks.Copy
 
-val sheepfoldVersionCode = 35
-val sheepfoldVersionName = "0.1.34"
+val sheepfoldVersionCode = 40
+val sheepfoldVersionName = "0.1.39"
 
 plugins {
     id("com.android.application")
@@ -51,6 +51,7 @@ dependencies {
     implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.camera:camera-camera2:1.4.2")
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")
@@ -86,15 +87,16 @@ val copyDebugApkToDownloads by tasks.registering(Copy::class) {
     val exportDir = debugApkExportDir()
     from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
     into(exportDir)
-    rename { "sheepfold-v$sheepfoldVersionName.apk" }
+    rename { "sheepfold-parent-v$sheepfoldVersionName.apk" }
 
     doFirst {
         exportDir.mkdirs()
     }
 }
 
-afterEvaluate {
-    tasks.named("assembleDebug") {
-        finalizedBy(copyDebugApkToDownloads)
-    }
+val exportDebugApk by tasks.registering {
+    group = "sheepfold"
+    description = "Builds the unified parent APK and explicitly copies it to the artifact directory."
+    dependsOn("assembleDebug")
+    finalizedBy(copyDebugApkToDownloads)
 }

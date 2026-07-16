@@ -15,22 +15,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.example.sheepfoldchild.R
-import com.example.sheepfoldchild.data.AiRepository
-import com.example.sheepfoldchild.viewmodel.AiChatViewModel
 import com.example.sheepfoldchild.viewmodel.ChildStatusViewModel
 
-/** Bottom navigation: Статус / Мой доступ / ИИ-помощник. */
+/** Общая навигация; AI-вкладка приходит только по capability текущего роутера. §prodvar */
 @Composable
 fun MainNavigation(statusViewModel: ChildStatusViewModel, appContext: android.content.Context) {
-    val applicationContext = appContext.applicationContext
-    val aiViewModel = remember(applicationContext) {
-        AiChatViewModel(AiRepository(applicationContext), applicationContext)
-    }
-
     val latestStatus = statusViewModel.latestStatus
-    LaunchedEffect(latestStatus) { aiViewModel.currentStatus = latestStatus }
+    val productTab = productChildTab(appContext.applicationContext, latestStatus)
 
     var selectedTab by remember { mutableIntStateOf(0) }
+    LaunchedEffect(productTab) {
+        if (productTab == null && selectedTab > 1) selectedTab = 0
+    }
 
     Scaffold(
         bottomBar = {
@@ -47,12 +43,14 @@ fun MainNavigation(statusViewModel: ChildStatusViewModel, appContext: android.co
                     icon = { Text("◷") },
                     label = { Text(stringResource(R.string.tab_access)) }
                 )
-                NavigationBarItem(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    icon = { Text("AI") },
-                    label = { Text(stringResource(R.string.tab_ai)) }
-                )
+                productTab?.let { tab ->
+                    NavigationBarItem(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        icon = { Text(tab.icon) },
+                        label = { Text(tab.label) }
+                    )
+                }
             }
         }
     ) { innerPadding ->
@@ -60,7 +58,7 @@ fun MainNavigation(statusViewModel: ChildStatusViewModel, appContext: android.co
             when (selectedTab) {
                 0 -> ChildStatusScreen(viewModel = statusViewModel)
                 1 -> AccessInfoScreen(status = latestStatus)
-                2 -> AiChatScreen(viewModel = aiViewModel, status = latestStatus)
+                2 -> productTab?.content?.invoke()
             }
         }
     }

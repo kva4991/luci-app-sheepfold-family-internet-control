@@ -2,14 +2,16 @@
 
 These rules apply to the whole repository.
 
+Before interpreting iterative owner feedback or writing a completion message, read `docs/owner-communication-profile.ru.md` (§usrcomm). It records project-specific terminology and communication preferences without replacing explicit newer instructions.
+
 ## Project Naming
 
 - Use `Sheepfold` as the main project and product name in English and Russian text.
 - Use `Sheepfold` as the public Android app name too.
 - In LuCI Russian UI headings, keep the product word in English: `Sheepfold`.
 - Do not use `Овчарня` in public product text unless the owner explicitly asks to discuss the old/internal name.
-- Sheepfold has two planned deliverables from one shared source tree: `Sheepfold` and `Sheepfold - AI Support`. Do not create independently maintained copies of common device-control code or a second repository merely to publish the AI variant. Follow `docs/product-variants.ru.md` (§prodvar).
-- Standard Sheepfold must not ship AI backend, AI prompts, provider-key settings, AI UI, or detailed per-device activity collection. The ordinary administrative/system event journal remains part of both variants.
+- Sheepfold builds two router packages from one shared source tree: `Sheepfold` and `Sheepfold - AI Support`, plus one parent APK and one child APK shared by both packages. Android product flavors for AI are forbidden. The APKs contain the small AI client but hide every AI-related screen until the connected router returns the positive server capability described in `docs/product-variants.ru.md` (§prodvar).
+- Standard Sheepfold IPK must not ship AI backend, AI prompts, provider-key settings, AI LuCI UI, or detailed per-device activity collection. The ordinary administrative/system event journal remains part of both IPKs. Never infer Android AI availability locally: missing/invalid capability means disabled.
 
 Correct examples:
 
@@ -30,6 +32,9 @@ Avoid:
 - In Russian, write `через OpenWRT-роутер и его веб-интерфейс LuCI` instead of only `через LuCI`.
 - Keep README files approachable for non-developers.
 - Keep user-facing strings localizable. Do not hardcode menu labels, validation messages, or bot replies when a localization resource should be used.
+- Treat LuCI `.po` catalogs as the source of truth for client-side translation JSON and regenerate JSON only with `python scripts/po2json.py <input.po> <output.json>`. Never round-trip `sheepfold/i18n/*.json` through Windows PowerShell 5 `ConvertFrom-Json` / `ConvertTo-Json`: its case-insensitive property handling collapses valid distinct keys such as `Clear log` and `clear log`.
+- Always qualify list terminology when ambiguity is possible: `device allowlist`, `device blocklist`, `site allowlist`, `site blocklist`, or `emergency-useful sites`. In Russian, write `белый список устройств`, `чёрный список устройств`, `белый список сайтов`, or `чёрный список сайтов`; do not say only `чёрный список` when either devices or domains could be meant. The device blocklist always denies LuCI, SSH, and router API access even when a public-domain exception is enabled (§usrcomm, §84azytj).
+- Emergency-useful sites are persisted as `emergency_site` UCI sections and applied through Sheepfold-owned DNS/nftables state. Match only web ports, return into the normal OpenWRT/Podkop chain, and never describe IP-backed domain matching as perfect isolation because shared CDN addresses and extra service domains exist (§emerg1).
 - In Sheepfold LuCI settings, all setting changes must be saved only after the parent presses the explicit `Save` / `Сохранить` button. Do not autosave settings on field blur, select change, checkbox change, or radio change. The settings page must show this save action at least twice: at the top right of the settings panel and again at the bottom after the settings content. Internally, Sheepfold may still perform OpenWRT `save`/`apply`, service restart, cron update, or backend wrapper calls, but the parent-facing model is one deliberate save action.
 - Do not expose separate `Apply` and `Save` actions unless OpenWRT internals force it; if both exist technically, hide or merge `Apply` in the Sheepfold UI so parents are not asked to understand the distinction.
 - After Sheepfold changes UCI from LuCI actions, the implementation must also apply/accept LuCI's own pending-change queue so the standard LuCI banner like "Unsaved changes" / `Не принятые изменения` does not remain visible. Prefer a shared helper that saves configs and then uses the LuCI changes API when available, with an OpenWRT `uci apply` fallback.
@@ -42,7 +47,7 @@ Avoid:
 ## Coding Style
 
 - Use camelCase for JavaScript/Kotlin variables, functions, object fields, and UI state names whenever the surrounding platform does not require another convention.
-- Variable names must tell a human reviewer what the value contains. For new project-owned local variables and private fields, keep the name at 15 characters or fewer; if the meaning does not fit, simplify the scope or use an established domain term instead of stacking words. Never satisfy the limit with cryptic abbreviations. External contracts, generated names, constants, and platform-required identifiers are exempt (§pm3kq7r).
+- Variable names must tell a human reviewer what the value contains. For new project-owned local variables and private fields, treat 15 characters as a practical guideline rather than a hard limit. A clear longer name is better than a cryptic abbreviation or a refactor performed only to shorten the name. External contracts, generated names, constants, and platform-required identifiers are exempt (§pm3kq7r).
 - Keep OpenWRT/UCI/package keys in their native format, usually snake_case or uppercase Make variables, for example `app_port`, `ui_asset_version`, `PKG_RELEASE`, and `SHEEPFOLD_UI_ASSET_VERSION`.
 - Do not convert external API fields, UCI options, package metadata, Android resource names, or documented protocol keys to camelCase unless the external contract itself uses camelCase.
 - When fixing non-obvious code in this repository, leave short Russian comments explaining why the fix is needed and why this approach is used. Do not comment obvious assignments or noise.
@@ -54,8 +59,8 @@ Avoid:
 - Keep the English and Russian README files structurally similar where practical.
 - Keep `install.sh`, `update.sh`, and `uninstall.sh` suitable for running directly on an OpenWRT router.
 - Test `.ipk` packages must follow OpenWrt `ipkg-build` style: a gzip-compressed tar archive containing `debian-binary`, `data.tar.gz`, and `control.tar.gz`; do not publish ad-hoc `ar` archives for OpenWrt test packages.
-- After building local test packages such as `.ipk` or `.apk`, always copy the finished artifact to `C:\Users\User\Downloads` for easy manual installation. Do not commit generated package artifacts.
-- Default artifact output for this Windows workspace: `C:\Users\User\Downloads`. Test IPK builders write the package there directly; do not use `dist\` as the default output directory.
+- Ordinary `.ipk`/`.apk` builds stay in repository-local build directories. Copy artifacts to `C:\Users\User\Downloads` only when the user explicitly asks for it; routine verification must not overwrite or accumulate files there. Do not commit generated package artifacts.
+- The test IPK builder defaults to `.build/ipk-output`. Android uses each project's `app/build/outputs/apk`. Explicit export tasks and `--out-dir` may target Downloads only on direct request.
 - The uninstall command must remove the package without clearing Sheepfold client lists or user settings, then print a report of remaining router settings that may require manual cleanup.
 - When changing installation, update, or uninstall commands, update both README files and `docs/github-install-setup.md` if relevant.
 
@@ -89,6 +94,28 @@ Avoid:
 - Read `docs/agent-gotchas.ru.md` when debugging surprising LuCI, i18n, default-group, detector, or test-IPK behavior so earlier traps are not rediscovered from scratch.
 - Read `docs/troubleshooting.ru.md` when a command, build, test, installation, UCI save, LuCI page, Git operation, messenger, or updater fails. It is the symptom-to-fix handbook for agents and human developers. (§trouble)
 - Future AI developers should start with `docs/developer-task.ru.md`, then read `docs/product-requirements.md` and the relevant focused docs.
+- Work on AI-assistant memory, dialogue behavior, database design, or external AI integrations must start with `docs/ai-assistant-development/README.md`; put each new idea directly into the relevant focused document, and keep the folder's module map synchronized. If no focused document fits, create one and link it from the folder README. (§aiarch1)
+- Before sending AI data to any provider or compute worker, perform deterministic secret removal, identifier pseudonymization, minimization, and any required user preview on the router. A post-send auditor cannot repair a disclosure. Do not call pseudonymized data anonymous (§aimask1).
+- External AI compute is optional and must not participate in firewall or access-control decisions. Prefer a user-controlled LAN worker first; never send it the alias reverse map, provider keys, UCI, raw logs, or router credentials, and treat every result as untrusted input (§aiexec1).
+- Do not implement fastText token classification as if it were sequence BIO NER. Any NER design must demonstrate sentence-context behavior, target-router benchmarks, architecture-specific packaging impact, and leak/false-positive tests before it becomes a privacy boundary (§aimask1).
+- Regional AI risk hints must be versioned, sourced, scoped, and phrased as possible barriers to help-seeking, never as traits of every resident. A country/city, sex, age, or religion cannot by itself create a personal risk fact (§aireg01).
+- In injury, loss, sexual-health, violence, poisoning, or substance-risk scenarios, AI guidance prioritizes safety and appropriate help before discipline. Do not recommend punishment for disclosing harm or asking for help; separate the later teaching conversation from the act of disclosure (§aireg01).
+- Treat caregiver emotional regulation as a central AI-assistant goal. Acknowledge fear, anger, guilt, helplessness, or overload without excusing harm; help the adult pause, protect the child, teach the intended skill later, and repair the relationship after a lapse (§aicare1).
+- Do not shame an inexperienced caregiver as the first intervention, but do not soften physical violence into "strict parenting". Understanding the motive is for prevention and change, not removal of responsibility (§aicare1).
+- Treat the child AI as a future trusted safety entry point, not merely a status chatbot. Natural attachment may arise and must not be shamed or met with withdrawal of support. The AI identifies itself honestly, remains warm, avoids deliberately engineering exclusivity or retention, and gently broadens the child's safe real-world support when context makes that useful (§aichild).
+- Never auto-forward a child's sensitive disclosure merely because a user has the parent/admin role. The parent may be the source of danger. In a validated immediate threat, the safety router may send the minimum necessary alert only inside the approved family/trusted-adult circle when that recipient is safe and able to help. Sheepfold itself never contacts a state body or emergency service; it may only advise a person to call or write (§aichild, §aigov0).
+- Use risk-proportionate, transparent persistence for serious avoided topics. Accept ordinary refusal; for serious risk explain the concern, offer a minimal step, and limit reminders; for a concrete immediate threat give concise safety guidance. Never shame, manipulate, or repeat warnings without a new reason (§aiescal).
+- A human psychologist/consultant behind an external service is a separate data recipient. Require explicit preview/consent, verified role and qualifications, minimal masked context, retention/deletion terms, and a clear distinction between family consultation and consultation used only to improve an AI response (§aiescal, §aimask1).
+- Human-consultant consent must be an explicit case-scoped question with an unchecked acknowledgement. LLM consent, terms acceptance, silence, closing the dialog, or a previous consultant request never authorizes a new human recipient, purpose, or additional data (§aiescal).
+- Sheepfold AI must never contact police, child-protection, courts, emergency dispatch, or another state body and must never transmit family data to them. This is a product invariant, not a consent option or a future safety-router branch. The assistant may show a verified contact, prepare words for the user, or open a dialer/message composer only when the final call/send remains a direct human action; never attach a transcript or send automatically (§ailegal, §aichild, §aigov0).
+- Do not turn the product invariant above into a false promise about an external LLM provider. A provider processes submitted text under its own terms and may face legally binding requests. The strictest future mode requires a local model/worker so the conversation does not leave user-controlled equipment (§aigov0, §aiexec1, §aimask1).
+- Distinguish immediate danger, serious criminal/legal jeopardy, and a low-level non-violent wrong. Immediate danger uses the safety router; serious legal jeopardy routes first to a safe adult and qualified local legal help; a low-level wrong uses a context-aware restorative conversation. Do not automatically equate a country's general risk with the outcome of an individual case (§ailegal, §aireg01).
+- Never help conceal ongoing violence or other continuing serious harm, destroy evidence, fabricate an alibi, intimidate a witness, or evade an active rescue response. This boundary does not authorize automatic state reporting or moralizing about every minor offence (§ailegal).
+- A recommendation to contact a service must name what kind of recipient it is, what it can actually do in the selected country, what the person may disclose, and whether contact can create additional risk. Do not build a state-service API, automated call, automatic report, or transcript transfer. A convenience action may only leave the final call/message initiation and content under direct human control (§ailegal, §aigov0).
+- Religion may be a source of identity, continuity, duty, mutual aid, and moral language for a family or community. The AI may use the family's own commandments and traditions when invited, but it must not deliberately intensify fear, invent God's will, claim spiritual authority, or promise a specific afterlife punishment (§airel01).
+- Keep the universal ethical goal visible across AI prompts: help the family care for themselves and one another, respect each person's dignity, govern their desires, and repair harm they caused. A religious family may express this through its own commandments; Sheepfold must not claim a religion of its own (§airel01, §aidlg01).
+- Do not threaten a child with vague "legal consequences". Explain only verified, proportionate, situation-specific possible consequences when they are genuinely relevant, clearly mark uncertainty, and keep explanation separate from intimidation or demands for confession (§ailegal).
+- Do not reduce a family's contempt or principled rejection of law-enforcement bodies to fear, a confession, or a request for political/moral re-education. In non-critical situations, ask neutrally and prefer safe non-state help. In an immediate life-threatening situation, clearly present the fastest realistic options available to the person, including an appropriate emergency service, while preserving the absolute rule that Sheepfold never contacts it. Do not validate threats, violence, revenge, evidence destruction, or witness intimidation (§ailegal, §aigov0).
 - For broad feature work, future AI developers must also read `docs/agent-playbook.ru.md`; it is the detailed implementation playbook that captures product decisions from the planning discussion.
 - Keep `docs/developer-task.ru.md` updated when project-level decisions change.
 - Do not replace the focused docs with the developer task; it is an entrypoint and summary, not the source of every detail.
@@ -156,7 +183,7 @@ Avoid:
 - The OpenWRT installer must ask for application language before the agreement prompt. Use a simple console prompt: `Choose application language / Выберите язык приложения: Русский ru, English en`, with `ru` as the default.
 - The agreement must be visible before first use in LuCI/Android when practical.
 - Do not claim that the agreement is final legal advice; production releases should be reviewed by a qualified lawyer.
-- Sheepfold is self-hosted for family use by default. Do not introduce a developer-operated cloud dependency unless explicitly requested later.
+- Sheepfold remains self-hosted for family management. The only developer-operated cloud exception currently approved is the optional feedback channel described by `§feedback`: it must never become a dependency for router control and may send only user-entered fields plus a separately consented diagnostic report built from an explicit safe-field allowlist. Never send a raw UCI export, device identifiers/names, SSIDs, logs, browsing history, passwords, tokens, or API keys.
 - The main Android app in `android/` is for parent/admin devices only. A separate child app in `android-child/` is allowed only as an explicitly installed status/helper client without administrative functions; never design hidden child-phone installation flows (§z5ck8mv).
 - If app-store publication is added later, prepare store-specific privacy disclosures before release.
 - Do not collect website visit history as part of the normal administrative log. If per-device site activity history is added later, it must be a separate opt-in feature, off by default, excluded for administrator devices and allowlisted devices, and documented in privacy/legal text. See `docs/site-activity-logs.ru.md`.
@@ -226,26 +253,30 @@ Avoid:
 
 - On first opening Sheepfold in LuCI, check whether the OpenWRT root password is set.
 - If the root password is empty/not configured, do not allow Sheepfold settings to open.
+- If password verification itself fails, fail closed and keep the settings blocked; never interpret an RPC/backend error as proof that a password exists (§rootgate).
 - Show a clear warning and route the user to the OpenWRT password/administration page.
 - Do not create default Sheepfold administrator passwords. First setup must force the owner to set their own password.
 
 ## Device Defaults
 
 - New device behavior is configurable: `allow` by default, or `restrict_until_configured`.
-- Global "Block internet" blocks every device except allowlisted devices.
-- Device groups should include children, parents, TVs/media devices, guests/custom groups, and a special `No restrictions` / `Без ограничений` group.
-- The `No restrictions` group is a group-level trusted service-device rule: it may bypass schedules, temporary restrictions, new-device restrictions, and global block, but it must never override the blocklist. Blocklist remains the highest priority.
+- Global "Block internet" currently blocks every device except administrator devices, the device allowlist, and the protected `No restrictions` group. Do not describe a custom `access_priority` as active until status API and nftables share one implementation.
+- Readable settings exports must never contain secrets. Full exports must use the versioned AES-GCM envelope, and imports must validate the complete payload before staging any UCI changes. Preserve `[secret]` only from the matching current section and never write that marker as a credential (§cfgbak1).
+- Device groups should include children, parents, TVs/media devices, guests/custom groups, a special `No restrictions` / `Без ограничений` group, and a protected non-removable `Personal devices` / `Персональные устройства` group.
+- The `No restrictions` group is a high-priority trusted service-device rule that bypasses global shutdown, schedules, and new-device restrictions, but never the device blocklist. Assigning a device to this protected group is security-sensitive and must be visible and confirmed.
 - Strong device detection may suggest or confirm `No restrictions` for infrastructure devices such as NAS, Home Assistant, AdGuard Home, Proxmox, video recorders, and smart-home hubs.
 - Keep end smart-home devices as a separate device type `Smart home` / `Умный дом`: floor-heating controllers, kettles, irons, light relays/switches, smart sockets, automatic curtains, sensors, and similar household endpoints. Do not confuse them with smart-home hubs/servers.
 - Full detection should combine several router-side signals such as DHCP/static lease data, hostname, vendor/OUI when available, open ports, service banners, mDNS/SSDP/UPnP names, and previously confirmed device fingerprints. Treat port/banner checks as confidence signals, not as cryptographic identity.
 - Sheepfold must assume children may use unregistered or borrowed phones. Do not trust child-device apps, self-reported phone data, or Android-side state for enforcement. Child-device decisions must be based on router-side data and clearly marked confidence.
 - If a parent manually sets a device type, stop further automatic type detection for that device. The router may still update IP/name/lease observations, but must not run type classification or overwrite the manual type.
-- If automatic detection has already identified a device type with confidence `>= 80`, further automatic type detection for that device may be skipped. Devices below `80` must be shown as `Unknown device type` / `Неизвестный тип` until clarified or manually set.
+- If automatic detection has identified a device type confidently, further automatic type detection may be skipped only after any pending safe auto-group decision has enough evidence. Do not freeze an infrastructure candidate merely because type confidence is high while `No restrictions` still lacks two independent evidence families (§agfix88).
+- Confidently recognized phones, tablets, computers, TVs/media players, and smart watches may be assigned to `Personal devices` when automatic setup is enabled. This group is organizational only: it must not bypass blocklists, schedules, or global blocking (§persdev).
 - Implement strong device detection as a separate optional backend/package, for example `sheepfold-device-detector`, not inside the LuCI-only package. The LuCI package should call a Sheepfold backend API and remain lightweight.
 - The detector may use existing OpenWRT tools when available, such as `nmap`/`nmap-ssl` for port and banner detection, `avahi-utils` or equivalent mDNS clients for service discovery, and SSDP/UPnP probes. These tools must be optional/full-mode dependencies, not mandatory dependencies for reduced installations.
 - Do not run heavy scans continuously. Use bounded local-network scans, cache results, explain detector confidence in UI, and let the parent correct the result.
+- Cache a full port scan per device for at least 15 minutes (six hours by default), clamp user-controlled `nmap` arguments, and prioritize the requested MAC during explicit reclassification (§detload).
 - Prefer event-driven detection: watch DHCP lease changes and run detection when a device receives/updates an IP address. Keep a rare control scan only as a fallback for router reboot, manual DHCP changes, or unusual clients. Default control interval: 15 minutes.
-- Blocklist always overrides automatic detection, automatic grouping, and the `No restrictions` group.
+- The fixed whole-device order is: device blocklist → administrator devices → `No restrictions` → allowlist → global block → temporary access → device schedule → group schedule → default access. Emergency-useful domains are a separate narrow exception and never open LuCI, SSH, or Sheepfold API (§84azytj).
 - Full automatic setup is the default because it is the useful path for most families. Reduced mode is for routers with very little free space or constrained resources.
 - The OpenWRT installer must ask `Apply Sheepfold automatic setup?` / `Применить автонастройку программы?`. If the parent/admin presses Enter or answers `yes`, `y`, or `да`, set `auto_configure=1`, `detection_mode=full`, and `no_restrictions_auto_assign=1`.
 - Full automatic setup may place confidently detected infrastructure devices into `No restrictions` automatically. The UI should still make this visible and explain why the device was trusted, so the parent can correct mistakes.
@@ -255,6 +286,7 @@ Avoid:
 - Blocked-page placeholder text must be configurable by the parent/admin.
 - Allowlist should support quick add mode: a parent opens a 30 second connection window, sees a Wi-Fi QR code and devices that connected after the window started, then explicitly presses `Add` / `Добавить` for each candidate.
 - Quick add must collect candidates, not silently add every new device to the allowlist.
+- A child APK may expose `Request 30 minutes` only when an administrator explicitly enables requests for that account. Resolve the child device from router-side IP/DHCP/ARP data, rate-limit and queue the request, notify the opted-in administrator, and never grant access automatically (§child30).
 - The quick add button may turn grey when the 30 second window expires, but it must remain clickable to restart the timer.
 
 ## Wi-Fi Settings
@@ -279,6 +311,14 @@ Avoid:
 ## LuCI Architecture
 
 - Use a Podkop-like structure for the real LuCI implementation: a small entrypoint with `form.Map("sheepfold")`, `tabbed = true`, and separate modules for devices, allowlist, blocklist, schedules, emergency-useful sites, Wi-Fi, integrations, messaging, logs, diagnostics, and settings.
+- Organize LuCI frontend implementation by responsibility: menu routes and page composition in `resources/view/sheepfold/`; framework/backend plumbing in `resources/sheepfold/core/`; reusable presentation helpers in `resources/sheepfold/shared/`; and domain code in `resources/sheepfold/features/<area>/`. Keep a helper beside the feature it serves instead of growing a generic `utils.js` dumping ground (§frontmod).
+- Prefer one cohesive helper module that names operations for a single domain over repeated local helper functions. Do not create a helper merely to hide one obvious expression, and do not make unrelated domains depend on each other's UI state (§frontmod).
+- For a larger domain, split only the responsibilities that exist: `model.js` for pure rules, `api.js` for narrow backend calls, and `view.js` for DOM composition and local interaction. Keep a small domain in one specifically named file; do not create ceremonial layers or giant generic helper modules (§frontmod).
+- Before changing a LuCI feature, inspect one or two nearest feature modules and follow their established contract and naming. Do not scan or refactor the whole frontend merely to discover a style example (§frontmod).
+- Never replace `overview.js` with a global `appControl`, `overviewContext`, component registry, or another object that exposes arbitrary application state and methods to every feature. Pass only the data and callbacks named by the feature contract (§frontmod).
+- Create fresh initial state through a feature-specific factory when a panel has a non-trivial state shape. Do not reuse one mutable default object between renders or panels (§frontmod).
+- Every timer, polling loop, event listener, watcher, and subscription must have an explicit stop/dispose path owned by the same module that starts it. Put mode-dependent intervals and retry values in a named policy map instead of scattering numeric literals (§frontmod).
+- Keep feature-specific CSS selectors visibly grouped and prefixed by their feature. A later physical CSS split is allowed only when the LuCI asset-versioning path continues to version every resulting file (§frontmod, §assetv1).
 - Podkop is the implementation style reference for LuCI structure, backend JSON methods, diagnostics, ACL discipline, install/update flow, and cache handling. Do not copy Podkop routing/sing-box responsibilities into Sheepfold.
 - Keep the visual prototype separate from the future production architecture; do not keep growing one huge `overview.js`.
 - In the family-facing LuCI navigation, keep `Emergency-useful sites`, `Integrations`, and `Messenger` inside the `Settings` page. The current settings content belongs under a `General` subtab, and import/export/update/reboot actions belong under a `Misc` subtab.
@@ -341,17 +381,23 @@ Avoid:
 - Provider availability is country-profile configuration, not a permanent legal claim in code.
 - The selected router country controls visible AI providers and suggested emergency-useful sites.
 - Manual user entries must survive country changes.
-- AI context sharing must use an explicit preview/confirmation step. Do not send MAC/IP/device names/child names/family details/logs/device lists/router settings automatically.
-- The assistant may suggest settings but must not apply router actions without explicit parent confirmation.
+- AI context sharing must use an explicit preview/confirmation step. Automatic action mode never authorizes automatic disclosure of MAC/IP/device names/child names/family details/logs/device lists/router settings.
+- Future `ai_auto_actions` is off by default. When it is off, every proposed router action requires parent confirmation. When it is on, only applying an existing schedule or moving a device to an ordinary user group may run without a second question. Every other operation requires explicit confirmation. The feature is a documented plan and must not be presented as implemented until the versioned action API and tests exist (§aimed01).
 - Keep long assistant prompts in separate prompt documents, not buried inside architecture docs.
 - Assistant prompts are drafts until reviewed by the project owner and, for family/psychology guidance, a qualified family psychologist.
-- The assistant may propose router setting changes through Android only after an explicit preview and confirmation. Examples: static DHCP lease, emergency-useful site addition, group/schedule changes, whitelist-only group mode, temporary access, and activity-journal toggles.
+- The assistant may propose router setting changes through Android using a strict versioned action schema. In manual mode the preview requires confirmation; in automatic mode only the allowlisted low-risk subset may skip the second question. Never claim an action succeeded before the backend returns a verified result.
+- New words must not silently enter the trusted PII/entity dictionary. Present the inferred meaning and ask the user, for example: `Фуфочка — это ваша кошка по кличке Фуфа?` Store the mapping only after confirmation.
+- Internal profiles may contain useful working hypotheses, but never hidden facts or a user-facing psychological report. Each hypothesis needs evidence, provenance, confidence, at least one plausible alternative, and a review date. When a subject comments on a hypothesis, store that view separately and reassess; do not overwrite the model hypothesis automatically. Other family members never receive it except for a separately designed minimal life/health safety signal. Data deletion remains a separate privacy control (§aisurv1, §aichild).
 - The assistant may help compose bug reports, feature requests, and feedback for the developer. It must anonymize sensitive data, ask before sending, and may include a rough value/impact percentage as a subjective prioritization hint.
 
 ## Site List Sources
 
 - Do not manually compile or maintain a huge built-in “safe child websites” list in the repository.
 - Use updateable external list sources and store them as configurable sources. See `docs/site-list-sources.ru.md`.
+- Treat every downloaded source as untrusted. Parse each source into a bounded candidate file, validate it completely, and atomically replace only that source's cache. A malformed line may be skipped, but a failed source must keep its last-known-good cache while other sources continue updating (§slstres).
+- Never interpret “configured entries exist but all are invalid” as an intentional empty list. Only an actually empty source setting may clear the resulting list. Retry a failed source after one day and notify administrators after three consecutive failed cycles without notification spam (§slstres).
+- Keep per-source status, limits, and failure reasons. Do not run multi-million-entry desktop/server filters on a router merely because an upstream project publishes them; choose resource-sized variants or delegate to AdGuard Home (§slstres).
+- Do not claim that site filtering works merely because sources download successfully. Verify the complete runtime path from cache to DNS/firewall and all four AdGuard Home/Podkop modes before presenting the feature as enforced (§slstres, §uirunfx).
 - LuCI must expose `Whitelist sources` / `Источники белых списков` and `Site blacklist sources` / `Источники чёрного списка сайтов` in Settings -> Misc.
 - Groups may enable a “whitelist sources only” mode. This is different from device allowlist and must not override the device blocklist.
 - Site blacklist mode values: disabled, enabled for everyone, enabled for everyone except allowlist and administrators.
@@ -360,11 +406,24 @@ Avoid:
 ## Activity Journal
 
 - Internet activity journal is separate from the administrative action log.
-- It must be off by default and can be enabled per group or per device.
+- It has two required levels: the global `activity_log_enabled` switch is off by default, and the device/group scope must also allow collection.
+- When the global switch is off, hide per-device activity-log controls and reject writes in the backend. When it is enabled, initially enable eligible devices in the protected `Personal devices` group; the parent can then change individual device choices.
 - Do not collect activity journal data for administrator devices, device allowlist, or device blocklist.
 - Show only a visible badge/size/status in ordinary UI; do not display raw browsing history by default.
 - AI analysis of activity logs requires an explicit data-preview confirmation. The assistant should summarize patterns and risks, not hand the parent a raw list of sites to confront the child with.
 - Router-visible data is the boundary. DNS alone does not provide video titles, descriptions, or comments; collect such metadata only through a separate explicit mechanism and say when it is unavailable.
+- The child APK does not need to announce router activity logging. Before enabling it, the parent UI must require confirmation that the user has lawful authority over the ward/device or suitable permission from the legal representative under applicable local law. Keep the exact warning country-reviewable and do not present it as universal legal advice (§aiact01).
+- Planned child AI memory exposes only existence, size, broad categories, retention, and protection status to the parent. Conversation text and personal conclusions remain in the child-private scope; sharing belongs to the child except for a separately designed minimal life/health safety signal (§aichild).
+- New AI memory is private to the speaker by default. Ask about visibility in age-appropriate language only when preserving a meaningful record. For an ordinary child secret ask only whether it should remain in this chat; do not push disclosure without a reason. Sensitive records cannot be shared in bulk; `можешь сказать маме` authorizes only the selected record or shown summary. Router administrator status and marriage do not grant access to another adult's or child's private AI memory (§aidata1, §aichild).
+- A verified immediate life/health safety signal may be sent silently to a safe parent when warning the child would increase risk or delay help. Send the minimum and coach the parent to approach gently; never generalize this to ordinary secrets or misconduct (§aichild).
+- A one-line parent hint is insufficient after a child safety signal. The future implementation needs the scenario library in `docs/ai-assistant-development/parent-conversation-after-safety-signal.ru.md`, selected by risk, age, urgency, and recipient safety (§aichild).
+- Child memory has three planned retention layers: permanent concise `lifeArchive`, usefulness-reviewed `importantMemory`, and `currentTopics` removed after two years without new user evidence. Parent administrators cannot selectively delete or inspect child memory; product reset and the subject's own erasure rights require separate design (§aidata1, §aichild).
+- A subject may ask the assistant to forget their own information. The future `memoryForgettingPolicy` must explain that the assistant will lose this context, clarify scope, obtain confirmation, and cascade deletion through summaries, embeddings, hypotheses based only on that record, caches, and AI copies. Never keep a hidden content copy (§aiforgt).
+- If that request occurs during an already verified immediate life/health threat, move only the necessary minimum into an isolated 72-hour `safetyHold`. It may support the personal dialogue, `childSafetyRouter`, and an already-started minimal family safety action; it is excluded from ordinary memory, family context, backup, and export and expires without AI-read extension unless the subject explicitly preserves selected content (§aiforgt).
+- Safe-adult candidates may come from a child or adult suggestion, but `childSafetyRouter` maintains the set and chooses the recipient per incident. Re-evaluate possible aggressors and conflicts; if nobody is safe, send nothing automatically (§aichild).
+- A subject's death is not an erasure or sharing instruction. Preserve the concise `lifeArchive`, age out working layers by their normal policies, retain provenance and prior visibility, and never copy the deceased person's private memory into relatives' records automatically (§aiforgt).
+- `familyShared` permits context-aware use, not raw disclosure. Discuss the relevant meaning tactfully when useful, but do not quote the conversation, expose its source, or surface internal memory cards unless the subject's permission explicitly covers that disclosure (§aidata1, §aiforgt).
+- A statement about another family member is a sourced third-party judgment, not that person's trait. The other person's assistant may explore the topic with neutral, non-interrogative questions without revealing the source, presuming guilt, or forwarding answers back automatically (§aisurv1).
 
 ## Android App Security Copy
 

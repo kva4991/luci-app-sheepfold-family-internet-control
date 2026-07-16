@@ -167,6 +167,13 @@ list_has_mac() {
         return 1
 }
 
+status_is_temporary() {
+        case "${1:-}" in
+                temp_access|temp-access|temporary) return 0 ;;
+                *) return 1 ;;
+        esac
+}
+
 device_has_blocked_status() {
         local mac section existing
         mac="$(normalize_mac "$1")"
@@ -217,6 +224,21 @@ remove_mac_from_list() {
                 valid_mac "$normalized" || continue
                 uci -q add_list "sheepfold.$list_name.mac=$normalized"
         done
+}
+
+cancel_temp_access() {
+        local section="$1" mac="$2" status added
+        status="$(uci -q get "sheepfold.$section.status" 2>/dev/null || true)"
+        added="$(uci -q get "sheepfold.$section.temp_access_allowlist_added" 2>/dev/null || true)"
+
+        # Удаляем только технический allowlist старой схемы. Явный белый список
+        # пользователя (added=0) этот helper никогда не переносит и не очищает.
+        if [ "$added" = 1 ] || { [ -z "$added" ] && status_is_temporary "$status"; }; then
+                remove_mac_from_list allowlist "$mac"
+        fi
+        uci -q delete "sheepfold.$section.temp_access_until" 2>/dev/null || true
+        uci -q delete "sheepfold.$section.temp_access_previous_status" 2>/dev/null || true
+        uci -q delete "sheepfold.$section.temp_access_allowlist_added" 2>/dev/null || true
 }
 
 # Возвращает имя UCI-секции для устройства по MAC.
@@ -654,6 +676,7 @@ device_allow() {
                 return 3
         fi
 
+        cancel_temp_access "$device_section" "$device_mac"
         uci -q set "sheepfold.$device_section.status=allow"
         add_mac_to_list allowlist "$device_mac"
         uci -q commit sheepfold
@@ -684,13 +707,20 @@ device_block() {
         fi
 
         if list_has_mac allowlist "$device_mac"; then
-                echo "Device is in allowlist. Remove from allowlist first." >&2
-                return 3
+                local current_status temp_added
+                current_status="$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || true)"
+                temp_added="$(uci -q get "sheepfold.$device_section.temp_access_allowlist_added" 2>/dev/null || true)"
+                if status_is_temporary "$current_status" && [ "$temp_added" != 0 ]; then
+                        cancel_temp_access "$device_section" "$device_mac"
+                else
+                        echo "Device is in allowlist. Remove from allowlist first." >&2
+                        return 3
+                fi
         fi
 
+        cancel_temp_access "$device_section" "$device_mac"
         uci -q set "sheepfold.$device_section.status=blocked"
         add_mac_to_list blocklist "$device_mac"
-        remove_mac_from_list allowlist "$device_mac"
         uci -q commit sheepfold
         sync_firewall
 
@@ -706,6 +736,7 @@ device_temp_access() {
         valid_mac "$device_mac" || { echo "Invalid MAC: $device_mac" >&2; return 2; }
 
         case "$minutes" in ''|*[!0-9]*) minutes=30 ;; esac
+        [ "$minutes" -ge 1 ] || minutes=30
         [ "$minutes" -le 1440 ] || minutes=1440
 
         repair_sheepfold_uci_sections
@@ -715,17 +746,34 @@ device_temp_access() {
         device_section="$(device_section_for_mac "$device_mac")"
         local device_id
         device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || true)"
+        local current_status admin_device device_group no_restrictions_name current_is_temporary
+        current_status="$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || true)"
+        admin_device="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
+        device_group="$(uci -q get "sheepfold.$device_section.group" 2>/dev/null || true)"
+        no_restrictions_name="$(uci -q get sheepfold.no_restrictions.name 2>/dev/null || printf 'No restrictions')"
+        current_is_temporary=0
+        case "$current_status" in temp_access|temp-access|temporary) current_is_temporary=1 ;; esac
 
         if list_has_mac blocklist "$device_mac" || \
-                [ "$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || true)" = "blocked" ]; then
+                [ "$current_status" = "blocked" ]; then
                 echo "Device is in blocklist. Temporary access cannot override blocklist." >&2
+                return 3
+        fi
+
+        # +N минут предназначены только для ограниченного устройства. Нельзя временно
+        # заменить ими постоянное исключение: иначе команда из API или бота способна
+        # неожиданно понизить белый список, админское устройство или «Без ограничений».
+        if [ "$admin_device" = 1 ] || [ "$current_status" = allow ] || \
+                { [ "$current_is_temporary" = 0 ] && list_has_mac allowlist "$device_mac"; } || \
+                { [ -n "$device_group" ] && [ "$device_group" = "$no_restrictions_name" ]; }; then
+                echo "Device already has unrestricted access. Temporary access is not needed." >&2
                 return 3
         fi
 
         local expires_at
         expires_at=$(( $(date +%s) + minutes * 60 ))
         local previous_status previous_added previous_was_temp
-        previous_status="$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || printf restricted)"
+        previous_status="${current_status:-restricted}"
         previous_added="$(uci -q get "sheepfold.$device_section.temp_access_allowlist_added" 2>/dev/null || true)"
         previous_was_temp=0
         case "$previous_status" in
@@ -735,18 +783,17 @@ device_temp_access() {
                         ;;
         esac
 
-        # Временный доступ сохраняется как поле temp_access_until.
-        # Если backend временно добавил MAC в allowlist, очистка после срока снимет только этот временный доступ.
+        # Временный доступ живёт только в status + temp_access_until. Пользовательский
+        # allowlist здесь не нужен: firewall пропускает активный temp_access мимо
+        # расписаний, но глобальная блокировка всё равно остаётся сильнее.
         uci -q set "sheepfold.$device_section.temp_access_until=$expires_at"
         uci -q set "sheepfold.$device_section.temp_access_previous_status=$previous_status"
         if [ "$previous_added" = "1" ] || { [ "$previous_was_temp" = "1" ] && [ -z "$previous_added" ]; }; then
-                uci -q set "sheepfold.$device_section.temp_access_allowlist_added=1"
-        elif list_has_mac allowlist "$device_mac"; then
-                uci -q set "sheepfold.$device_section.temp_access_allowlist_added=0"
-        else
-                uci -q set "sheepfold.$device_section.temp_access_allowlist_added=1"
-                add_mac_to_list allowlist "$device_mac"
+                # Миграция старой схемы: технический MAC не должен выглядеть как
+                # осознанное добавление родителем в белый список устройств.
+                remove_mac_from_list allowlist "$device_mac"
         fi
+        uci -q set "sheepfold.$device_section.temp_access_allowlist_added=0"
         uci -q set "sheepfold.$device_section.status=temp_access"
         uci -q commit sheepfold
         sync_firewall
@@ -773,13 +820,21 @@ expire_temp_access() {
                         *) continue ;;
                 esac
 
+                mac="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
+                added="$(uci -q get "sheepfold.$section.temp_access_allowlist_added" 2>/dev/null || true)"
+                if [ "$added" = "1" ] && valid_mac "$mac"; then
+                        remove_mac_from_list allowlist "$mac"
+                        uci -q set "sheepfold.$section.temp_access_allowlist_added=0"
+                        changed=1
+                fi
+
                 expires_at="$(uci -q get "sheepfold.$section.temp_access_until" 2>/dev/null || printf 0)"
                 case "$expires_at" in ''|*[!0-9]*) expires_at=0 ;; esac
                 [ "$expires_at" -le "$now" ] || continue
 
-                mac="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
-                added="$(uci -q get "sheepfold.$section.temp_access_allowlist_added" 2>/dev/null || printf 1)"
-                if [ "$added" = "1" ] && valid_mac "$mac"; then
+                # Очень старые версии не всегда записывали флаг, но при завершении
+                # временного статуса такой allowlist-MAC тоже был техническим.
+                if [ -z "$added" ] && valid_mac "$mac"; then
                         remove_mac_from_list allowlist "$mac"
                 fi
 
@@ -835,6 +890,7 @@ global_block_off() {
 
 set_device_status() {
         local device_mac device_status device_name device_ip device_group device_type
+        local current_status temp_added
         device_mac="$(normalize_mac "${1:-}")"
         device_status="${2:-}"
         device_name="${3:-}"
@@ -871,14 +927,21 @@ set_device_status() {
         fi
 
         if [ "$device_status" = "blocked" ] && list_has_mac allowlist "$device_mac"; then
-                echo "Device is in allowlist. Remove from allowlist first." >&2
-                return 3
+                current_status="$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || true)"
+                temp_added="$(uci -q get "sheepfold.$device_section.temp_access_allowlist_added" 2>/dev/null || true)"
+                if status_is_temporary "$current_status" && [ "$temp_added" != 0 ]; then
+                        cancel_temp_access "$device_section" "$device_mac"
+                else
+                        echo "Device is in allowlist. Remove from allowlist first." >&2
+                        return 3
+                fi
         fi
 
         [ -n "$device_name" ]   || device_name="$device_mac"
         [ -n "$device_group" ]  || device_group="Not configured"
         [ -n "$device_type" ]   || device_type="smart"
 
+        cancel_temp_access "$device_section" "$device_mac"
         uci -q set "sheepfold.$device_section.mac=$device_mac"
         uci -q set "sheepfold.$device_section.name=$device_name"
         uci -q set "sheepfold.$device_section.ip=$device_ip"
@@ -1340,7 +1403,10 @@ router_info() {
         release="unknown"
         model="$(router_model_text)"
         kernel="$(uname -r 2>/dev/null || printf unknown)"
-        sheepfold_version="$(opkg_version luci-app-sheepfold-family-internet-control)"
+        sheepfold_package='luci-app-sheepfold-family-internet-control'
+        [ "$(uci -q get sheepfold.global.product_variant 2>/dev/null || printf sheepfold)" != sheepfoldAi ] || \
+                sheepfold_package='luci-app-sheepfold-ai-support'
+        sheepfold_version="$(opkg_version "$sheepfold_package")"
         podkop_version="$(package_version_any podkop luci-app-podkop || true)"
         adguard_version="$(package_version_any AdGuardHome adguardhome luci-app-adguardhome || true)"
         podkop_version_status="not_installed"
@@ -1550,6 +1616,35 @@ blocked_page_apply() {
         fi
 }
 
+settings_import_applied() {
+        local refresh_failed=0
+
+        repair_sheepfold_uci_sections
+        sync_firewall || refresh_failed=1
+        /usr/libexec/sheepfold/sheepfold-emergency-sites apply >/dev/null 2>&1 || refresh_failed=1
+
+        # Порт и состояние страницы блокировки могли измениться, поэтому старый
+        # uhttpd надо остановить до чтения импортированных настроек.
+        blocked_httpd_stop
+        blocked_page_apply || refresh_failed=1
+
+        # Ответ LuCI должен успеть вернуться до перезапуска Wi-Fi. Дочерний процесс
+        # полностью отвязываем от CGI stdout/stderr, иначе браузер будет ждать его.
+        (
+                sleep 3
+                [ ! -x /etc/init.d/dnsmasq ] || /etc/init.d/dnsmasq reload || true
+                if command -v wifi >/dev/null 2>&1; then
+                        wifi reload || true
+                elif [ -x /sbin/wifi ]; then
+                        /sbin/wifi reload || true
+                fi
+        ) > /tmp/sheepfold/import-services.log 2>&1 </dev/null &
+
+        log_event "Настройки Sheepfold, постоянные DHCP-аренды и Wi-Fi восстановлены из резервной копии."
+        printf 'Import applied; network services reload queued.\n'
+        [ "$refresh_failed" -eq 0 ]
+}
+
 # -----------------------------------------------------------------------------
 # LED-управление
 # -----------------------------------------------------------------------------
@@ -1725,6 +1820,7 @@ wps_allowlist_window() {
         done
 
         uci -q commit sheepfold
+        sync_firewall
         rm -f "$WPS_ALLOWLIST_FLAG" "$WPS_LEASES_SNAPSHOT"
         log_event "Окно WPS-добавления в белый список завершено"
 }
@@ -1845,6 +1941,12 @@ case "$COMMAND" in
         internet-status)
                 global_internet_status
                 ;;
+        schedule-sync)
+                sync_firewall
+                ;;
+        settings-import-applied)
+                settings_import_applied
+                ;;
 
         # --- Сопряжение Android-приложения -----------------------------------
         pair-admin-device)
@@ -1899,6 +2001,15 @@ case "$COMMAND" in
                 ;;
         site-lists-status)
                 /usr/libexec/sheepfold/sheepfold-site-lists status
+                ;;
+        site-lists-apply)
+                /usr/libexec/sheepfold/sheepfold-domain-policy apply
+                ;;
+        emergency-sites-apply)
+                /usr/libexec/sheepfold/sheepfold-emergency-sites apply
+                ;;
+        emergency-sites-status)
+                /usr/libexec/sheepfold/sheepfold-emergency-sites status
                 ;;
 
         # --- Диагностика -----------------------------------------------------
@@ -2001,12 +2112,12 @@ case "$COMMAND" in
                 echo "Токены:           check-token <bearer>  |  revoke-tokens <login>" >&2
                 echo "Клиент (APK):     client-status <ip>" >&2
                 echo "Устройства:       list-devices  |  device-allow <mac>  |  device-block <mac>  |  device-temp-access <mac> [min]  |  expire-temp-access" >&2
-                echo "Блокировка:       global-block-on  |  global-block-off  |  internet-enable  |  internet-disable  |  internet-status" >&2
+                echo "Блокировка:       global-block-on  |  global-block-off  |  internet-enable  |  internet-disable  |  internet-status  |  schedule-sync" >&2
                 echo "Сопряжение:       pair-admin-device  |  activate-admin-pairing-code  |  admin-pairing-status" >&2
                 echo "Wi-Fi:            wifi-enable  |  wifi-disable  |  wifi-automation-tick" >&2
                 echo "Мессенджеры:      messenger-disable  |  messenger-save-telegram  |  messenger-save-vk  |  messenger-status  |  messenger-check" >&2
                 echo "Время:            time-save" >&2
-                echo "Списки сайтов:    site-lists-update  |  site-lists-cron-apply  |  site-lists-status" >&2
+                echo "Списки сайтов:    site-lists-update  |  site-lists-cron-apply  |  site-lists-status  |  site-lists-apply  |  emergency-sites-apply  |  emergency-sites-status" >&2
                 echo "Диагностика:      router-info  |  wan-status-tick  |  status" >&2
                 echo "WPS:              wps-button  |  wps-allowlist-window" >&2
                 echo "LED:              led-apply  |  led-blink-code  |  led-alert-start  |  led-alert-loop  |  led-alert-ack" >&2

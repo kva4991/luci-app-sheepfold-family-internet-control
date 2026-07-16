@@ -1,0 +1,124 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, it } from 'node:test';
+
+const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const resources = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources');
+const overview = readFileSync(join(resources, 'view/sheepfold/overview.js'), 'utf8');
+
+function moduleSource(path) {
+  return readFileSync(join(resources, path), 'utf8');
+}
+
+describe('LuCI frontend modules §frontmod', () => {
+  it('keeps domain helpers outside the overview composition view', () => {
+    assert.match(overview, /require sheepfold\.features\.devices\.types as deviceTypes/);
+    assert.match(overview, /require sheepfold\.features\.emergency\.sites as emergencySiteModel/);
+    assert.match(overview, /require sheepfold\.features\.devices\.access-lists as deviceAccessLists/);
+    assert.match(overview, /require sheepfold\.features\.devices\.inventory as deviceInventory/);
+    assert.match(overview, /require sheepfold\.features\.devices\.table as deviceTableModel/);
+    assert.match(overview, /require sheepfold\.features\.devices\.selection as deviceSelection/);
+    assert.match(overview, /require sheepfold\.features\.administrators\.model as administratorModel/);
+    assert.match(overview, /require sheepfold\.features\.administrators\.view as administratorView/);
+    assert.match(overview, /require sheepfold\.features\.groups\.model as groupModel/);
+    assert.match(overview, /require sheepfold\.features\.groups\.view as groupView/);
+    assert.match(overview, /require sheepfold\.features\.logs\.model as logModel/);
+    assert.match(overview, /require sheepfold\.features\.messenger\.settings as messengerSettings/);
+    assert.match(overview, /require sheepfold\.features\.pairing\.qr as pairingQr/);
+    assert.match(overview, /require sheepfold\.features\.router\.info as routerInfo/);
+    assert.match(overview, /require sheepfold\.features\.router\.maintenance as routerMaintenance/);
+    assert.match(overview, /require sheepfold\.features\.wifi\.payload as wifiPayload/);
+    assert.match(overview, /require sheepfold\.features\.wifi\.cards as wifiCards/);
+    assert.match(overview, /require sheepfold\.features\.schedules\.model as scheduleModel/);
+    assert.match(overview, /require sheepfold\.features\.schedules\.view as scheduleView/);
+    assert.match(overview, /require sheepfold\.features\.settings\.draft as settingsDraftModel/);
+    assert.match(overview, /require sheepfold\.features\.settings\.backup as settingsBackupModel/);
+    assert.match(overview, /require sheepfold\.features\.sites\.status as siteListStatus/);
+    assert.match(overview, /require sheepfold\.core\.backend\.router as routerBackend/);
+    assert.match(overview, /require sheepfold\.core\.security\.random as secureRandom/);
+    assert.match(overview, /require sheepfold\.shared\.forms as sharedForms/);
+    assert.match(overview, /require sheepfold\.shared\.icons as sharedIcons/);
+
+    assert.doesNotMatch(overview, /function reedSolomonGenerator/);
+    assert.doesNotMatch(overview, /function logPhrasePattern/);
+    assert.doesNotMatch(overview, /function timeToMinutes/);
+    assert.doesNotMatch(overview, /function messengerField/);
+    assert.doesNotMatch(overview, /function scheduleWindowsOverlap/);
+    assert.doesNotMatch(overview, /function parseDhcpLeases/);
+    assert.doesNotMatch(overview, /function parseArpTable/);
+    assert.doesNotMatch(overview, /function addRouterDevice/);
+    assert.doesNotMatch(overview, /Math\.random\(\)/);
+  });
+
+  it('keeps each helper focused on its own domain', () => {
+    const qr = moduleSource('sheepfold/features/pairing/qr.js');
+    const types = moduleSource('sheepfold/features/devices/types.js');
+    const accessLists = moduleSource('sheepfold/features/devices/access-lists.js');
+    const inventory = moduleSource('sheepfold/features/devices/inventory.js');
+    const logs = moduleSource('sheepfold/features/logs/model.js');
+    const random = moduleSource('sheepfold/core/security/random.js');
+    const router = moduleSource('sheepfold/core/backend/router.js');
+    const routerInfo = moduleSource('sheepfold/features/router/info.js');
+    const maintenance = moduleSource('sheepfold/features/router/maintenance.js');
+    const wifi = moduleSource('sheepfold/features/wifi/payload.js');
+    const forms = moduleSource('sheepfold/shared/forms.js');
+    const icons = moduleSource('sheepfold/shared/icons.js');
+    const schedules = moduleSource('sheepfold/features/schedules/model.js');
+    const groups = moduleSource('sheepfold/features/groups/model.js');
+    const administrators = moduleSource('sheepfold/features/administrators/model.js');
+    const deviceTable = moduleSource('sheepfold/features/devices/table.js');
+    const deviceSelection = moduleSource('sheepfold/features/devices/selection.js');
+    const wifiCards = moduleSource('sheepfold/features/wifi/cards.js');
+    const messenger = moduleSource('sheepfold/features/messenger/settings.js');
+    const settingsDraft = moduleSource('sheepfold/features/settings/draft.js');
+    const settingsBackup = moduleSource('sheepfold/features/settings/backup.js');
+    const siteListStatus = moduleSource('sheepfold/features/sites/status.js');
+    const emergencySites = moduleSource('sheepfold/features/emergency/sites.js');
+    const scheduleView = moduleSource('sheepfold/features/schedules/view.js');
+    const groupView = moduleSource('sheepfold/features/groups/view.js');
+    const administratorView = moduleSource('sheepfold/features/administrators/view.js');
+
+    assert.match(qr, /function createQrMatrix/);
+    assert.match(types, /function displayedType/);
+    assert.match(types, /function infer/);
+    assert.match(types, /byValue: byValue/);
+    assert.match(accessLists, /function updatedValues/);
+    assert.match(accessLists, /function conflictingList/);
+    assert.match(inventory, /function parseDhcp/);
+    assert.match(inventory, /function parseArp/);
+    assert.match(inventory, /function build\(options\)/);
+    assert.match(overview, /function deviceTypeByValue\(value\)[\s\S]*deviceTypes\.byValue\(value\)/);
+    assert.match(logs, /function filterView/);
+    assert.match(logs, /function maskedExport/);
+    assert.match(random, /crypto\.getRandomValues/);
+    assert.doesNotMatch(random, /Math\.random/);
+    assert.match(router, /function parseKeyValues/);
+    assert.match(routerInfo, /function renderContent/);
+    assert.match(maintenance, /function updateRow/);
+    assert.match(wifi, /function build\(ssid, password, encryption\)/);
+    assert.match(forms, /function checkboxControl/);
+    assert.match(icons, /function adminCrown/);
+    assert.match(schedules, /function windowsOverlap/);
+    assert.match(groups, /function nextColor/);
+    assert.match(administrators, /function fromSections/);
+    assert.match(deviceTable, /function sortHeader/);
+    assert.match(deviceSelection, /function create\(options\)/);
+    assert.match(wifiCards, /function networkBox/);
+    assert.match(messenger, /function settingsBox/);
+    assert.match(settingsDraft, /function dirtySavers/);
+    assert.match(settingsBackup, /function encrypt\(payload, password\)/);
+    assert.match(settingsBackup, /function validateAccessLists/);
+    assert.match(siteListStatus, /function describe\(values\)/);
+    assert.match(siteListStatus, /site-lists-status/);
+    assert.match(emergencySites, /function normalizeDomain/);
+    assert.match(emergencySites, /function stage\(uci, config, sites\)/);
+    assert.match(scheduleView, /function render\(deps, embedded\)/);
+    assert.match(groupView, /function render\(deps, embedded\)/);
+    assert.match(groupView, /function refresh\(\)/);
+    assert.doesNotMatch(groupView, /visual test build/);
+    assert.doesNotMatch(groupView, /window\.location\.reload/);
+    assert.match(administratorView, /function render\(deps, embedded\)/);
+  });
+});

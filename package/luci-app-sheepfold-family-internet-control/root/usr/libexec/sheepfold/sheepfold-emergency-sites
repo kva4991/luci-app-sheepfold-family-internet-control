@@ -1,0 +1,186 @@
+#!/bin/sh
+set -eu
+
+COMMAND="${1:-status}"
+RUNTIME_DIR='/tmp/sheepfold/emergency-sites'
+DOMAINS_FILE="$RUNTIME_DIR/domains"
+IPV4_FILE="$RUNTIME_DIR/ipv4"
+IPV6_FILE="$RUNTIME_DIR/ipv6"
+NFT_BATCH="$RUNTIME_DIR/addresses.nft"
+DHCP_PREFIX='sheepfold_emergency'
+FIREWALL_HELPER='/usr/libexec/sheepfold/sheepfold-firewall'
+
+mkdir -p "$RUNTIME_DIR"
+
+valid_domain() {
+        printf '%s' "${1:-}" | grep -Eqi '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+}
+
+valid_ipv4() {
+        printf '%s' "${1:-}" | awk -F. '
+        BEGIN { valid=1 }
+        NF != 4 { valid=0 }
+        { for (i=1; i<=NF; i++) if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) valid=0 }
+        END { exit valid ? 0 : 1 }'
+}
+
+valid_ipv6() {
+        printf '%s' "${1:-}" | grep -Eq '^[0-9A-Fa-f:]+$' && printf '%s' "$1" | grep -q ':'
+}
+
+append_unique() {
+        local file="$1" value="$2"
+        grep -qxF "$value" "$file" 2>/dev/null || printf '%s\n' "$value" >> "$file"
+}
+
+collect_domains() {
+        local section enabled domain legacy
+        : > "$DOMAINS_FILE"
+
+        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=emergency_site$/\1/p'); do
+                enabled="$(uci -q get "sheepfold.$section.enabled" 2>/dev/null || printf 1)"
+                [ "$enabled" = 1 ] || continue
+                domain="$(uci -q get "sheepfold.$section.domain" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+                valid_domain "$domain" && append_unique "$DOMAINS_FILE" "$domain"
+        done
+
+        # Старый list остаётся входом только для миграционной совместимости.
+        for legacy in $(uci -q get sheepfold.domain_allowlist.domain 2>/dev/null || true); do
+                domain="$(printf '%s' "$legacy" | tr '[:upper:]' '[:lower:]')"
+                valid_domain "$domain" && append_unique "$DOMAINS_FILE" "$domain"
+        done
+        sort -u "$DOMAINS_FILE" -o "$DOMAINS_FILE"
+}
+
+dnsmasq_supports_nftset() {
+        command -v dnsmasq >/dev/null 2>&1 || return 1
+        dnsmasq --version 2>/dev/null | grep -Eq '(^|[[:space:]])nftset([[:space:]]|$)'
+}
+
+dnsmasq_dynamic_configured() {
+        uci -q show dhcp 2>/dev/null | grep -q "^dhcp\.${DHCP_PREFIX}_[0-9][0-9]*=ipset$"
+}
+
+remove_dnsmasq_sections() {
+        local section removed=1
+        for section in $(uci -q show dhcp 2>/dev/null | sed -n 's/^dhcp\.\([^.=]*\)=ipset$/\1/p'); do
+                case "$section" in
+                        "$DHCP_PREFIX"|"$DHCP_PREFIX"_*)
+                                uci -q delete "dhcp.$section" 2>/dev/null || true
+                                removed=0
+                                ;;
+                esac
+        done
+        return "$removed"
+}
+
+configure_dnsmasq() {
+        local domain section index=0 changed=0
+
+        if ! dnsmasq_supports_nftset || [ ! -s "$DOMAINS_FILE" ]; then
+                if remove_dnsmasq_sections; then
+                        uci -q commit dhcp
+                        changed=1
+                fi
+        else
+                remove_dnsmasq_sections || true
+                while IFS= read -r domain; do
+                        [ -n "$domain" ] || continue
+                        index=$((index + 1))
+                        section="${DHCP_PREFIX}_$index"
+                        # Один домен на секцию защищает dnsmasq от слишком длинной
+                        # nftset-строки при большом пользовательском списке. §emerg1
+                        uci -q set "dhcp.$section=ipset"
+                        uci -q add_list "dhcp.$section.name=sheepfold_emergency_v4"
+                        uci -q add_list "dhcp.$section.name=sheepfold_emergency_v6"
+                        uci -q add_list "dhcp.$section.domain=$domain"
+                        uci -q set "dhcp.$section.table_family=inet"
+                done < "$DOMAINS_FILE"
+                uci -q commit dhcp
+                changed=1
+        fi
+
+        if [ "$changed" = 1 ] && [ -x /etc/init.d/dnsmasq ]; then
+                /etc/init.d/dnsmasq restart >/dev/null 2>&1 || {
+                        # Ошибка нашей nftset-конфигурации не должна оставлять дом
+                        # без DNS. Удаляем только секции Sheepfold и возвращаем dnsmasq. §emerg1
+                        remove_dnsmasq_sections || true
+                        uci -q commit dhcp
+                        /etc/init.d/dnsmasq restart >/dev/null 2>&1 || return 1
+                        logger -t sheepfold "Emergency sites use resolver fallback because dnsmasq rejected nftset settings"
+                }
+        fi
+}
+
+resolve_with_router() {
+        local domain="$1"
+
+        if command -v resolveip >/dev/null 2>&1; then
+                resolveip -4 -t 4 "$domain" 2>/dev/null || true
+                resolveip -6 -t 4 "$domain" 2>/dev/null || true
+                return 0
+        fi
+
+        # BusyBox nslookup сначала печатает адрес DNS-сервера. Берём только строки
+        # после Name:, иначе можно случайно разрешить адрес самого роутера. §emerg1
+        nslookup "$domain" 2>/dev/null | awk '
+                /^Name:[[:space:]]/ { answers=1; next }
+                answers && /^Address([[:space:]][0-9]+)?:[[:space:]]/ { print $NF }
+        ' || true
+}
+
+refresh_addresses() {
+        local domain address
+        : > "$IPV4_FILE"
+        : > "$IPV6_FILE"
+
+        while IFS= read -r domain; do
+                [ -n "$domain" ] || continue
+                for address in $(resolve_with_router "$domain"); do
+                        if valid_ipv4 "$address"; then
+                                append_unique "$IPV4_FILE" "$address"
+                        elif valid_ipv6 "$address"; then
+                                append_unique "$IPV6_FILE" "$address"
+                        fi
+                done
+        done < "$DOMAINS_FILE"
+
+        {
+                printf 'flush set inet fw4 sheepfold_emergency_v4\n'
+                printf 'flush set inet fw4 sheepfold_emergency_v6\n'
+                while IFS= read -r address; do
+                        [ -n "$address" ] && printf 'add element inet fw4 sheepfold_emergency_v4 { %s }\n' "$address"
+                done < "$IPV4_FILE"
+                while IFS= read -r address; do
+                        [ -n "$address" ] && printf 'add element inet fw4 sheepfold_emergency_v6 { %s }\n' "$address"
+                done < "$IPV6_FILE"
+        } > "$NFT_BATCH"
+        nft -f "$NFT_BATCH"
+}
+
+apply() {
+        collect_domains
+        "$FIREWALL_HELPER" ensure
+        configure_dnsmasq
+        "$FIREWALL_HELPER" sync
+
+        # Резолвинг не задерживает LuCI. Dnsmasq с nftset начнёт добавлять ответы
+        # сразу, а этот проход даёт базовую поддержку прошивкам без nftset.
+        (refresh_addresses >/dev/null 2>&1 || logger -t sheepfold "Emergency site addresses could not be refreshed") </dev/null &
+        printf 'domains=%s\n' "$(wc -l < "$DOMAINS_FILE" | tr -d ' ')"
+        printf 'dnsmasq_nftset=%s\n' "$(dnsmasq_dynamic_configured && printf 1 || printf 0)"
+}
+
+status() {
+        collect_domains
+        printf 'domains=%s\n' "$(wc -l < "$DOMAINS_FILE" | tr -d ' ')"
+        printf 'dnsmasq_nftset=%s\n' "$(dnsmasq_dynamic_configured && printf 1 || printf 0)"
+        printf 'blocklist_enabled=%s\n' "$(uci -q get sheepfold.global.domain_allowlist_for_blocklist 2>/dev/null || printf 1)"
+}
+
+case "$COMMAND" in
+        apply) apply ;;
+        refresh) collect_domains; "$FIREWALL_HELPER" ensure; refresh_addresses ;;
+        status) status ;;
+        *) echo 'Usage: sheepfold-emergency-sites [apply|refresh|status]' >&2; exit 2 ;;
+esac

@@ -8,7 +8,8 @@ SIGNAL_FILE="${4:-}"
 MAC="${5:-}"
 MDNS_SERVICES="${6:-}"
 NO_RESTRICTIONS_GROUP="$(uci -q get sheepfold.no_restrictions.name 2>/dev/null || printf 'Без ограничений')"
-POLICY_VERSION="2"
+PERSONAL_DEVICES_GROUP="$(uci -q get sheepfold.personal_devices.name 2>/dev/null || printf 'Персональные устройства')"
+POLICY_VERSION="3"
 NETWORK_NAME_PATTERN='(^|[^a-z0-9])(openwrt|router|gateway|repeater|extender|access[ _-]?point|wireless[ _-]?ap|wi-?fi[ _-]?ap|mesh)([^a-z0-9]|$)|(^|[^a-z0-9])ap[-_][a-z0-9]'
 SMART_HOME_GATEWAY_PATTERN='thread border router|matter bridge|homekit bridge|zigbee gateway|zigbee bridge|z-wave gateway|zwave gateway|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|tradfri gateway|ikea dirigera|dirigera|hue bridge|sonoff zigbee bridge'
 
@@ -78,10 +79,17 @@ eligible_type() {
 }
 
 interactive_type() {
-        case "$1" in
-                network|phone|tablet|computer|tv|console) return 0 ;;
-                *) return 1 ;;
-        esac
+	case "$1" in
+		network|phone|tablet|computer|tv|media_player|smart_watch|console) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+personal_device_type() {
+	case "$1" in
+		phone|tablet|computer|tv|media_player|smart_watch) return 0 ;;
+		*) return 1 ;;
+	esac
 }
 
 classify_text() {
@@ -117,8 +125,12 @@ classify_text() {
                 detected_type="camera"
                 detected_confidence=82
                 detected_reason="camera marker"
-        elif text_has "$lower" 'iphone|android|galaxy|redmi|pixel|phone'; then
-                detected_type="phone"
+	elif text_has "$lower" 'apple watch|galaxy watch|pixel watch|mi watch|smart[ _-]?watch|smartwatch|wear os|wearos|amazfit|fitbit|garmin watch|huawei watch|honor watch'; then
+		detected_type="smart_watch"
+		detected_confidence=82
+		detected_reason="smart watch marker"
+	elif text_has "$lower" 'iphone|android|galaxy|redmi|pixel|phone'; then
+		detected_type="phone"
                 detected_confidence=78
                 detected_reason="phone marker"
         elif text_has "$lower" 'ipad|tablet|pad'; then
@@ -129,8 +141,12 @@ classify_text() {
                 detected_type="computer"
                 detected_confidence=76
                 detected_reason="computer marker"
-        elif text_has "$lower" 'tv|chromecast|mi box|androidtv|smarttv'; then
-                detected_type="tv"
+	elif text_has "$lower" 'chromecast|mi box|android[ _-]?box|apple tv|fire tv|firetv|nvidia shield|roku|dune hd|dune player|kodi|media player|media[ _-]?player|streaming player|video player|видеоплеер|медиаплеер'; then
+		detected_type="media_player"
+		detected_confidence=80
+		detected_reason="media player marker"
+	elif text_has "$lower" '(^|[^a-z0-9])tv([^a-z0-9]|$)|androidtv|smarttv|smart[ _-]?tv|television'; then
+		detected_type="tv"
                 detected_confidence=76
                 detected_reason="TV or media marker"
         elif text_has "$lower" 'playstation|ps4|ps5|xbox|switch|console'; then
@@ -363,9 +379,15 @@ fi
 
 TARGET_GROUP=""
 if eligible_type "$TYPE"; then
-        TARGET_GROUP="$NO_RESTRICTIONS_GROUP"
+	TARGET_GROUP="$NO_RESTRICTIONS_GROUP"
+elif personal_device_type "$TYPE"; then
+	# Эта группа только упорядочивает личные экраны и компьютеры. Она не даёт
+	# обхода блокировок, поэтому уверенно определённый тип можно назначить без
+	# инфраструктурного требования двух независимых доказательств.
+	TARGET_GROUP="$PERSONAL_DEVICES_GROUP"
+	AUTO_SCORE="$TYPE_CONFIDENCE"
 else
-        AUTO_SCORE=0
+	AUTO_SCORE=0
 fi
 
 printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \

@@ -1,5 +1,7 @@
 # Parent AI Assistant
 
+> Implementation status and exact source paths are maintained in the Russian canonical map: [Implemented AI assistant architecture](ai-assistant-development/current-implementation.ru.md) (§aiimpl1). The remaining text defines the target product contract.
+
 The Android app should include a parent AI assistant tab.
 
 The assistant is not a firewall controller by itself. It helps parents think through family rules, schedules, gradual self-control, and conflict-safe communication.
@@ -8,12 +10,12 @@ The assistant is not a firewall controller by itself. It helps parents think thr
 
 Use an abstract LLM provider layer.
 
-The selected router country profile should define which providers are shown in the Android app.
+The selected router country profile should define which providers are offered in LuCI. Android receives only the resulting AI capability and does not select a provider for an individual request.
 
 Requirements:
 
 - DeepSeek should be available as the preferred default provider in countries where it is allowed and reachable.
-- The user must be able to choose another provider if it is allowed in the selected router country.
+- The router owner must be able to choose another provider in LuCI if it is allowed in the selected router country.
 - Do not hardcode one global provider for every country.
 - Do not show providers marked as unavailable, prohibited, or unsupported in the selected country profile.
 - Keep provider availability editable in country profile data because legal and network availability can change.

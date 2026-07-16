@@ -59,6 +59,8 @@ auth_check() {
 router_name="$(uci -q get system.@system[0].hostname 2>/dev/null || printf OpenWrt)"
 version="$(uci -q get sheepfold.global.ui_asset_version 2>/dev/null || printf unknown)"
 app_port="$(uci -q get sheepfold.global.app_port 2>/dev/null || printf 5201)"
+case "$app_port" in ''|*[!0-9]*) app_port=5201 ;; esac
+[ "$app_port" -ge 1 ] && [ "$app_port" -le 65535 ] || app_port=5201
 api_path="/cgi-bin/sheepfold-api"
 http_host="${HTTP_HOST:-}"
 [ -n "$http_host" ] || http_host="127.0.0.1:$app_port"
@@ -131,15 +133,15 @@ router_control_pair() {
 	printf '%s\n' "$2" | sed -n "s/^$key=//p" | sed -n '1p'
 }
 
-mask_ai_context() {
-	# Этот текст может уйти внешнему AI-провайдеру. Оставляем смысл событий,
-	# но скрываем MAC/IP и секреты, чтобы родитель мог получить совет без лишней утечки данных.
+mask_private_context() {
+	# Маскируем MAC/IP и секреты перед экспортом диагностического контекста.
 	sed -E \
 		-e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/[mac]/g' \
 		-e 's/([0-9]{1,3}\.){3}[0-9]{1,3}/[ip]/g' \
 		-e 's/([Tt]oken|[Kk]ey|[Pp]assword|[Pp]ass|[Ss]ecret)=?[^[:space:],;]*/\1=[secret]/g'
 }
 
+# SHEEPFOLD_AI_BEGIN
 program_log_context() {
 	log_file="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf /tmp/sheepfold/events.log)"
 	# Путь к журналу берётся из UCI, но для AI-контекста читаем только ожидаемую область /tmp/sheepfold.
@@ -152,12 +154,32 @@ program_log_context() {
 		printf '%s' "Журнал Sheepfold недоступен или пуст."
 		return 0
 	fi
-	tail -n 80 "$log_file" 2>/dev/null | mask_ai_context
+	tail -n 80 "$log_file" 2>/dev/null | mask_private_context
 }
 
 router_info_context() {
-	/usr/libexec/sheepfold/sheepfold-router-control router-info 2>/dev/null | mask_ai_context || true
+	/usr/libexec/sheepfold/sheepfold-router-control router-info 2>/dev/null | mask_private_context || true
 }
+# SHEEPFOLD_AI_END
+
+# Android получает только итоговую возможность функции. Название провайдера и
+# тем более ключ наружу не выдаются. В обычном IPK AI-handler отсутствует,
+# поэтому единый APK автоматически скрывает все AI-разделы. §prodvar
+# SHEEPFOLD_AI_BEGIN
+ai_feature_available() {
+	[ -x /usr/libexec/sheepfold/sheepfold-ai-handler ] || return 1
+	[ "$(uci -q get sheepfold.global.product_variant 2>/dev/null || printf sheepfold)" = sheepfoldAi ] || return 1
+	[ "$(uci -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)" = 1 ] || return 1
+	provider="$(uci -q get sheepfold.global.ai_provider 2>/dev/null || printf none)"
+	case "$provider" in
+		deepseek) key="$(uci -q get sheepfold.global.deepseek_api_key 2>/dev/null || true)" ;;
+		gemini) key="$(uci -q get sheepfold.global.gemini_api_key 2>/dev/null || true)" ;;
+		grok) key="$(uci -q get sheepfold.global.grok_api_key 2>/dev/null || true)" ;;
+		*) return 1 ;;
+	esac
+	[ -n "$key" ]
+}
+# SHEEPFOLD_AI_END
 
 # ---------------------------------------------------------------------------
 # client_status_json — GET /client-status
@@ -169,6 +191,7 @@ client_status_json() {
 	status_val="$(kv_get status "$output")"
 	[ -n "$status_val" ] || status_val="unknown"
 	schedule_name="$(kv_get schedule_name "$output")"
+	schedule_conflict="$(kv_get schedule_conflict "$output")"
 	next_change_at="$(kv_get next_change_at "$output")"
 	warning_minutes="$(kv_get warning_before_minutes "$output")"
 	[ -n "$warning_minutes" ] || warning_minutes="5"
@@ -177,6 +200,7 @@ client_status_json() {
 	printf '{"app":"sheepfold","ok":true,'
 	json_pair status "$status_val" ,
 	json_pair scheduleName "$schedule_name" ,
+	json_pair scheduleConflict "$schedule_conflict" ,
 	json_pair nextChangeAt "$next_change_at" ,
 	json_pair warningBeforeMinutes "$warning_minutes" ''
 	printf '}\n'
@@ -276,9 +300,15 @@ global_block_json() {
 			ctrl_result="$(/usr/libexec/sheepfold/sheepfold-router-control global-block-on 2>&1)" || ctrl_status="$?"
 			action_label="on"
 			;;
-		*)
+		0|false|off)
 			ctrl_result="$(/usr/libexec/sheepfold/sheepfold-router-control global-block-off 2>&1)" || ctrl_status="$?"
 			action_label="off"
+			;;
+		*)
+			# Неизвестное значение не должно отключать защиту по принципу fail-open.
+			header_json "400 Bad Request"
+			printf '{"app":"sheepfold","ok":false,"error":"invalid_global_block_value","message":"Enable must be 1 or 0."}\n'
+			return 0
 			;;
 	esac
 
@@ -325,7 +355,7 @@ log_json() {
 	header_json "200 OK"
 	printf '{"app":"sheepfold","ok":true,"entries":['
 	log_first=1
-	log_lines="$(tail -n "$lines" "$log_file" 2>/dev/null | mask_ai_context || true)"
+	log_lines="$(tail -n "$lines" "$log_file" 2>/dev/null | mask_private_context || true)"
 	printf '%s\n' "$log_lines" | while IFS= read -r line; do
 		[ -n "$line" ] || continue
 		if [ "$log_first" = "1" ]; then
@@ -365,6 +395,33 @@ log_clear_json() {
 	printf '{"app":"sheepfold","ok":true,"message":"Log cleared."}\n'
 }
 
+feedback_json() {
+	auth_check
+	body="$(read_request_body_checked)"
+	category="$(form_get category "$body")"
+	subject="$(form_get subject "$body")"
+	message="$(form_get message "$body")"
+	contact="$(form_get contact "$body")"
+	include_diagnostics="$(form_get includeDiagnostics "$body")"
+	[ -n "$include_diagnostics" ] || include_diagnostics=0
+
+	if output="$(/usr/libexec/sheepfold/sheepfold-router-control feedback-submit android \
+		"$category" "$subject" "$message" "$contact" "$include_diagnostics" 2>&1)"; then
+		header_json "200 OK"
+		printf '{"app":"sheepfold","ok":true,"message":"Feedback sent."}\n'
+		return 0
+	fi
+
+	case "$output" in
+		*rate_limited*) status="429 Too Many Requests"; error="rate_limited"; message_text="Too many messages. Try again later." ;;
+		*not_configured*) status="503 Service Unavailable"; error="feedback_not_configured"; message_text="Feedback sending is not configured." ;;
+		*invalid_*) status="400 Bad Request"; error="invalid_feedback"; message_text="Check the feedback fields." ;;
+		*) status="502 Bad Gateway"; error="feedback_delivery_failed"; message_text="Could not deliver feedback. Try again later." ;;
+	esac
+	header_json "$status"
+	printf '{"app":"sheepfold","ok":false,"error":"%s","message":"%s"}\n' "$error" "$message_text"
+}
+
 # ---------------------------------------------------------------------------
 # router_info_json — GET /router-info
 # Диагностический снимок. Без секретов.
@@ -373,7 +430,13 @@ router_info_json() {
 	info="$(/usr/libexec/sheepfold/sheepfold-router-control router-info 2>/dev/null || true)"
 	wifi_count="$(kv_get wifi_count "$info")"
 	[ -n "$wifi_count" ] || wifi_count=0
+	ai_available=false
+	# SHEEPFOLD_AI_BEGIN
+	ai_feature_available && ai_available=true
+	# SHEEPFOLD_AI_END
+	# SHEEPFOLD_AI_BEGIN
 	ai_summary="Router model: $(kv_get router_model "$info"); firmware: $(kv_get firmware_version "$info"); Sheepfold: $(kv_get sheepfold_version "$info"); internet: $(kv_get internet_status "$info") ($(kv_get internet_reason "$info")); ping to ya.ru: $(kv_get ping_yandex_ms "$info") ms; Wi-Fi modules: $wifi_count; LAN ports: $(kv_get lan_ports_count "$info"); Podkop: $(kv_get podkop_installed "$info") $(kv_get podkop_version "$info"); AdGuard Home: $(kv_get adguard_installed "$info") $(kv_get adguard_version "$info"); uptime: $(kv_get uptime "$info"); load: $(kv_get load_average "$info"); memory: $(kv_get memory "$info")."
+	# SHEEPFOLD_AI_END
 
 	header_json "200 OK"
 	printf '{"app":"sheepfold","ok":true,"routerName":"%s","diagnostics":{' "$(json_escape "$router_name")"
@@ -412,7 +475,11 @@ router_info_json() {
 		printf '}'
 		i=$((i + 1))
 	done
-	printf '],"aiContextPreview":"%s"}\n' "$(json_escape "$ai_summary")"
+	printf ']'
+	# SHEEPFOLD_AI_BEGIN
+	printf ',"aiContextPreview":"%s"' "$(json_escape "$ai_summary")"
+	# SHEEPFOLD_AI_END
+	printf ',"capabilities":{"aiAssistant":%s}}\n' "$ai_available"
 }
 
 # ---------------------------------------------------------------------------
@@ -479,6 +546,7 @@ pair_status_json() {
 	fi
 }
 
+# SHEEPFOLD_AI_BEGIN
 # ---------------------------------------------------------------------------
 # ai_assistant_json — POST /ai-assistant
 # ---------------------------------------------------------------------------
@@ -621,6 +689,7 @@ ai_assistant_json() {
 			;;
 	esac
 }
+# SHEEPFOLD_AI_END
 
 # ===========================================================================
 # Маршрутизация запросов
@@ -695,9 +764,14 @@ case "$method" in
 			/log/clear)
 				log_clear_json
 				;;
+			/feedback)
+				feedback_json
+				;;
+			# SHEEPFOLD_AI_BEGIN
 			/ai-assistant)
 				ai_assistant_json
 				;;
+			# SHEEPFOLD_AI_END
 			*)
 				header_json "404 Not Found"
 				printf '{"app":"sheepfold","ok":false,"error":"unknown_action","path":"%s"}\n' "$(json_escape "$path_info")"

@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import app.sheepfold.android.notifications.SheepfoldNotifications
+import app.sheepfold.android.notifications.AccessRequestWorker
 import app.sheepfold.android.router.SheepfoldConnectionStore
 import app.sheepfold.android.security.AppProtectionStore
 import app.sheepfold.android.ui.main.OperationalMainScreen
@@ -33,6 +34,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         SheepfoldNotifications.ensureChannels(this)
+        AccessRequestWorker.schedule(this)
         setContent { SheepfoldRoot() }
     }
 }

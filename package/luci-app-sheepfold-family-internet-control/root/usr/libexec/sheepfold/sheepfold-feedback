@@ -1,0 +1,263 @@
+#!/bin/sh
+# §feedback — необязательный канал не участвует в правилах доступа к интернету.
+set -eu
+
+CONFIG="sheepfold.global"
+STATE_DIR="/tmp/sheepfold"
+RATE_FILE="$STATE_DIR/feedback-rate"
+RATE_LOCK="$STATE_DIR/feedback-rate.lock"
+MAX_PER_HOUR=3
+
+uci_get() {
+	uci -q get "$CONFIG.$1" 2>/dev/null || printf '%s' "${2:-}"
+}
+
+kv_get() {
+	key="$1"
+	printf '%s\n' "$2" | sed -n "s/^$key=//p" | sed -n '1p'
+}
+
+uci_section_count() {
+	type="$1"
+	uci -q show sheepfold 2>/dev/null |
+		sed -n "s/^sheepfold\.[^.=]*=$type$/x/p" |
+		awk 'END { print NR + 0 }'
+}
+
+uci_list_count() {
+	# В диагностический отчёт уходит только количество записей. Сами MAC-адреса
+	# не покидают роутер даже временно в составе JSON.
+	values="$(uci -q get "$1" 2>/dev/null || true)"
+	set -- $values
+	printf '%s' "$#"
+}
+
+wifi_summary() {
+	diagnostics="$1"
+	count="$(kv_get wifi_count "$diagnostics")"
+	case "$count" in ''|*[!0-9]*) count=0 ;; esac
+	index=1
+	summary=""
+	while [ "$index" -le "$count" ]; do
+		status="$(kv_get "wifi_${index}_status" "$diagnostics")"
+		band="$(kv_get "wifi_${index}_band" "$diagnostics")"
+		channel="$(kv_get "wifi_${index}_channel" "$diagnostics")"
+		mode="$(kv_get "wifi_${index}_mode" "$diagnostics")"
+		country="$(kv_get "wifi_${index}_country" "$diagnostics")"
+		[ -z "$summary" ] || summary="$summary; "
+		# SSID, пароль, BSSID и аппаратный path намеренно исключены.
+		summary="${summary}${status:-unknown}, ${band:-unknown}, channel ${channel:-unknown}, ${mode:-unknown}, country ${country:-unknown}"
+		index=$((index + 1))
+	done
+	printf '%s' "$summary"
+}
+
+valid_endpoint() {
+	case "$1" in
+		https://functions.yandexcloud.net/*|https://*.apigw.yandexcloud.net/*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+valid_category() {
+	case "$1" in bug|idea|question|other) return 0 ;; *) return 1 ;; esac
+}
+
+valid_source() {
+	case "$1" in luci|android) return 0 ;; *) return 1 ;; esac
+}
+
+generate_install_id() {
+	od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n'
+}
+
+install_id() {
+	id="$(uci_get feedback_install_id '')"
+	if [ -z "$id" ]; then
+		id="$(generate_install_id)"
+		[ "${#id}" -eq 32 ] || return 1
+		# Идентификатор случаен и не содержит MAC, IP или серийный номер роутера.
+		# Запись выполняется только один раз, чтобы не изнашивать flash частыми изменениями.
+		uci -q set "$CONFIG.feedback_install_id=$id"
+		uci -q commit sheepfold
+	fi
+	printf '%s' "$id"
+}
+
+rate_limit_check() {
+	now="$(date +%s)"
+	threshold=$((now - 3600))
+	tries=0
+	mkdir -p "$STATE_DIR"
+
+	while ! mkdir "$RATE_LOCK" 2>/dev/null; do
+		tries=$((tries + 1))
+		[ "$tries" -lt 20 ] || return 1
+		sleep 1
+	done
+	trap 'rmdir "$RATE_LOCK" 2>/dev/null || true' EXIT INT TERM
+
+	tmp="$RATE_FILE.$$"
+	count=0
+	: > "$tmp"
+	if [ -r "$RATE_FILE" ]; then
+		while IFS= read -r value; do
+			case "$value" in ''|*[!0-9]*) continue ;; esac
+			[ "$value" -ge "$threshold" ] || continue
+			printf '%s\n' "$value" >> "$tmp"
+			count=$((count + 1))
+		done < "$RATE_FILE"
+	fi
+	if [ "$count" -ge "$MAX_PER_HOUR" ]; then
+		mv "$tmp" "$RATE_FILE"
+		rmdir "$RATE_LOCK" 2>/dev/null || true
+		trap - EXIT INT TERM
+		return 1
+	fi
+	printf '%s\n' "$now" >> "$tmp"
+	mv "$tmp" "$RATE_FILE"
+	rmdir "$RATE_LOCK" 2>/dev/null || true
+	trap - EXIT INT TERM
+}
+
+validate_text() {
+	value="$1"
+	min="$2"
+	max="$3"
+	length="${#value}"
+	[ "$length" -ge "$min" ] && [ "$length" -le "$max" ]
+}
+
+status() {
+	endpoint="$(uci_get feedback_endpoint '')"
+	if valid_endpoint "$endpoint"; then
+		printf 'configured=1\n'
+	else
+		printf 'configured=0\n'
+	fi
+	printf 'max_message_chars=4000\n'
+	printf 'max_per_hour=%s\n' "$MAX_PER_HOUR"
+}
+
+submit() {
+	source="$1"
+	category="$2"
+	subject="$3"
+	message="$4"
+	contact="$5"
+	include_diagnostics="$6"
+	endpoint="$(uci_get feedback_endpoint '')"
+
+	valid_endpoint "$endpoint" || { printf 'error=not_configured\n' >&2; return 2; }
+	valid_source "$source" || { printf 'error=invalid_source\n' >&2; return 3; }
+	valid_category "$category" || { printf 'error=invalid_category\n' >&2; return 3; }
+	validate_text "$subject" 1 120 || { printf 'error=invalid_subject\n' >&2; return 3; }
+	validate_text "$message" 10 4000 || { printf 'error=invalid_message\n' >&2; return 3; }
+	validate_text "$contact" 0 200 || { printf 'error=invalid_contact\n' >&2; return 3; }
+	case "$include_diagnostics" in 0|1) ;; *) printf 'error=invalid_diagnostics_flag\n' >&2; return 3 ;; esac
+	rate_limit_check || { printf 'error=rate_limited\n' >&2; return 4; }
+
+	request_id="$(install_id)" || { printf 'error=install_id_failed\n' >&2; return 5; }
+	app_version="$(uci_get ui_asset_version unknown)"
+	product_variant="$(uci_get product_variant sheepfold)"
+	router_model=""
+	firmware_version=""
+	diagnostics=""
+	if [ "$include_diagnostics" = 1 ]; then
+		diagnostics="$(/usr/libexec/sheepfold/sheepfold-router-control router-info 2>/dev/null || true)"
+		router_model="$(kv_get router_model "$diagnostics")"
+		firmware_version="$(kv_get firmware_version "$diagnostics")"
+	fi
+
+	payload_file="$STATE_DIR/feedback-payload.$$"
+	response_file="$STATE_DIR/feedback-response.$$"
+	umask 077
+	trap 'rm -f "$payload_file" "$response_file"' EXIT INT TERM
+
+	# jshn входит в базовый стек OpenWrt/libubox и корректно экранирует произвольный
+	# пользовательский текст. Ручная склейка JSON здесь ломалась бы на кавычках и переносах.
+	. /usr/share/libubox/jshn.sh
+	json_init
+	json_add_string schemaVersion "2"
+	json_add_string installId "$request_id"
+	json_add_string source "$source"
+	json_add_string category "$category"
+	json_add_string subject "$subject"
+	json_add_string message "$message"
+	json_add_string contact "$contact"
+	json_add_string appVersion "$app_version"
+	json_add_string productVariant "$product_variant"
+	json_add_boolean includeDiagnostics "$include_diagnostics"
+	json_add_string routerModel "$router_model"
+	json_add_string firmwareVersion "$firmware_version"
+	json_add_object diagnostics
+	if [ "$include_diagnostics" = 1 ]; then
+		# Это белый список безопасных полей. Не заменять его выгрузкой UCI:
+		# в полном конфиге находятся пароли Wi-Fi, токены и семейные данные.
+		json_add_string kernelVersion "$(kv_get kernel_version "$diagnostics")"
+		json_add_string uptime "$(kv_get uptime "$diagnostics")"
+		json_add_string loadAverage "$(kv_get load_average "$diagnostics")"
+		json_add_string memory "$(kv_get memory "$diagnostics")"
+		json_add_string storageSpace "$(kv_get storage_space "$diagnostics")"
+		json_add_string internetStatus "$(kv_get internet_status "$diagnostics")"
+		json_add_string internetReason "$(kv_get internet_reason "$diagnostics")"
+		json_add_string pingYandexMs "$(kv_get ping_ya_ru_ms "$diagnostics")"
+		json_add_string lanPortsCount "$(kv_get lan_ports_count "$diagnostics")"
+		json_add_string wifiCount "$(kv_get wifi_count "$diagnostics")"
+		json_add_string wifiSummary "$(wifi_summary "$diagnostics")"
+		json_add_string podkopInstalled "$(kv_get podkop_installed "$diagnostics")"
+		json_add_string podkopVersion "$(kv_get podkop_version "$diagnostics")"
+		json_add_string adguardInstalled "$(kv_get adguard_installed "$diagnostics")"
+		json_add_string adguardVersion "$(kv_get adguard_version "$diagnostics")"
+		json_add_string language "$(uci_get language ru)"
+		json_add_string integrationMode "$(uci_get integration_mode none)"
+		json_add_string detectionMode "$(uci_get detection_mode full)"
+		json_add_string autoConfigure "$(uci_get auto_configure 1)"
+		json_add_string newDevicePolicy "$(uci_get new_device_policy allow)"
+		json_add_string globalBlock "$(uci_get block_on_boot 0)"
+		json_add_string activeMessenger "$(uci_get active_messenger none)"
+		json_add_string updateMode "$(uci_get update_check_install_mode weekly)"
+		json_add_string logging "$(uci_get logging 1)"
+		json_add_string logLevel "$(uci_get log_level important)"
+		json_add_string logStorage "$(uci_get log_storage ram)"
+		json_add_string domainAllowlistEnabled "$(uci_get domain_allowlist_enabled 0)"
+		json_add_string siteBlocklistMode "$(uci_get site_blocklist_mode disabled)"
+		json_add_string wifiAutoEnableMode "$(uci_get wifi_auto_enable_mode never)"
+		json_add_string wifiAutoDisableMode "$(uci_get wifi_auto_disable_mode never)"
+		json_add_string aiEnabled "$(uci_get ai_enabled 0)"
+		json_add_string aiProvider "$(uci_get ai_provider none)"
+		json_add_string accessPriority "$(uci_get access_priority '')"
+		json_add_string scheduleConflictInternet "$(uci_get schedule_conflict_internet off)"
+		json_add_string deviceCount "$(uci_section_count device)"
+		json_add_string groupCount "$(uci_section_count group)"
+		json_add_string scheduleCount "$(uci_section_count schedule)"
+		json_add_string administratorCount "$(uci_section_count administrator)"
+		json_add_string allowlistCount "$(uci_list_count sheepfold.allowlist.mac)"
+		json_add_string blocklistCount "$(uci_list_count sheepfold.blocklist.mac)"
+	fi
+	json_close_object
+	json_dump > "$payload_file"
+
+	http_code="$(curl -sS --max-time 30 -o "$response_file" -w '%{http_code}' \
+		-H 'Content-Type: application/json; charset=utf-8' \
+		-H 'User-Agent: Sheepfold-feedback/1' \
+		--data-binary "@$payload_file" "$endpoint" 2>/dev/null || printf 000)"
+	case "$http_code" in
+		200|201|202)
+			# Содержимое отзыва намеренно не пишется в журнал.
+			logger -t sheepfold "Отзыв отправлен: источник $source, категория $category"
+			printf 'ok=1\n'
+			;;
+		429) printf 'error=cloud_rate_limited\n' >&2; return 4 ;;
+		*) printf 'error=cloud_http_%s\n' "$http_code" >&2; return 6 ;;
+	esac
+}
+
+case "${1:-status}" in
+	status) status ;;
+	submit)
+		[ "$#" -eq 7 ] || { printf 'error=invalid_arguments\n' >&2; exit 3; }
+		submit "$2" "$3" "$4" "$5" "$6" "$7"
+		;;
+	*) printf 'error=unknown_command\n' >&2; exit 1 ;;
+esac

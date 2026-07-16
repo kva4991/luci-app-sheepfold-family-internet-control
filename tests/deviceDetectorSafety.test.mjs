@@ -24,6 +24,14 @@ const reclassifyPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-reclassify',
 );
+const servicePath = resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-service',
+);
+const hardeningPath = resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-runtime-hardening',
+);
 const temporaryDirectories = [];
 
 afterEach(() => {
@@ -245,12 +253,32 @@ describe('Безопасное автоназначение устройств',
   it('повторяет автоназначение для закреплённого типа, если группа ещё не назначена', () => {
     const source = readFileSync(detectorPath, 'utf8');
     const lockedBody = functionBody(source, 'write_locked_device_observation', 'write_detection');
-    const assignmentCalls = source.match(/assign_no_restrictions_if_allowed\s+"\$section"/g) || [];
+    const assignmentCalls = source.match(/assign_detected_group_if_allowed\s+"\$section"/g) || [];
 
-    assert.match(lockedBody, /assign_no_restrictions_if_allowed/);
+    assert.match(lockedBody, /assign_detected_group_if_allowed/);
     assert.equal(assignmentCalls.length, 2, 'Автоназначение должно вызываться и после закреплённого определения');
     assert.match(source, /device_group_unassigned/);
     assert.doesNotMatch(source, /revoke_unsafe_auto_assignment/);
+  });
+
+  it('не замораживает инфраструктурный тип, пока автогруппе не хватает независимых признаков', () => {
+    const source = readFileSync(detectorPath, 'utf8');
+
+    assert.match(source, /needs_more_auto_group_evidence/);
+    assert.match(source, /! needs_more_auto_group_evidence "\$section"/);
+    assert.match(source, /independent_evidence_required/);
+  });
+
+  it('назначает уверенно распознанные личные экраны в отдельную непривилегированную группу', () => {
+    const phone = classify({ name: 'Android Pixel phone' });
+    const watch = classify({ name: 'Galaxy Watch 6' });
+    const player = classify({ name: 'Dune HD media player' });
+
+    assert.equal(phone.targetGroup, 'Персональные устройства');
+    assert.equal(watch.type, 'smart_watch');
+    assert.equal(watch.targetGroup, 'Персональные устройства');
+    assert.equal(player.type, 'media_player');
+    assert.equal(player.targetGroup, 'Персональные устройства');
   });
 
   it('повторное определение снимает ручную фиксацию, но не меняет группу и списки доступа', () => {
@@ -260,5 +288,36 @@ describe('Безопасное автоназначение устройств',
     assert.match(source, /delete[^\n]*\.device_type/);
     assert.doesNotMatch(source, /delete[^\n]*\.group/);
     assert.doesNotMatch(source, /delete[^\n]*(allowlist|blocklist)/);
+  });
+
+  it('ограничивает тяжёлое сканирование и ставит вручную выбранное устройство первым', () => {
+    const detector = readFileSync(detectorPath, 'utf8');
+    const reclassify = readFileSync(reclassifyPath, 'utf8');
+
+    assert.match(detector, /detector_full_rescan_seconds 21600/);
+    assert.match(detector, /detection_ports_scanned_at/);
+    assert.match(detector, /--max-retries 1/);
+    assert.match(detector, /priority_mac/);
+    assert.match(reclassify, /scan full "\$mac"/);
+  });
+
+  it('оставляет быстрый firewall tick, но реже запускает остальные фоновые операции', () => {
+    const service = readFileSync(servicePath, 'utf8');
+
+    assert.match(service, /service_control_interval_seconds[^\n]*printf 30/);
+    assert.match(service, /handle_router_control periodic/);
+    assert.match(service, /handle_router_control force/);
+    assert.match(service, /"\$FIREWALL_HELPER" sync/);
+  });
+
+  it('сверяет версии политики classifier и detector без зашитого номера', () => {
+    const hardening = readFileSync(hardeningPath, 'utf8');
+
+    assert.match(hardening, /classifier_policy=/);
+    assert.match(hardening, /detector_policy=/);
+    assert.match(hardening, /"\$classifier_policy" = "\$detector_policy"/);
+    assert.doesNotMatch(hardening, /grep -q 'POLICY_VERSION="\d+"'/);
+    assert.match(hardening, /evidence_count.*-lt 2/);
+    assert.match(hardening, /assign_detected_group_if_allowed/);
   });
 });

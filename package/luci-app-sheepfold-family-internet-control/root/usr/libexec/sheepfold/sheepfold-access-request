@@ -1,0 +1,160 @@
+#!/bin/sh
+set -eu
+
+STATE_DIR="/tmp/sheepfold/access-requests"
+LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
+MAX_AGE_SECONDS=86400
+
+json_escape() {
+    printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+
+mac_for_ip() {
+    client_ip="$1"
+    mac=""
+    [ ! -r /tmp/dhcp.leases ] || mac="$(awk -v ip="$client_ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases)"
+    [ -n "$mac" ] || [ ! -r /proc/net/arp ] || mac="$(awk -v ip="$client_ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp)"
+    normalize_mac "$mac"
+}
+
+device_section_for_mac() {
+    wanted="$(normalize_mac "$1")"
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+        existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+        [ "$(normalize_mac "$existing")" = "$wanted" ] || continue
+        printf '%s\n' "$section"
+        return 0
+    done
+    return 1
+}
+
+admin_section_for_login() {
+    wanted="$1"
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$/\1/p'); do
+        [ "$(uci -q get "sheepfold.$section.login" 2>/dev/null || true)" = "$wanted" ] || continue
+        printf '%s\n' "$section"
+        return 0
+    done
+    return 1
+}
+
+requests_enabled() {
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$/\1/p'); do
+        [ "$(uci -q get "sheepfold.$section.allow_child_access_requests" 2>/dev/null || printf 0)" = 1 ] && return 0
+    done
+    return 1
+}
+
+value_from_file() {
+    key="$1"
+    file="$2"
+    sed -n "s/^$key=//p" "$file" 2>/dev/null | sed -n '1p'
+}
+
+cleanup_expired() {
+    now="$(date +%s)"
+    for file in "$STATE_DIR"/*.request; do
+        [ -f "$file" ] || continue
+        created_at="$(value_from_file created_at "$file")"
+        case "$created_at" in ''|*[!0-9]*) rm -f "$file"; continue ;; esac
+        [ "$created_at" -le "$now" ] || { rm -f "$file"; continue; }
+        [ $((now - created_at)) -le "$MAX_AGE_SECONDS" ] || rm -f "$file"
+    done
+}
+
+create_request() {
+    remote_ip="$1"
+    mac="$(mac_for_ip "$remote_ip")"
+    [ -n "$mac" ] || return 2
+    section="$(device_section_for_mac "$mac" 2>/dev/null || true)"
+    [ -n "$section" ] || return 2
+    [ "$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)" != 1 ] || return 4
+    requests_enabled || return 3
+
+    mkdir -p "$STATE_DIR"
+    chmod 700 "$STATE_DIR" 2>/dev/null || true
+    cleanup_expired
+    device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section" 2>/dev/null || true)"
+    # ID участвует в имени временного файла, поэтому здесь допустимы только цифры.
+    case "$device_id" in ''|*[!0-9]*) return 2 ;; esac
+    device_name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+    [ -n "$device_name" ] || device_name="$(awk -v ip="$remote_ip" '$3 == ip { print $4; exit }' /tmp/dhcp.leases 2>/dev/null || true)"
+    [ "$device_name" != '*' ] || device_name=''
+    now="$(date +%s)"
+
+    # Повторное нажатие обновляет существующую просьбу, а не создаёт поток уведомлений.
+    for file in "$STATE_DIR"/*.request; do
+        [ -f "$file" ] || continue
+        [ "$(value_from_file device_id "$file")" = "$device_id" ] || continue
+        request_id="$(value_from_file id "$file")"
+        printf '{"app":"sheepfold","ok":true,"requestId":"%s","duplicate":true}\n' "$(json_escape "$request_id")"
+        return 0
+    done
+
+    request_id="${now}-${device_id:-unknown}"
+    file="$STATE_DIR/$request_id.request"
+    tmp="$file.tmp.$$"
+    umask 077
+    {
+        printf 'id=%s\n' "$request_id"
+        printf 'created_at=%s\n' "$now"
+        printf 'device_id=%s\n' "$device_id"
+        printf 'device_name=%s\n' "$(printf '%s' "$device_name" | tr '\n\r\t=' '    ')"
+        printf 'ip=%s\n' "$remote_ip"
+        printf 'mac=%s\n' "$mac"
+    } > "$tmp"
+    chmod 600 "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$file"
+
+    if [ -x "$LOG_HELPER" ]; then
+        "$LOG_HELPER" "Устройство #${device_id:-?} ${device_name:-$mac} попросило 30 минут доступа в интернет"
+    fi
+    printf '{"app":"sheepfold","ok":true,"requestId":"%s","duplicate":false}\n' "$(json_escape "$request_id")"
+}
+
+list_requests() {
+    login="$1"
+    admin_section="$(admin_section_for_login "$login" 2>/dev/null || true)"
+    [ -n "$admin_section" ] || { printf '{"app":"sheepfold","ok":false,"error":"administrator_not_found"}\n'; return 0; }
+    [ "$(uci -q get "sheepfold.$admin_section.allow_child_access_requests" 2>/dev/null || printf 0)" = 1 ] || {
+        printf '{"app":"sheepfold","ok":true,"requests":[]}\n'
+        return 0
+    }
+
+    mkdir -p "$STATE_DIR"
+    cleanup_expired
+    printf '{"app":"sheepfold","ok":true,"requests":['
+    first=1
+    for file in "$STATE_DIR"/*.request; do
+        [ -f "$file" ] || continue
+        [ "$first" = 1 ] || printf ','
+        first=0
+        printf '{"id":"%s","deviceId":"%s","deviceName":"%s","ip":"%s","mac":"%s","createdAt":%s}' \
+            "$(json_escape "$(value_from_file id "$file")")" \
+            "$(json_escape "$(value_from_file device_id "$file")")" \
+            "$(json_escape "$(value_from_file device_name "$file")")" \
+            "$(json_escape "$(value_from_file ip "$file")")" \
+            "$(json_escape "$(value_from_file mac "$file")")" \
+            "$(value_from_file created_at "$file")"
+    done
+    printf ']}\n'
+}
+
+command="${1:-enabled}"
+case "$command" in
+    enabled)
+        requests_enabled && printf '1\n' || printf '0\n'
+        ;;
+    create)
+        create_request "${2:-}"
+        ;;
+    list)
+        list_requests "${2:-}"
+        ;;
+    *)
+        echo "Unknown access request command: $command" >&2
+        exit 2
+        ;;
+esac

@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Sheepfold — статус</string>
-
     <!-- Статусы -->
     <string name="status_enabled">Интернет включён</string>
     <string name="status_disabled">Интернет отключён</string>
@@ -45,13 +43,6 @@
     <!-- Навигация -->
     <string name="tab_status">Статус</string>
     <string name="tab_access">Мой доступ</string>
-    <string name="tab_ai">ИИ-помощник</string>
-
-    <!-- AI-чат -->
-    <string name="ai_chat_title">ИИ-помощник</string>
-    <string name="ai_input_hint">Задай вопрос…</string>
-    <string name="ai_personal_group_required">Попросите родителя поместить ваше устройство в вашу личную группу в настройках Sheepfold. Тогда ИИ-помощник откроется.</string>
-
     <!-- Экран «Мой доступ» -->
     <string name="access_screen_title">Мой доступ</string>
     <string name="access_device_label">Устройство</string>
@@ -59,4 +50,12 @@
     <string name="access_mode_label">Режим</string>
     <string name="access_time_label">Оставшееся время</string>
     <string name="access_message_label">Сообщение</string>
+    <string name="access_request_30_minutes">Попросить 30 минут интернета</string>
+    <string name="access_request_sent">Просьба отправлена родителю. Интернет включится только после его подтверждения.</string>
+    <string name="access_request_failed">Не удалось отправить просьбу.</string>
+    <string name="app_name">Sheepfold Child</string>
+    <string name="tab_ai">ИИ-помощник</string>
+    <string name="ai_chat_title">ИИ-помощник</string>
+    <string name="ai_input_hint">Задай вопрос…</string>
+    <string name="ai_personal_group_required">Попросите родителя поместить ваше устройство в вашу личную группу в настройках Sheepfold. Тогда ИИ-помощник откроется.</string>
 </resources>

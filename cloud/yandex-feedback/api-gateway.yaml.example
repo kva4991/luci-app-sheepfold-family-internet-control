@@ -1,0 +1,27 @@
+openapi: "3.0.0"
+info:
+  title: Sheepfold feedback API
+  version: "1.0.0"
+paths:
+  /feedback:
+    post:
+      operationId: submitFeedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Feedback accepted
+        "400":
+          description: Invalid request
+        "429":
+          description: Rate limit exceeded
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: <FUNCTION_ID>
+        service_account_id: <API_GATEWAY_SERVICE_ACCOUNT_ID>
+        tag: "$latest"
+        payload_format_version: "0.1"

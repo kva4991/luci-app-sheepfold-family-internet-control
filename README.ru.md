@@ -8,6 +8,8 @@
 
 [Презентация проекта Sheepfold](docs/project-presentation.ru.md)
 
+[Настройка канала отзывов: Yandex Cloud + YDB](docs/yandex-cloud-ydb-feedback.ru.md)
+
 **Sheepfold** — система семейного управления доступом домашних устройств в интернет через OpenWRT-роутер.
 
 Проект развивается как приложение для OpenWRT-роутера с веб-интерфейсом LuCI, backend-сервисом, Android-приложением **Sheepfold** и интеграцией с ботом в мессенджере для управления домашним интернетом.

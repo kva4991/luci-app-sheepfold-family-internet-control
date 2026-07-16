@@ -27,6 +27,21 @@ describe('Administrator token device binding', () => {
     assert.match(tokenCommon, /mac=/);
   });
 
+  it('does not persist administrator rights before token storage succeeds', () => {
+    const pairDevice = readProjectFile('root/usr/libexec/sheepfold/sheepfold-pair-device');
+    const tokenStore = pairDevice.indexOf('if ! pair_store_token; then');
+    const adminGrant = pairDevice.indexOf('admin_device=1');
+    const codeConsume = pairDevice.indexOf('pairing_code" 2>/dev/null', adminGrant);
+    const finalCommit = pairDevice.indexOf('if ! uci -q commit sheepfold; then', adminGrant);
+
+    assert.ok(tokenStore >= 0, 'pairing must persist a bound token');
+    assert.ok(adminGrant > tokenStore, 'administrator rights must be staged only after token storage');
+    assert.ok(codeConsume > adminGrant, 'the one-time code must be consumed with the rights grant');
+    assert.ok(finalCommit > codeConsume, 'rights and code consumption must share the final UCI commit');
+    assert.match(pairDevice, /rm -f "\$PAIR_TOKEN_DIR\/\$PAIR_TOKEN_HASH"/);
+    assert.match(pairDevice, /uci -q revert "sheepfold\.\$device_section"/);
+  });
+
   it('checks bearer tokens together with device identity', () => {
     const control = readProjectFile('root/usr/libexec/sheepfold/sheepfold-router-control');
     const cgi = readProjectFile('root/www/cgi-bin/sheepfold-api');

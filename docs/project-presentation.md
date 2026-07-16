@@ -3,7 +3,7 @@
 ## What Sheepfold is
 
 **Sheepfold** is a self-hosted family internet access control system for OpenWrt routers.
-It helps parents manage when and how home devices can access the internet through the router and its LuCI web interface, without relying on a developer-operated cloud backend.
+It helps parents manage when and how home devices can access the internet through the router and its LuCI web interface, without relying on a developer-operated cloud backend for family controls.
 
 ## Core idea
 
@@ -40,7 +40,7 @@ Sheepfold is built as a local-first, self-hosted system. Full management is inte
 
 Sensitive data — device identifiers, child names, logs, router settings, and similar private details — must not be sent to AI providers automatically. Extended AI context requires a preview screen and explicit user confirmation before anything beyond the parent's own text is shared.
 
-The project avoids a central cloud backend and is designed to work alongside existing OpenWrt services instead of silently taking control of them.
+The project avoids a mandatory central cloud backend and is designed to work alongside existing OpenWrt services instead of silently taking control of them. An optional, user-triggered feedback form may send the displayed message fields to the project owner's Yandex Cloud endpoint.
 
 ## Integration philosophy
 

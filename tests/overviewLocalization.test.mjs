@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
 const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/view/sheepfold/overview.js');
+const maintenancePath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/router/maintenance.js');
 const i18nModulePath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n.js');
 const ruJsonPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n/ru.json');
 const poPath = resolve(packageDir, 'po/ru/sheepfold.po');
@@ -48,7 +49,7 @@ function parsePoEntries(source) {
 
 describe('overview localization', () => {
   it('uses gettext _() instead of the legacy T() dictionary', () => {
-    const source = readFileSync(overviewPath, 'utf8');
+    const source = readFileSync(overviewPath, 'utf8') + readFileSync(maintenancePath, 'utf8');
 
     assert.doesNotMatch(source, /var translations\s*=/);
     assert.doesNotMatch(source, /function T\(/);
@@ -70,7 +71,8 @@ describe('overview localization', () => {
   it('includes overview.js in xgettext extraction list', () => {
     const xgettext = readProjectFile('xgettext.sh');
 
-    assert.match(xgettext, /overview\.js/);
+    assert.match(xgettext, /MODULE_DIR="htdocs\/luci-static\/resources\/sheepfold"/);
+    assert.match(xgettext, /find "\$VIEW_DIR" "\$MODULE_DIR"/);
     assert.doesNotMatch(xgettext, /переходный словарь T\(\)/);
   });
 
@@ -92,5 +94,10 @@ describe('overview localization', () => {
 
     assert.equal(catalog['User lists'], 'Списки пользователей');
     assert.equal(catalog.Settings, 'Настройки');
+    assert.equal(catalog['Clear log'], 'Очистить журнал');
+    assert.equal(catalog['clear log'], 'очистить журнал');
+    assert.equal(catalog['Auto-assigned to No restrictions'], 'Автоматически добавлено в "Без ограничений"');
+    assert.equal(catalog['Blocklist emergency-useful sites access'], 'Доступ пользователей из чёрного списка к "аварийно-полезным сайтам"');
+    assert.equal(catalog['Site lists are applied by Sheepfold.'], 'Списки сайтов применены Sheepfold.');
   });
 });

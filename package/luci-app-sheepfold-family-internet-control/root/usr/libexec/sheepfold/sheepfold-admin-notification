@@ -1,0 +1,121 @@
+#!/bin/sh
+set -eu
+
+STATE_DIR="${SHEEPFOLD_NOTIFICATION_DIR:-/etc/sheepfold/admin-notifications}"
+TELEGRAM_HELPER="${SHEEPFOLD_TELEGRAM_HELPER:-/usr/libexec/sheepfold/sheepfold-telegram-bot}"
+MAX_AGE_SECONDS=2592000
+MAX_NOTIFICATIONS=100
+
+json_escape() {
+	printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+clean_value() {
+	# Значения лежат в простом key=value-файле: переносы и "=" нельзя оставлять как управляющие символы.
+	printf '%s' "$1" | tr '\n\r\t=' '    ' | cut -c1-700
+}
+
+value_from_file() {
+	key="$1"
+	file="$2"
+	sed -n "s/^$key=//p" "$file" 2>/dev/null | sed -n '1p'
+}
+
+cleanup_notifications() {
+	now="$(date +%s)"
+	for file in "$STATE_DIR"/*.notification; do
+		[ -f "$file" ] || continue
+		created_at="$(value_from_file created_at "$file")"
+		case "$created_at" in ''|*[!0-9]*) rm -f "$file"; continue ;; esac
+		[ "$created_at" -le "$now" ] || { rm -f "$file"; continue; }
+		[ $((now - created_at)) -le "$MAX_AGE_SECONDS" ] || rm -f "$file"
+	done
+
+	# Очередь нужна нескольким телефонам администраторов, поэтому события не удаляются после первого чтения.
+	ls -1t "$STATE_DIR"/*.notification 2>/dev/null | awk -v keep="$MAX_NOTIFICATIONS" 'NR > keep' |
+		while IFS= read -r stale_file; do
+			[ -n "$stale_file" ] && rm -f "$stale_file"
+		done
+}
+
+enqueue_notification() {
+	type="$(clean_value "${1:-system}")"
+	dedupe_key="$(clean_value "${2:-}")"
+	title="$(clean_value "${3:-Sheepfold}")"
+	message="$(clean_value "${4:-}")"
+	[ -n "$dedupe_key" ] || return 2
+	[ -n "$message" ] || return 2
+
+	mkdir -p "$STATE_DIR"
+	chmod 700 "$STATE_DIR" 2>/dev/null || true
+	cleanup_notifications
+
+	for file in "$STATE_DIR"/*.notification; do
+		[ -f "$file" ] || continue
+		[ "$(value_from_file dedupe_key "$file")" = "$dedupe_key" ] || continue
+		printf '{"app":"sheepfold","ok":true,"id":"%s","duplicate":true}\n' \
+			"$(json_escape "$(value_from_file id "$file")")"
+		return 0
+	done
+
+	now="$(date +%s)"
+	hash="$(printf '%s' "$dedupe_key" | cksum | awk '{print $1}')"
+	id="$now-$hash"
+	file="$STATE_DIR/$id.notification"
+	tmp="$file.tmp.$$"
+	umask 077
+	{
+		printf 'id=%s\n' "$id"
+		printf 'type=%s\n' "$type"
+		printf 'dedupe_key=%s\n' "$dedupe_key"
+		printf 'title=%s\n' "$title"
+		printf 'message=%s\n' "$message"
+		printf 'created_at=%s\n' "$now"
+	} > "$tmp"
+	chmod 600 "$tmp" 2>/dev/null || true
+	mv -f "$tmp" "$file"
+
+	# Telegram даёт немедленную доставку, а очередь ниже остаётся источником для родительского APK.
+	if [ -x "$TELEGRAM_HELPER" ]; then
+		("$TELEGRAM_HELPER" send-admin "$title. $message" >/dev/null 2>&1 || true) &
+	fi
+
+	printf '{"app":"sheepfold","ok":true,"id":"%s","duplicate":false}\n' "$(json_escape "$id")"
+}
+
+list_notifications() {
+	mkdir -p "$STATE_DIR"
+	chmod 700 "$STATE_DIR" 2>/dev/null || true
+	cleanup_notifications
+	printf '{"app":"sheepfold","ok":true,"notifications":['
+	first=1
+	for file in $(ls -1t "$STATE_DIR"/*.notification 2>/dev/null || true); do
+		[ -f "$file" ] || continue
+		[ "$first" = 1 ] || printf ','
+		first=0
+		printf '{"id":"%s","type":"%s","title":"%s","message":"%s","createdAt":%s}' \
+			"$(json_escape "$(value_from_file id "$file")")" \
+			"$(json_escape "$(value_from_file type "$file")")" \
+			"$(json_escape "$(value_from_file title "$file")")" \
+			"$(json_escape "$(value_from_file message "$file")")" \
+			"$(value_from_file created_at "$file")"
+	done
+	printf ']}\n'
+}
+
+case "${1:-list}" in
+	enqueue)
+		enqueue_notification "${2:-system}" "${3:-}" "${4:-Sheepfold}" "${5:-}"
+		;;
+	list)
+		list_notifications
+		;;
+	cleanup)
+		mkdir -p "$STATE_DIR"
+		cleanup_notifications
+		;;
+	*)
+		echo "Usage: sheepfold-admin-notification [enqueue TYPE DEDUPE_KEY TITLE MESSAGE|list|cleanup]" >&2
+		exit 2
+		;;
+esac

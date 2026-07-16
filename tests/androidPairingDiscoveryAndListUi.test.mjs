@@ -9,6 +9,9 @@ const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
 
 const discovery = read('android/app/src/main/java/app/sheepfold/android/router/LocalRouterDiscovery.kt');
 const connection = read('android/app/src/main/java/app/sheepfold/android/router/SecureRouterConnectionManager.kt');
+const endpointRecovery = read('android/app/src/main/java/app/sheepfold/android/router/RouterEndpointRecovery.kt');
+const adminClient = read('android/app/src/main/java/app/sheepfold/android/router/RouterAdminClient.kt');
+const connectionStore = read('android/app/src/main/java/app/sheepfold/android/router/SheepfoldConnectionStore.kt');
 const overview = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js');
 const androidBuild = read('android/app/build.gradle.kts');
 const makefile = read('package/luci-app-sheepfold-family-internet-control/Makefile');
@@ -37,6 +40,17 @@ describe('Android pairing discovery and access-list UI', () => {
     assert.match(connection, /friendlyConnectionError/);
   });
 
+  it('recovers and stores a changed Sheepfold API port after pairing', () => {
+    assert.match(endpointRecovery, /\.well-known\/sheepfold\.json/);
+    assert.match(endpointRecovery, /RouterHttps\.open\(url, tlsPin, allowTrustOnFirstUse = false\)/);
+    assert.match(endpointRecovery, /it in 1\.\.65535/);
+    assert.match(endpointRecovery, /SheepfoldConnectionStore\.updateApiUrl/);
+    assert.match(connectionStore, /fun updateApiUrl/);
+    assert.match(adminClient, /endpointCanBeRecovered/);
+    assert.match(adminClient, /RouterEndpointRecovery\.discoverAndStore/);
+    assert.doesNotMatch(adminClient, /SocketTimeoutException/);
+  });
+
   it('updates allowlist and blocklist panels without reloading the browser page', () => {
     const addModal = functionBody(overview, 'showManualListDeviceModal', 'showManualDeviceModal');
     const removeAction = functionBody(overview, 'removeDeviceFromAccessList', 'applyAdminDeviceBindings');
@@ -46,11 +60,14 @@ describe('Android pairing discovery and access-list UI', () => {
     assert.match(removeAction, /refreshUserListsWithoutPageReload/);
     assert.doesNotMatch(removeAction, /window\.location\.reload/);
     assert.match(overview, /data-metric/);
+    assert.match(overview, /function saveSheepfoldAccessChanges[\s\S]*schedule-sync/);
+    assert.match(addModal, /persistDeviceListMembership/);
   });
 
   it('bumps Android and OpenWrt package versions for the fix', () => {
-    assert.match(androidBuild, /sheepfoldVersionCode = 35/);
-    assert.match(androidBuild, /sheepfoldVersionName = "0\.1\.34"/);
-    assert.match(makefile, /PKG_RELEASE:=165/);
+    assert.match(androidBuild, /sheepfoldVersionCode = 40/);
+    assert.match(androidBuild, /sheepfoldVersionName = "0\.1\.39"/);
+    const release = Number(makefile.match(/PKG_RELEASE:=(\d+)/)?.[1] || 0);
+    assert.ok(release >= 178);
   });
 });

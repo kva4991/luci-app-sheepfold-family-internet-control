@@ -43,7 +43,12 @@ describe('Temporary access UI', () => {
     assert.match(routerControl, /list_has_mac blocklist "\$device_mac"[\s\S]*status"[\s\S]*= "blocked"[\s\S]*Temporary access cannot override blocklist/);
     assert.match(routerControl, /temp_access_until=\$expires_at/);
     assert.match(routerControl, /temp_access_previous_status=\$previous_status/);
-    assert.match(routerControl, /temp_access_allowlist_added=1/);
+    assert.match(routerControl, /temp_access_allowlist_added=0/);
+    const tempFunction = routerControl.slice(
+      routerControl.indexOf('device_temp_access() {'),
+      routerControl.indexOf('expire_temp_access() {'),
+    );
+    assert.doesNotMatch(tempFunction, /add_mac_to_list allowlist/);
     assert.match(routerControl, /expire_temp_access\(\)/);
     assert.match(routerControl, /remove_mac_from_list allowlist "\$mac"/);
     assert.match(routerControl, /delete "sheepfold\.\$section\.temp_access_until"/);

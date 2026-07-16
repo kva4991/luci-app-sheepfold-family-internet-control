@@ -50,7 +50,7 @@ class SheepfoldWidgetActionReceiver : BroadcastReceiver() {
         Thread {
             try {
                 val connection = SheepfoldConnectionStore.read(context) ?: return@Thread
-                runBlocking { RouterAdminClient(connection).setGlobalBlock(blocked) }
+                runBlocking { RouterAdminClient(connection, context).setGlobalBlock(blocked) }
                 SheepfoldWidgetRenderer.storeState(context, blocked)
             } finally {
                 SheepfoldWidgetRenderer.updateAllWidgets(context)
@@ -64,7 +64,9 @@ object SheepfoldWidgetRenderer {
     fun refreshFromRouter(context: Context) {
         Thread {
             val connection = SheepfoldConnectionStore.read(context) ?: return@Thread
-            val snapshot = runCatching { runBlocking { RouterAdminClient(connection).loadRouterInfo() } }.getOrNull()
+            val snapshot = runCatching {
+                runBlocking { RouterAdminClient(connection, context).loadRouterInfo() }
+            }.getOrNull()
                 ?: return@Thread
             storeState(context, snapshot.globalBlocked)
             updateAllWidgets(context)

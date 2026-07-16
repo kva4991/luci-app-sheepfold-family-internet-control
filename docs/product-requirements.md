@@ -11,8 +11,9 @@
 
 ## Product Variants
 
-- `Sheepfold` is the Standard product: all family internet-control functions, without AI UI/backend, provider settings, prompts, or detailed per-device activity collection.
-- `Sheepfold - AI Support` contains the identical shared control core plus the AI assistant and explicit opt-in context/activity features.
+- `Sheepfold` is the ordinary router package: all family internet-control functions, without AI LuCI UI/backend, provider settings, prompts, or detailed per-device activity collection.
+- `Sheepfold - AI Support` is the router package with the identical shared control core plus the AI assistant and explicit opt-in context/activity features.
+- Android is distributed as one parent and one child APK for both router packages. Their AI client stays hidden until the router reports the positive capability; no Android AI product flavors are allowed (§prodvar).
 - Both products must be built from one shared source repository and one common control implementation. See [`product-variants.ru.md`](product-variants.ru.md) (§prodvar).
 - The ordinary administrative/system event journal remains available in both products; it must not be confused with detailed AI activity logs.
 
@@ -212,9 +213,9 @@ There is no need to support old OpenWRT versions based on `firewall3` / `iptable
 
 ## Device Rules
 
-Blocklisted devices are always blocked. Allowlisted devices are never blocked by global blocking or schedules. The backend and UI must prevent the same MAC address from being present in both lists.
+The device blocklist is the highest whole-device rule and overrides automatic group assignment, allowlist, temporary access, and schedules. Emergency-useful public domains are a separate, narrowly scoped safety exception when enabled; they do not remove the device from the blocklist. Blocklisted devices always remain unable to access LuCI, SSH, and Sheepfold API. The backend and UI must prevent the same MAC address from being present in both allowlist and blocklist.
 
-Temporary access must never bypass the blocklist.
+Temporary access does not bypass the device blocklist. Future editing of lower-priority rules may be enabled only when the effective-status API and firewall apply the selected order consistently; it must never weaken the router-management denial for blocklisted devices.
 
 New devices policy must be configurable:
 
@@ -225,7 +226,7 @@ restrict_until_configured
 
 Default: `allow`.
 
-Global "Block internet" means blocking all devices except allowlisted devices.
+Global "Block internet" means blocking all devices except administrator devices, allowlisted devices, and devices in the protected `No restrictions` group.
 
 Emergency-useful sites may be allowed even for blocklisted devices if `domain_allowlist_for_blocklist` is enabled. This is for user safety. Blocklisted devices still must not access LuCI, SSH, or the Sheepfold API.
 
@@ -236,17 +237,27 @@ Device groups should be supported for easier management:
 - TVs/media devices;
 - guests/custom groups;
 - no restrictions / `Без ограничений`.
+- personal devices / `Персональные устройства`.
 
 `No restrictions` / `Без ограничений` is a trusted service-device group for household infrastructure such as NAS, Home Assistant, AdGuard Home, Proxmox, video recorders, and smart-home hubs. Devices in this group should not be restricted by schedules, temporary restrictions, new-device restrictions, or global internet block.
 
-This group must not override the blocklist. Priority is:
+`Personal devices` / `Персональные устройства` is a protected, non-removable organizational group for confidently recognized phones, tablets, computers, TVs/media players, and smart watches. It grants no allowlist or access-policy bypass. Automatic assignment is allowed only when `auto_configure=1`, does not replace a group selected by a parent, and stops further routine type detection after a confident result (§persdev).
 
-1. blocklist;
-2. allowlist;
+The fixed safe whole-device priority is:
+
+1. device blocklist;
+2. administrator devices;
 3. no restrictions group;
-4. temporary access;
-5. schedule;
-6. general rules.
+4. allowlist;
+5. global internet block;
+6. temporary access;
+7. individual-device schedule;
+8. group schedule;
+9. default access.
+
+Emergency-useful domains are evaluated as a separate domain-level exception and are not a whole-device priority step.
+
+The target order is stored in `sheepfold.global.access_priority`. `Settings → Misc` must keep it read-only until LuCI, effective-status, schedules, and nftables all execute the same configurable order. Router-management access denial for blocklisted devices is a separate invariant and is not weakened by this order.
 
 Strong device detection should use router-side signals such as DHCP/static lease data, hostname, vendor/OUI, open ports, service banners, mDNS/SSDP/UPnP names, and a previously confirmed device fingerprint. Detection by MAC, hostname, or open ports alone is not a cryptographic guarantee, so the UI must show why a device was trusted and allow the parent to correct it.
 
@@ -266,7 +277,14 @@ Operational behavior:
 - The watcher should react to DHCP lease changes, especially when a device receives or updates an IP address.
 - A rare control scan is allowed as a safety net for router reboot, manual DHCP edits, or clients that behave unusually. Default control interval: 15 minutes.
 - Heavy checks such as `nmap` must be bounded by host count, port list, and timeout.
-- Blocklist always has higher priority than automatic detection and automatic `No restrictions` assignment.
+- Automatic assignment to `No restrictions` is security-sensitive because the group bypasses global shutdown and schedules. It requires strong detection evidence, visible reasoning, and the existing one-time exclusion after a parent removes a device from the group. It never bypasses the device blocklist.
+- A confident type percentage and an auto-group trust score are separate values. Until two independent evidence families are available for `No restrictions`, detection must continue collecting bounded signals instead of permanently locking the first result. LuCI must explain the exact reason when assignment is skipped (§agfix88).
+
+The LuCI page must fail closed when the router root password is unset or cannot be verified. A non-dismissible overlay links to the standard LuCI password page and prevents Sheepfold settings changes until the check succeeds (§rootgate).
+
+The AI assistant settings expose the parent prompt version. A selected version maps to `usr/share/sheepfold/prompts/parent/<version>/system.txt`; adding a new prompt creates a new directory and never silently replaces an existing reviewed version (§prmvers).
+
+Child devices may optionally show `Request 30 minutes of internet`. The router enables it only when at least one administrator has explicitly opted in. The request is identified from router-side IP/DHCP/ARP data, is rate-limited, only creates a parent notification, and never grants access without a parent action (§child30).
 
 Installer mode:
 
@@ -427,6 +445,10 @@ The UI should not expose separate `Apply` and `Save` actions because that distin
 When Sheepfold LuCI actions write UCI data immediately, for example allowlist/blocklist edits, administrator-device binding, group changes, or settings save, the implementation must also accept/apply LuCI's own pending-change queue. The standard LuCI banner such as `Unsaved changes` / `Не принятые изменения` must not remain after a successful Sheepfold action. Use a shared save/apply helper that saves the touched configs, applies through the LuCI changes API when available, and falls back to OpenWRT `uci.apply` only when needed.
 
 ## Integrations
+
+### Optional feedback channel
+
+LuCI settings and the parent Android app provide `Feedback / suggestions`. Submission goes through the authenticated router API to a configurable Yandex Cloud Function/API Gateway endpoint and Serverless YDB. It is optional, rate-limited, isolated from family-control behavior, and never present in the child APK. Only visible form fields and separately consented minimal router diagnostics may be sent (§feedback).
 
 AdGuard Home should remain responsible for DNS-level filtering when enabled.
 

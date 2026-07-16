@@ -8,6 +8,8 @@
 
 [Project presentation](docs/project-presentation.md)
 
+[Feedback backend setup: Yandex Cloud + YDB](docs/yandex-cloud-ydb-feedback.ru.md)
+
 Sheepfold is a family internet access control system for an OpenWRT router.
 
 It is being built as an OpenWRT router application with a LuCI web interface, backend service, Android companion app named **Sheepfold**, and messenger bot integration for managing household internet access.

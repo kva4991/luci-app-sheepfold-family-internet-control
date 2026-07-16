@@ -99,6 +99,17 @@ LuCI подгружает переводы из **`/usr/lib/lua/luci/i18n/sheepf
 
 Для русского интерфейса **Sheepfold** нужны `sheepfold.global.language=ru` и файл `sheepfold/i18n/ru.json` в пакете (плюс `sheepfold.ru.lmo` для совместимости с gettext LuCI). Язык роутера (`luci.main.lang`) при смене языка в настройках Sheepfold **не меняется**.
 
+### Безопасная генерация JSON-каталогов
+
+`.po` является источником истины, а клиентский JSON генерируется из него:
+
+```powershell
+python scripts/po2json.py package/luci-app-sheepfold-family-internet-control/po/ru/sheepfold.po package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/i18n/ru.json
+python scripts/po2json.py po/zh_Hans/sheepfold.po package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/i18n/zh_Hans.json
+```
+
+Не прогоняйте эти JSON-файлы через `ConvertFrom-Json` / `ConvertTo-Json` в Windows PowerShell 5. Его свойства нечувствительны к регистру, поэтому корректные разные msgid `Clear log` и `clear log` конфликтуют. `scripts/po2json.py` сохраняет регистр и прекращает сборку, если один и тот же точный msgid случайно получил два разных перевода. (§i18ncase)
+
 ### Установка и English
 
 Цепочка при **первой** установке через `install.sh`:

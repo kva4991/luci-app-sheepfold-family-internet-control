@@ -34,7 +34,9 @@ fun ChildStatusScreen(viewModel: ChildStatusViewModel) {
                     StatusCard(
                         status = state.status,
                         lastUpdated = viewModel.lastUpdated,
-                        onRefresh = { viewModel.refresh() }
+                        accessRequestMessage = viewModel.accessRequestMessage,
+                        onRefresh = { viewModel.refresh() },
+                        onRequestThirtyMinutes = { viewModel.requestThirtyMinutes() }
                     )
                 }
                 is ChildUiState.Error -> {
@@ -58,7 +60,9 @@ fun ChildStatusScreen(viewModel: ChildStatusViewModel) {
 private fun StatusCard(
     status: com.example.sheepfoldchild.data.ClientStatusData,
     lastUpdated: String?,
-    onRefresh: () -> Unit
+    accessRequestMessage: String?,
+    onRefresh: () -> Unit,
+    onRequestThirtyMinutes: () -> Unit
 ) {
     val isEnabled = status.internetState == "enabled"
     val cardColor = if (isEnabled)
@@ -120,6 +124,23 @@ private fun StatusCard(
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+
+            if (status.canRequestAccessExtension && !status.isAdministrator) {
+                OutlinedButton(
+                    onClick = onRequestThirtyMinutes,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.access_request_30_minutes))
+                }
+            }
+
+            accessRequestMessage?.let { message ->
+                Text(
+                    text = message,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
                 )
             }
 

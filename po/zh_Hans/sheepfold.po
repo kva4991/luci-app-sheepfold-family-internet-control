@@ -100,6 +100,84 @@ msgstr "语言"
 msgid "Application language"
 msgstr "应用程序语言"
 
+msgid "Feedback / suggestions"
+msgstr "反馈 / 建议"
+
+msgid "Short summary"
+msgstr "简要主题"
+
+msgid "Describe what happened or what you suggest changing."
+msgstr "请描述发生的问题或您建议的改进。"
+
+msgid "Optional email or messenger contact"
+msgstr "可选的电子邮件或即时通讯联系方式"
+
+msgid "Checking whether feedback sending is configured..."
+msgstr "正在检查反馈服务配置…"
+
+msgid "Enter a subject up to 120 characters."
+msgstr "请输入不超过 120 个字符的主题。"
+
+msgid "The message must contain from 10 to 4000 characters."
+msgstr "消息长度必须为 10 到 4000 个字符。"
+
+msgid "The feedback service did not respond in time."
+msgstr "反馈服务未及时响应。"
+
+msgid "Thank you. Your message was sent to the Sheepfold developer."
+msgstr "谢谢。您的消息已发送给 Sheepfold 开发者。"
+
+msgid "Could not send the message. Try again later."
+msgstr "无法发送消息，请稍后重试。"
+
+msgid "Feedback sending is available."
+msgstr "反馈发送功能可用。"
+
+msgid "Feedback sending has not been configured by the project owner yet."
+msgstr "项目所有者尚未配置反馈发送功能。"
+
+msgid "Could not check the feedback service status."
+msgstr "无法检查反馈服务状态。"
+
+msgid "Message type"
+msgstr "消息类型"
+
+msgid "Optional. Leave empty if you do not need a reply. This value will be stored with the message in Yandex Cloud."
+msgstr "可选。如果不需要回复请留空。该值将与消息一起存储在 Yandex Cloud。"
+
+msgid "Suggestion"
+msgstr "建议"
+
+msgid "Problem or error"
+msgstr "问题或错误"
+
+msgid "Question"
+msgstr "问题"
+
+msgid "Other"
+msgstr "其他"
+
+msgid "Subject"
+msgstr "主题"
+
+msgid "Message"
+msgstr "消息"
+
+msgid "Contact for reply"
+msgstr "回复联系方式"
+
+msgid "Send message"
+msgstr "发送消息"
+
+msgid "Sending..."
+msgstr "正在发送…"
+
+msgid "Tell the developer about a problem or suggest an improvement. Along with the form fields, the router sends the Sheepfold version and a random installation identifier that is not based on device data."
+msgstr "向开发者报告问题或提出改进建议。除表单字段外，路由器还会发送 Sheepfold 版本和一个不基于设备数据的随机安装标识符。"
+
+msgid "Attach a diagnostic report (recommended for a problem): router and network status, versions, resources, safe Sheepfold settings, and counts of devices and rules. Passwords, tokens, MAC/IP addresses, names, SSIDs, logs, and browsing history are never attached."
+msgstr "附加诊断报告（报告问题时建议）：路由器和网络状态、版本、资源、安全的 Sheepfold 设置，以及设备和规则数量。不会附加密码、令牌、MAC/IP 地址、名称、SSID、日志或浏览历史。"
+
 msgid "Chinese (Simplified)"
 msgstr "中文（简体）"
 
@@ -108,6 +186,21 @@ msgstr "英语"
 
 msgid "Russian"
 msgstr "俄语"
+
+msgid "Enter a valid domain name, for example gosuslugi.ru."
+msgstr "请输入有效的域名，例如 gosuslugi.ru。"
+
+msgid "This domain is already in the emergency-useful sites list."
+msgstr "此域名已在应急实用网站列表中。"
+
+msgid "Site prepared. Press Save settings to apply it."
+msgstr "网站已准备好。请按“保存设置”应用更改。"
+
+msgid "Site removal prepared. Press Save settings to apply it."
+msgstr "网站删除已准备好。请按“保存设置”应用更改。"
+
+msgid "Some services load maps, sign-in pages, or images from additional technical domains. If a site opens incompletely, add only the domains required for its useful function."
+msgstr "某些服务会从其他技术域名加载地图、登录页面或图片。如果网站打开不完整，请仅添加其实用功能所需的域名。"
 
 # Add more translations as needed. Use msgmerge.sh to update from template.
 # For production, run the i18n scripts and provide high-quality translations for all msgids.

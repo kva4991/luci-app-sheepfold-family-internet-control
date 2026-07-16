@@ -21,6 +21,7 @@ const makefile = read('package/luci-app-sheepfold-family-internet-control/Makefi
 describe('fw4 access enforcement and integration profiles', () => {
   it('uses package-author fw4 hooks and only Sheepfold-owned sets and chains', () => {
     assert.match(tableSnippet, /set sheepfold_block_macs/);
+    assert.match(tableSnippet, /set sheepfold_restricted_macs/);
     assert.match(tableSnippet, /set sheepfold_exempt_macs/);
     assert.match(tableSnippet, /set sheepfold_global_ifaces/);
     assert.match(tableSnippet, /chain sheepfold_forward_guard/);
@@ -29,9 +30,12 @@ describe('fw4 access enforcement and integration profiles', () => {
     assert.match(inputSnippet, /^jump sheepfold_input_guard\s*$/);
 
     const blockRule = tableSnippet.indexOf('ether saddr @sheepfold_block_macs');
+    const restrictedRule = tableSnippet.indexOf('ether saddr @sheepfold_restricted_macs');
     const exemptionRule = tableSnippet.indexOf('ether saddr @sheepfold_exempt_macs');
     const globalDrop = tableSnippet.lastIndexOf('iifname @sheepfold_global_ifaces counter drop');
-    assert.ok(blockRule >= 0 && blockRule < exemptionRule && exemptionRule < globalDrop);
+    assert.ok(blockRule >= 0 && blockRule < restrictedRule);
+    assert.ok(restrictedRule < exemptionRule && exemptionRule < globalDrop);
+    assert.doesNotMatch(inputSnippet, /sheepfold_restricted_macs/);
   });
 
   it('does not touch Podkop routing, packet marks, or foreign nftables state', () => {
@@ -54,6 +58,15 @@ describe('fw4 access enforcement and integration profiles', () => {
     assert.match(firewall, /ensure_sets\(\)[\s\S]*\/etc\/init\.d\/firewall reload/);
   });
 
+  it('keeps internet-only restrictions separate from the device blocklist', () => {
+    assert.match(firewall, /append_unique "\$restricted_file" "\$mac"/);
+    assert.match(firewall, /new_device_policy/);
+    assert.match(firewall, /restricted\|scheduled/);
+    assert.match(firewall, /schedule_status" = block[\s\S]*restricted_file/);
+    assert.doesNotMatch(inputSnippet, /internet restrictions/i);
+    assert.match(service, /run_detector scan "\$SCAN_SCOPE"[\s\S]*"\$FIREWALL_HELPER" sync/);
+  });
+
   it('keeps global block above temporary access but below explicit exemptions', () => {
     const admin = clientStatus.indexOf('administrator_device');
     const allowlist = clientStatus.indexOf('reason=allowlist');
@@ -64,6 +77,7 @@ describe('fw4 access enforcement and integration profiles', () => {
     assert.ok(allowlist >= 0 && allowlist < globalBlock);
     assert.ok(noRestrictions >= 0 && noRestrictions < globalBlock);
     assert.ok(globalBlock < temporary);
+    assert.match(firewall, /! status_is_temporary "\$status" && list_has_mac allowlist "\$mac"/);
     assert.match(firewall, /temp_access\|temp-access\|temporary\|blocked\|block\) continue/);
   });
 
@@ -78,7 +92,8 @@ describe('fw4 access enforcement and integration profiles', () => {
   });
 
   it('ships migration defaults and a new package release', () => {
-    assert.match(makefile, /PKG_RELEASE:=165/);
+    const release = Number(makefile.match(/PKG_RELEASE:=(\d+)/)?.[1] || 0);
+    assert.ok(release >= 172);
     assert.match(makefile, /ensure_global_option lan_firewall_zones 'lan'/);
     assert.match(makefile, /ensure_global_option integration_mode 'none'/);
     assert.doesNotMatch(makefile, /mv -f "\$\$tmp" "\$\$cron_file"[^\r\n]*\[ -x \/etc\/init\.d\/cron/);

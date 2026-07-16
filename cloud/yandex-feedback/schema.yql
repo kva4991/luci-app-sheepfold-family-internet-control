@@ -1,0 +1,19 @@
+CREATE TABLE feedback (
+    install_hash Utf8 NOT NULL,
+    created_at Timestamp NOT NULL,
+    id Utf8 NOT NULL,
+    source Utf8 NOT NULL,
+    category Utf8 NOT NULL,
+    subject Utf8 NOT NULL,
+    message Utf8 NOT NULL,
+    contact Utf8 NOT NULL,
+    app_version Utf8 NOT NULL,
+    product_variant Utf8 NOT NULL,
+    router_model Utf8 NOT NULL,
+    firmware_version Utf8 NOT NULL,
+    diagnostics_json Utf8 NOT NULL,
+    PRIMARY KEY (install_hash, created_at, id)
+)
+WITH (
+    TTL = Interval("P730D") ON created_at
+);

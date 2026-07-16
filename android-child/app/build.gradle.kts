@@ -1,7 +1,7 @@
 import org.gradle.api.tasks.Copy
 
-val sheepfoldChildVersionCode = 4
-val sheepfoldChildVersionName = "1.3"
+val sheepfoldChildVersionCode = 6
+val sheepfoldChildVersionName = "1.5"
 
 plugins {
     alias(libs.plugins.android.application)
@@ -20,7 +20,6 @@ android {
         versionCode = sheepfoldChildVersionCode
         versionName = sheepfoldChildVersionName
     }
-
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -72,8 +71,9 @@ val copyChildDebugApkToDownloads by tasks.registering(Copy::class) {
     doFirst { exportDir.mkdirs() }
 }
 
-afterEvaluate {
-    tasks.named("assembleDebug") {
-        finalizedBy(copyChildDebugApkToDownloads)
-    }
+val exportChildDebugApk by tasks.registering {
+    group = "sheepfold"
+    description = "Builds the unified child APK and explicitly copies it to the artifact directory."
+    dependsOn("assembleDebug")
+    finalizedBy(copyChildDebugApkToDownloads)
 }

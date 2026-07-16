@@ -37,9 +37,11 @@
 | [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) | Полный справочник CGI-эндпоинтов |
 | [`docs/live-router-testing.ru.md`](live-router-testing.ru.md) | Тестирование на живом роутере |
 | [`docs/luci-cache.ru.md`](luci-cache.ru.md) | Cache-busting для LuCI-ассетов |
+| [`docs/frontend-architecture.ru.md`](frontend-architecture.ru.md) | Предметные LuCI-модули, helpers и поэтапное уменьшение `overview.js` (§frontmod) |
 | [`docs/podkop-luci-notes.ru.md`](podkop-luci-notes.ru.md) | Совместная работа с Podkop |
 | [`docs/integrations.md`](integrations.md) | AdGuard Home, Podkop |
 | [`docs/github-install-setup.md`](github-install-setup.md) | Установка и обновление |
+| [`docs/yandex-cloud-ydb-feedback.ru.md`](yandex-cloud-ydb-feedback.ru.md) | Развёртывание необязательного канала отзывов через Yandex Cloud + YDB (§feedback) |
 
 ### Android
 
@@ -70,9 +72,32 @@
 
 | Файл | Тема |
 |---|---|
+| [`docs/ai-assistant-development/README.md`](ai-assistant-development/README.md) | Главная схема взаимодействия будущих AI-модулей (§aiarch1) |
+| [`docs/ai-assistant-development/current-implementation.ru.md`](ai-assistant-development/current-implementation.ru.md) | Уже работающие AI-компоненты, пути кода и явные границы (§aiimpl1) |
+| [`docs/ai-assistant-development/modules.ru.md`](ai-assistant-development/modules.ru.md) | Границы модулей и запрещённые связи |
+| [`docs/ai-assistant-development/data-model.ru.md`](ai-assistant-development/data-model.ru.md) | Будущая БД, provenance, consent и удаление (§aidata1) |
+| [`docs/ai-assistant-development/memory-lifecycle-and-forgetting.ru.md`](ai-assistant-development/memory-lifecycle-and-forgetting.ru.md) | Три слоя памяти и отдельный модуль аккуратного забывания (§aiforgt) |
+| [`docs/ai-assistant-development/consciousness-architecture-notes.ru.md`](ai-assistant-development/consciousness-architecture-notes.ru.md) | Архитектурные рекомендации, нерешённые направления и точка возврата к сознанию помощника (§aiconsc) |
+| [`docs/ai-assistant-development/dialogue-policy.ru.md`](ai-assistant-development/dialogue-policy.ru.md) | Религия, опасные убеждения и безопасный диалог (§aidlg01) |
+| [`docs/ai-assistant-development/caregiver-emotion-regulation.ru.md`](ai-assistant-development/caregiver-emotion-regulation.ru.md) | Саморегуляция родителя и восстановление после срыва (§aicare1) |
+| [`docs/ai-assistant-development/child-trusted-assistant.ru.md`](ai-assistant-development/child-trusted-assistant.ru.md) | Доверенный детский собеседник и будущий safety-протокол (§aichild) |
+| [`docs/ai-assistant-development/parent-conversation-after-safety-signal.ru.md`](ai-assistant-development/parent-conversation-after-safety-signal.ru.md) | Будущая большая библиотека сценариев разговора родителя после экстренного сигнала (§aichild) |
+| [`docs/ai-assistant-development/tactful-persistence-and-human-help.ru.md`](ai-assistant-development/tactful-persistence-and-human-help.ru.md) | Тактичная настойчивость и консультация живого специалиста (§aiescal) |
+| [`docs/ai-assistant-development/legal-risk-and-restorative-response.ru.md`](ai-assistant-development/legal-risk-and-restorative-response.ru.md) | Правовой риск ребёнка, отсутствие скрытого информирования и восстановительный ответ (§ailegal) |
+| [`docs/ai-assistant-development/regional-risk-context.ru.md`](ai-assistant-development/regional-risk-context.ru.md) | Региональные факторы риска и безопасное обращение за помощью (§aireg01) |
+| [`docs/ai-assistant-development/external-integrations.ru.md`](ai-assistant-development/external-integrations.ru.md) | Календарь, заметки, SMS и официальные источники |
+| [`docs/ai-assistant-development/privacy-proxy-and-external-compute.ru.md`](ai-assistant-development/privacy-proxy-and-external-compute.ru.md) | Локальное маскирование, псевдонимы и внешний вычислительный worker (§aiexec1, §aimask1) |
+| [`docs/ai-assistant-development/mediator-and-initiative.ru.md`](ai-assistant-development/mediator-and-initiative.ru.md) | Будущие команды, узкий автоматический режим и инициатива (§aimed01, §aiact01) |
+| [`docs/ai-assistant-development/adaptive-surveys-and-hypotheses.ru.md`](ai-assistant-development/adaptive-surveys-and-hypotheses.ru.md) | Добровольные анкеты и строгие рабочие гипотезы (§aisurv1) |
+| [`docs/ai-assistant-development/interaction-styles.ru.md`](ai-assistant-development/interaction-styles.ru.md) | Стили ответа без ослабления safety и приватности (§aistyle1) |
+| [`docs/ai-assistant-development/implementation-roadmap.ru.md`](ai-assistant-development/implementation-roadmap.ru.md) | Порядок будущей реализации и тесты (§airoad1) |
 | [`docs/ai-assistant.ru.md`](ai-assistant.ru.md) | Описание AI-функций для родителя |
 | [`docs/ai-context-sharing.ru.md`](ai-context-sharing.ru.md) | Правила передачи контекста |
 | [`docs/ai-assistant-prompt-for-support-parent/`](ai-assistant-prompt-for-support-parent/) | Системные промпты |
+| [`docs/ai-assistant-charter.ru.md`](ai-assistant-charter.ru.md) | Продуктовые ценности и запреты ИИ-помощника |
+| [`docs/ai-device-ownership.ru.md`](ai-device-ownership.ru.md) | Исследовательская идея анализа принадлежности устройств; не реализовано |
+| [`docs/ai-family-profiles.ru.md`](ai-family-profiles.ru.md) | Исторический концепт профилей; заменён моделью субъектов и provenance |
+| [`docs/ai-child-safety.ru.md`](ai-child-safety.ru.md) | Исследовательская идея анализа рисков; не реализовано |
 
 ### Конфиденциальность и безопасность
 
@@ -113,7 +138,7 @@
 1. **Не добавляй `yandex.ru`** в списки по умолчанию — только `ya.ru` для поиска.
 2. **Не реализуй VPN/WireGuard** — удалённое управление только через мессенджер.
 3. **Не храни секреты в QR, `router-info`, журнале.**
-4. **Blocklist — наивысший приоритет**, ничто его не переопределяет.
+4. **Чёрный список устройств всегда сильнее автоматических назначений и закрывает административные интерфейсы роутера.** Аварийно-полезные домены являются отдельным узким исключением для публичных сайтов и не открывают LuCI, SSH или Sheepfold API.
 5. **Сохранение настроек — только по кнопке «Сохранить»**, не автосохранение.
 6. **Бэкенд-ожидания зафиксированы в `backend-design.ru.md`** — не переносить в UI-комментарии.
 7. **Детский APK — без токенов и административных функций.**

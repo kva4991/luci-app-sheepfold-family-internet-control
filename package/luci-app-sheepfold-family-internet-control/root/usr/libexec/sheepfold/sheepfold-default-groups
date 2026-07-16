@@ -7,13 +7,13 @@ default_group_names_for_language() {
 	lang="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
 	case "$lang" in
 		en)
-			printf '%s\n' 'No restrictions' 'First child'
+			printf '%s\n' 'No restrictions' 'First child' 'Personal devices'
 			;;
 		zh_Hans)
-			printf '%s\n' '不受限制' '第一个孩子'
+			printf '%s\n' '不受限制' '第一个孩子' '个人设备'
 			;;
 		*)
-			printf '%s\n' 'Без ограничений' 'Первый ребёнок'
+			printf '%s\n' 'Без ограничений' 'Первый ребёнок' 'Персональные устройства'
 			;;
 	esac
 }
@@ -25,6 +25,17 @@ no_restrictions_group_name() {
 			en) printf 'No restrictions' ;;
 			zh_Hans) printf '不受限制' ;;
 			*) printf 'Без ограничений' ;;
+		esac
+	}
+}
+
+personal_devices_group_name() {
+	uci -q get sheepfold.personal_devices.name 2>/dev/null || {
+		lang="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
+		case "$lang" in
+			en) printf 'Personal devices' ;;
+			zh_Hans) printf '个人设备' ;;
+			*) printf 'Персональные устройства' ;;
 		esac
 	}
 }
@@ -78,6 +89,7 @@ ensure_default_groups() {
 	names="$(default_group_names_for_language)"
 	no_restrictions_name="$(printf '%s' "$names" | sed -n '1p')"
 	child_name="$(printf '%s' "$names" | sed -n '2p')"
+	personal_devices_name="$(printf '%s' "$names" | sed -n '3p')"
 
 	uci -q get sheepfold.no_restrictions >/dev/null || uci -q set sheepfold.no_restrictions='group'
 	current_nr="$(uci -q get sheepfold.no_restrictions.name 2>/dev/null || true)"
@@ -89,7 +101,9 @@ ensure_default_groups() {
 	[ -n "$(uci -q get sheepfold.no_restrictions.personal 2>/dev/null)" ] || uci -q set sheepfold.no_restrictions.personal='0'
 	[ -n "$(uci -q get sheepfold.no_restrictions.auto_assignable 2>/dev/null)" ] || uci -q set sheepfold.no_restrictions.auto_assignable='1'
 	[ -n "$(uci -q get sheepfold.no_restrictions.allowlist_only 2>/dev/null)" ] || uci -q set sheepfold.no_restrictions.allowlist_only='0'
+	# SHEEPFOLD_AI_BEGIN
 	[ -n "$(uci -q get sheepfold.no_restrictions.activity_log_enabled 2>/dev/null)" ] || uci -q set sheepfold.no_restrictions.activity_log_enabled='0'
+	# SHEEPFOLD_AI_END
 	[ -n "$(uci -q get sheepfold.no_restrictions.description 2>/dev/null)" ] || uci -q set sheepfold.no_restrictions.description='Trusted home infrastructure devices that should not be limited unless they are blocklisted'
 
 	uci -q get sheepfold.child_1 >/dev/null || uci -q set sheepfold.child_1='group'
@@ -102,13 +116,28 @@ ensure_default_groups() {
 	[ -n "$(uci -q get sheepfold.child_1.personal 2>/dev/null)" ] || uci -q set sheepfold.child_1.personal='1'
 	[ -n "$(uci -q get sheepfold.child_1.auto_assignable 2>/dev/null)" ] || uci -q set sheepfold.child_1.auto_assignable='0'
 	[ -n "$(uci -q get sheepfold.child_1.allowlist_only 2>/dev/null)" ] || uci -q set sheepfold.child_1.allowlist_only='0'
+	# SHEEPFOLD_AI_BEGIN
 	[ -n "$(uci -q get sheepfold.child_1.activity_log_enabled 2>/dev/null)" ] || uci -q set sheepfold.child_1.activity_log_enabled='0'
+	# SHEEPFOLD_AI_END
 	[ -n "$(uci -q get sheepfold.child_1.description 2>/dev/null)" ] || uci -q set sheepfold.child_1.description='Default first child group'
+
+	uci -q get sheepfold.personal_devices >/dev/null || uci -q set sheepfold.personal_devices='group'
+	current_personal="$(uci -q get sheepfold.personal_devices.name 2>/dev/null || true)"
+	if [ -z "$current_personal" ] || { [ "$INSTALL_LANGUAGE_SELECTED" = 1 ] && \
+		case "$current_personal" in 'Personal devices'|'Персональные устройства'|'个人设备') true ;; *) false ;; esac; }; then
+		uci -q set "sheepfold.personal_devices.name=$personal_devices_name"
+	fi
+	[ -n "$(uci -q get sheepfold.personal_devices.protected 2>/dev/null)" ] || uci -q set sheepfold.personal_devices.protected='1'
+	[ -n "$(uci -q get sheepfold.personal_devices.personal 2>/dev/null)" ] || uci -q set sheepfold.personal_devices.personal='0'
+	[ -n "$(uci -q get sheepfold.personal_devices.auto_assignable 2>/dev/null)" ] || uci -q set sheepfold.personal_devices.auto_assignable='1'
+	[ -n "$(uci -q get sheepfold.personal_devices.allowlist_only 2>/dev/null)" ] || uci -q set sheepfold.personal_devices.allowlist_only='0'
+	[ -n "$(uci -q get sheepfold.personal_devices.description 2>/dev/null)" ] || uci -q set sheepfold.personal_devices.description='Personal phones, tablets, computers, media players, TVs, and smart watches'
 }
 
 migrate_device_group_aliases() {
 	canonical_nr="$(no_restrictions_group_name)"
 	canonical_child="$(uci -q get sheepfold.child_1.name 2>/dev/null || true)"
+	canonical_personal="$(personal_devices_group_name)"
 
 	for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
 		group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
@@ -118,6 +147,9 @@ migrate_device_group_aliases() {
 				;;
 			'First child'|'Child number 1'|'Первый ребёнок'|'Ребёнок номер 1'|'第一个孩子')
 				[ -n "$canonical_child" ] && uci -q set "sheepfold.$section.group=$canonical_child"
+				;;
+			'Personal devices'|'Персональные устройства'|'个人设备')
+				[ -n "$canonical_personal" ] && uci -q set "sheepfold.$section.group=$canonical_personal"
 				;;
 			'Не настроено')
 				uci -q set "sheepfold.$section.group=Not configured"
@@ -137,12 +169,15 @@ case "${1:-apply}" in
 	name)
 		no_restrictions_group_name
 		;;
+	personal-name)
+		personal_devices_group_name
+		;;
 	apply)
 		ensure_default_groups
 		migrate_device_group_aliases
 		;;
 	*)
-		echo "Usage: $0 [apply|name]" >&2
+		echo "Usage: $0 [apply|name|personal-name]" >&2
 		exit 1
 		;;
 esac

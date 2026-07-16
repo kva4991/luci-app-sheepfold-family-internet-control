@@ -1,10 +1,12 @@
 package app.sheepfold.android.router
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URL
-import javax.net.ssl.HttpsURLConnection
+import java.net.ConnectException
+import java.net.NoRouteToHostException
 import java.net.URLEncoder
 
 data class RouterDevice(
@@ -20,11 +22,35 @@ data class RouterDevice(
 data class RouterSnapshot(
     val routerName: String,
     val diagnostics: Map<String, String>,
-    val globalBlocked: Boolean
+    val globalBlocked: Boolean,
+    val aiAvailable: Boolean
+)
+
+data class ChildAccessRequest(
+    val id: String,
+    val deviceId: String,
+    val deviceName: String,
+    val ip: String,
+    val mac: String,
+    val createdAt: Long
+)
+
+data class RouterAdminNotification(
+    val id: String,
+    val type: String,
+    val title: String,
+    val message: String,
+    val createdAt: Long
 )
 
 /** Все команды выполняются на роутере с Bearer-токеном, а не в локальном состоянии APK. */
-class RouterAdminClient(private val connection: RouterConnectionRequest) {
+class RouterAdminClient(
+    private val connection: RouterConnectionRequest,
+    context: Context? = null
+) {
+    private val appContext = context?.applicationContext
+    private var activeApiUrl = connection.apiUrl
+
     suspend fun loadDevices(): List<RouterDevice> = withContext(Dispatchers.IO) {
         val json = request("GET", "/devices")
         val devices = json.optJSONArray("devices") ?: return@withContext emptyList()
@@ -62,6 +88,26 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
         request("POST", "/device/temp-access", mapOf("mac" to mac, "minutes" to minutes.toString()))
     }
 
+    suspend fun submitFeedback(
+        category: String,
+        subject: String,
+        message: String,
+        contact: String,
+        includeDiagnostics: Boolean
+    ) = withContext(Dispatchers.IO) {
+        request(
+            method = "POST",
+            path = "/feedback",
+            form = mapOf(
+                "category" to category,
+                "subject" to subject,
+                "message" to message,
+                "contact" to contact,
+                "includeDiagnostics" to if (includeDiagnostics) "1" else "0"
+            )
+        )
+    }
+
     private suspend fun deviceAction(action: String, mac: String) = withContext(Dispatchers.IO) {
         request("POST", "/device/$action", mapOf("mac" to mac))
     }
@@ -81,8 +127,53 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
         RouterSnapshot(
             routerName = json.optString("routerName", connection.routerName),
             diagnostics = diagnostics,
-            globalBlocked = diagnostics["globalBlocked"] == "1"
+            globalBlocked = diagnostics["globalBlocked"] == "1",
+            aiAvailable = json.optJSONObject("capabilities")
+                ?.optBoolean("aiAssistant", false)
+                ?: false
         )
+    }
+
+    suspend fun loadChildAccessRequests(): List<ChildAccessRequest> = withContext(Dispatchers.IO) {
+        val json = request("GET", "/access-requests")
+        val requests = json.optJSONArray("requests") ?: return@withContext emptyList()
+        buildList {
+            for (index in 0 until requests.length()) {
+                val item = requests.optJSONObject(index) ?: continue
+                add(
+                    ChildAccessRequest(
+                        id = item.optString("id"),
+                        deviceId = item.optString("deviceId"),
+                        deviceName = item.optString("deviceName").ifBlank { "Неизвестное устройство" },
+                        ip = item.optString("ip"),
+                        mac = item.optString("mac"),
+                        createdAt = item.optLong("createdAt")
+                    )
+                )
+            }
+        }
+    }
+
+    suspend fun loadAdminNotifications(): List<RouterAdminNotification> = withContext(Dispatchers.IO) {
+        val json = request("GET", "/notifications")
+        val notifications = json.optJSONArray("notifications") ?: return@withContext emptyList()
+        buildList {
+            for (index in 0 until notifications.length()) {
+                val item = notifications.optJSONObject(index) ?: continue
+                val id = item.optString("id")
+                val message = item.optString("message")
+                if (id.isBlank() || message.isBlank()) continue
+                add(
+                    RouterAdminNotification(
+                        id = id,
+                        type = item.optString("type", "system"),
+                        title = item.optString("title", "Sheepfold"),
+                        message = message,
+                        createdAt = item.optLong("createdAt")
+                    )
+                )
+            }
+        }
     }
 
     private fun request(
@@ -90,13 +181,23 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
         path: String,
         form: Map<String, String> = emptyMap()
     ): JSONObject {
-        var lastError: Throwable? = null
-        for (apiBase in candidateApiUrls(connection.apiUrl)) {
-            val result = runCatching { requestOnce(apiBase, method, path, form) }
-            if (result.isSuccess) return result.getOrThrow()
-            lastError = result.exceptionOrNull()
+        val firstAttempt = runCatching { requestOnce(activeApiUrl, method, path, form) }
+        if (firstAttempt.isSuccess) return firstAttempt.getOrThrow()
+
+        val firstError = firstAttempt.exceptionOrNull()
+        if (appContext != null && endpointCanBeRecovered(firstError)) {
+            val recoveredApiUrl = RouterEndpointRecovery.discoverAndStore(
+                appContext,
+                connection,
+                activeApiUrl
+            )
+            if (recoveredApiUrl != null) {
+                activeApiUrl = recoveredApiUrl
+                return requestOnce(activeApiUrl, method, path, form)
+            }
         }
-        throw lastError ?: IllegalStateException("Роутер недоступен")
+
+        throw firstError ?: IllegalStateException("Роутер недоступен")
     }
 
     private fun requestOnce(
@@ -141,7 +242,8 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
                 .orEmpty()
             val json = runCatching { JSONObject(body) }.getOrNull()
             if (code !in 200..299) {
-                throw IllegalStateException(
+                throw RouterHttpException(
+                    code,
                     json?.optString("message")
                         ?.ifBlank { json.optString("error") }
                         .orEmpty()
@@ -154,12 +256,15 @@ class RouterAdminClient(private val connection: RouterConnectionRequest) {
         }
     }
 
-    private fun candidateApiUrls(rawApiUrl: String): List<String> {
-        val parsed = URL(rawApiUrl)
-        val host = if (parsed.host.contains(':')) "[${parsed.host}]" else parsed.host
-        val httpsPort = parsed.port.takeIf { it > 0 } ?: 5201
-        return listOf("https://$host:$httpsPort${parsed.path}")
-    }
+    private fun endpointCanBeRecovered(error: Throwable?): Boolean =
+        error is ConnectException ||
+            error is NoRouteToHostException ||
+            error is RouterHttpException && error.statusCode == 404
 
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())
 }
+
+private class RouterHttpException(
+    val statusCode: Int,
+    message: String
+) : IllegalStateException(message)

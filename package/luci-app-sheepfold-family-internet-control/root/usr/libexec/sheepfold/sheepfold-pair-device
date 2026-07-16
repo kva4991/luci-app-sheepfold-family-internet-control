@@ -57,16 +57,33 @@ pair_prepare_token "$login" || {
     exit 6
 }
 
-# Повторная проверка выполняется непосредственно перед первой записью прав.
-pair_list_has_mac blocklist "$device_mac" && {
-    echo "Blocklisted device cannot become an administrator device." >&2
-    exit 5
-}
-
 [ "$(uci -q get "sheepfold.$device_section" 2>/dev/null || true)" = device ] || \
     uci -q set "sheepfold.$device_section=device"
 uci -q set "sheepfold.$device_section.mac=$device_mac"
 device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$device_section")"
+
+PAIR_TOKEN_LOGIN="$login"
+PAIR_TOKEN_DEVICE_ID="$device_id"
+PAIR_TOKEN_MAC="$device_mac"
+PAIR_TOKEN_ISSUED_AT="$now"
+
+if ! pair_store_token; then
+    echo "Could not store administrator token hash. Pairing code was not consumed." >&2
+    exit 6
+fi
+
+# Повторная проверка выполняется непосредственно перед первой записью прав.
+# Если родитель успел заблокировать устройство во время pairing, временный токен
+# удаляется и ни белый список, ни администраторский флаг не изменяются.
+if pair_list_has_mac blocklist "$device_mac"; then
+    rm -f "$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH" 2>/dev/null || true
+    echo "Blocklisted device cannot become an administrator device." >&2
+    exit 5
+fi
+
+# Токен уже подготовлен, но ещё не выдан APK. Только теперь одной UCI-транзакцией
+# назначаем права, добавляем MAC в белый список и сжигаем одноразовый код. Иначе
+# сбой token storage оставлял бы на роутере админское устройство без рабочего входа.
 uci -q set "sheepfold.$device_section.name=$device_name"
 uci -q set "sheepfold.$device_section.ip=$remote_ip"
 uci -q set "sheepfold.$device_section.device_type=phone"
@@ -81,29 +98,15 @@ uci -q set "sheepfold.$device_section.paired_from=android"
 uci -q set "sheepfold.$device_section.paired_at=$now"
 uci -q set "sheepfold.$device_section.pairing_user_agent=$user_agent"
 pair_add_allowlist "$device_mac"
-
-if ! uci -q commit sheepfold; then
-    echo "Could not save administrator device settings." >&2
-    exit 6
-fi
-
-PAIR_TOKEN_LOGIN="$login"
-PAIR_TOKEN_DEVICE_ID="$device_id"
-PAIR_TOKEN_MAC="$device_mac"
-PAIR_TOKEN_ISSUED_AT="$now"
-
-if ! pair_store_token; then
-    echo "Could not store administrator token hash. Pairing code was not consumed." >&2
-    exit 6
-fi
-
 uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
 uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
 if ! uci -q commit sheepfold; then
     rm -f "$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH" 2>/dev/null || true
+    uci -q revert "sheepfold.$device_section" 2>/dev/null || true
+    uci -q revert sheepfold.allowlist 2>/dev/null || true
     uci -q revert "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
     uci -q revert "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
-    echo "Could not consume pairing code. Token was revoked; try pairing again." >&2
+    echo "Could not save pairing. Token was revoked and administrator rights were not granted." >&2
     exit 6
 fi
 

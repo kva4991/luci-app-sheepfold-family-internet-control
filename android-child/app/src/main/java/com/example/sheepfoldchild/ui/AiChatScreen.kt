@@ -28,7 +28,7 @@ import com.example.sheepfoldchild.viewmodel.AiChatViewModel
 fun AiChatScreen(viewModel: AiChatViewModel, status: ClientStatusData?) {
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
-    val aiBlockedByPersonalGroup = status?.personalGroupRequired == true
+    val aiBlockedByPersonalGroup = status?.productStatus?.personalGroupRequired == true
 
     // Прокручиваем к последнему сообщению.
     LaunchedEffect(viewModel.messages.size) {

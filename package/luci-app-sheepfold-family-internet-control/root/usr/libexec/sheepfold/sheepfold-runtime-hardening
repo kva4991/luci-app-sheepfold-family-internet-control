@@ -27,6 +27,13 @@ PAIR_COMMON="$(path /usr/libexec/sheepfold/sheepfold-pair-common)"
 TOKEN_COMMON="$(path /usr/libexec/sheepfold/sheepfold-token-common)"
 PAIR_API="$(path /usr/libexec/sheepfold/sheepfold-api-pair)"
 STATUS_API="$(path /usr/libexec/sheepfold/sheepfold-api-client-status)"
+ACCESS_REQUEST="$(path /usr/libexec/sheepfold/sheepfold-access-request)"
+ADMIN_NOTIFICATION="$(path /usr/libexec/sheepfold/sheepfold-admin-notification)"
+FIREWALL="$(path /usr/libexec/sheepfold/sheepfold-firewall)"
+SCHEDULE_EVALUATOR="$(path /usr/libexec/sheepfold/sheepfold-schedule-evaluator)"
+EMERGENCY_SITES="$(path /usr/libexec/sheepfold/sheepfold-emergency-sites)"
+SITE_LISTS="$(path /usr/libexec/sheepfold/sheepfold-site-lists)"
+DOMAIN_POLICY="$(path /usr/libexec/sheepfold/sheepfold-domain-policy)"
 AI_GATE="$(path /usr/libexec/sheepfold/sheepfold-ai-gate)"
 AI_HANDLER="$(path /usr/libexec/sheepfold/sheepfold-ai-handler)"
 ACTIVITY_LOG="$(path /usr/libexec/sheepfold/sheepfold-activity-log)"
@@ -49,7 +56,8 @@ for required in \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
     "$DEVICE_MDNS_UCODE" "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" \
     "$DHCP_SIGNALS" "$LED_CONTROL" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-    "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$STATUS_API" "$AI_GATE" "$AI_HANDLER" \
+    "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" \
+    "$FIREWALL" "$SCHEDULE_EVALUATOR" "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$AI_GATE" "$AI_HANDLER" \
     "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" \
     "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$ACL" "$PRIVACY_NOTICE" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND" \
@@ -62,7 +70,8 @@ for executable in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
     "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
-    "$STATUS_API" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" \
+    "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$FIREWALL" "$SCHEDULE_EVALUATOR" \
+    "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" \
     "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" \
     "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
@@ -108,6 +117,17 @@ grep -q 'revoke-device-tokens' "$CONTROL" || die "per-device token revoke is mis
 grep -q 'pair_valid_code' "$PAIR_COMMON" || die "pairing-code alphabet validation is missing"
 grep -q 'device_id' "$PAIR_DEVICE" || die "pairing does not return stable device id"
 
+# Запрос ребёнка не принимает MAC/IP из тела запроса: устройство определяется самим роутером.
+grep -q '/access-request)' "$CGI" || die "public child access request route is missing"
+grep -q '/access-requests)' "$CGI" || die "administrator access request route is missing"
+grep -q 'mac_for_ip' "$ACCESS_REQUEST" || die "access request does not resolve the device on the router"
+grep -q '/tmp/sheepfold/access-requests' "$ACCESS_REQUEST" || die "access requests are not stored in RAM"
+
+# Системные предупреждения доступны только через аутентифицированный API и не считаются прочитанными одним телефоном за все остальные.
+grep -q '/notifications)' "$CGI" || die "administrator notifications route is missing"
+grep -q 'require_admin' "$CGI" || die "administrator notifications are not protected"
+grep -q 'MAX_NOTIFICATIONS' "$ADMIN_NOTIFICATION" || die "administrator notification queue is unbounded"
+
 # Статус клиента учитывает blocklist, временный доступ и глобальную блокировку.
 grep -q 'global_block' "$CLIENT_STATUS" || die "effective status ignores global block"
 grep -q 'temporary_access_expired' "$CLIENT_STATUS" || die "effective status ignores expired temporary access"
@@ -119,7 +139,10 @@ grep -q 'DNSMASQ_REQUESTED_OPTIONS' "$DHCP_SIGNALS" || die "DHCP option fingerpr
 grep -q 'device-signals.changed' "$SERVICE" || die "DHCP signal changes do not trigger detection"
 grep -q 'device-detection.lock' "$SERVICE" || die "background detection is not serialized"
 grep -q 'NETWORK_NAME_PATTERN=' "$DEVICE_CLASSIFIER" || die "network infrastructure guard is missing"
-grep -q 'POLICY_VERSION="2"' "$DEVICE_CLASSIFIER" || die "device classification policy version is missing"
+classifier_policy="$(sed -n 's/^POLICY_VERSION="\([^"]*\)"/\1/p' "$DEVICE_CLASSIFIER" | sed -n '1p')"
+detector_policy="$(sed -n 's/^POLICY_VERSION="\([^"]*\)"/\1/p' "$DEVICE_DETECTOR" | sed -n '1p')"
+[ -n "$classifier_policy" ] && [ "$classifier_policy" = "$detector_policy" ] || \
+    die "device classifier and detector policy versions differ"
 grep -q 'EVIDENCE_COUNT' "$DEVICE_CLASSIFIER" || die "independent evidence counting is missing"
 grep -q 'nmap-mac-prefixes' "$DEVICE_CLASSIFIER" || die "local OUI lookup is missing"
 grep -q 'mdns_has' "$DEVICE_CLASSIFIER" || die "mDNS evidence handling is missing"
@@ -128,12 +151,12 @@ grep -q 'ubus.call("umdns", "browse"' "$DEVICE_MDNS_UCODE" || die "mDNS reader d
 grep -q 'ubus.call("umdns", "hosts"' "$DEVICE_MDNS_UCODE" || die "mDNS reader does not use the OpenWrt hosts API"
 grep -q 'device-mdns.tsv' "$DEVICE_DETECTOR" || die "mDNS snapshot is not included in detection"
 grep -q 'detection_mdns_services' "$DEVICE_DETECTOR" || die "mDNS evidence is not persisted"
-grep -q '\[ "\$evidence_count" -ge 2 \]' "$DEVICE_DETECTOR" || die "automatic group assignment does not require two evidence families"
+grep -q '\[ "\$evidence_count" -lt 2 \]' "$DEVICE_DETECTOR" || die "automatic group assignment does not require two evidence families"
 grep -q 'detection_fingerprint' "$DEVICE_DETECTOR" || die "device fingerprint persistence is missing"
 grep -q 'detection_policy_version' "$DEVICE_DETECTOR" || die "classification policy version is not persisted"
 grep -q 'device-detection.last-scan' "$DEVICE_DETECTOR" || die "runtime last-scan state is missing"
-assignment_calls="$(grep -c 'assign_no_restrictions_if_allowed "\$section"' "$DEVICE_DETECTOR" || true)"
-[ "$assignment_calls" -ge 1 ] || die "automatic group assignment is not connected"
+assignment_calls="$(grep -c 'assign_detected_group_if_allowed "\$section"' "$DEVICE_DETECTOR" || true)"
+[ "$assignment_calls" -ge 2 ] || die "automatic group assignment is not connected to fresh and locked detection paths"
 grep -q 'auto_configure="$(global_get auto_configure 1)"' "$DEVICE_DETECTOR" || die "automatic group assignment ignores auto-configure setting"
 ! grep -q 'revoke_unsafe_auto_assignment' "$DEVICE_DETECTOR" || die "automatic group rollback must not be present"
 grep -q 'classify <name>' "$DEVICE_DETECTOR" || die "detector regression interface is missing"
@@ -195,7 +218,8 @@ for script in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
     "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
-    "$STATUS_API" "$PAIR_API" "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+    "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$FIREWALL" "$SCHEDULE_EVALUATOR" \
+    "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$PAIR_API" "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
     "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do

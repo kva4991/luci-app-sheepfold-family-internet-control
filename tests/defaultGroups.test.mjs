@@ -15,7 +15,7 @@ describe('Default Sheepfold groups', () => {
   it('keeps singleton default groups in UCI and does not inject gettext duplicates in LuCI', () => {
     const overview = readProjectFile('htdocs/luci-static/resources/view/sheepfold/overview.js');
 
-    assert.match(overview, /DEFAULT_GROUP_SECTION_IDS = \['no_restrictions', 'child_1'\]/);
+    assert.match(overview, /DEFAULT_GROUP_SECTION_IDS = \['no_restrictions', 'child_1', 'personal_devices'\]/);
     assert.match(overview, /LEGACY_GROUP_ALIASES/);
     assert.match(overview, /ensureDefaultGroupSections\(/);
     assert.match(overview, /defaultGroupDisplayName\('no_restrictions'/);
@@ -34,6 +34,7 @@ describe('Default Sheepfold groups', () => {
     assert.match(helper, /INSTALL_LANGUAGE_SELECTED/);
     assert.match(helper, /current_nr/);
     assert.match(helper, /current_child/);
+    assert.match(helper, /current_personal/);
     assert.match(helper, /'First child'/);
     assert.match(helper, /'第一个孩子'/);
     assert.match(helper, /migrate_device_group_aliases/);
@@ -48,8 +49,9 @@ describe('Default Sheepfold groups', () => {
     assert.match(detector, /no_restrictions_group_name\(\)/);
     assert.match(detector, /'No restrictions'\|'Без ограничений'/);
     assert.match(detector, /ensure_default_groups/);
-    assert.match(detector, /write_locked_device_observation[\s\S]*assign_no_restrictions_if_allowed/);
-    assert.match(detector, /\[ "\$current_group" = "\$target_group" \] && return 0/);
+    assert.match(detector, /write_locked_device_observation[\s\S]*assign_detected_group_if_allowed/);
+    assert.match(detector, /\[ "\$current_group" = "\$target_group" \][\s\S]*set_auto_group_status "\$section" assigned/);
     assert.match(classifier, /sheepfold\.no_restrictions\.name/);
+    assert.match(classifier, /sheepfold\.personal_devices\.name/);
   });
 });

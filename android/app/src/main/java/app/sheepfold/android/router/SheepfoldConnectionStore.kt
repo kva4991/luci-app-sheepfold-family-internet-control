@@ -59,6 +59,13 @@ object SheepfoldConnectionStore {
             !request.deviceMac.isNullOrBlank()
     } == true
 
+    fun updateApiUrl(context: Context, apiUrl: String) {
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+            .edit()
+            .putString(apiUrlKey, apiUrl)
+            .apply()
+    }
+
     fun clear(context: Context) {
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
             .edit()

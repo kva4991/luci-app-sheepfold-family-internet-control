@@ -15,6 +15,7 @@ class ClientStatusRepository(private val context: Context) {
     companion object {
         private val KEY_ROUTER_URL = stringPreferencesKey("router_base_url")
         private const val ENDPOINT = "/cgi-bin/sheepfold-api/client-status"
+        private const val ACCESS_REQUEST_ENDPOINT = "/cgi-bin/sheepfold-api/access-request"
         private const val TIMEOUT_MS = 5000
         private const val DEFAULT_HTTPS_PORT = 5201
     }
@@ -34,6 +35,46 @@ class ClientStatusRepository(private val context: Context) {
             val candidate = preferredBaseUrl(baseUrl)
             fetchFrom(candidate).onSuccess { saveSelectedBaseUrl(candidate) }
         }
+
+    suspend fun requestThirtyMinutes(baseUrl: String): Result<Unit> = withContext(Dispatchers.IO) {
+        var connection: HttpsURLConnection? = null
+        val candidate = preferredBaseUrl(baseUrl)
+        try {
+            val url = URL("${candidate.trimEnd('/')}$ACCESS_REQUEST_ENDPOINT")
+            val (https, capturedPin) = ChildRouterHttps.open(context, url)
+            connection = https
+            connection.connectTimeout = TIMEOUT_MS
+            connection.readTimeout = TIMEOUT_MS
+            connection.requestMethod = "POST"
+            connection.instanceFollowRedirects = false
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            connection.doOutput = true
+            connection.outputStream.use { it.write(ByteArray(0)) }
+
+            val code = connection.responseCode
+            val body = (if (code in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader(Charsets.UTF_8)
+                ?.use { it.readText() }
+                .orEmpty()
+            if (code !in 200..299) {
+                Result.failure(Exception(extractError(body, code)))
+            } else {
+                val root = JSONObject(body)
+                if (!root.optBoolean("ok", false)) {
+                    Result.failure(Exception(root.optString("message", "Не удалось отправить просьбу")))
+                } else {
+                    ChildRouterHttps.commitCapturedPin(context, url, capturedPin)
+                    saveSelectedBaseUrl(candidate)
+                    Result.success(Unit)
+                }
+            }
+        } catch (error: Exception) {
+            Result.failure(error)
+        } finally {
+            connection?.disconnect()
+        }
+    }
 
     private fun fetchFrom(baseUrl: String): Result<ClientStatusResponse> {
         var connection: HttpsURLConnection? = null
@@ -78,7 +119,7 @@ class ClientStatusRepository(private val context: Context) {
 
     private suspend fun saveSelectedBaseUrl(baseUrl: String) {
         context.clientDataStore.edit { prefs -> prefs[KEY_ROUTER_URL] = baseUrl }
-        context.aiDataStore.edit { prefs -> prefs[KEY_ROUTER_URL] = baseUrl }
+        saveProductRouterUrl(context, baseUrl)
     }
 
     private fun preferredBaseUrl(rawUrl: String): String = candidateBaseUrls(rawUrl).first()
@@ -129,9 +170,8 @@ class ClientStatusRepository(private val context: Context) {
                 deviceName = value.optString("deviceName").takeIf { it.isNotBlank() },
                 isAdministrator = value.optBoolean("isAdministrator", false),
                 clientRole = value.optString("clientRole", "child"),
-                personalGroupName = value.optString("personalGroupName").takeIf { it.isNotBlank() },
-                childAiAllowed = value.optBoolean("childAiAllowed", false),
-                personalGroupRequired = value.optBoolean("personalGroupRequired", false),
+                canRequestAccessExtension = value.optBoolean("canRequestAccessExtension", false),
+                productStatus = parseProductStatus(value),
                 internetState = value.optString("internetState", "unknown"),
                 accessMode = value.optString("accessMode").takeIf { it.isNotBlank() },
                 accessEndsAt = value.optString("accessEndsAt").takeIf { it.isNotBlank() },

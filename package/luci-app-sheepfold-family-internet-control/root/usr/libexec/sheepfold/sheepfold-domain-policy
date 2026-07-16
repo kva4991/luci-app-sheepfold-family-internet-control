@@ -1,0 +1,469 @@
+#!/bin/sh
+set -eu
+
+COMMAND="${1:-status}"
+SITE_LIST_DIR="${SHEEPFOLD_SITE_LIST_RUNTIME_DIR:-/tmp/sheepfold/site-lists}"
+RUNTIME_DIR="${SHEEPFOLD_DOMAIN_POLICY_RUNTIME_DIR:-/tmp/sheepfold/domain-policy}"
+STATUS_FILE="$RUNTIME_DIR/status"
+ACTIVE_FILE="$RUNTIME_DIR/active"
+UCI_HELPER="${SHEEPFOLD_DOMAIN_POLICY_UCI_HELPER:-uci}"
+DNSMASQ_BIN="${SHEEPFOLD_DOMAIN_POLICY_DNSMASQ_BIN:-dnsmasq}"
+DNSMASQ_INIT="${SHEEPFOLD_DOMAIN_POLICY_DNSMASQ_INIT:-/etc/init.d/dnsmasq}"
+FIREWALL_HELPER="${SHEEPFOLD_DOMAIN_POLICY_FIREWALL_HELPER:-/usr/libexec/sheepfold/sheepfold-firewall}"
+NOTIFICATION_HELPER="${SHEEPFOLD_NOTIFICATION_HELPER:-/usr/libexec/sheepfold/sheepfold-admin-notification}"
+LOG_HELPER="${SHEEPFOLD_LOG_HELPER:-/usr/libexec/sheepfold/sheepfold-log}"
+MAX_CONFIG_BYTES="${SHEEPFOLD_DOMAIN_POLICY_MAX_CONFIG_BYTES:-33554432}"
+MAX_LINE_BYTES="${SHEEPFOLD_DOMAIN_POLICY_MAX_LINE_BYTES:-900}"
+LOCK_WAIT_SECONDS="${SHEEPFOLD_DOMAIN_POLICY_LOCK_WAIT_SECONDS:-15}"
+LOCK_DIR="$RUNTIME_DIR/apply.lock"
+
+case "$MAX_CONFIG_BYTES:$MAX_LINE_BYTES:$LOCK_WAIT_SECONDS" in
+	*[!0-9:]*) echo 'Invalid domain policy numeric limit' >&2; exit 2 ;;
+esac
+[ "$MAX_CONFIG_BYTES" -ge 1024 ] || MAX_CONFIG_BYTES=1024
+[ "$MAX_LINE_BYTES" -ge 320 ] || MAX_LINE_BYTES=320
+
+mkdir -p "$RUNTIME_DIR"
+chmod 700 "$RUNTIME_DIR" 2>/dev/null || true
+
+acquire_policy_lock() {
+	apl_waited=0
+	while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+		apl_pid="$(sed -n '1p' "$LOCK_DIR/pid" 2>/dev/null || true)"
+		# Между mkdir и записью PID есть короткое окно. Не принимаем живой lock за
+		# осиротевший только потому, что второй процесс попал именно в него. §dompol
+		case "$apl_pid" in
+			''|*[!0-9]*)
+				sleep 1
+				apl_pid="$(sed -n '1p' "$LOCK_DIR/pid" 2>/dev/null || true)"
+				;;
+		esac
+		case "$apl_pid" in
+			''|*[!0-9]*) apl_alive=0 ;;
+			*) kill -0 "$apl_pid" 2>/dev/null && apl_alive=1 || apl_alive=0 ;;
+		esac
+
+		if [ "$apl_alive" = 0 ]; then
+			rm -f "$LOCK_DIR/pid"
+			rmdir "$LOCK_DIR" 2>/dev/null || true
+			continue
+		fi
+
+		[ "$apl_waited" -lt "$LOCK_WAIT_SECONDS" ] || return 1
+		apl_waited=$((apl_waited + 1))
+		sleep 1
+	done
+
+	printf '%s\n' "$$" > "$LOCK_DIR/pid"
+}
+
+release_policy_lock() {
+	rm -f "$LOCK_DIR/pid"
+	rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+
+safe_value() {
+	printf '%s' "${1:-}" | tr '\n\r\t=' '    ' | cut -c1-700
+}
+
+value_from_file() {
+	key="$1"
+	file="$2"
+	sed -n "s/^$key=//p" "$file" 2>/dev/null | sed -n '1p'
+}
+
+uci_get() {
+	ug_value="$("$UCI_HELPER" -q get "$1" 2>/dev/null || true)"
+	if [ -n "$ug_value" ]; then
+		printf '%s' "$ug_value"
+	else
+		printf '%s' "${2:-}"
+	fi
+}
+
+log_event() {
+	if [ -x "$LOG_HELPER" ]; then
+		"$LOG_HELPER" "$*"
+	else
+		logger -t sheepfold-domain-policy "$*"
+	fi
+}
+
+notify_once() {
+	dedupe_key="$1"
+	message="$2"
+	[ -x "$NOTIFICATION_HELPER" ] || return 0
+	"$NOTIFICATION_HELPER" enqueue site_list_policy "$dedupe_key" \
+		'Sheepfold: списки сайтов' "$message" >/dev/null 2>&1 || true
+}
+
+integration_mode() {
+	im_mode="$(uci_get sheepfold.global.integration_mode none)"
+	case "$im_mode" in none|adguard|podkop|adguard_podkop) ;; *) im_mode=none ;; esac
+	printf '%s' "$im_mode"
+}
+
+site_blocklist_mode() {
+	sbm_mode="$(uci_get sheepfold.global.site_blocklist_mode disabled)"
+	case "$sbm_mode" in disabled|all|except_allowlist_admins) ;; *) sbm_mode=disabled ;; esac
+	printf '%s' "$sbm_mode"
+}
+
+allowlist_policy_requested() {
+	for apr_section in $("$UCI_HELPER" -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=group$/\1/p'); do
+		[ "$(uci_get "sheepfold.$apr_section.allowlist_only" 0)" = 1 ] && return 0
+	done
+	return 1
+}
+
+dnsmasq_conf_dir() {
+	dcd_dir="${SHEEPFOLD_DOMAIN_POLICY_DNSMASQ_DIR:-}"
+	[ -n "$dcd_dir" ] || dcd_dir="$(uci_get 'dhcp.@dnsmasq[0].confdir' /tmp/dnsmasq.d)"
+	dcd_dir="${dcd_dir%%,*}"
+	case "$dcd_dir" in
+		/*) printf '%s' "$dcd_dir" ;;
+		*) [ "${SHEEPFOLD_DOMAIN_POLICY_ALLOW_RELATIVE_PATHS:-0}" = 1 ] && printf '%s' "$dcd_dir" || return 1 ;;
+	esac
+}
+
+dnsmasq_supports_nftset() {
+	command -v "$DNSMASQ_BIN" >/dev/null 2>&1 || [ -x "$DNSMASQ_BIN" ] || return 1
+	"$DNSMASQ_BIN" --version 2>/dev/null | grep -Eq '(^|[[:space:]])nftset([[:space:]]|$)'
+}
+
+write_state() {
+	ws_file="$1"
+	ws_backend="$2"
+	ws_integration="$3"
+	ws_requested="$4"
+	ws_allow_ready="$5"
+	ws_block_ready="$6"
+	ws_reason="$7"
+	ws_config_path="${8:-}"
+	ws_tmp="$ws_file.tmp.$$"
+	{
+		printf 'backend=%s\n' "$(safe_value "$ws_backend")"
+		printf 'integration_mode=%s\n' "$(safe_value "$ws_integration")"
+		printf 'requested=%s\n' "$ws_requested"
+		printf 'allowlist_ready=%s\n' "$ws_allow_ready"
+		printf 'blocklist_ready=%s\n' "$ws_block_ready"
+		printf 'reason=%s\n' "$(safe_value "$ws_reason")"
+		printf 'config_path=%s\n' "$(safe_value "$ws_config_path")"
+		printf 'applied_at=%s\n' "$(date +%s)"
+	} > "$ws_tmp"
+	chmod 600 "$ws_tmp" 2>/dev/null || true
+	mv -f "$ws_tmp" "$ws_file"
+}
+
+active_matches() {
+	[ "$(value_from_file backend "$ACTIVE_FILE")" = dnsmasq ] &&
+		[ "$(value_from_file allowlist_ready "$ACTIVE_FILE")" = "$1" ] &&
+		[ "$(value_from_file blocklist_ready "$ACTIVE_FILE")" = "$2" ]
+}
+
+write_nftset_rules() {
+	wnr_input="$1"
+	wnr_set_v4="$2"
+	wnr_set_v6="$3"
+	wnr_output="$4"
+	[ -s "$wnr_input" ] || return 0
+
+	# Несколько доменов помещаются в строку, но строка остаётся короче опасного
+	# предела dnsmasq. Один огромный nftset= способен оставить роутер без DNS. §dompol
+	awk -v output="$wnr_output" -v set4="$wnr_set_v4" -v set6="$wnr_set_v6" -v max="$MAX_LINE_BYTES" '
+	BEGIN {
+		prefix = "nftset="
+		suffix = "/4#inet#fw4#" set4 ",6#inet#fw4#" set6
+		line = ""
+	}
+	NF {
+		part = "/" $0
+		if (line != "" && length(prefix line part suffix) > max) {
+			print prefix line suffix >> output
+			line = part
+		} else {
+			line = line part
+		}
+	}
+	END {
+		if (line != "")
+			print prefix line suffix >> output
+	}' "$wnr_input"
+}
+
+generate_candidate() {
+	gc_output="$1"
+	gc_allow_requested="$2"
+	gc_block_mode="$3"
+	ALLOWLIST_READY=0
+	BLOCKLIST_READY=0
+	{
+		printf '# Generated by Sheepfold. Manual changes are discarded.\n'
+		printf '# Lists contain domain suffixes resolved through dnsmasq.\n'
+	} > "$gc_output"
+
+	if [ "$gc_allow_requested" = 1 ] && [ -s "$SITE_LIST_DIR/allowlist.domains" ]; then
+		write_nftset_rules "$SITE_LIST_DIR/allowlist.domains" \
+			sheepfold_site_allow_v4 sheepfold_site_allow_v6 "$gc_output"
+		ALLOWLIST_READY=1
+	fi
+
+	if [ "$gc_block_mode" != disabled ] && [ -s "$SITE_LIST_DIR/blocklist.domains" ]; then
+		write_nftset_rules "$SITE_LIST_DIR/blocklist.domains" \
+			sheepfold_site_block_v4 sheepfold_site_block_v6 "$gc_output"
+		BLOCKLIST_READY=1
+	fi
+}
+
+restart_dnsmasq() {
+	[ -x "$DNSMASQ_INIT" ] || return 1
+	"$DNSMASQ_INIT" restart >/dev/null 2>&1
+}
+
+restore_config() {
+	rc_target="$1"
+	rc_backup="$2"
+	rc_had_old="$3"
+	if [ "$rc_had_old" = 1 ]; then
+		cp "$rc_backup" "$rc_target" || return 1
+	else
+		rm -f "$rc_target"
+	fi
+}
+
+reset_domain_sets() {
+	[ -x "$FIREWALL_HELPER" ] || return 1
+	"$FIREWALL_HELPER" domain-reset >/dev/null 2>&1
+}
+
+clear_local_policy() {
+	clp_backend="$1"
+	clp_integration="$2"
+	clp_requested="$3"
+	clp_reason="$4"
+	clp_conf_dir="$(dnsmasq_conf_dir)" || {
+		write_state "$STATUS_FILE" error "$clp_integration" "$clp_requested" 0 0 invalid_confdir ''
+		return 1
+	}
+	clp_target="$clp_conf_dir/sheepfold-domain-policy.conf"
+	clp_backup="$RUNTIME_DIR/clear-backup.conf"
+	clp_active_backup="$RUNTIME_DIR/clear-active-backup"
+	clp_had_old=0
+	clp_had_active=0
+	mkdir -p "$clp_conf_dir"
+	if [ -f "$ACTIVE_FILE" ]; then
+		cp "$ACTIVE_FILE" "$clp_active_backup"
+		clp_had_active=1
+	fi
+
+	if [ -f "$clp_target" ]; then
+		cp "$clp_target" "$clp_backup"
+		clp_had_old=1
+		rm -f "$clp_target"
+		if ! restart_dnsmasq; then
+			cp "$clp_backup" "$clp_target" || true
+			restart_dnsmasq || true
+			write_state "$STATUS_FILE" error "$clp_integration" "$clp_requested" \
+				"$(value_from_file allowlist_ready "$ACTIVE_FILE")" \
+				"$(value_from_file blocklist_ready "$ACTIVE_FILE")" restart_failed "$clp_target"
+			rm -f "$clp_backup" "$clp_active_backup"
+			return 1
+		fi
+	fi
+
+	rm -f "$ACTIVE_FILE"
+	if ! reset_domain_sets; then
+		# Удаление локальной DNS-политики тоже транзакционно: если firewall не смог
+		# убрать старые sets, возвращаем прежний конфиг и прежний active-маркер. §dompol
+		restore_config "$clp_target" "$clp_backup" "$clp_had_old" || true
+		[ "$clp_had_old" = 1 ] && restart_dnsmasq || true
+		restore_config "$ACTIVE_FILE" "$clp_active_backup" "$clp_had_active" || true
+		reset_domain_sets >/dev/null 2>&1 || true
+		write_state "$STATUS_FILE" error "$clp_integration" "$clp_requested" \
+			"$(value_from_file allowlist_ready "$ACTIVE_FILE")" \
+			"$(value_from_file blocklist_ready "$ACTIVE_FILE")" firewall_sync_failed "$clp_target"
+		rm -f "$clp_backup" "$clp_active_backup"
+		return 1
+	fi
+	rm -f "$clp_backup" "$clp_active_backup"
+	write_state "$STATUS_FILE" "$clp_backend" "$clp_integration" "$clp_requested" 0 0 "$clp_reason" "$clp_target"
+	return 0
+}
+
+apply_dnsmasq_policy() {
+	adp_integration="$1"
+	adp_allow_requested="$2"
+	adp_block_mode="$3"
+	adp_conf_dir="$(dnsmasq_conf_dir)" || {
+		write_state "$STATUS_FILE" error "$adp_integration" 1 0 0 invalid_confdir ''
+		return 1
+	}
+	adp_target="$adp_conf_dir/sheepfold-domain-policy.conf"
+	adp_candidate="$RUNTIME_DIR/candidate.conf"
+	adp_backup="$RUNTIME_DIR/config-backup.conf"
+	adp_active_backup="$RUNTIME_DIR/active-backup"
+	adp_had_old=0
+	adp_had_active=0
+	mkdir -p "$adp_conf_dir"
+
+	generate_candidate "$adp_candidate" "$adp_allow_requested" "$adp_block_mode"
+	adp_size="$(wc -c < "$adp_candidate" | tr -d ' ')"
+	if [ "$adp_size" -gt "$MAX_CONFIG_BYTES" ]; then
+		rm -f "$adp_candidate"
+		write_state "$STATUS_FILE" error "$adp_integration" 1 \
+			"$ALLOWLIST_READY" "$BLOCKLIST_READY" config_too_large "$adp_target"
+		notify_once domain_policy_config_too_large \
+			'Итоговый DNS-конфиг списков сайтов слишком велик для безопасного применения. Старые правила сохранены.'
+		return 1
+	fi
+
+	# Пустой кэш после загрузки роутера не превращается в запрет всего интернета.
+	# Строгий белый список включается только после появления проверенных доменов. §dompol
+	if [ "$ALLOWLIST_READY" = 0 ] && [ "$BLOCKLIST_READY" = 0 ]; then
+		rm -f "$adp_candidate"
+		clear_local_policy waiting_for_lists "$adp_integration" 1 waiting_for_lists
+		return $?
+	fi
+
+	[ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" ensure >/dev/null 2>&1 || {
+		rm -f "$adp_candidate"
+		write_state "$STATUS_FILE" error "$adp_integration" 1 0 0 firewall_unavailable "$adp_target"
+		return 1
+	}
+	if ! "$DNSMASQ_BIN" --test --conf-file="$adp_candidate" >/dev/null 2>&1; then
+		rm -f "$adp_candidate"
+		write_state "$STATUS_FILE" error "$adp_integration" 1 0 0 dnsmasq_config_invalid "$adp_target"
+		notify_once domain_policy_invalid_config \
+			'Dnsmasq отклонил новый конфиг списков сайтов. Старая рабочая конфигурация сохранена.'
+		return 1
+	fi
+
+	if [ -f "$adp_target" ] && cmp -s "$adp_target" "$adp_candidate" && \
+		active_matches "$ALLOWLIST_READY" "$BLOCKLIST_READY"; then
+		rm -f "$adp_candidate"
+		if ! "$FIREWALL_HELPER" sync >/dev/null 2>&1; then
+			write_state "$STATUS_FILE" error "$adp_integration" 1 \
+				"$ALLOWLIST_READY" "$BLOCKLIST_READY" firewall_sync_failed "$adp_target"
+			return 1
+		fi
+		write_state "$STATUS_FILE" dnsmasq "$adp_integration" 1 \
+			"$ALLOWLIST_READY" "$BLOCKLIST_READY" active "$adp_target"
+		return 0
+	fi
+
+	if [ -f "$adp_target" ]; then
+		cp "$adp_target" "$adp_backup"
+		adp_had_old=1
+	fi
+	if [ -f "$ACTIVE_FILE" ]; then
+		cp "$ACTIVE_FILE" "$adp_active_backup"
+		adp_had_active=1
+	fi
+	mv -f "$adp_candidate" "$adp_target"
+	chmod 600 "$adp_target" 2>/dev/null || true
+
+	if ! restart_dnsmasq; then
+		restore_config "$adp_target" "$adp_backup" "$adp_had_old" || true
+		restart_dnsmasq || true
+		rm -f "$adp_backup" "$adp_active_backup"
+		write_state "$STATUS_FILE" error "$adp_integration" 1 \
+			"$(value_from_file allowlist_ready "$ACTIVE_FILE")" \
+			"$(value_from_file blocklist_ready "$ACTIVE_FILE")" restart_failed "$adp_target"
+		notify_once domain_policy_restart_failed \
+			'Dnsmasq не запустился с новым списком сайтов. Sheepfold вернул прежний конфиг.'
+		return 1
+	fi
+
+	# Firewall должен прочитать готовность именно нового DNS-конфига. При ошибке
+	# возвращаются и конфиг, и active-маркер, иначе строгая группа могла бы остаться
+	# с набором MAC от предыдущего режима. §dompol
+	if ! write_state "$ACTIVE_FILE" dnsmasq "$adp_integration" 1 \
+		"$ALLOWLIST_READY" "$BLOCKLIST_READY" active "$adp_target"; then
+		restore_config "$adp_target" "$adp_backup" "$adp_had_old" || true
+		restart_dnsmasq || true
+		restore_config "$ACTIVE_FILE" "$adp_active_backup" "$adp_had_active" || true
+		reset_domain_sets >/dev/null 2>&1 || true
+		rm -f "$adp_backup" "$adp_active_backup"
+		write_state "$STATUS_FILE" error "$adp_integration" 1 0 0 active_state_write_failed "$adp_target"
+		return 1
+	fi
+
+	if ! reset_domain_sets; then
+		restore_config "$adp_target" "$adp_backup" "$adp_had_old" || true
+		restart_dnsmasq || true
+		restore_config "$ACTIVE_FILE" "$adp_active_backup" "$adp_had_active" || true
+		reset_domain_sets >/dev/null 2>&1 || true
+		rm -f "$adp_backup" "$adp_active_backup"
+		write_state "$STATUS_FILE" error "$adp_integration" 1 \
+			"$(value_from_file allowlist_ready "$ACTIVE_FILE")" \
+			"$(value_from_file blocklist_ready "$ACTIVE_FILE")" firewall_sync_failed "$adp_target"
+		return 1
+	fi
+
+	rm -f "$adp_backup" "$adp_active_backup"
+	write_state "$STATUS_FILE" dnsmasq "$adp_integration" 1 \
+		"$ALLOWLIST_READY" "$BLOCKLIST_READY" active "$adp_target"
+	log_event "DNS-политика белого и чёрного списков сайтов применена"
+}
+
+apply_policy() {
+	ap_integration="$(integration_mode)"
+	ap_block_mode="$(site_blocklist_mode)"
+	ap_allow_requested=0
+	allowlist_policy_requested && ap_allow_requested=1
+	ap_requested=0
+	[ "$ap_allow_requested" = 1 ] && ap_requested=1
+	[ "$ap_block_mode" != disabled ] && ap_requested=1
+
+	if [ "$ap_requested" = 0 ]; then
+		clear_local_policy disabled "$ap_integration" 0 disabled
+		return $?
+	fi
+
+	case "$ap_integration" in
+		adguard|adguard_podkop)
+			# AdGuard остаётся единственным владельцем DNS-фильтрации. Sheepfold не
+			# переписывает его API или YAML без отдельного согласия владельца. §dompol
+			clear_local_policy adguard "$ap_integration" 1 delegated_to_adguard
+			return $?
+			;;
+	esac
+
+	if ! dnsmasq_supports_nftset; then
+		clear_local_policy unsupported "$ap_integration" 1 dnsmasq_nftset_unavailable
+		notify_once domain_policy_nftset_unavailable \
+			'Dnsmasq не поддерживает nftset. Списки сайтов Sheepfold пока не фильтруют трафик; интернет оставлен доступным.'
+		return 0
+	fi
+
+	apply_dnsmasq_policy "$ap_integration" "$ap_allow_requested" "$ap_block_mode"
+}
+
+show_status() {
+	if [ -r "$STATUS_FILE" ]; then
+		cat "$STATUS_FILE"
+	else
+		printf 'backend=unknown\nintegration_mode=%s\nrequested=0\nallowlist_ready=0\nblocklist_ready=0\nreason=not_applied\nconfig_path=\napplied_at=\n' \
+			"$(integration_mode)"
+	fi
+}
+
+case "$COMMAND" in
+	apply|refresh)
+		acquire_policy_lock || { echo 'Site list policy update is already running' >&2; exit 2; }
+		trap 'release_policy_lock' 0
+		trap 'exit 1' 1 2 3 15
+		apply_policy
+		;;
+	clear)
+		acquire_policy_lock || { echo 'Site list policy update is already running' >&2; exit 2; }
+		trap 'release_policy_lock' 0
+		trap 'exit 1' 1 2 3 15
+		clear_local_policy disabled "$(integration_mode)" 0 cleared
+		;;
+	status) show_status ;;
+	*)
+		echo 'Usage: sheepfold-domain-policy [apply|refresh|clear|status]' >&2
+		exit 2
+		;;
+esac

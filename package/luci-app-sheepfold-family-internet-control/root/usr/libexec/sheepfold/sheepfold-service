@@ -15,6 +15,7 @@ SIGNAL_PROCESSING_FLAG="/tmp/sheepfold/device-signals.processing"
 UPDATE_REQUEST_FILE="/tmp/sheepfold/update.request"
 REBOOT_REQUEST_FILE="/tmp/sheepfold/reboot.request"
 LED_ALERT_ACK_FILE="/tmp/sheepfold/new-device-alert.ack"
+LAST_CONTROL_TICK=0
 
 init_ram_log() {
         RAM_LOG="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf '%s' "$DEFAULT_RAM_LOG")"
@@ -49,17 +50,27 @@ handle_reboot_request() {
 }
 
 handle_router_control() {
+        mode="${1:-periodic}"
         [ -x "$ROUTER_CONTROL" ] || return 0
 
         if [ -e "$LED_ALERT_ACK_FILE" ]; then
                 "$ROUTER_CONTROL" led-alert-ack >/dev/null 2>&1 || true
         fi
 
-        "$ROUTER_CONTROL" wifi-automation-tick >/dev/null 2>&1 || true
-        "$ROUTER_CONTROL" wan-status-tick >/dev/null 2>&1 || true
-        "$ROUTER_CONTROL" expire-temp-access >/dev/null 2>&1 || true
-        "$ROUTER_CONTROL" led-apply >/dev/null 2>&1 || true
-        "$ROUTER_CONTROL" blocked-page-apply >/dev/null 2>&1 || true
+        now="$(date +%s)"
+        control_interval="$(uci -q get sheepfold.global.service_control_interval_seconds 2>/dev/null || printf 30)"
+        case "$control_interval" in ''|*[!0-9]*) control_interval=30 ;; esac
+        [ "$control_interval" -ge 15 ] || control_interval=15
+        [ "$control_interval" -le 3600 ] || control_interval=3600
+
+        if [ "$mode" = force ] || [ $((now - LAST_CONTROL_TICK)) -ge "$control_interval" ]; then
+                "$ROUTER_CONTROL" wifi-automation-tick >/dev/null 2>&1 || true
+                "$ROUTER_CONTROL" wan-status-tick >/dev/null 2>&1 || true
+                "$ROUTER_CONTROL" expire-temp-access >/dev/null 2>&1 || true
+                "$ROUTER_CONTROL" led-apply >/dev/null 2>&1 || true
+                "$ROUTER_CONTROL" blocked-page-apply >/dev/null 2>&1 || true
+                LAST_CONTROL_TICK="$now"
+        fi
         # Проверка дешёвая: при неизменном checksum helper не пишет nft. После
         # чужого firewall reload она восстанавливает только Sheepfold sets. §v7x2k9p
         [ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
@@ -107,7 +118,7 @@ case "$COMMAND" in
                 while :; do
                         handle_update_request
                         handle_reboot_request
-                        handle_router_control
+                        handle_router_control periodic
 
                         DETECTION_MODE="$(uci -q get sheepfold.global.detection_mode 2>/dev/null || printf full)"
                         if [ "$DETECTION_MODE" != "disabled" ] && [ -x "$DETECTOR" ]; then
@@ -143,12 +154,14 @@ case "$COMMAND" in
                                                 [ "$SIGNALS_CHANGED" = "1" ] && finish_signal_change
                                                 LAST_LEASES_STATE="$LEASES_STATE"
                                                 [ "$SCAN_SCOPE" = "full" ] && LAST_FULL_SCAN="$NOW"
+                                                [ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
                                         elif [ "$SIGNALS_CHANGED" = "1" ]; then
                                                 restore_signal_change
                                         fi
                                 elif [ $((NOW - LAST_FULL_SCAN)) -ge "$INTERVAL" ]; then
                                         if run_detector scan full >/dev/null 2>&1; then
                                                 LAST_FULL_SCAN="$NOW"
+                                                [ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
                                         fi
                                 fi
                         else
@@ -161,7 +174,7 @@ case "$COMMAND" in
                 init_ram_log
                 handle_update_request
                 handle_reboot_request
-                handle_router_control
+                handle_router_control force
                 [ -x "$DETECTOR" ] && run_detector scan >/dev/null 2>&1 || true
                 echo "Sheepfold reload complete"
                 ;;

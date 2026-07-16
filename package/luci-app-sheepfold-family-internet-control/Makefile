@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=165
+PKG_RELEASE:=186
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -46,7 +46,8 @@ cleanup_opkg_conffile_artifacts() {
 	done
 }
 cleanup_stale_update_artifacts() {
-	rm -f /tmp/sheepfold/update/*.ipk /tmp/sheepfold/update/sheepfold-config-before-update 2>/dev/null || true
+	# Временную копию конфига удаляет updater только после проверки результата opkg (§updsafe).
+	rm -f /tmp/sheepfold/update/*.ipk 2>/dev/null || true
 }
 recover_sheepfold_config() {
 	mkdir -p /etc/config /etc/sheepfold/migrations
@@ -103,6 +104,14 @@ ensure_global_option() {
 ensure_global_option enabled '0'
 ensure_global_option language 'ru'
 ensure_global_option block_on_boot '0'
+legacy_access_priority='emergency_sites no_restrictions blocklist allowlist global_block temp_access device_schedule group_schedule default_access'
+safe_access_priority='blocklist admin_devices no_restrictions allowlist global_block temp_access device_schedule group_schedule default_access'
+current_access_priority="$$(uci -q get sheepfold.global.access_priority 2>/dev/null || true)"
+# Меняем только прежний заводской порядок. Неизвестное пользовательское значение
+# сохраняем для диагностики и будущей явной миграции, а не переписываем молча.
+[ "$$current_access_priority" != "$$legacy_access_priority" ] || uci -q set sheepfold.global.access_priority="$$safe_access_priority"
+ensure_global_option access_priority "$$safe_access_priority"
+ensure_global_option schedule_conflict_internet 'off'
 ensure_global_option lan_firewall_zones 'lan'
 ensure_global_option integration_mode 'none'
 ensure_global_option integration_mode_source 'default'
@@ -111,11 +120,14 @@ ensure_global_option new_device_policy 'allow'
 ensure_global_option auto_configure '1'
 ensure_global_option detection_mode 'full'
 ensure_global_option no_restrictions_auto_assign '1'
+ensure_global_option personal_devices_auto_assign '1'
 ensure_global_option detector_watch_interval_seconds '10'
 ensure_global_option detector_interval_seconds '900'
 ensure_global_option detector_min_device_type_confidence '70'
 ensure_global_option detector_min_no_restrictions_confidence '80'
 ensure_global_option detector_nmap_host_timeout_seconds '20'
+ensure_global_option detector_full_rescan_seconds '21600'
+ensure_global_option service_control_interval_seconds '30'
 ensure_global_option update_check_install_mode 'weekly'
 ensure_global_option active_messenger 'none'
 ensure_global_option ai_enabled '0'
@@ -158,9 +170,20 @@ ensure_global_option blocked_page_enabled '1'
 ensure_global_option blocked_page_text 'Интернет временно недоступен по семейным правилам. Если это ошибка, обратитесь к родителю.'
 ensure_global_option blocked_page_port '5202'
 ensure_global_option domain_allowlist_for_blocklist '1'
-ensure_global_option site_allowlist_sources 'UT1 child | https://dsi.ut-capitole.fr/blacklists/index_en.php#child'
+old_site_allowlist_sources='UT1 child | https://dsi.ut-capitole.fr/blacklists/index_en.php#child'
+default_site_allowlist_sources='UT1 child | https://dsi.ut-capitole.fr/blacklists/download/child.tar.gz'
+current_site_allowlist_sources="$$(uci -q get sheepfold.global.site_allowlist_sources 2>/dev/null || true)"
+if [ -z "$$current_site_allowlist_sources" ] || [ "$$current_site_allowlist_sources" = "$$old_site_allowlist_sources" ]; then
+	# Старый URL открывал страницу описания, а не сам список. Пользовательские значения не трогаем.
+	uci -q set sheepfold.global.site_allowlist_sources="$$default_site_allowlist_sources"
+fi
 ensure_global_option site_blocklist_mode 'except_allowlist_admins'
-ensure_global_option site_blocklist_sources 'UT1 adult, malware, phishing, gambling, games, vpn | https://dsi.ut-capitole.fr/blacklists/index_en.php; StevenBlack hosts gambling-porn | https://github.com/StevenBlack/hosts; HaGeZi Threat Intelligence Feeds | https://github.com/hagezi/dns-blocklists; URLhaus malware URLs | https://urlhaus.abuse.ch/api/'
+old_site_blocklist_sources='UT1 adult, malware, phishing, gambling, games, vpn | https://dsi.ut-capitole.fr/blacklists/index_en.php; StevenBlack hosts gambling-porn | https://github.com/StevenBlack/hosts; HaGeZi Threat Intelligence Feeds | https://github.com/hagezi/dns-blocklists; URLhaus malware URLs | https://urlhaus.abuse.ch/api/'
+default_site_blocklist_sources='HaGeZi NSFW | https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nsfw.txt; HaGeZi Gambling mini | https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/gambling.mini.txt; HaGeZi Threat Intelligence mini | https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.mini.txt; URLhaus malware domains | https://urlhaus.abuse.ch/downloads/hostfile/'
+current_site_blocklist_sources="$$(uci -q get sheepfold.global.site_blocklist_sources 2>/dev/null || true)"
+if [ -z "$$current_site_blocklist_sources" ] || [ "$$current_site_blocklist_sources" = "$$old_site_blocklist_sources" ]; then
+	uci -q set sheepfold.global.site_blocklist_sources="$$default_site_blocklist_sources"
+fi
 ensure_global_option site_lists_update_interval 'weekly'
 ensure_global_option activity_log_enabled '0'
 ensure_global_option private_logs '0'
@@ -174,6 +197,8 @@ fi
 ensure_global_option log_retention '3d'
 ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
+ensure_global_option feedback_endpoint ''
+ensure_global_option feedback_install_id ''
 uci -q delete sheepfold.global.app_https_port 2>/dev/null || true
 ensure_global_option log_storage 'ram'
 ensure_global_option log_cache_path '/tmp/sheepfold/events.log'
@@ -193,6 +218,40 @@ ensure_named_section() {
 ensure_named_section allowlist list
 ensure_named_section blocklist list
 ensure_named_section domain_allowlist list
+add_emergency_site() {
+	section="$$1"
+	domain="$$2"
+	name="$$3"
+	description="$$4"
+	order="$$5"
+	uci -q set "sheepfold.$$section=emergency_site"
+	uci -q set "sheepfold.$$section.domain=$$domain"
+	uci -q set "sheepfold.$$section.name=$$name"
+	uci -q set "sheepfold.$$section.description=$$description"
+	uci -q set "sheepfold.$$section.enabled=1"
+	uci -q set "sheepfold.$$section.order=$$order"
+}
+if [ "$$(uci -q get sheepfold.global.emergency_sites_initialized 2>/dev/null || printf 0)" != 1 ] && \
+		! uci -q show sheepfold 2>/dev/null | grep -q '=emergency_site$$'; then
+	legacy_order=0
+	for legacy_domain in $$(uci -q get sheepfold.domain_allowlist.domain 2>/dev/null || true); do
+		printf '%s' "$$legacy_domain" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}$$' || continue
+		legacy_order=$$((legacy_order + 1))
+		add_emergency_site "emergency_legacy_$$legacy_order" "$$legacy_domain" "$$legacy_domain" '' "$$legacy_order"
+	done
+	if [ "$$legacy_order" = 0 ]; then
+		# Стартовый набор создаём только при отсутствии пользовательских записей.
+		# Обновление пакета не должно возвращать удалённые родителем домены. §emerg1
+		add_emergency_site emergency_gosuslugi_ru gosuslugi.ru 'Госуслуги' 'Государственные услуги' 1
+		add_emergency_site emergency_esia_gosuslugi_ru esia.gosuslugi.ru 'ЕСИА' 'Вход в государственную учётную запись' 2
+		add_emergency_site emergency_mos_ru mos.ru 'Услуги Москвы' 'Городские сервисы' 3
+		add_emergency_site emergency_school_mos_ru school.mos.ru 'Московская школа' 'Доступ к школе' 4
+		add_emergency_site emergency_dnevnik_ru dnevnik.ru 'Дневник.ру' 'Школьный дневник' 5
+		add_emergency_site emergency_ya_ru ya.ru 'Поиск Яндекса' 'Узкая точка входа в поиск' 6
+		add_emergency_site emergency_2gis_ru 2gis.ru '2ГИС' 'Карты и организации' 7
+	fi
+fi
+uci -q set sheepfold.global.emergency_sites_initialized='1'
 ensure_named_section adguard integration
 ensure_named_section podkop integration
 ensure_named_section messenger_global messenger
@@ -227,6 +286,10 @@ uci -q get sheepfold.owner >/dev/null || uci -q set sheepfold.owner=administrato
 [ -n "$$(uci -q get sheepfold.owner.login 2>/dev/null)" ] || uci -q set sheepfold.owner.login='SuperParent'
 [ -n "$$(uci -q get sheepfold.owner.role 2>/dev/null)" ] || uci -q set sheepfold.owner.role='owner'
 [ -n "$$(uci -q get sheepfold.owner.password_setup_required 2>/dev/null)" ] || uci -q set sheepfold.owner.password_setup_required='1'
+[ -n "$$(uci -q get sheepfold.owner.allow_child_access_requests 2>/dev/null)" ] || uci -q set sheepfold.owner.allow_child_access_requests='0'
+for section in $$(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$$/\1/p'); do
+	[ -n "$$(uci -q get sheepfold.$$section.allow_child_access_requests 2>/dev/null)" ] || uci -q set sheepfold.$$section.allow_child_access_requests='0'
+done
 # Администраторы используют ту же понятную числовую схему ID, что и устройства.
 used_admin_ids=' 1 '
 next_admin_id=2
@@ -321,9 +384,8 @@ install_sheepfold_cron() {
 	fi
 	cat >> "$$tmp" <<'EOF'
 # BEGIN SHEEPFOLD MANAGED JOBS
-5 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
+* * * * * /usr/libexec/sheepfold/sheepfold-firewall sync >/dev/null 2>&1
 10 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-log-storage archive-push >/dev/null 2>&1
-55 4 * * * /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
 0 5 * * * /usr/libexec/sheepfold/sheepfold-log-storage archive-push >/dev/null 2>&1
 # END SHEEPFOLD MANAGED JOBS
 EOF
@@ -346,6 +408,10 @@ endef
 define Package/$(PKG_NAME)/prerm
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
+[ -x /usr/libexec/sheepfold/sheepfold-site-lists ] && \
+	/usr/libexec/sheepfold/sheepfold-site-lists cron-remove >/dev/null 2>&1 || true
+[ -x /usr/libexec/sheepfold/sheepfold-domain-policy ] && \
+	/usr/libexec/sheepfold/sheepfold-domain-policy clear >/dev/null 2>&1 || true
 # До удаления исполняемых файлов очищаем только собственные наборы Sheepfold.
 # Чужие таблицы, правила и packet marks, включая Podkop, не изменяются. §v7x2k9p
 [ -x /usr/libexec/sheepfold/sheepfold-firewall ] && \

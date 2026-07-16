@@ -63,6 +63,7 @@ for option in \
         detection_policy_version \
         detection_fingerprint \
         detection_ports \
+        detection_ports_scanned_at \
         detection_oui_vendor \
         detection_mdns_services \
         detection_updated_at; do
@@ -71,7 +72,7 @@ done
 
 uci -q commit sheepfold
 
-if [ -x "$DETECTOR" ] && ! "$DETECTOR" scan changed >/dev/null 2>&1; then
+if [ -x "$DETECTOR" ] && ! "$DETECTOR" scan full "$mac" >/dev/null 2>&1; then
         release_lock
         echo "reclassification_scan_failed" >&2
         exit 6

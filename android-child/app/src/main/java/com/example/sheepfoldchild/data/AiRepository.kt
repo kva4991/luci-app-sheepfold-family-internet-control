@@ -43,7 +43,7 @@ class AiRepository(private val context: Context) {
             ?: return@withContext Result.failure(
                 IllegalStateException("Роутер ещё не подтвердил статус устройства")
             )
-        if (status?.personalGroupRequired == true) {
+        if (status.productStatus.personalGroupRequired) {
             return@withContext Result.failure(
                 IllegalStateException("Попросите родителя поместить ваше устройство в вашу личную группу, тогда ИИ-помощник откроется.")
             )

@@ -1,0 +1,217 @@
+#!/bin/sh
+set -eu
+
+LOG_HELPER="${SHEEPFOLD_LOG_HELPER:-/usr/libexec/sheepfold/sheepfold-log}"
+STATE_DIR="${SHEEPFOLD_SCHEDULE_STATE_DIR:-/tmp/sheepfold/schedule-conflicts}"
+
+print_kv() {
+	printf '%s=%s\n' "$1" "$(printf '%s' "$2" | tr '\r\n\t' '   ')"
+}
+
+uci_get() {
+	uci -q get "$1" 2>/dev/null || true
+}
+
+weekday_key() {
+	case "$1" in
+		1) printf mon ;;
+		2) printf tue ;;
+		3) printf wed ;;
+		4) printf thu ;;
+		5) printf fri ;;
+		6) printf sat ;;
+		7) printf sun ;;
+		*) printf mon ;;
+	esac
+}
+
+list_has_word() {
+	local wanted="$1" value
+	shift
+	for value in "$@"; do
+		[ "$value" = "$wanted" ] && return 0
+	done
+	return 1
+}
+
+time_minutes() {
+	local value="$1" hours minutes
+	case "$value" in
+		[0-2][0-9]:[0-5][0-9]) ;;
+		*) return 1 ;;
+	esac
+	hours="${value%%:*}"
+	minutes="${value#*:}"
+	hours="${hours#0}"
+	minutes="${minutes#0}"
+	[ -n "$hours" ] || hours=0
+	[ -n "$minutes" ] || minutes=0
+	[ "$hours" -le 23 ] || return 1
+	printf '%s\n' "$((hours * 60 + minutes))"
+}
+
+schedule_is_active() {
+	local section="$1" range start_text end_text start end
+	local today yesterday now_minutes weekdays
+
+	today="${SHEEPFOLD_NOW_WEEKDAY:-$(weekday_key "$(date +%u)")}"
+	yesterday="${SHEEPFOLD_PREVIOUS_WEEKDAY:-}"
+	if [ -z "$yesterday" ]; then
+		case "$today" in
+			mon) yesterday=sun ;; tue) yesterday=mon ;; wed) yesterday=tue ;;
+			thu) yesterday=wed ;; fri) yesterday=thu ;; sat) yesterday=fri ;; sun) yesterday=sat ;;
+		esac
+	fi
+	if [ -n "${SHEEPFOLD_NOW_MINUTES:-}" ]; then
+		now_minutes="$SHEEPFOLD_NOW_MINUTES"
+	else
+		now_hours="$(date +%H)"
+		now_mins="$(date +%M)"
+		now_hours="${now_hours#0}"
+		now_mins="${now_mins#0}"
+		[ -n "$now_hours" ] || now_hours=0
+		[ -n "$now_mins" ] || now_mins=0
+		now_minutes="$((now_hours * 60 + now_mins))"
+	fi
+	weekdays="$(uci_get "sheepfold.$section.weekdays")"
+
+	for range in $(uci_get "sheepfold.$section.time_ranges"); do
+		start_text="${range%%-*}"
+		end_text="${range#*-}"
+		start="$(time_minutes "$start_text" 2>/dev/null || printf '%s' -1)"
+		end="$(time_minutes "$end_text" 2>/dev/null || printf '%s' -1)"
+		[ "$start" -ge 0 ] && [ "$end" -ge 0 ] && [ "$start" -ne "$end" ] || continue
+
+		if [ "$end" -gt "$start" ]; then
+			list_has_word "$today" $weekdays && [ "$now_minutes" -ge "$start" ] && [ "$now_minutes" -lt "$end" ] && return 0
+		else
+			# Ночной интервал принадлежит дню начала: правило понедельника 22:00-07:00
+			# продолжает действовать во вторник до 07:00. Это легко сломать проверкой только текущего дня.
+			list_has_word "$today" $weekdays && [ "$now_minutes" -ge "$start" ] && return 0
+			list_has_word "$yesterday" $weekdays && [ "$now_minutes" -lt "$end" ] && return 0
+		fi
+	done
+
+	return 1
+}
+
+schedule_targets_device() {
+	local section="$1" device_section="$2" target_type target device_id device_group group_name
+	target_type="$(uci_get "sheepfold.$section.target_type")"
+	device_id="$(uci_get "sheepfold.$device_section.id")"
+	device_group="$(uci_get "sheepfold.$device_section.group")"
+
+	case "$target_type" in
+		device)
+			for target in $(uci_get "sheepfold.$section.targets"); do
+				[ "$target" = "$device_id" ] || [ "$target" = "$device_section" ] || continue
+				return 0
+			done
+			;;
+		group|"")
+			for target in $(uci_get "sheepfold.$section.targets"); do
+				group_name="$(uci_get "sheepfold.$target.name")"
+				if [ "$device_group" != "$target" ] && { [ -z "$group_name" ] || [ "$device_group" != "$group_name" ]; }; then
+					continue
+				fi
+				return 0
+			done
+			;;
+	esac
+
+	return 1
+}
+
+evaluate_scope() {
+	local wanted_scope="$1" device_section="$2" section target_type action
+	local allow_count=0 block_count=0 active_sections=""
+
+	for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=schedule$/\1/p'); do
+		[ "$(uci_get "sheepfold.$section.enabled")" != 0 ] || continue
+		target_type="$(uci_get "sheepfold.$section.target_type")"
+		[ -n "$target_type" ] || target_type=group
+		[ "$target_type" = "$wanted_scope" ] || continue
+		schedule_targets_device "$section" "$device_section" || continue
+		schedule_is_active "$section" || continue
+
+		action="$(uci_get "sheepfold.$section.action")"
+		case "$action" in
+			allow) allow_count=$((allow_count + 1)) ;;
+			block) block_count=$((block_count + 1)) ;;
+			*) continue ;;
+		esac
+		active_sections="${active_sections}${active_sections:+ }$section"
+	done
+
+	printf '%s|%s|%s\n' "$allow_count" "$block_count" "$active_sections"
+}
+
+record_conflict() {
+	local device_section="$1" conflict="$2" result="$3" sections="$4"
+	local state_file previous device_id result_text
+	state_file="$STATE_DIR/$device_section"
+
+	if [ "$conflict" != 1 ]; then
+		rm -f "$state_file" 2>/dev/null || true
+		return 0
+	fi
+
+	mkdir -p "$STATE_DIR"
+	previous="$(cat "$state_file" 2>/dev/null || true)"
+	[ "$previous" != "$result|$sections" ] || return 0
+	printf '%s\n' "$result|$sections" > "$state_file"
+	device_id="$(uci_get "sheepfold.$device_section.id")"
+	[ -n "$device_id" ] || device_id="$device_section"
+	[ "$result" = allow ] && result_text='интернет включён' || result_text='интернет выключен'
+	[ -x "$LOG_HELPER" ] && "$LOG_HELPER" "Конфликт расписаний для устройства #$device_id: одновременно действуют правила включения и отключения; $result_text согласно настройке." || true
+}
+
+device_section="${1:-}"
+[ -n "$device_section" ] || {
+	echo "Usage: sheepfold-schedule-evaluator <device-section>" >&2
+	exit 2
+}
+
+scope=device
+scope_result="$(evaluate_scope device "$device_section")"
+allow_count="${scope_result%%|*}"
+scope_rest="${scope_result#*|}"
+block_count="${scope_rest%%|*}"
+active_sections="${scope_rest#*|}"
+
+if [ "$allow_count" -eq 0 ] && [ "$block_count" -eq 0 ]; then
+	scope=group
+	scope_result="$(evaluate_scope group "$device_section")"
+	allow_count="${scope_result%%|*}"
+	scope_rest="${scope_result#*|}"
+	block_count="${scope_rest%%|*}"
+	active_sections="${scope_rest#*|}"
+fi
+
+status=none
+reason=no_active_schedule
+conflict=0
+if [ "$allow_count" -gt 0 ] && [ "$block_count" -gt 0 ]; then
+	conflict=1
+	case "$(uci_get sheepfold.global.schedule_conflict_internet)" in
+		on) status=allow; reason=schedule_conflict_internet_on ;;
+		*) status=block; reason=schedule_conflict_internet_off ;;
+	esac
+elif [ "$block_count" -gt 0 ]; then
+	status=block
+	reason=schedule_block
+elif [ "$allow_count" -gt 0 ]; then
+	status=allow
+	reason=schedule_allow
+fi
+
+active_schedule="${active_sections%% *}"
+[ -z "$active_schedule" ] || active_schedule="$(uci_get "sheepfold.$active_schedule.name")"
+record_conflict "$device_section" "$conflict" "$status" "$active_sections"
+
+print_kv status "$status"
+print_kv reason "$reason"
+print_kv conflict "$conflict"
+print_kv scope "$scope"
+print_kv active_schedule "$active_schedule"
+print_kv active_schedule_sections "$active_sections"

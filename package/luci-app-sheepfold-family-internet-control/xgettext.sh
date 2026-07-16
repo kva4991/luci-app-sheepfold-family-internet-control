@@ -4,17 +4,20 @@ set -euo pipefail
 # Извлекает msgid из _('...') во view-файлах LuCI JS и обновляет po/templates/sheepfold.pot.
 # По образцу itdoginfo/podkop (luci-app-podkop/xgettext.sh); см. CODING_RULES.md, раздел 8.2.
 
-SRC_DIR="htdocs/luci-static/resources/view/sheepfold"
+VIEW_DIR="htdocs/luci-static/resources/view/sheepfold"
+MODULE_DIR="htdocs/luci-static/resources/sheepfold"
 OUT_POT="po/templates/sheepfold.pot"
 ENCODING="UTF-8"
 WIDTH=120
 
-FILES=(
-    "$SRC_DIR/ai.js"
-    "$SRC_DIR/overview.js"
-    "$SRC_DIR/overview-secure.js"
-    "$SRC_DIR/overview-personal.js"
+mapfile -d '' FILES < <(
+    find "$VIEW_DIR" "$MODULE_DIR" -type f -name '*.js' -print0 | sort -z
 )
+
+if [ "${#FILES[@]}" -eq 0 ]; then
+    echo "LuCI JS-файлы для извлечения переводов не найдены" >&2
+    exit 1
+fi
 
 for f in "${FILES[@]}"; do
     if [ ! -f "$f" ]; then

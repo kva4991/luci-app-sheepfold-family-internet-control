@@ -4,9 +4,13 @@ set -u
 LEGACY="/usr/libexec/sheepfold/sheepfold-api-legacy"
 PAIR="/usr/libexec/sheepfold/sheepfold-api-pair"
 STATUS="/usr/libexec/sheepfold/sheepfold-api-client-status"
+# SHEEPFOLD_AI_BEGIN
 AI_GATE="/usr/libexec/sheepfold/sheepfold-ai-gate"
 AI_HANDLER="/usr/libexec/sheepfold/sheepfold-ai-handler"
+# SHEEPFOLD_AI_END
 RATE_LIMIT="/usr/libexec/sheepfold/sheepfold-api-rate-limit"
+ACCESS_REQUEST="/usr/libexec/sheepfold/sheepfold-access-request"
+ADMIN_NOTIFICATION="/usr/libexec/sheepfold/sheepfold-admin-notification"
 method="${REQUEST_METHOD:-GET}"
 path_info="${PATH_INFO:-}"
 client_ip="${REMOTE_ADDR:-unknown}"
@@ -49,6 +53,12 @@ require_admin() {
         printf '{"app":"sheepfold","ok":false,"error":"auth_required","message":"Valid administrator Bearer token required."}\n'
         exit 0
     fi
+    authenticated_admin_login="$(/usr/libexec/sheepfold/sheepfold-router-control token-login "$bearer" "$client_device_id" "$client_device_mac" 2>/dev/null || true)"
+    if [ -z "$authenticated_admin_login" ]; then
+        header_json "401 Unauthorized"
+        printf '{"app":"sheepfold","ok":false,"error":"auth_required"}\n'
+        exit 0
+    fi
 }
 
 run_legacy() {
@@ -87,9 +97,48 @@ case "$path_info" in
         enforce_rate_limit client_status 120 60
         exec "$STATUS" "${REMOTE_ADDR:-}"
         ;;
+    /access-request)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit access_request 3 300
+        if output="$($ACCESS_REQUEST create "${REMOTE_ADDR:-}" 2>/dev/null)"; then
+            header_json "200 OK"
+            printf '%s\n' "$output"
+        else
+            result=$?
+            case "$result" in
+                2) status="404 Not Found"; error="device_not_registered"; message="Router could not identify this device." ;;
+                3) status="403 Forbidden"; error="access_requests_disabled"; message="No administrator accepts access requests." ;;
+                4) status="403 Forbidden"; error="administrator_device"; message="Administrator devices cannot send child access requests." ;;
+                *) status="500 Internal Server Error"; error="request_failed"; message="Could not save access request." ;;
+            esac
+            header_json "$status"
+            printf '{"app":"sheepfold","ok":false,"error":"%s","message":"%s"}\n' "$error" "$message"
+        fi
+        ;;
+    /access-requests)
+        [ "$method" = "GET" ] || method_not_allowed
+        enforce_rate_limit admin_read 120 60
+        require_admin
+        header_json "200 OK"
+        "$ACCESS_REQUEST" list "$authenticated_admin_login"
+        ;;
+    /notifications)
+        [ "$method" = "GET" ] || method_not_allowed
+        enforce_rate_limit admin_read 120 60
+        require_admin
+        header_json "200 OK"
+        "$ADMIN_NOTIFICATION" list
+        ;;
     /router-info|/pair-status)
         [ "$method" = "GET" ] || method_not_allowed
         enforce_rate_limit admin_read 120 60
+        require_admin
+        run_legacy
+        ;;
+    /feedback)
+        [ "$method" = "POST" ] || method_not_allowed
+        # Кроме общей защиты Cloud Function ограничиваем поток ещё на домашнем роутере.
+        enforce_rate_limit feedback 3 3600
         require_admin
         run_legacy
         ;;
@@ -97,6 +146,7 @@ case "$path_info" in
         header_json "410 Gone"
         printf '{"app":"sheepfold","ok":false,"error":"legacy_settings_writer_disabled","message":"Use authenticated LuCI UCI forms with typed validation."}\n'
         ;;
+    # SHEEPFOLD_AI_BEGIN
     /ai-assistant)
         [ "$method" = "POST" ] || method_not_allowed
         enforce_rate_limit ai_assistant 30 60
@@ -114,6 +164,7 @@ case "$path_info" in
         fi
         printf '%s' "$body" | /bin/sh "$AI_HANDLER"
         ;;
+    # SHEEPFOLD_AI_END
     *)
         enforce_rate_limit api_write 90 60
         run_legacy

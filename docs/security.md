@@ -6,7 +6,7 @@
 - Do not allow Sheepfold setup to continue when the OpenWRT root password is empty/not configured.
 - Use API tokens or session-based authentication.
 - Restrict management API access to the local network by default.
-- Sheepfold is a family self-hosted tool by default; do not require a developer-operated cloud service.
+- Sheepfold is a family self-hosted tool by default; do not require a developer-operated cloud service. The optional `§feedback` endpoint is isolated from router control and its failure must not affect family rules.
 - The main Android app in `android/` is for parent/admin devices only. The separate `android-child/` app, when used, must be an explicitly installed status/helper client without administrative functions, not a hidden installation flow (§z5ck8mv).
 - Validate MAC addresses, IP addresses, hostnames, and domains.
 - Avoid shell injection.
@@ -100,6 +100,8 @@ Do not log administrator passwords, bot tokens, API tokens, or session IDs.
 ## AI Assistant Access
 
 The `/ai-assistant` endpoint may be available to ordinary LAN clients only when the feature is explicitly enabled in LuCI. The router must derive the client MAC itself, deny blocklisted devices, and apply a configurable per-device request limit. Router diagnostics, program logs, Google account context, or other administrative context may be sent to an AI provider only for a request authenticated with an administrator Bearer token.
+
+A child disclosure, network signal, site category, or model inference about a possible offence must not trigger hidden reporting to a parent or any external recipient. Sheepfold never contacts police, child-protection, emergency dispatch, courts, or another state body. It may provide a verified contact and prepare a user-controlled draft, but must not send it. These signals are not evidence. Sheepfold must also refuse assistance to conceal continuing serious harm, destroy evidence, fabricate alibis, or intimidate witnesses (§ailegal, §aichild, §aigov0).
 
 ## List Conflicts
 

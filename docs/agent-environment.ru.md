@@ -168,13 +168,13 @@ bash -lc 'set -euo pipefail; package_root="package/luci-app-sheepfold-family-int
 powershell -ExecutionPolicy Bypass -File scripts\build-test-ipk.ps1
 ```
 
-Готовый пакет появляется в:
+Готовые пакеты появляются в:
 
 ```powershell
-C:\Users\User\Downloads\
+.build\ipk-output\
 ```
 
-Сборщик пишет `.ipk` **сразу** в Downloads (`%USERPROFILE%\Downloads`), без каталога `dist\` в репозитории. Для другого пути: `python scripts/build-test-ipk.py --out-dir D:\artifacts`.
+Сборщик пишет `.ipk` в `.build/ipk-output`. Для другого пути: `python scripts/build-test-ipk.py --variant all --out-dir D:\artifacts`. В Downloads копировать только по прямой просьбе пользователя.
 
 Правильный `.ipk` для OpenWRT `opkg` здесь является gzip-tar архивом с файлами:
 
@@ -187,7 +187,7 @@ C:\Users\User\Downloads\
 Проверка структуры:
 
 ```powershell
-python -c "from pathlib import Path; import os, tarfile; d=Path(os.environ['USERPROFILE'])/'Downloads'; p=sorted(d.glob('luci-app-sheepfold-family-internet-control_*_all.ipk'))[-1]; print(p); tf=tarfile.open(p,'r:gz'); print('\n'.join(tf.getnames()))"
+python -c "from pathlib import Path; import tarfile; d=Path('.build/ipk-output'); p=sorted(d.glob('luci-app-sheepfold-*_all.ipk'))[-1]; print(p); tf=tarfile.open(p,'r:gz'); print('\n'.join(tf.getnames()))"
 ```
 
 Не коммить `.ipk`.
@@ -250,7 +250,7 @@ android-child\gradlew.bat -p android-child assembleDebug --stacktrace
 - `resource string/... not found` — отсутствующая Android string resource;
 - Kotlin nullable/type mismatch — реальная ошибка кода, чинить.
 
-Родительский debug APK копируется Gradle-задачей в Downloads. Не коммить `android/app/build` и `android-child/app/build`.
+Обычная Gradle-сборка оставляет два APK в `app/build/outputs/apk/debug`. Явные задачи `exportDebugApk` и `exportChildDebugApk` копируют их в заданный каталог; использовать их для Downloads только по прямой просьбе. Не коммить `android/app/build` и `android-child/app/build`.
 
 ## GitHub Actions
 

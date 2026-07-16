@@ -33,7 +33,10 @@ class ChildStatusViewModel(
     var lastUpdated: String? by mutableStateOf(null)
         private set
 
-    /** Последний полученный статус (нужен для AI-экрана). */
+    var accessRequestMessage: String? by mutableStateOf(null)
+        private set
+
+    /** Последний полученный статус используется экранами выбранного варианта продукта. */
     var latestStatus: ClientStatusData? by mutableStateOf(null)
         private set
 
@@ -92,6 +95,21 @@ class ChildStatusViewModel(
                 uiState = ChildUiState.Error(msg)
                 AccessEndingScheduler.cancel(context)
             }
+        }
+    }
+
+    fun requestThirtyMinutes() {
+        val url = routerBaseUrl ?: return
+        accessRequestMessage = null
+        viewModelScope.launch {
+            repository.requestThirtyMinutes(url)
+                .onSuccess {
+                    accessRequestMessage = context.getString(com.example.sheepfoldchild.R.string.access_request_sent)
+                }
+                .onFailure { error ->
+                    accessRequestMessage = error.message
+                        ?: context.getString(com.example.sheepfoldchild.R.string.access_request_failed)
+                }
         }
     }
 

@@ -12,6 +12,240 @@
         display: block;
 }
 
+.sf-priority-editor,
+.sf-schedule-editor {
+        display: grid;
+        gap: 12px;
+}
+
+.sf-field-head,
+.sf-priority-row,
+.sf-schedule-head,
+.sf-bedtime-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+}
+
+.sf-priority-list,
+.sf-time-ranges {
+        display: grid;
+        gap: 7px;
+}
+
+.sf-priority-row {
+        min-height: 38px;
+        padding: 5px 8px;
+        border: 1px solid var(--sf-border);
+        border-radius: 6px;
+        background: #f8fafc;
+}
+
+.sf-priority-num {
+        display: inline-grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: #dce9e4;
+        color: #174d38;
+}
+
+.sf-priority-name {
+        flex: 1;
+}
+
+.sf-priority-actions,
+.sf-card-actions,
+.sf-action-choices,
+.sf-day-row,
+.sf-schedule-facts,
+.sf-time-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+}
+
+.sf-icon-btn {
+        display: inline-grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #334155;
+        cursor: pointer;
+        font-size: 17px;
+}
+
+.sf-icon-btn:disabled {
+        cursor: default;
+        opacity: 0.35;
+}
+
+.sf-icon-danger {
+        color: var(--sf-red);
+        border-color: #efc0ba;
+}
+
+.sf-schedule-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+        gap: 12px;
+        margin: 12px 0;
+}
+
+.sf-schedule-card {
+        display: grid;
+        gap: 10px;
+        padding: 13px;
+        border: 1px solid var(--sf-border);
+        border-left: 5px solid var(--sf-red);
+        border-radius: 7px;
+        background: #ffffff;
+}
+
+.sf-schedule-card.sf-schedule-allow {
+        border-left-color: var(--sf-green);
+}
+
+.sf-schedule-card.is-disabled {
+        border-left-color: #94a3b8;
+        background: #f8fafc;
+        opacity: 0.72;
+}
+
+.sf-schedule-name {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 16px;
+}
+
+.sf-rule-badge {
+        display: inline-block;
+        padding: 3px 7px;
+        border-radius: 5px;
+        font-size: 12px;
+        font-weight: 600;
+}
+
+.sf-rule-allow {
+        background: #dcfce7;
+        color: #166534;
+}
+
+.sf-rule-block {
+        background: #fee2e2;
+        color: #991b1b;
+}
+
+.sf-schedule-facts span {
+        padding: 4px 7px;
+        border: 1px solid #d8dde5;
+        border-radius: 5px;
+        background: #f8fafc;
+        color: #334155;
+        font-size: 12px;
+}
+
+.sf-switch-line,
+.sf-toggle-line,
+.sf-action-choice,
+.sf-day-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+}
+
+.sf-action-choice,
+.sf-day-chip {
+        padding: 7px 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #ffffff;
+}
+
+.sf-action-choice-allow:has(input:checked),
+.sf-day-chip:has(input:checked) {
+        border-color: #79bd98;
+        background: #e8f6ee;
+        color: #14532d;
+}
+
+.sf-action-choice-block:has(input:checked) {
+        border-color: #e4a49c;
+        background: #fff0ee;
+        color: #7f1d1d;
+}
+
+.sf-conflict-choice-off:has(input:checked) {
+        border-color: #e4a49c;
+        background: #fff0ee;
+        color: #7f1d1d;
+}
+
+.sf-conflict-choice-on:has(input:checked) {
+        border-color: #79bd98;
+        background: #e8f6ee;
+        color: #14532d;
+}
+
+.sf-conflict-policy-field .sf-action-choices {
+        margin-top: 2px;
+}
+
+.sf-schedule-targets {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 7px;
+        max-height: 220px;
+        overflow: auto;
+        padding: 9px;
+        border: 1px solid var(--sf-border);
+        border-radius: 6px;
+}
+
+.sf-time-row input[type="time"] {
+        width: 130px;
+}
+
+.sf-schedule-preview {
+        margin-top: 4px;
+        font-weight: 600;
+}
+
+.sf-empty-state {
+        padding: 24px 14px;
+        border: 1px dashed #b8c3d1;
+        border-radius: 7px;
+        text-align: center;
+        background: #f8fafc;
+}
+
+.sf-bedtime-row {
+        align-items: end;
+        max-width: 520px;
+        margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+        .sf-field-head,
+        .sf-schedule-head,
+        .sf-bedtime-row {
+                align-items: stretch;
+                flex-direction: column;
+        }
+
+        .sf-time-row input[type="time"] {
+                min-width: 0;
+                width: calc(50% - 34px);
+        }
+}
+
 .sf-header,
 .sf-panel,
 .sf-box,
@@ -893,7 +1127,26 @@
 }
 
 .sf-note span {
-        display: block;
+	display: block;
+}
+
+.sf-site-list-status-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.sf-site-list-status-head strong {
+	margin: 0;
+}
+
+.sf-site-list-status > span + span {
+	margin-top: 6px;
+}
+
+.sf-site-list-problems {
+	font-weight: 600;
 }
 
 .sf-inline-link {
@@ -1799,6 +2052,28 @@
         border-color: #059669;
 }
 
+.sf-feedback-form .cbi-input-textarea {
+        width: 100%;
+        min-height: 11rem;
+        resize: vertical;
+}
+
+.sf-checkbox-line {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        max-width: 920px;
+        line-height: 1.45;
+        cursor: pointer;
+}
+
+.sf-checkbox-line input[type="checkbox"] {
+        flex: 0 0 auto;
+        width: 22px;
+        height: 22px;
+        margin-top: 1px;
+}
+
 .sf-manual-settings h4 {
         margin-top: 0;
 }
@@ -1971,6 +2246,43 @@
 
 .cbi-page-actions {
         display: none !important;
+}
+
+.sf-root-password-gate {
+        position: fixed;
+        z-index: 10000;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(15, 23, 42, 0.72);
+}
+
+.sf-root-password-card {
+        width: min(560px, 100%);
+        padding: 24px;
+        border: 1px solid #ef4444;
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+}
+
+.sf-root-password-card h3 {
+        margin: 0 0 12px;
+        padding: 0 0 10px;
+        border-bottom: 1px solid #fecaca;
+        color: #991b1b;
+}
+
+.sf-root-password-card p {
+        margin: 0 0 18px;
+        color: #334155;
+        line-height: 1.5;
+}
+
+.sf-root-password-card .sf-action + .sf-action {
+        margin-left: 8px;
 }
 
 @media (max-width: 900px) {

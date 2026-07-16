@@ -3,6 +3,11 @@
 START=90
 USE_PROCD=1
 
+valid_port() {
+        case "$1" in ''|*[!0-9]*) return 1 ;; esac
+        [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
 restore_usb_storage() {
         local enabled device role swap_file
 
@@ -48,13 +53,29 @@ start_service() {
                 /usr/libexec/sheepfold/sheepfold-firewall ensure >/dev/null 2>&1 ||
                 logger -t sheepfold "Sheepfold firewall sets could not be loaded"
 
+        [ -x /usr/libexec/sheepfold/sheepfold-emergency-sites ] &&
+                /usr/libexec/sheepfold/sheepfold-emergency-sites apply >/dev/null 2>&1 ||
+                logger -t sheepfold "Sheepfold emergency sites could not be applied"
+
         [ -x /usr/libexec/sheepfold/sheepfold-site-lists ] &&
                 /usr/libexec/sheepfold/sheepfold-site-lists cron-apply >/dev/null 2>&1 || true
+
+        [ -x /usr/libexec/sheepfold/sheepfold-domain-policy ] &&
+                /usr/libexec/sheepfold/sheepfold-domain-policy apply >/dev/null 2>&1 ||
+                logger -t sheepfold "Sheepfold site list policy could not be applied"
 
         procd_open_instance
         procd_set_param command /usr/libexec/sheepfold/sheepfold-service
         procd_set_param respawn
         procd_close_instance
+
+        if [ -x /usr/libexec/sheepfold/sheepfold-site-lists ]; then
+                procd_open_instance site_lists_bootstrap
+                # Кэш живёт в RAM, поэтому после загрузки роутера восстанавливаем его
+                # отдельным oneshot-процессом и не задерживаем запуск API/LuCI. §slstres
+                procd_set_param command /usr/libexec/sheepfold/sheepfold-site-lists bootstrap
+                procd_close_instance
+        fi
 
         if [ "$(uci -q get sheepfold.global.active_messenger 2>/dev/null || printf disabled)" = "telegram" ]; then
                 procd_open_instance telegram
@@ -64,7 +85,7 @@ start_service() {
         fi
 
         port="$(uci -q get sheepfold.global.app_port 2>/dev/null || printf 5201)"
-        case "$port" in ''|*[!0-9]*) port=5201 ;; esac
+        valid_port "$port" || port=5201
 
         if [ -s /etc/uhttpd.crt ] && [ -s /etc/uhttpd.key ] && \
            /usr/sbin/uhttpd -h 2>&1 | grep -q -- '-s'; then
@@ -84,9 +105,13 @@ reload_service() {
         /usr/libexec/sheepfold/sheepfold-service reload
         apply_led_repair
         apply_led_settings
+        [ -x /usr/libexec/sheepfold/sheepfold-domain-policy ] &&
+                /usr/libexec/sheepfold/sheepfold-domain-policy apply >/dev/null 2>&1 || true
 }
 
 stop_service() {
+        [ -x /usr/libexec/sheepfold/sheepfold-domain-policy ] &&
+                /usr/libexec/sheepfold/sheepfold-domain-policy clear >/dev/null 2>&1 || true
         [ -x /usr/libexec/sheepfold/sheepfold-firewall ] &&
                 /usr/libexec/sheepfold/sheepfold-firewall clear >/dev/null 2>&1 || true
         [ -x /usr/libexec/sheepfold/sheepfold-router-control ] &&

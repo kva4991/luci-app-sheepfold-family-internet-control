@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
 const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/view/sheepfold/overview.js');
+const wifiCardsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/wifi/cards.js');
 const cssPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/sheepfold.css');
 const logHelperPath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-log');
 const yandexPath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-yandex-disk');
@@ -16,10 +17,11 @@ const makefilePath = resolve(packageDir, 'Makefile');
 describe('overview UI release 148', () => {
   it('restores Wi-Fi save flow with wireless UCI and wifi reload', () => {
     const overview = readFileSync(overviewPath, 'utf8');
+    const wifiCards = readFileSync(wifiCardsPath, 'utf8');
 
     assert.match(overview, /function saveWifiNetworksNow/);
     assert.match(overview, /function wifiSaveBar/);
-    assert.match(overview, /sectionName: sectionName/);
+    assert.match(wifiCards, /sectionName: sectionName/);
     assert.match(overview, /saveUciChanges\(\['wireless'\]\)/);
     assert.match(overview, /fs\.exec\('\/sbin\/wifi', \['reload'\]\)/);
     assert.match(overview, /wifiSaveBar\(\)/);
@@ -76,6 +78,7 @@ describe('overview UI release 148', () => {
     assert.match(po, /msgstr "HTTPS-порт приложения"/);
     assert.match(po, /msgid "Site list update from allowlist and blocklist sources"/);
     assert.match(po, /msgstr "Обновление списков сайтов из белых и чёрных списков"/);
-    assert.match(makefile, /PKG_RELEASE:=165/);
+    const release = Number(makefile.match(/PKG_RELEASE:=(\d+)/)?.[1] || 0);
+    assert.ok(release >= 172);
   });
 });

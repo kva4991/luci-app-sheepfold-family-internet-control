@@ -13,6 +13,10 @@ const overviewPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js',
 );
+const infoModulePath = resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/router/info.js',
+);
 
 function readProjectFile(path) {
   return readFileSync(path, 'utf8');
@@ -65,20 +69,21 @@ describe('Router information panel', () => {
   });
 
   it('renders storage and tolerates empty router-info output in LuCI', () => {
-    const source = readProjectFile(overviewPath);
+    const overview = readProjectFile(overviewPath);
+    const source = readProjectFile(infoModulePath);
 
     assert.match(source, /function formatPingMs/);
-    assert.match(source, /function routerInfoHasData/);
-    assert.match(source, /function loadRouterInformation/);
-    assert.match(source, /function routerControlWithTimeout/);
-    assert.match(source, /function internetStatusDetails/);
-    assert.match(source, /formatInternetProbeLine\('ya\.ru'/);
-    assert.match(source, /formatInternetProbeLine\('google\.com'/);
-    assert.match(source, /formatInternetProbeLine\('youtube\.com'/);
-    assert.match(source, /informationRow\(_\('Router storage'\), infoValue\(values\.storage_space\)\)/);
-    assert.match(source, /if \(!routerInfoHasData\(values\)\)/);
-    assert.match(source, /routerInfoState\.status = 'error'/);
-    assert.match(source, /tab === 'info'/);
+    assert.match(source, /function hasData/);
+    assert.match(source, /function load\(force\)/);
+    assert.match(source, /routerBackend\.withTimeout/);
+    assert.match(source, /function internetDetails/);
+    assert.match(source, /probeLine\('ya\.ru'/);
+    assert.match(source, /probeLine\('google\.com'/);
+    assert.match(source, /probeLine\('youtube\.com'/);
+    assert.match(source, /row\(_\('Router storage'\), infoValue\(values\.storage_space\)\)/);
+    assert.match(source, /if \(!hasData\(values\)\)/);
+    assert.match(source, /state\.status = 'error'/);
+    assert.match(overview, /tab === 'info'/);
   });
 
   it('does not abort router-info on shell errexit', () => {
@@ -101,11 +106,12 @@ describe('Router information panel', () => {
   it('reports Podkop package freshness for the information panel', () => {
     const legacy = readProjectFile(legacyPath);
     const overview = readProjectFile(overviewPath);
+    const infoModule = readProjectFile(infoModulePath);
 
     assert.match(legacy, /package_upgradable_any/);
     assert.match(legacy, /print_kv podkop_version_status/);
     assert.match(overview, /function formatInstalledPackageInfo/);
     assert.match(overview, /packageVersionStatusLabel/);
-    assert.match(overview, /values\.podkop_version_status/);
+    assert.match(infoModule, /values\.podkop_version_status/);
   });
 });

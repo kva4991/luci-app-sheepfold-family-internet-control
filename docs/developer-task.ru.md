@@ -9,29 +9,32 @@
 
 ## Что такое Sheepfold
 
-Sheepfold — OpenWRT-пакет для семейного управления доступом в интернет. Родитель управляет через веб-интерфейс LuCI и Android-приложение. Управление включает: расписания, группы устройств, белый/чёрный списки, аварийно-полезные сайты, интеграции с Telegram/VK, AI-ассистент.
+Sheepfold — OpenWRT-пакет для семейного управления доступом в интернет. Родитель управляет через веб-интерфейс LuCI и Android-приложение. Управление включает: расписания, группы устройств, белый и чёрный списки устройств, отдельные списки сайтов, аварийно-полезные сайты, интеграции с Telegram/VK, AI-ассистент.
 
 ---
 
 ## Порядок чтения документации
 
 1. [`docs/agent-fast-start.ru.md`](agent-fast-start.ru.md) — короткий маршрут нового чата: что проверить и читать, не загружая весь проект в контекст. (§fastagt)
-2. **Этот файл** — общая ориентация и карта детальных документов.
-3. [`docs/agent-environment.ru.md`](agent-environment.ru.md) — локальное окружение Codex Desktop на Windows, нужные программы, сборка IPK/APK и команды проверок.
-4. [`docs/agent-gotchas.ru.md`](agent-gotchas.ru.md) — реестр неочевидных мелочей (i18n, группы, детектор, IPK); **обязательно дополнять** при новых находках.
-5. [`docs/troubleshooting.ru.md`](troubleshooting.ru.md) — практический справочник ошибок: симптомы, причины, проверки и безопасные исправления для Windows, тестов, Android, OpenWRT и LuCI. (§trouble)
-6. [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) — детальный плейбук для AI: продуктовые решения, архитектурные ограничения, правила реализации.
-7. [`docs/product-requirements.md`](product-requirements.md) — полные требования к продукту.
-8. [`docs/backend-design.ru.md`](backend-design.ru.md) — архитектура бэкенда роутера, API-эндпоинты, UCI-структура.
-9. [`docs/uci-config-migration.ru.md`](uci-config-migration.ru.md) — шаблон UCI, `postinst`, миграции при обновлении `.ipk` (обязательно при изменении `/etc/config/sheepfold`).
-10. [`docs/default-groups.ru.md`](default-groups.ru.md) — группы `no_restrictions` / `child_1`, язык при установке, миграция алиасов.
-11. [`docs/hidden-settings.ru.md`](hidden-settings.ru.md) — UCI-параметры без поля в LuCI; обновлять при появлении/удалении полей.
-12. [`docs/localization.ru.md`](localization.ru.md) — LuCI gettext, `.lmo`, два параметра языка.
-13. [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента, сопряжение, детский APK.
-14. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
-15. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
-16. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
-17. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (§22 — куда писать мелочи).
+2. [`docs/owner-communication-profile.ru.md`](owner-communication-profile.ru.md) — как понимать итеративные требования владельца, различать виды списков и сообщать результат (§usrcomm).
+3. **Этот файл** — общая ориентация и карта детальных документов.
+4. [`docs/agent-environment.ru.md`](agent-environment.ru.md) — локальное окружение Codex Desktop на Windows, нужные программы, сборка IPK/APK и команды проверок.
+5. [`docs/agent-gotchas.ru.md`](agent-gotchas.ru.md) — реестр неочевидных мелочей (i18n, группы, детектор, IPK); **обязательно дополнять** при новых находках.
+6. [`docs/troubleshooting.ru.md`](troubleshooting.ru.md) — практический справочник ошибок: симптомы, причины, проверки и безопасные исправления для Windows, тестов, Android, OpenWRT и LuCI. (§trouble)
+7. [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) — детальный плейбук для AI: продуктовые решения, архитектурные ограничения, правила реализации.
+8. [`docs/product-requirements.md`](product-requirements.md) — полные требования к продукту.
+9. [`docs/ai-assistant-development/README.md`](ai-assistant-development/README.md) — точка входа для памяти, модулей, БД и политики диалога ИИ-помощника (§aiarch1).
+10. [`docs/backend-design.ru.md`](backend-design.ru.md) — архитектура бэкенда роутера, API-эндпоинты, UCI-структура.
+11. [`docs/uci-config-migration.ru.md`](uci-config-migration.ru.md) — шаблон UCI, `postinst`, миграции при обновлении `.ipk` (обязательно при изменении `/etc/config/sheepfold`).
+12. [`docs/default-groups.ru.md`](default-groups.ru.md) — группы `no_restrictions` / `child_1`, язык при установке, миграция алиасов.
+13. [`docs/hidden-settings.ru.md`](hidden-settings.ru.md) — UCI-параметры без поля в LuCI; обновлять при появлении/удалении полей.
+14. [`docs/localization.ru.md`](localization.ru.md) — LuCI gettext, `.lmo`, два параметра языка.
+15. [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента, сопряжение, детский APK.
+16. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
+17. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
+18. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
+19. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (§22 — куда писать мелочи).
+20. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
 
 ---
 
@@ -39,11 +42,7 @@ Sheepfold — OpenWRT-пакет для семейного управления 
 
 См. [`docs/current-implementation-status.md`](current-implementation-status.md).
 
-**Кратко:**
-- LuCI: визуальный прототип в `overview.js`. Backend-правила роутера не активны.
-- Android: не начат.
-- Backend (`sheepfold-router-control`): частично — `router-info`, `led-apply`, `site-lists-cron-apply`, сопряжение.
-- API (`/cgi-bin/sheepfold-api/`): частично.
+**Кратко:** LuCI, router backend, API и оба Android-приложения уже содержат рабочие части и незавершённые экраны. Не поддерживайте здесь второй быстро устаревающий перечень: доказательный статус, границы реализации и нужные живые проверки находятся в [`current-implementation-status.md`](current-implementation-status.md) и [`implementation-audit-2026-07-16.ru.md`](implementation-audit-2026-07-16.ru.md) (§implaudit).
 
 ---
 
@@ -98,6 +97,7 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 │   ├── agent-playbook.ru.md  # Плейбук для AI
 │   ├── agent-environment.ru.md # Codex Desktop на Windows: окружение и команды
 │   ├── backend-design.ru.md  # Архитектура бэкенда ← читать обязательно
+│   ├── ai-assistant-development/ # Модули, БД и dialogue policy ИИ-помощника
 │   ├── yandex-disk-storage.ru.md  # Yandex Disk: WebDAV, журнал, бэкапы
 │   ├── android-config.ru.md  # Android-конфигурация ← читать обязательно
 │   ├── testing-cases.ru.md   # Тест-кейсы ← прогнать перед PR
@@ -171,3 +171,4 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 | [`docs/live-router-testing.ru.md`](live-router-testing.ru.md) | Тестирование на роутере |
 | [`docs/messaging.ru.md`](messaging.ru.md) | Интеграция мессенджеров |
 | [`docs/privacy.ru.md`](privacy.ru.md) | Политика конфиденциальности |
+| [`docs/ai-assistant-development/README.md`](ai-assistant-development/README.md) | Архитектура будущего ИИ-помощника и карта модулей |

@@ -88,8 +88,8 @@ describe('LuCI asset versioning', () => {
     );
     assert.match(
       buildSh,
-      /uci -q set sheepfold\.global\.ui_asset_version='\$\{PKG_VERSION\}-\$\{PKG_RELEASE\}'/,
-      'Shell-сборщик тестового IPK должен писать ui_asset_version из PKG_VERSION-PKG_RELEASE',
+      /build-test-ipk\.py/,
+      'Shell-обёртка должна делегировать единому Python-сборщику с ui_asset_version',
     );
   });
 });

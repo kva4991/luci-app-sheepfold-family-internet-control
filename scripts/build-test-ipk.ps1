@@ -1,7 +1,7 @@
 param(
     [string]$OutDir,
-    [string]$DownloadsDir = $(if ($env:USERPROFILE) { Join-Path $env:USERPROFILE 'Downloads' } else { 'C:\Users\User\Downloads' }),
-    [switch]$NoDownloadsCopy
+    [ValidateSet('sheepfold', 'sheepfoldAi', 'all')]
+    [string]$Variant = 'sheepfold'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,14 +54,9 @@ if (-not $python) {
 }
 
 $argsList = @((Join-Path $PSScriptRoot 'build-test-ipk.py'))
+$argsList += @('--variant', $Variant)
 if ($OutDir) {
     $argsList += @('--out-dir', $OutDir)
-}
-if ($DownloadsDir) {
-    $argsList += @('--downloads-dir', $DownloadsDir)
-}
-if ($NoDownloadsCopy) {
-    $argsList += '--no-downloads-copy'
 }
 
 & $python.Path @($python.PrefixArgs + $argsList)

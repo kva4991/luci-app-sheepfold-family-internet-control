@@ -9,6 +9,10 @@ LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
 ROUTER_CONTROL="/usr/libexec/sheepfold/sheepfold-router-control"
 UPDATER="/usr/libexec/sheepfold/sheepfold-updater"
 DEFAULT_RAM_LOG="/tmp/sheepfold/events.log"
+TELEGRAM_HTTP_TIMEOUT_SECONDS="${SHEEPFOLD_TELEGRAM_HTTP_TIMEOUT:-35}"
+
+case "$TELEGRAM_HTTP_TIMEOUT_SECONDS" in ''|*[!0-9]*) TELEGRAM_HTTP_TIMEOUT_SECONDS=35 ;; esac
+[ "$TELEGRAM_HTTP_TIMEOUT_SECONDS" -ge 30 ] || TELEGRAM_HTTP_TIMEOUT_SECONDS=30
 
 mkdir -p "$RUNTIME_DIR"
 
@@ -56,11 +60,34 @@ fetch() {
         url="$1"
         data="${2:-}"
 
-        if [ -n "$data" ]; then
-                uclient-fetch -qO- --post-data="$data" "$url" 2>/dev/null || return 1
-        else
-                uclient-fetch -qO- "$url" 2>/dev/null || return 1
+        if command -v uclient-fetch >/dev/null 2>&1; then
+                if [ -n "$data" ]; then
+                        uclient-fetch -q -T "$TELEGRAM_HTTP_TIMEOUT_SECONDS" -O- --post-data="$data" "$url" 2>/dev/null
+                else
+                        uclient-fetch -q -T "$TELEGRAM_HTTP_TIMEOUT_SECONDS" -O- "$url" 2>/dev/null
+                fi
+                return $?
         fi
+
+        if command -v curl >/dev/null 2>&1; then
+                if [ -n "$data" ]; then
+                        curl -fsSL --connect-timeout 10 --max-time "$TELEGRAM_HTTP_TIMEOUT_SECONDS" --data-raw "$data" "$url" 2>/dev/null
+                else
+                        curl -fsSL --connect-timeout 10 --max-time "$TELEGRAM_HTTP_TIMEOUT_SECONDS" "$url" 2>/dev/null
+                fi
+                return $?
+        fi
+
+        if command -v wget >/dev/null 2>&1; then
+                if [ -n "$data" ]; then
+                        wget -q -T "$TELEGRAM_HTTP_TIMEOUT_SECONDS" -O- --post-data="$data" "$url" 2>/dev/null
+                else
+                        wget -q -T "$TELEGRAM_HTTP_TIMEOUT_SECONDS" -O- "$url" 2>/dev/null
+                fi
+                return $?
+        fi
+
+        return 127
 }
 
 form_escape() {
@@ -805,6 +832,12 @@ case "$COMMAND" in
                 sync_telegram_commands >/dev/null 2>&1 || true
                 send_admin_message "Sheepfold Telegram подключен к роутеру $(router_name)." || exit 1
                 ;;
+        send-admin)
+                # Системные помощники используют этот узкий вход и не знают токен Telegram.
+                telegram_active || exit 0
+                [ -n "${2:-}" ] || exit 2
+                send_admin_message "$2"
+                ;;
         sync-commands)
                 telegram_active || {
                         echo "Telegram is not the active messenger" >&2
@@ -819,7 +852,7 @@ case "$COMMAND" in
                 printf 'offset=%s\n' "$(cat "$OFFSET_FILE" 2>/dev/null || printf 0)"
                 ;;
         *)
-                echo "Usage: sheepfold-telegram-bot [run|once|send-test|sync-commands|status]" >&2
+                echo "Usage: sheepfold-telegram-bot [run|once|send-test|send-admin MESSAGE|sync-commands|status]" >&2
                 exit 1
                 ;;
 esac

@@ -2,6 +2,10 @@ set sheepfold_block_macs {
 	type ether_addr
 }
 
+set sheepfold_restricted_macs {
+	type ether_addr
+}
+
 set sheepfold_exempt_macs {
 	type ether_addr
 }
@@ -10,12 +14,91 @@ set sheepfold_global_ifaces {
 	type ifname
 }
 
+set sheepfold_emergency_macs {
+	type ether_addr
+}
+
+set sheepfold_emergency_v4 {
+	type ipv4_addr
+	flags timeout
+	timeout 1h
+}
+
+set sheepfold_emergency_v6 {
+	type ipv6_addr
+	flags timeout
+	timeout 1h
+}
+
+set sheepfold_site_allow_macs {
+	type ether_addr
+}
+
+set sheepfold_site_block_exempt_macs {
+	type ether_addr
+}
+
+set sheepfold_site_filter_ifaces {
+	type ifname
+}
+
+set sheepfold_site_allow_v4 {
+	type ipv4_addr
+	flags timeout
+	timeout 1h
+}
+
+set sheepfold_site_allow_v6 {
+	type ipv6_addr
+	flags timeout
+	timeout 1h
+}
+
+set sheepfold_site_block_v4 {
+	type ipv4_addr
+	flags timeout
+	timeout 1h
+}
+
+set sheepfold_site_block_v6 {
+	type ipv6_addr
+	flags timeout
+	timeout 1h
+}
+
+chain sheepfold_site_guard {
+	ether saddr @sheepfold_site_allow_macs ip daddr @sheepfold_site_allow_v4 tcp dport { 80, 443 } counter return comment "Sheepfold site allowlist web IPv4"
+	ether saddr @sheepfold_site_allow_macs ip6 daddr @sheepfold_site_allow_v6 tcp dport { 80, 443 } counter return comment "Sheepfold site allowlist web IPv6"
+	ether saddr @sheepfold_site_allow_macs ip daddr @sheepfold_site_allow_v4 udp dport 443 counter return comment "Sheepfold site allowlist QUIC IPv4"
+	ether saddr @sheepfold_site_allow_macs ip6 daddr @sheepfold_site_allow_v6 udp dport 443 counter return comment "Sheepfold site allowlist QUIC IPv6"
+	ether saddr @sheepfold_site_allow_macs counter drop comment "Sheepfold site allowlist only"
+	ether saddr @sheepfold_site_block_exempt_macs counter return comment "Sheepfold site blocklist exemption"
+	iifname @sheepfold_site_filter_ifaces ip daddr @sheepfold_site_block_v4 tcp dport { 80, 443 } counter drop comment "Sheepfold site blocklist web IPv4"
+	iifname @sheepfold_site_filter_ifaces ip6 daddr @sheepfold_site_block_v6 tcp dport { 80, 443 } counter drop comment "Sheepfold site blocklist web IPv6"
+	iifname @sheepfold_site_filter_ifaces ip daddr @sheepfold_site_block_v4 udp dport 443 counter drop comment "Sheepfold site blocklist QUIC IPv4"
+	iifname @sheepfold_site_filter_ifaces ip6 daddr @sheepfold_site_block_v6 udp dport 443 counter drop comment "Sheepfold site blocklist QUIC IPv6"
+}
+
 chain sheepfold_forward_guard {
+	ether saddr @sheepfold_emergency_macs ip daddr @sheepfold_emergency_v4 tcp dport { 80, 443 } counter return comment "Sheepfold emergency web IPv4"
+	ether saddr @sheepfold_emergency_macs ip6 daddr @sheepfold_emergency_v6 tcp dport { 80, 443 } counter return comment "Sheepfold emergency web IPv6"
+	ether saddr @sheepfold_emergency_macs ip daddr @sheepfold_emergency_v4 udp dport 443 counter return comment "Sheepfold emergency QUIC IPv4"
+	ether saddr @sheepfold_emergency_macs ip6 daddr @sheepfold_emergency_v6 udp dport 443 counter return comment "Sheepfold emergency QUIC IPv6"
 	ether saddr @sheepfold_block_macs counter drop comment "Sheepfold blocklist"
+	# Общая аварийная оговорка глобального выключения стоит после чёрного списка
+	# устройств. Выше него проходят только MAC, явно добавленные в emergency_macs. §emerg1
+	iifname @sheepfold_global_ifaces ip daddr @sheepfold_emergency_v4 tcp dport { 80, 443 } counter return comment "Sheepfold global emergency web IPv4"
+	iifname @sheepfold_global_ifaces ip6 daddr @sheepfold_emergency_v6 tcp dport { 80, 443 } counter return comment "Sheepfold global emergency web IPv6"
+	iifname @sheepfold_global_ifaces ip daddr @sheepfold_emergency_v4 udp dport 443 counter return comment "Sheepfold global emergency QUIC IPv4"
+	iifname @sheepfold_global_ifaces ip6 daddr @sheepfold_emergency_v6 udp dport 443 counter return comment "Sheepfold global emergency QUIC IPv6"
+	ether saddr @sheepfold_restricted_macs counter drop comment "Sheepfold internet restrictions"
+	jump sheepfold_site_guard
 	iifname @sheepfold_global_ifaces ether saddr @sheepfold_exempt_macs return comment "Sheepfold global exemptions"
 	iifname @sheepfold_global_ifaces counter drop comment "Sheepfold global internet block"
 }
 
 chain sheepfold_input_guard {
+	ether saddr @sheepfold_block_macs udp dport { 53, 67, 547 } counter return comment "Sheepfold essential DNS and DHCP"
+	ether saddr @sheepfold_block_macs tcp dport 53 counter return comment "Sheepfold essential DNS TCP"
 	ether saddr @sheepfold_block_macs counter drop comment "Sheepfold router access block"
 }

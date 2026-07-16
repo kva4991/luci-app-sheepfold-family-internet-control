@@ -13,6 +13,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.sheepfold.android.MainActivity
 import app.sheepfold.android.R
+import app.sheepfold.android.router.ChildAccessRequest
+import app.sheepfold.android.router.RouterAdminNotification
 
 data class NewDeviceNotification(
     val id: Int,
@@ -25,6 +27,8 @@ object SheepfoldNotifications {
     private const val channelId = "sheepfold_devices"
     private const val channelName = "Sheepfold devices"
     private const val notifiedDevicesPrefs = "sheepfold_notified_devices"
+    private const val notifiedRequestsPrefs = "sheepfold_notified_access_requests"
+    private const val notifiedAdminEventsPrefs = "sheepfold_notified_admin_events"
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -89,5 +93,68 @@ object SheepfoldNotifications {
         notifiedPrefs.edit()
             .putBoolean(notifiedKey, true)
             .apply()
+    }
+
+    fun notifyAccessRequestOnce(context: Context, request: ChildAccessRequest) {
+        val appContext = context.applicationContext
+        val preferences = appContext.getSharedPreferences(notifiedRequestsPrefs, Context.MODE_PRIVATE)
+        if (preferences.getBoolean(request.id, false) || !notificationsAllowed(appContext)) {
+            return
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            appContext,
+            request.id.hashCode(),
+            Intent(appContext, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val deviceLabel = request.deviceId.takeIf { it.isNotBlank() }
+            ?.let { "#$it ${request.deviceName}" }
+            ?: request.deviceName
+        val notification = NotificationCompat.Builder(appContext, channelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Ребёнок просит 30 минут интернета")
+            .setContentText(deviceLabel)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$deviceLabel просит предоставить ещё 30 минут доступа в интернет."))
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+
+        NotificationManagerCompat.from(appContext).notify(20_000 + request.id.hashCode().and(0x3fff), notification)
+        preferences.edit().putBoolean(request.id, true).apply()
+    }
+
+    fun notifyAdminEventOnce(context: Context, event: RouterAdminNotification) {
+        val appContext = context.applicationContext
+        val preferences = appContext.getSharedPreferences(notifiedAdminEventsPrefs, Context.MODE_PRIVATE)
+        if (preferences.getBoolean(event.id, false) || !notificationsAllowed(appContext)) {
+            return
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            appContext,
+            event.id.hashCode(),
+            Intent(appContext, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(appContext, channelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(event.title)
+            .setContentText(event.message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(event.message))
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+
+        NotificationManagerCompat.from(appContext)
+            .notify(30_000 + event.id.hashCode().and(0x3fff), notification)
+        preferences.edit().putBoolean(event.id, true).apply()
+    }
+
+    private fun notificationsAllowed(context: Context): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
 }

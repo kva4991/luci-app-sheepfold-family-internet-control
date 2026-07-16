@@ -18,6 +18,25 @@ header_json() {
 
 normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
 
+# Детское приложение получает только итоговый флаг доступности. Проверка
+# повторяется на backend при каждом AI-запросе, поэтому поле не является
+# разрешением само по себе. §prodvar
+# SHEEPFOLD_AI_BEGIN
+ai_feature_available() {
+    [ -x /usr/libexec/sheepfold/sheepfold-ai-handler ] || return 1
+    [ "$(uci -q get sheepfold.global.product_variant 2>/dev/null || printf sheepfold)" = sheepfoldAi ] || return 1
+    [ "$(uci -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)" = 1 ] || return 1
+    provider="$(uci -q get sheepfold.global.ai_provider 2>/dev/null || printf none)"
+    case "$provider" in
+        deepseek) key="$(uci -q get sheepfold.global.deepseek_api_key 2>/dev/null || true)" ;;
+        gemini) key="$(uci -q get sheepfold.global.gemini_api_key 2>/dev/null || true)" ;;
+        grok) key="$(uci -q get sheepfold.global.grok_api_key 2>/dev/null || true)" ;;
+        *) return 1 ;;
+    esac
+    [ -n "$key" ]
+}
+# SHEEPFOLD_AI_END
+
 mac_for_ip() {
     client_ip="$1"
     mac=""
@@ -37,6 +56,7 @@ device_section_for_mac() {
     return 1
 }
 
+# SHEEPFOLD_AI_BEGIN
 personal_group_for_device() {
     section="$1"
     mac="$(normalize_mac "$2")"
@@ -65,26 +85,39 @@ personal_group_for_device() {
 
     return 1
 }
+# SHEEPFOLD_AI_END
 
 remote_ip="${REMOTE_ADDR:-${1:-}}"
 output="$(/usr/libexec/sheepfold/sheepfold-router-control client-status "$remote_ip" 2>/dev/null || true)"
 status="$(kv_get status "$output")"
 reason="$(kv_get reason "$output")"
+schedule_conflict="$(kv_get schedule_conflict "$output")"
 access_ends_at="$(kv_get next_change_at "$output")"
 [ -n "$status" ] || status=unknown
+[ "$schedule_conflict" = 1 ] || schedule_conflict=0
 
 case "$status" in
     allow|allowed|enabled|online)
         internet_state=enabled
         access_mode=allowlist
-        message="Интернет доступен."
+        if [ "$reason" = schedule_conflict_internet_on ]; then
+            access_mode=scheduled
+            message="Расписания конфликтуют; согласно настройке интернет оставлен включённым."
+        elif [ "$reason" = schedule_allow ]; then
+            access_mode=scheduled
+            message="Интернет разрешён действующим расписанием."
+        else
+            message="Интернет доступен."
+        fi
         ;;
     block|blocked|deny|denied|disabled|offline)
         internet_state=disabled
         access_mode=blocked
+        case "$reason" in schedule_block|schedule_conflict_internet_off) access_mode=scheduled ;; esac
         case "$reason" in
             global_block) message="Интернет отключён общей семейной блокировкой." ;;
-            blocklist) message="Устройство находится в чёрном списке." ;;
+            blocklist) message="Устройство находится в чёрном списке устройств." ;;
+            schedule_conflict_internet_off) message="Расписания конфликтуют; согласно настройке интернет оставлен выключенным." ;;
             *) message="Интернет ограничен правилами Sheepfold." ;;
         esac
         ;;
@@ -126,16 +159,25 @@ device_id=""
 device_name=""
 is_administrator=0
 client_role=child
+can_request_access_extension=0
+# SHEEPFOLD_AI_BEGIN
 personal_group_name=""
+# SHEEPFOLD_AI_END
 if [ -n "$device_section" ]; then
     device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$device_section" 2>/dev/null || true)"
     device_name="$(uci -q get "sheepfold.$device_section.name" 2>/dev/null || true)"
     is_administrator="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
+    # SHEEPFOLD_AI_BEGIN
     personal_group_name="$(personal_group_for_device "$device_section" "$mac" 2>/dev/null || true)"
+    # SHEEPFOLD_AI_END
     if [ "$is_administrator" = 1 ]; then
         client_role=parent
     else
         is_administrator=0
+        if [ -x /usr/libexec/sheepfold/sheepfold-access-request ] &&
+           [ "$(/usr/libexec/sheepfold/sheepfold-access-request enabled 2>/dev/null || printf 0)" = 1 ]; then
+            can_request_access_extension=1
+        fi
     fi
 fi
 if [ -z "$device_name" ] && [ -r /tmp/dhcp.leases ]; then
@@ -143,17 +185,25 @@ if [ -z "$device_name" ] && [ -r /tmp/dhcp.leases ]; then
     [ "$device_name" != "*" ] || device_name=""
 fi
 
+# SHEEPFOLD_AI_BEGIN
 ai_enabled="$(uci -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)"
 child_ai_consent="$(uci -q get sheepfold.global.child_ai_parental_consent 2>/dev/null || printf 0)"
+ai_assistant_available=0
+child_ai_available=0
 child_ai_allowed=0
 personal_group_required=0
-if [ "$client_role" = child ] && [ "$ai_enabled" = 1 ] && [ "$child_ai_consent" = 1 ]; then
+if [ "$ai_enabled" = 1 ] && ai_feature_available; then
+    ai_assistant_available=1
+fi
+if [ "$client_role" = child ] && [ "$ai_assistant_available" = 1 ] && [ "$child_ai_consent" = 1 ]; then
+    child_ai_available=1
     if [ -n "$personal_group_name" ]; then
         child_ai_allowed=1
     else
         personal_group_required=1
     fi
 fi
+# SHEEPFOLD_AI_END
 
 minutes_remaining=null
 case "$access_ends_at" in
@@ -174,11 +224,17 @@ printf '"deviceId":"%s",' "$(json_escape "$device_id")"
 printf '"deviceName":"%s",' "$(json_escape "$device_name")"
 printf '"isAdministrator":%s,' "$([ "$is_administrator" = 1 ] && printf true || printf false)"
 printf '"clientRole":"%s",' "$(json_escape "$client_role")"
+printf '"canRequestAccessExtension":%s,' "$([ "$can_request_access_extension" = 1 ] && printf true || printf false)"
+# SHEEPFOLD_AI_BEGIN
+printf '"aiAssistantAvailable":%s,' "$([ "$ai_assistant_available" = 1 ] && printf true || printf false)"
+printf '"childAiAvailable":%s,' "$([ "$child_ai_available" = 1 ] && printf true || printf false)"
 printf '"personalGroupName":"%s",' "$(json_escape "$personal_group_name")"
 printf '"childAiAllowed":%s,' "$([ "$child_ai_allowed" = 1 ] && printf true || printf false)"
 printf '"personalGroupRequired":%s,' "$([ "$personal_group_required" = 1 ] && printf true || printf false)"
+# SHEEPFOLD_AI_END
 printf '"internetState":"%s",' "$(json_escape "$internet_state")"
 printf '"accessMode":"%s",' "$(json_escape "$access_mode")"
+printf '"scheduleConflict":%s,' "$([ "$schedule_conflict" = 1 ] && printf true || printf false)"
 if [ -n "$access_ends_at" ]; then
     printf '"accessEndsAt":"%s",' "$(json_escape "$access_ends_at")"
 else

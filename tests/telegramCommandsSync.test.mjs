@@ -11,9 +11,9 @@ function readProjectFile(path) {
   return readFileSync(resolve(packageDir, path), 'utf8');
 }
 
-function overviewCommandNames(source) {
-  const block = source.match(/function messengerCommandRows\(\) \{[\s\S]*?return \[([\s\S]*?)\];\s*\}/);
-  assert.ok(block, 'messengerCommandRows() must exist in overview.js');
+function messengerCommandNames(source) {
+  const block = source.match(/function commandRows\(\) \{[\s\S]*?return \[([\s\S]*?)\];\s*\}/);
+  assert.ok(block, 'commandRows() must exist in the messenger feature module');
 
   const names = [];
   const rowPattern = /\['(\/[^']+)'/g;
@@ -39,11 +39,11 @@ function telegramCommandNames(source) {
 }
 
 describe('Telegram command menu sync', () => {
-  it('keeps overview.js messengerCommandRows in sync with telegram_commands_json()', () => {
-    const overview = readProjectFile('htdocs/luci-static/resources/view/sheepfold/overview.js');
+  it('keeps the LuCI messenger feature in sync with telegram_commands_json()', () => {
+    const messenger = readProjectFile('htdocs/luci-static/resources/sheepfold/features/messenger/settings.js');
     const bot = readProjectFile('root/usr/libexec/sheepfold/sheepfold-telegram-bot');
 
-    const overviewNames = overviewCommandNames(overview);
+    const overviewNames = messengerCommandNames(messenger);
     const telegramNames = telegramCommandNames(bot);
 
     assert.deepEqual(

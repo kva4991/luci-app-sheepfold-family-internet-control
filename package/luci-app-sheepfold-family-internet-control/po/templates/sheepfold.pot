@@ -2557,7 +2557,7 @@ msgid "User management"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
-msgid "Visual test build. Router rules and persistence are not active yet."
+msgid "Manage family devices' internet access through this OpenWRT router."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
@@ -2702,4 +2702,508 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
 msgid "Create the key in the xAI console and save it here. It is stored only on the router."
+msgstr ""
+
+msgid "A block rule wins at the same level."
+msgstr ""
+
+msgid "Access priority"
+msgstr ""
+
+msgid "Access priority contains an unknown or duplicate rule."
+msgstr ""
+
+msgid "Add schedule"
+msgstr ""
+
+msgid "Add the first rule and choose who, on which days, and at what time it applies."
+msgstr ""
+
+msgid "Add time interval"
+msgstr ""
+
+msgid "Allow internet"
+msgstr ""
+
+msgid "Apply to"
+msgstr ""
+
+msgid "Bedtime saved."
+msgstr ""
+
+msgid "Block internet"
+msgstr ""
+
+msgid "copy"
+msgstr ""
+
+msgid "Could not change schedule state."
+msgstr ""
+
+msgid "Could not delete schedule."
+msgstr ""
+
+msgid "Could not save bedtime."
+msgstr ""
+
+msgid "Could not save schedule."
+msgstr ""
+
+msgid "Create recurring allow or block rules for groups and individual devices. A rule can be disabled without deleting it."
+msgstr ""
+
+msgid "Days of week"
+msgstr ""
+
+msgid "Delete schedule"
+msgstr ""
+
+msgid "Delete schedule?"
+msgstr ""
+
+msgid "Disable without deleting"
+msgstr ""
+
+msgid "Duplicate schedule"
+msgstr ""
+
+msgid "Edit schedule"
+msgstr ""
+
+msgid "Enable schedule"
+msgstr ""
+
+msgid "Enter a name, select targets and days, and set a valid time interval."
+msgstr ""
+
+msgid "Enter a valid bedtime."
+msgstr ""
+
+msgid "Individual devices"
+msgstr ""
+
+msgid "Internet access rule priority"
+msgstr ""
+
+msgid "Internet allowed"
+msgstr ""
+
+msgid "Internet blocked"
+msgstr ""
+
+msgid "Move down"
+msgstr ""
+
+msgid "Move up"
+msgstr ""
+
+msgid "next day"
+msgstr ""
+
+msgid "No days selected"
+msgstr ""
+
+msgid "No schedules yet"
+msgstr ""
+
+msgid "No suitable devices or groups."
+msgstr ""
+
+msgid "No targets selected"
+msgstr ""
+
+msgid "Remove time interval"
+msgstr ""
+
+msgid "Reset order"
+msgstr ""
+
+msgid "Rules higher in the list take priority. Emergency-useful sites never open access to the router itself."
+msgstr ""
+
+msgid "The order is temporarily fixed so that the router always applies exactly what the interface shows."
+msgstr ""
+
+msgid "Use at least 12 characters for the backup password."
+msgstr ""
+
+msgid "The backup contains a device in both the allowlist and the blocklist."
+msgstr ""
+
+msgid "The backup does not contain the required Sheepfold sections."
+msgstr ""
+
+msgid "This browser cannot create or open an encrypted backup."
+msgstr ""
+
+msgid "Backup passwords do not match."
+msgstr ""
+
+msgid "Encrypting backup..."
+msgstr ""
+
+msgid "Encrypted full backup saved."
+msgstr ""
+
+msgid "Create encrypted backup"
+msgstr ""
+
+msgid "This backup contains passwords and tokens. Keep the file and its password separately. Without the password, the backup cannot be restored."
+msgstr ""
+
+msgid "Backup password"
+msgstr ""
+
+msgid "Repeat backup password"
+msgstr ""
+
+msgid "Settings were restored, but router services could not be refreshed."
+msgstr ""
+
+msgid "Applying backup..."
+msgstr ""
+
+msgid "Settings imported successfully. The page will reload."
+msgstr ""
+
+msgid "Import and apply"
+msgstr ""
+
+msgid "The backup contains: %s devices, %s groups, %s schedules, %s administrators, %s static DHCP leases and %s Wi-Fi sections."
+msgstr ""
+
+msgid "Existing Sheepfold settings, static DHCP leases and Wi-Fi settings will be replaced."
+msgstr ""
+
+msgid "The encrypted backup contains secrets."
+msgstr ""
+
+msgid "This backup does not contain secrets. Existing matching secrets will be kept; missing ones must be entered again."
+msgstr ""
+
+msgid "Wi-Fi may restart and temporarily disconnect this device."
+msgstr ""
+
+msgid "Decrypting backup..."
+msgstr ""
+
+msgid "Could not decrypt the backup. Check the password and file."
+msgstr ""
+
+msgid "Decrypt and check"
+msgstr ""
+
+msgid "Open encrypted backup"
+msgstr ""
+
+msgid "The backup file is too large."
+msgstr ""
+
+msgid "A backup containing passwords or tokens must be encrypted."
+msgstr ""
+
+msgid "Could not import settings. The previous settings were kept."
+msgstr ""
+
+msgid "Schedule deleted."
+msgstr ""
+
+msgid "Schedule disabled."
+msgstr ""
+
+msgid "Schedule enabled"
+msgstr ""
+
+msgid "Schedule enabled."
+msgstr ""
+
+msgid "Schedule name"
+msgstr ""
+
+msgid "Schedule saved."
+msgstr ""
+
+msgid "This rule overlaps the opposite rule:"
+msgstr ""
+
+msgid "Time intervals"
+msgstr ""
+
+msgid "Time is not set"
+msgstr ""
+
+msgid "Unnamed schedule"
+msgstr ""
+
+msgid "Weekdays"
+msgstr ""
+
+msgid "Weekends"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Off"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "On"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "When internet enable and disable schedules conflict, internet will be"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The conflict will still be shown in the interface and written to the journal. Device schedules remain more specific than group schedules."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "According to the conflict setting, internet will be on."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "According to the conflict setting, internet will be off."
+msgstr ""
+
+msgid "Personal devices"
+msgstr ""
+
+msgid "May child devices send this administrator requests for 30 more minutes of internet?"
+msgstr ""
+
+msgid "Disabled by default. A request only notifies the parent and never grants internet automatically."
+msgstr ""
+
+msgid "AI assistant prompt version"
+msgstr ""
+
+msgid "Version 2 (recommended)"
+msgstr ""
+
+msgid "Version 1 (original draft)"
+msgstr ""
+
+msgid "The selected version is used for conversations with parents. Changing it does not send any data until a parent starts a conversation."
+msgstr ""
+
+msgid "Automatic setup for new devices is disabled."
+msgstr ""
+
+msgid "Automatic assignment to No restrictions is disabled."
+msgstr ""
+
+msgid "This device was manually removed from No restrictions and will not be added again automatically."
+msgstr ""
+
+msgid "Automatic assignment to Personal devices is disabled."
+msgstr ""
+
+msgid "This device was manually removed from Personal devices and will not be added again automatically."
+msgstr ""
+
+msgid "This device type is not safe for automatic assignment to No restrictions."
+msgstr ""
+
+msgid "The type is recognized, but automatic assignment to No restrictions still needs a second independent router-side signal."
+msgstr ""
+
+msgid "Device type confidence is still too low for automatic grouping."
+msgstr ""
+
+msgid "A device from the device blocklist is never assigned automatically."
+msgstr ""
+
+msgid "The device is already in another group; automatic setup does not replace a parent choice."
+msgstr ""
+
+msgid "The detected group has been assigned automatically."
+msgstr ""
+
+msgid "Protect the router with a password"
+msgstr ""
+
+msgid "Sheepfold could not verify the router root password. Settings remain locked for safety. Install the current Sheepfold package or set the router password and reload this page."
+msgstr ""
+
+msgid "The router root password is not set. Until you create it, anyone connected to the home network may be able to change router and Sheepfold settings."
+msgstr ""
+
+msgid "Go to router password setup"
+msgstr ""
+
+msgid "Check again"
+msgstr ""
+
+msgid "Feedback / suggestions"
+msgstr ""
+
+msgid "Suggestion"
+msgstr ""
+
+msgid "Problem or error"
+msgstr ""
+
+msgid "Question"
+msgstr ""
+
+msgid "Other"
+msgstr ""
+
+msgid "Short summary"
+msgstr ""
+
+msgid "Describe what happened or what you suggest changing."
+msgstr ""
+
+msgid "Optional email or messenger contact"
+msgstr ""
+
+msgid "Checking whether feedback sending is configured..."
+msgstr ""
+
+msgid "Enter a subject up to 120 characters."
+msgstr ""
+
+msgid "The message must contain from 10 to 4000 characters."
+msgstr ""
+
+msgid "Sending..."
+msgstr ""
+
+msgid "The feedback service did not respond in time."
+msgstr ""
+
+msgid "Thank you. Your message was sent to the Sheepfold developer."
+msgstr ""
+
+msgid "Could not send the message. Try again later."
+msgstr ""
+
+msgid "Send message"
+msgstr ""
+
+msgid "Feedback sending is available."
+msgstr ""
+
+msgid "Feedback sending has not been configured by the project owner yet."
+msgstr ""
+
+msgid "Could not check the feedback service status."
+msgstr ""
+
+msgid "Tell the developer about a problem or suggest an improvement. Along with the form fields, the router sends the Sheepfold version and a random installation identifier that is not based on device data."
+msgstr ""
+
+msgid "Message type"
+msgstr ""
+
+msgid "Subject"
+msgstr ""
+
+msgid "Message"
+msgstr ""
+
+msgid "Contact for reply"
+msgstr ""
+
+msgid "Optional. Leave empty if you do not need a reply. This value will be stored with the message in Yandex Cloud."
+msgstr ""
+
+msgid "Attach a diagnostic report (recommended for a problem): router and network status, versions, resources, safe Sheepfold settings, and counts of devices and rules. Passwords, tokens, MAC/IP addresses, names, SSIDs, logs, and browsing history are never attached."
+msgstr ""
+
+msgid "Enter a valid domain name, for example gosuslugi.ru."
+msgstr ""
+
+msgid "This domain is already in the emergency-useful sites list."
+msgstr ""
+
+msgid "Site prepared. Press Save settings to apply it."
+msgstr ""
+
+msgid "Site removal prepared. Press Save settings to apply it."
+msgstr ""
+
+msgid "Some services load maps, sign-in pages, or images from additional technical domains. If a site opens incompletely, add only the domains required for its useful function."
+msgstr ""
+
+msgid "Checking site list application status..."
+msgstr ""
+
+msgid "Configure allowlists and blocklists in AdGuard Home. Sheepfold does not duplicate or overwrite its DNS rules."
+msgstr ""
+
+msgid "Could not apply the new site lists."
+msgstr ""
+
+msgid "Could not read site list application status."
+msgstr ""
+
+msgid "Loaded domains: allowlist %s, blocklist %s."
+msgstr ""
+
+msgid "No strict allowlist group is currently using the loaded allowlist."
+msgstr ""
+
+msgid "Refresh status"
+msgstr ""
+
+msgid "Refresh the status after the first list update or after saving the integration settings."
+msgstr ""
+
+msgid "Sheepfold firewall rules are not available."
+msgstr ""
+
+msgid "Sheepfold is waiting for the first successful site list download."
+msgstr ""
+
+msgid "Site filtering is delegated to AdGuard Home."
+msgstr ""
+
+msgid "Site list application status is not available yet."
+msgstr ""
+
+msgid "Site list filtering is disabled."
+msgstr ""
+
+msgid "Site list filtering is left off instead of incorrectly blocking devices. The router needs a dnsmasq build with nftset support."
+msgstr ""
+
+msgid "Site lists are applied by Sheepfold."
+msgstr ""
+
+msgid "Sources with update errors: %s. Last working copies are kept."
+msgstr ""
+
+msgid "Strict allowlist groups are protected by the loaded allowlist."
+msgstr ""
+
+msgid "The combined site lists are too large for safe application on this router."
+msgstr ""
+
+msgid "The previous working DNS configuration is kept when one exists."
+msgstr ""
+
+msgid "The router could not update the Sheepfold site filtering rules."
+msgstr ""
+
+msgid "The router DNS configuration directory is invalid."
+msgstr ""
+
+msgid "The router DNS service cannot apply Sheepfold site lists."
+msgstr ""
+
+msgid "The router DNS service could not restart with the new site lists."
+msgstr ""
+
+msgid "The router DNS service rejected the new site list configuration."
+msgstr ""
+
+msgid "The site blocklist is active."
+msgstr ""
+
+msgid "The site blocklist is not active."
+msgstr ""
+
+msgid "Until verified domains are available, strict allowlist groups are left online instead of accidentally blocking all internet access."
 msgstr ""
