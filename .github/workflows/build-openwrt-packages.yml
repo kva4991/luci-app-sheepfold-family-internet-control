@@ -49,7 +49,7 @@ jobs:
 
     steps:
       - name: Check out the exact commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -116,7 +116,7 @@ jobs:
             "${metadata_args[@]}"
 
       - name: Upload matrix artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openwrt-package-${{ matrix.variant }}-${{ matrix.packageFormat }}
           path: .build/release-assets/*
@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload SDK logs after a failed build
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openwrt-build-logs-${{ matrix.variant }}-${{ matrix.packageFormat }}
           path: .build/sdk-output/logs
@@ -138,10 +138,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out manifest tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download all matrix artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: openwrt-package-*
           path: .build/release-bundle
@@ -151,7 +151,7 @@ jobs:
         run: python3 scripts/create-openwrt-release-manifest.py --directory .build/release-bundle
 
       - name: Upload complete OpenWrt bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sheepfold-openwrt-packages
           path: .build/release-bundle/*
@@ -167,7 +167,7 @@ jobs:
       contents: write
     steps:
       - name: Download complete OpenWrt bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: sheepfold-openwrt-packages
           path: .build/release-bundle

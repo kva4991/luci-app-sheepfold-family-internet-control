@@ -10,7 +10,9 @@ import { describe, it } from 'node:test';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const workflowPath = join(root, '.github/workflows/build-openwrt-packages.yml');
+const validationWorkflowPath = join(root, '.github/workflows/placeholder.yml');
 const workflow = readFileSync(workflowPath, 'utf8');
+const validationWorkflow = readFileSync(validationWorkflowPath, 'utf8');
 
 describe('OpenWrt GitHub Actions build §owrtci1', () => {
   it('builds both product editions for current IPK and APK releases', () => {
@@ -48,5 +50,22 @@ describe('OpenWrt GitHub Actions build §owrtci1', () => {
     assert.match(workflow, /gh release upload/);
     assert.match(workflow, /OPENWRT_IPK_SIGNING_KEY/);
     assert.match(workflow, /OPENWRT_APK_PRIVATE_KEY/);
+  });
+
+  it('uses Node 24 compatible GitHub Actions in every workflow', () => {
+    const allWorkflows = `${workflow}\n${validationWorkflow}`;
+
+    // GitHub уже принудительно переводит старые JavaScript Actions на Node 24.
+    // Явные свежие major-версии не дают предупреждению снова стать скрытой поломкой CI.
+    assert.match(workflow, /actions\/checkout@v7/);
+    assert.match(workflow, /actions\/upload-artifact@v7/);
+    assert.match(workflow, /actions\/download-artifact@v8/);
+    assert.match(validationWorkflow, /actions\/setup-node@v7/);
+    assert.match(validationWorkflow, /actions\/setup-java@v5/);
+    assert.match(validationWorkflow, /gradle\/actions\/setup-gradle@v6/);
+    assert.doesNotMatch(
+      allWorkflows,
+      /actions\/(?:checkout|setup-node|setup-java|upload-artifact|download-artifact)@v4\b/,
+    );
   });
 });
