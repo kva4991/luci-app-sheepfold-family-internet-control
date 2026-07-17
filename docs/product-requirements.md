@@ -478,6 +478,8 @@ During installation, Sheepfold must detect whether AdGuard Home and/or Podkop ar
 
 The installer may automatically write Sheepfold-owned UCI values for this mode, but must not rewrite AdGuard Home or Podkop configuration without an explicit separate confirmation.
 
+Current Podkop compatibility requires the visible `Disable IPv6 on the router` option to become enabled automatically for `podkop` and `adguard_podkop`. Without Podkop it defaults to disabled and remains user-controlled. Sheepfold must use only its owned sysctl file and restore the kernel values that existed before automatic management (§ipv6pod).
+
 ## Helpful External Links
 
 - Podkop and AdGuard Home setup: https://podkop.net/docs/adguard/

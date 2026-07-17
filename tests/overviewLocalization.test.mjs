@@ -1,3 +1,8 @@
+/*
+ * Проверяет полноту переводимых строк Sheepfold и согласованность каталогов LuCI.
+ * Тест только читает исходники/словари и не меняет locale; визуальное размещение
+ * длинных переводов подтверждается отдельно браузерным тестом.
+ */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -99,5 +104,18 @@ describe('overview localization', () => {
     assert.equal(catalog['Auto-assigned to No restrictions'], 'Автоматически добавлено в "Без ограничений"');
     assert.equal(catalog['Blocklist emergency-useful sites access'], 'Доступ пользователей из чёрного списка к "аварийно-полезным сайтам"');
     assert.equal(catalog['Site lists are applied by Sheepfold.'], 'Списки сайтов применены Sheepfold.');
+    assert.equal(
+      catalog['The Sheepfold filter is active in AdGuard Home, but the DNS path is not yet verified.'],
+      'Фильтр Sheepfold активен в AdGuard Home, но путь DNS-запросов пока не проверен.',
+    );
+    assert.equal(catalog['AdGuard Home protection is disabled.'], 'Защита AdGuard Home выключена.');
+    assert.equal(
+      catalog['Control rules confirmed: %s of %s.'],
+      'Контрольные правила подтверждены: %s из %s.',
+    );
+    assert.equal(
+      catalog['The AdGuard Home filter exists, but its control rules are not confirmed.'],
+      'Фильтр Sheepfold существует в AdGuard Home, но его контрольные правила не подтверждены.',
+    );
   });
 });

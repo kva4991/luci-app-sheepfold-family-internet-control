@@ -42,12 +42,19 @@ apply_led_settings() {
                 logger -t sheepfold "Configured router LED mode could not be applied"
 }
 
+apply_ipv6_settings() {
+        [ -x /usr/libexec/sheepfold/sheepfold-ipv6-control ] || return 0
+        /usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || \
+                logger -t sheepfold "Configured IPv6 mode could not be applied"
+}
+
 start_service() {
         local port https_port
 
         restore_usb_storage
         apply_led_repair
         apply_led_settings
+        apply_ipv6_settings
 
         [ -x /usr/libexec/sheepfold/sheepfold-firewall ] &&
                 /usr/libexec/sheepfold/sheepfold-firewall ensure >/dev/null 2>&1 ||

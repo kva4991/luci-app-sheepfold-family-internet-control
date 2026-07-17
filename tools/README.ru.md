@@ -101,6 +101,20 @@ android-child\gradlew.bat -p android-child assembleDebug --stacktrace
 
 Эти каталоги не должны попадать в коммиты. Версии и требования проекта фиксируются в `tools/toolchain.json`.
 
+## Живой тестовый OpenWrt-роутер
+
+<!-- §routerharness -->
+
+Сценарии `tools/router-testing/` документированы каждый в собственной шапке и подробно описаны в [`../docs/live-router-automation.ru.md`](../docs/live-router-automation.ru.md). После однократной установки отдельного SSH-ключа и сохранения LuCI-пароля через DPAPI агент может сам:
+
+- собрать и установить нужный вариант IPK;
+- сохранить конфиги вне роутера до изменения;
+- проверить UCI/backend/fw4 на фиктивном MAC;
+- восстановить конфиг при ошибке;
+- открыть реальную LuCI через Playwright на desktop/mobile.
+
+Полная безопасная команда: `npm.cmd run router:allSafe`. Она не перезагружает роутер, не выключает Wi-Fi, не запускает WPS и не выполняет `opkg upgrade`.
+
 Официальные источники:
 
 - [Android command-line tools и лицензия SDK](https://developer.android.com/studio#command-tools);

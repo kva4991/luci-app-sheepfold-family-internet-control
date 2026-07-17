@@ -1,3 +1,8 @@
+/*
+ * Защищает модульные границы большого LuCI view и отсутствие возврата логики в
+ * overview.js. Тест читает только исходники; он не доказывает, что LuCI loader и
+ * браузер успешно загрузят модули, поэтому дополнительно нужен frontend smoke.
+ */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -17,13 +22,16 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.match(overview, /require sheepfold\.features\.devices\.types as deviceTypes/);
     assert.match(overview, /require sheepfold\.features\.emergency\.sites as emergencySiteModel/);
     assert.match(overview, /require sheepfold\.features\.devices\.access-lists as deviceAccessLists/);
+    assert.match(overview, /require sheepfold\.features\.devices\.editor as deviceEditor/);
     assert.match(overview, /require sheepfold\.features\.devices\.inventory as deviceInventory/);
     assert.match(overview, /require sheepfold\.features\.devices\.table as deviceTableModel/);
     assert.match(overview, /require sheepfold\.features\.devices\.selection as deviceSelection/);
     assert.match(overview, /require sheepfold\.features\.administrators\.model as administratorModel/);
     assert.match(overview, /require sheepfold\.features\.administrators\.view as administratorView/);
+    assert.match(overview, /require sheepfold\.features\.administrators\.editor as administratorEditor/);
     assert.match(overview, /require sheepfold\.features\.groups\.model as groupModel/);
     assert.match(overview, /require sheepfold\.features\.groups\.view as groupView/);
+    assert.match(overview, /require sheepfold\.features\.groups\.editor as groupEditor/);
     assert.match(overview, /require sheepfold\.features\.logs\.model as logModel/);
     assert.match(overview, /require sheepfold\.features\.messenger\.settings as messengerSettings/);
     assert.match(overview, /require sheepfold\.features\.pairing\.qr as pairingQr/);
@@ -33,6 +41,7 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.match(overview, /require sheepfold\.features\.wifi\.cards as wifiCards/);
     assert.match(overview, /require sheepfold\.features\.schedules\.model as scheduleModel/);
     assert.match(overview, /require sheepfold\.features\.schedules\.view as scheduleView/);
+    assert.match(overview, /require sheepfold\.features\.schedules\.editor as scheduleEditor/);
     assert.match(overview, /require sheepfold\.features\.settings\.draft as settingsDraftModel/);
     assert.match(overview, /require sheepfold\.features\.settings\.backup as settingsBackupModel/);
     assert.match(overview, /require sheepfold\.features\.sites\.status as siteListStatus/);
@@ -56,6 +65,7 @@ describe('LuCI frontend modules §frontmod', () => {
     const qr = moduleSource('sheepfold/features/pairing/qr.js');
     const types = moduleSource('sheepfold/features/devices/types.js');
     const accessLists = moduleSource('sheepfold/features/devices/access-lists.js');
+    const deviceEditor = moduleSource('sheepfold/features/devices/editor.js');
     const inventory = moduleSource('sheepfold/features/devices/inventory.js');
     const logs = moduleSource('sheepfold/features/logs/model.js');
     const random = moduleSource('sheepfold/core/security/random.js');
@@ -77,8 +87,11 @@ describe('LuCI frontend modules §frontmod', () => {
     const siteListStatus = moduleSource('sheepfold/features/sites/status.js');
     const emergencySites = moduleSource('sheepfold/features/emergency/sites.js');
     const scheduleView = moduleSource('sheepfold/features/schedules/view.js');
+    const scheduleEditor = moduleSource('sheepfold/features/schedules/editor.js');
     const groupView = moduleSource('sheepfold/features/groups/view.js');
+    const groupEditor = moduleSource('sheepfold/features/groups/editor.js');
     const administratorView = moduleSource('sheepfold/features/administrators/view.js');
+    const administratorEditor = moduleSource('sheepfold/features/administrators/editor.js');
 
     assert.match(qr, /function createQrMatrix/);
     assert.match(types, /function displayedType/);
@@ -86,6 +99,8 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.match(types, /byValue: byValue/);
     assert.match(accessLists, /function updatedValues/);
     assert.match(accessLists, /function conflictingList/);
+    assert.match(deviceEditor, /function open\(deps, device\)/);
+    assert.doesNotMatch(deviceEditor, /uci\.(get|set|unset|remove)|routerControl|saveUciChanges/);
     assert.match(inventory, /function parseDhcp/);
     assert.match(inventory, /function parseArp/);
     assert.match(inventory, /function build\(options\)/);
@@ -112,13 +127,25 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.match(settingsBackup, /function validateAccessLists/);
     assert.match(siteListStatus, /function describe\(values\)/);
     assert.match(siteListStatus, /site-lists-status/);
+    assert.match(siteListStatus, /function sourceRecords\(values\)/);
+    assert.match(siteListStatus, /site-lists-accept-shrink/);
+    assert.match(siteListStatus, /var remaining = 10/);
     assert.match(emergencySites, /function normalizeDomain/);
     assert.match(emergencySites, /function stage\(uci, config, sites\)/);
     assert.match(scheduleView, /function render\(deps, embedded\)/);
+    assert.match(scheduleEditor, /function open\(deps, section, copyMode\)/);
+    assert.doesNotMatch(scheduleEditor, /uci\.(get|set|unset|remove)|safeUciSections|overview/);
     assert.match(groupView, /function render\(deps, embedded\)/);
     assert.match(groupView, /function refresh\(\)/);
     assert.doesNotMatch(groupView, /visual test build/);
     assert.doesNotMatch(groupView, /window\.location\.reload/);
+    assert.match(groupEditor, /function openSettings\(deps, groupName, section, onSave\)/);
+    assert.match(groupEditor, /function openAdd\(deps, existingNames, onSave\)/);
+    assert.doesNotMatch(groupEditor, /uci\.(get|set|unset|remove)|safeUciSections|window\.location\.reload/);
     assert.match(administratorView, /function render\(deps, embedded\)/);
+    assert.match(administratorEditor, /function openAdd\(deps, onSave\)/);
+    assert.match(administratorEditor, /function openBinding\(deps, admin, onSave\)/);
+    assert.match(administratorEditor, /function openSettings\(deps, admin, pairing, callbacks\)/);
+    assert.doesNotMatch(administratorEditor, /uci\.(get|set|unset|remove)|routerControl|generatePairingCode/);
   });
 });

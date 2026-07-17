@@ -2,14 +2,15 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=186
+PKG_RELEASE:=197
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
+SHEEPFOLD_PRODUCT_VARIANT:=sheepfoldAi
 
 LUCI_TITLE:=Sheepfold Family Internet Control
 LUCI_DESCRIPTION:=Family internet access control for OpenWRT with LuCI, Android, and bot support.
-LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +uclient-fetch +ca-bundle +uhttpd +uhttpd-mod-tls +curl
+LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +jshn +uclient-fetch +ca-bundle +uhttpd +uhttpd-mod-tls +curl
 
 # Supported LuCI languages (gettext)
 LUCI_LANGUAGES:=en ru zh_Hans
@@ -46,8 +47,9 @@ cleanup_opkg_conffile_artifacts() {
 	done
 }
 cleanup_stale_update_artifacts() {
-	# Временную копию конфига удаляет updater только после проверки результата opkg (§updsafe).
-	rm -f /tmp/sheepfold/update/*.ipk 2>/dev/null || true
+	# Временную копию конфига updater удаляет только после проверки результата
+	# системного package manager: opkg на 24.10 или apk на 25.12 (§updsafe).
+	rm -f /tmp/sheepfold/update/*.ipk /tmp/sheepfold/update/*.apk 2>/dev/null || true
 }
 recover_sheepfold_config() {
 	mkdir -p /etc/config /etc/sheepfold/migrations
@@ -116,6 +118,11 @@ ensure_global_option lan_firewall_zones 'lan'
 ensure_global_option integration_mode 'none'
 ensure_global_option integration_mode_source 'default'
 ensure_global_option integration_mode_user_set '0'
+ensure_global_option router_ipv6_disabled '0'
+ensure_global_option router_ipv6_mode_source 'default'
+ensure_global_option site_filter_backend 'auto'
+ensure_global_option adguard_auto_manage '1'
+ensure_global_option adguard_health_interval_seconds '300'
 ensure_global_option new_device_policy 'allow'
 ensure_global_option auto_configure '1'
 ensure_global_option detection_mode 'full'
@@ -130,6 +137,7 @@ ensure_global_option detector_full_rescan_seconds '21600'
 ensure_global_option service_control_interval_seconds '30'
 ensure_global_option update_check_install_mode 'weekly'
 ensure_global_option active_messenger 'none'
+# SHEEPFOLD_AI_BEGIN
 ensure_global_option ai_enabled '0'
 ensure_global_option ai_provider 'none'
 ensure_global_option ai_rate_limit_requests '20'
@@ -148,6 +156,7 @@ ensure_global_option gemini_api_key ''
 ensure_global_option grok_model 'grok-3-mini'
 ensure_global_option grok_api_url 'https://api.x.ai/v1/chat/completions'
 ensure_global_option grok_api_key ''
+# SHEEPFOLD_AI_END
 ensure_global_option vk_access_token ''
 ensure_global_option vk_community_id ''
 ensure_global_option vk_admin_user_id ''
@@ -254,6 +263,15 @@ fi
 uci -q set sheepfold.global.emergency_sites_initialized='1'
 ensure_named_section adguard integration
 ensure_named_section podkop integration
+ensure_adguard_option() {
+	option="$$1"
+	value="$$2"
+	[ -n "$$(uci -q get sheepfold.adguard.$$option 2>/dev/null)" ] || uci -q set sheepfold.adguard.$$option="$$value"
+}
+ensure_adguard_option enabled '0'
+ensure_adguard_option url 'http://127.0.0.1:3000'
+ensure_adguard_option username ''
+ensure_adguard_option password ''
 ensure_named_section messenger_global messenger
 ensure_named_section export_global export
 ensure_named_section wifi_control_global wifi_control
@@ -328,11 +346,16 @@ esac
 mkdir -p "$${log_cache_path%/*}"
 touch "$$log_cache_path"
 chmod 600 "$$log_cache_path"
+package_manager_helper='/usr/libexec/sheepfold/sheepfold-package-manager'
+[ ! -r "$$package_manager_helper" ] || . "$$package_manager_helper"
 detect_installed() {
 	pkg="$$1"
 	init="$$2"
 	config="$$3"
-	opkg status "$$pkg" 2>/dev/null | grep -q "Status:.* installed" && return 0
+	if command -v sheepfold_package_is_installed >/dev/null 2>&1 &&
+	   sheepfold_package_is_installed "$$pkg"; then
+		return 0
+	fi
 	[ -n "$$init" ] && [ -x "/etc/init.d/$$init" ] && return 0
 	[ -n "$$config" ] && [ -f "/etc/config/$$config" ] && return 0
 	return 1
@@ -355,19 +378,43 @@ if [ "$$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null)" != 
 	uci -q set sheepfold.global.adguard_integration="$$([ "$$has_adguard" = "0" ] && printf 1 || printf 0)"
 	uci -q set sheepfold.global.podkop_compatibility="$$([ "$$has_podkop" = "0" ] && printf 1 || printf 0)"
 fi
+current_integration="$$(uci -q get sheepfold.global.integration_mode 2>/dev/null || printf none)"
+ipv6_source="$$(uci -q get sheepfold.global.router_ipv6_mode_source 2>/dev/null || printf default)"
+case "$$current_integration" in
+	podkop|adguard_podkop)
+		if [ "$$(uci -q get sheepfold.global.router_ipv6_disabled 2>/dev/null || printf 0)" != "1" ]; then
+			uci -q set sheepfold.global.router_ipv6_disabled='1'
+			uci -q set sheepfold.global.router_ipv6_mode_source='auto_podkop'
+		elif [ "$$ipv6_source" = 'default' ]; then
+			uci -q set sheepfold.global.router_ipv6_mode_source='auto_podkop'
+		fi
+		;;
+	*)
+		if [ "$$ipv6_source" = 'auto_podkop' ]; then
+			uci -q set sheepfold.global.router_ipv6_disabled='0'
+			uci -q set sheepfold.global.router_ipv6_mode_source='default'
+		fi
+		;;
+esac
+uci -q set sheepfold.global.product_variant='$(SHEEPFOLD_PRODUCT_VARIANT)'
 uci -q set sheepfold.global.ui_asset_version='$(SHEEPFOLD_UI_ASSET_VERSION)'
 uci -q commit sheepfold
 find /usr/libexec/sheepfold -type f -exec chmod 0755 {} + 2>/dev/null || true
+[ -x /usr/libexec/sheepfold/sheepfold-ipv6-control ] && \
+	/usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || true
 for helper in \
 	/etc/hotplug.d/dhcp/90-sheepfold-device-signals \
 	/www/.well-known/sheepfold.json.sh \
 	/www/cgi-bin/sheepfold-api \
-	/www/cgi-bin/sheepfold-blocked; do
+	/www/cgi-bin/sheepfold-blocked \
+	/www/cgi-bin/sheepfold-adguard-list; do
 	[ -e "$$helper" ] && chmod 0755 "$$helper" 2>/dev/null || true
 done
+# SHEEPFOLD_AI_BEGIN
 if [ "$$(uci -q get sheepfold.global.ai_individual_logs 2>/dev/null)" = "1" ]; then
 	/usr/libexec/sheepfold/sheepfold-openssl-ensure >/dev/null 2>&1 || true
 fi
+# SHEEPFOLD_AI_END
 /www/.well-known/sheepfold.json.sh || exit 1
 install_sheepfold_cron() {
 	cron_file='/etc/crontabs/root'
@@ -385,6 +432,10 @@ install_sheepfold_cron() {
 	cat >> "$$tmp" <<'EOF'
 # BEGIN SHEEPFOLD MANAGED JOBS
 * * * * * /usr/libexec/sheepfold/sheepfold-firewall sync >/dev/null 2>&1
+# SHEEPFOLD_AI_BEGIN
+5 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
+55 4 * * * /usr/libexec/sheepfold/sheepfold-activity-log rotate >/dev/null 2>&1
+# SHEEPFOLD_AI_END
 10 2 * * * /usr/libexec/sheepfold/sheepfold-maintenance-window && /usr/libexec/sheepfold/sheepfold-log-storage archive-push >/dev/null 2>&1
 0 5 * * * /usr/libexec/sheepfold/sheepfold-log-storage archive-push >/dev/null 2>&1
 # END SHEEPFOLD MANAGED JOBS
@@ -412,6 +463,14 @@ define Package/$(PKG_NAME)/prerm
 	/usr/libexec/sheepfold/sheepfold-site-lists cron-remove >/dev/null 2>&1 || true
 [ -x /usr/libexec/sheepfold/sheepfold-domain-policy ] && \
 	/usr/libexec/sheepfold/sheepfold-domain-policy clear >/dev/null 2>&1 || true
+# При обновлении новый postinst сразу применит настройку заново, поэтому не создаём
+# короткое окно с неожиданно включённым IPv6. При удалении возвращаем исходное состояние.
+if [ "$${1:-remove}" != upgrade ] && [ -x /usr/libexec/sheepfold/sheepfold-ipv6-control ]; then
+	if ! /usr/libexec/sheepfold/sheepfold-ipv6-control release >/dev/null 2>&1; then
+		logger -t sheepfold 'Не удалось восстановить прежнее состояние IPv6 при удалении пакета.'
+		echo 'Sheepfold: не удалось восстановить прежнее состояние IPv6; проверьте системный журнал.' >&2
+	fi
+fi
 # До удаления исполняемых файлов очищаем только собственные наборы Sheepfold.
 # Чужие таблицы, правила и packet marks, включая Podkop, не изменяются. §v7x2k9p
 [ -x /usr/libexec/sheepfold/sheepfold-firewall ] && \

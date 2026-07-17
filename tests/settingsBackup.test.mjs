@@ -1,3 +1,8 @@
+/*
+ * Проверяет шифрование, валидацию и восстановление экспорта настроек в изолированном
+ * VM-контексте Node. Реальные UCI/DHCP/Wi-Fi файлы не затрагиваются; зелёный результат
+ * не заменяет backup/restore на тестовом роутере.
+ */
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -111,6 +116,7 @@ describe('settings backup and restore', () => {
     assert.doesNotMatch(overview, /Applying imported settings will be added after backend/);
     assert.match(routerControl, /settings_import_applied\(\)/);
     assert.match(routerControl, /settings-import-applied\)/);
+    assert.match(routerControl, /settings_import_applied\(\)[\s\S]*sheepfold-ipv6-control apply/);
     assert.match(routerControl, /sleep 3[\s\S]*dnsmasq reload[\s\S]*wifi reload/);
   });
 });

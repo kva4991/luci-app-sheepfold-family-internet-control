@@ -137,8 +137,13 @@ $newPath = (($oldPath -split ';') + $add | Where-Object { $_ } | Select-Object -
 Node-тесты:
 
 ```powershell
-node --test tests/*.test.mjs
+npm.cmd run test:list
+npm.cmd run test:smoke
+npm.cmd run test:category -- luci devices
+npm.cmd test
 ```
+
+Выбор предметной категории и условия полного прогона описаны в [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat). Не запускать все долгие HTTP/shell-стенды после каждой локальной правки.
 
 Android XML:
 
@@ -160,9 +165,10 @@ bash -lc 'set -euo pipefail; package_root="package/luci-app-sheepfold-family-int
 
 Если проверяешь именно mDNS-инварианты, помни: в PowerShell легко сломать экранирование `$UCODE_SOURCE`. Надёжнее сначала открыть файл или запускать команду ровно как в `.github/workflows/placeholder.yml`.
 
-## Сборка OpenWRT IPK
+## Быстрая тестовая сборка OpenWRT IPK
 
-На Windows используй Python/PowerShell сборщик, а не ручной tar/ar.
+На Windows используй Python/PowerShell сборщик, а не ручной tar/ar. Это быстрый
+пакет для локальных и live-router проверок, а не канонический публичный release.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build-test-ipk.ps1
@@ -191,6 +197,22 @@ python -c "from pathlib import Path; import tarfile; d=Path('.build/ipk-output')
 ```
 
 Не коммить `.ipk`.
+
+### Канонические IPK и OpenWrt APK
+
+Публичные пакеты собирает GitHub Actions через официальный OpenWrt SDK:
+
+```powershell
+gh workflow run "Build OpenWrt packages" --ref main
+gh run list --workflow "Build OpenWrt packages"
+gh run watch
+```
+
+Workflow выпускает IPK для OpenWrt 24.10 и настоящий apk-tools v3 `.apk` для
+25.12. Переименовывать тестовый IPK в APK запрещено. WSL и локальный Docker для
+этой операции на Windows не обязательны. Полный контракт, артефакты и подписи:
+[`github-actions-openwrt-build.ru.md`](github-actions-openwrt-build.ru.md)
+(§owrtci1).
 
 ### Права на helper-скрипты в тестовом IPK
 
@@ -254,13 +276,18 @@ android-child\gradlew.bat -p android-child assembleDebug --stacktrace
 
 ## GitHub Actions
 
-Workflow находится в:
+Основные workflow находятся в:
 
 ```text
 .github/workflows/placeholder.yml
+.github/workflows/build-openwrt-packages.yml
 ```
 
-В нём есть:
+Первый проверяет shell/Node и две Android-сборки. Второй канонически собирает
+Standard/AI Support через официальный OpenWrt SDK: IPK для 24.10 и настоящий
+apk-tools v3 APK для 25.12 (§owrtci1).
+
+В `placeholder.yml` есть:
 
 - `shell-and-node`;
 - `android` matrix: `android`, `android-child`.

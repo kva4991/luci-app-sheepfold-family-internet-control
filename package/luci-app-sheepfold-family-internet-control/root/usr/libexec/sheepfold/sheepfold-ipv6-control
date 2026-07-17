@@ -1,0 +1,143 @@
+#!/bin/sh
+set -eu
+
+SYSCTL_FILE="${SHEEPFOLD_IPV6_SYSCTL_FILE:-/etc/sysctl.d/99-sheepfold-disable-ipv6.conf}"
+STATE_FILE="${SHEEPFOLD_IPV6_STATE_FILE:-/etc/sheepfold/ipv6-restore.conf}"
+PROC_ROOT="${SHEEPFOLD_IPV6_PROC_ROOT:-/proc/sys/net/ipv6/conf}"
+UCI_BIN="${SHEEPFOLD_IPV6_UCI_BIN:-uci}"
+SYSCTL_BIN="${SHEEPFOLD_IPV6_SYSCTL_BIN:-sysctl}"
+COMMAND="${1:-apply}"
+
+read_kernel_value() {
+	cat "$PROC_ROOT/$1/disable_ipv6" 2>/dev/null || printf '0'
+}
+
+valid_flag() {
+	case "$1" in 0|1) return 0 ;; *) return 1 ;; esac
+}
+
+configured_disabled() {
+	value="$("$UCI_BIN" -q get sheepfold.global.router_ipv6_disabled 2>/dev/null || printf '0')"
+	[ "$value" = '1' ]
+}
+
+sync_podkop_setting() {
+	integration="$("$UCI_BIN" -q get sheepfold.global.integration_mode 2>/dev/null || printf 'none')"
+	source="$("$UCI_BIN" -q get sheepfold.global.router_ipv6_mode_source 2>/dev/null || printf 'default')"
+	changed=0
+
+	case "$integration" in
+		podkop|adguard_podkop)
+			if ! configured_disabled; then
+				"$UCI_BIN" -q set sheepfold.global.router_ipv6_disabled='1'
+				"$UCI_BIN" -q set sheepfold.global.router_ipv6_mode_source='auto_podkop'
+				changed=1
+			elif [ "$source" = 'default' ]; then
+				"$UCI_BIN" -q set sheepfold.global.router_ipv6_mode_source='auto_podkop'
+				changed=1
+			fi
+			;;
+		*)
+			if [ "$source" = 'auto_podkop' ]; then
+				"$UCI_BIN" -q set sheepfold.global.router_ipv6_disabled='0'
+				"$UCI_BIN" -q set sheepfold.global.router_ipv6_mode_source='default'
+				changed=1
+			fi
+			;;
+	esac
+
+	[ "$changed" = 0 ] || "$UCI_BIN" -q commit sheepfold
+}
+
+remember_previous_state() {
+	[ -s "$STATE_FILE" ] && return 0
+
+	previous_all="$(read_kernel_value all)"
+	previous_default="$(read_kernel_value default)"
+	valid_flag "$previous_all" || previous_all=0
+	valid_flag "$previous_default" || previous_default=0
+
+	mkdir -p "$(dirname "$STATE_FILE")"
+	tmp_state="$STATE_FILE.tmp.$$"
+	umask 077
+	{
+		printf 'all=%s\n' "$previous_all"
+		printf 'default=%s\n' "$previous_default"
+	} > "$tmp_state"
+	mv -f "$tmp_state" "$STATE_FILE"
+}
+
+write_managed_sysctl() {
+	mkdir -p "$(dirname "$SYSCTL_FILE")"
+	tmp_sysctl="$SYSCTL_FILE.tmp.$$"
+	{
+		printf '%s\n' '# Managed by Sheepfold. Remove through the LuCI setting, not by editing this file.'
+		printf '%s\n' 'net.ipv6.conf.all.disable_ipv6=1'
+		printf '%s\n' 'net.ipv6.conf.default.disable_ipv6=1'
+	} > "$tmp_sysctl"
+	mv -f "$tmp_sysctl" "$SYSCTL_FILE"
+}
+
+set_kernel_value() {
+	name="$1"
+	value="$2"
+	"$SYSCTL_BIN" -w "net.ipv6.conf.$name.disable_ipv6=$value" >/dev/null
+}
+
+enable_ipv6_block() {
+	remember_previous_state
+	write_managed_sysctl
+	set_kernel_value all 1
+	set_kernel_value default 1
+}
+
+restore_previous_state() {
+	[ -e "$SYSCTL_FILE" ] || [ -s "$STATE_FILE" ] || return 0
+
+	previous_all=0
+	previous_default=0
+	if [ -s "$STATE_FILE" ]; then
+		. "$STATE_FILE"
+		previous_all="${all:-0}"
+		previous_default="${default:-0}"
+	fi
+	valid_flag "$previous_all" || previous_all=0
+	valid_flag "$previous_default" || previous_default=0
+
+	# Сначала убираем постоянную настройку Sheepfold, затем возвращаем ровно то
+	# состояние ядра, которое было до первого включения функции.
+	rm -f "$SYSCTL_FILE"
+	set_kernel_value all "$previous_all"
+	set_kernel_value default "$previous_default"
+	rm -f "$STATE_FILE"
+}
+
+print_status() {
+	configured=0
+	configured_disabled && configured=1
+	printf 'configured=%s\n' "$configured"
+	printf 'managed_file=%s\n' "$([ -e "$SYSCTL_FILE" ] && printf 1 || printf 0)"
+	printf 'kernel_all=%s\n' "$(read_kernel_value all)"
+	printf 'kernel_default=%s\n' "$(read_kernel_value default)"
+}
+
+case "$COMMAND" in
+	apply)
+		sync_podkop_setting
+		if configured_disabled; then
+			enable_ipv6_block
+		else
+			restore_previous_state
+		fi
+		;;
+	status)
+		print_status
+		;;
+	release)
+		restore_previous_state
+		;;
+	*)
+		echo 'Usage: sheepfold-ipv6-control <apply|status|release>' >&2
+		exit 2
+		;;
+esac

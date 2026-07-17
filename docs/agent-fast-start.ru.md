@@ -22,7 +22,8 @@
 | Родительский Android | `android/`, `docs/android-config.ru.md`, `docs/android-openwrt-api.ru.md` |
 | Детский Android | `android-child/` и контракт `/client-status` |
 | Автоопределение | detector-скрипты, `docs/device-detection.ru.md` |
-| Сборка и окружение | `tools/README.ru.md`, `docs/agent-environment.ru.md` |
+| Сборка и окружение | `tools/README.ru.md`, `docs/agent-environment.ru.md`; публичные IPK/OpenWrt APK — `docs/github-actions-openwrt-build.ru.md` (§owrtci1) |
+| Живой тестовый роутер и LuCI | `docs/live-router-automation.ru.md`, затем полная матрица `docs/live-router-testing.ru.md` (§routerharness) |
 | Известная странность | `docs/agent-gotchas.ru.md`, затем поиск по указанному §-тегу |
 | Ошибка команды, сборки, установки или сохранения | `docs/troubleshooting.ru.md` (§trouble) |
 
@@ -30,7 +31,7 @@
 
 1. Во время правки запускать синтаксическую проверку и ближайший целевой тест.
 2. После завершения подсистемы запускать её набор тестов.
-3. Полный `npm.cmd test` запускать один раз перед push либо раньше, если изменён общий backend/API/UCI-контракт. Не повторять долгий полный набор после каждой мелкой правки.
+3. После узкой правки запускать категорию из [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat), при пересечении — объединять категории. Полный `npm.cmd test` запускать перед push/PR/merge/release либо раньше, если изменён общий backend/API/UCI/package/security-контракт. Не повторять долгий полный набор после каждой мелкой правки.
 4. Android собирать соответствующим wrapper только после Android-изменений: `android\gradlew.bat -p android ...` или `android-child\gradlew.bat -p android-child ...`. Глобальный Gradle не нужен.
 5. Перед коммитом всегда выполнить `git diff --check`, проверить `git diff --stat`, §-теги и отсутствие скачанных SDK, APK, IPK и кэшей в индексе.
 
@@ -50,11 +51,12 @@
 | --- | --- | --- |
 | Поиск по проекту | `rg`, `rg --files`, поиск по §-тегу | полный рекурсивный вывод дерева и чтение всех документов |
 | Сборка тестового IPK в Windows | `python scripts/build-test-ipk.py` | 7-Zip, ручной `ar`, Windows `tar` |
+| Публичные IPK/OpenWrt APK | `Build OpenWrt packages` в GitHub Actions | переименование/перепаковка тестового IPK, snapshot SDK |
 | Просмотр APK/IPK/ZIP | 7-Zip | пересборку архива после ручного редактирования |
 | Android | Gradle Wrapper соответствующего проекта | глобальный `gradle` |
-| Node-тесты | целевой `node --test`, перед публикацией `npm.cmd test` | повторный полный прогон после каждой мелочи |
+| Node-тесты | целевой `node --test`, затем `npm.cmd run test:<category>`, перед публикацией `npm.cmd test` | повторный полный прогон после каждой мелочи |
 | GitHub CI | `gh run`, `gh pr checks` | догадки по одной красной плашке GitHub |
-| Тестовый роутер | `ssh`/`scp` по правилам `docs/live-router-testing.ru.md` | изменение живого роутера без согласованного сценария |
+| Тестовый роутер | `npm.cmd run router:readOnly`, `router:fullSafe`, `router:frontend` по `docs/live-router-automation.ru.md` | разрозненные ручные команды, `opkg upgrade` и изменение живого роутера без backup |
 
 ## Критерий хорошего завершения
 

@@ -9,6 +9,7 @@ SCAN_LOCK="/tmp/sheepfold/device-detection.lock"
 UPDATER="/usr/libexec/sheepfold/sheepfold-updater"
 ROUTER_CONTROL="/usr/libexec/sheepfold/sheepfold-router-control"
 FIREWALL_HELPER="/usr/libexec/sheepfold/sheepfold-firewall"
+DOMAIN_POLICY_HELPER="/usr/libexec/sheepfold/sheepfold-domain-policy"
 LEASES_FILE="/tmp/dhcp.leases"
 SIGNAL_CHANGE_FLAG="/tmp/sheepfold/device-signals.changed"
 SIGNAL_PROCESSING_FLAG="/tmp/sheepfold/device-signals.processing"
@@ -16,6 +17,7 @@ UPDATE_REQUEST_FILE="/tmp/sheepfold/update.request"
 REBOOT_REQUEST_FILE="/tmp/sheepfold/reboot.request"
 LED_ALERT_ACK_FILE="/tmp/sheepfold/new-device-alert.ack"
 LAST_CONTROL_TICK=0
+LAST_ADGUARD_HEALTH_TICK=0
 
 init_ram_log() {
         RAM_LOG="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf '%s' "$DEFAULT_RAM_LOG")"
@@ -109,16 +111,65 @@ restore_signal_change() {
                 : > "$SIGNAL_CHANGE_FLAG"
 }
 
+refresh_adguard_client_policy() {
+        [ -x "$DOMAIN_POLICY_HELPER" ] || return 0
+        [ "$(uci -q get sheepfold.global.adguard_auto_manage 2>/dev/null || printf 1)" = 1 ] || return 0
+        filter_backend="$(uci -q get sheepfold.global.site_filter_backend 2>/dev/null || printf auto)"
+        integration_mode="$(uci -q get sheepfold.global.integration_mode 2>/dev/null || printf none)"
+        case "$filter_backend:$integration_mode" in
+                adguard:adguard|adguard:adguard_podkop|auto:adguard|auto:adguard_podkop)
+                        # AdGuard привязывает клиентские правила к IP. После новой аренды обновляем
+                        # только управляемую ленту Sheepfold; неизменный checksum не вызывает refresh API. §dompol
+                        "$DOMAIN_POLICY_HELPER" apply >/dev/null 2>&1 || true
+                        ;;
+        esac
+}
+
+adguard_policy_requested() {
+	[ "$(uci -q get sheepfold.global.site_blocklist_mode 2>/dev/null || printf disabled)" != disabled ] && return 0
+	group_sections="$(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=group$/\1/p')"
+	for group_section in $group_sections; do
+		[ "$(uci -q get "sheepfold.$group_section.allowlist_only" 2>/dev/null || printf 0)" = 1 ] && return 0
+	done
+	return 1
+}
+
+handle_adguard_health() {
+	[ -x "$DOMAIN_POLICY_HELPER" ] || return 0
+	[ "$(uci -q get sheepfold.global.adguard_auto_manage 2>/dev/null || printf 1)" = 1 ] || return 0
+	adguard_policy_requested || return 0
+	health_backend="$(uci -q get sheepfold.global.site_filter_backend 2>/dev/null || printf auto)"
+	health_integration="$(uci -q get sheepfold.global.integration_mode 2>/dev/null || printf none)"
+	case "$health_backend:$health_integration" in
+		adguard:adguard|adguard:adguard_podkop|auto:adguard|auto:adguard_podkop) ;;
+		*) return 0 ;;
+	esac
+
+	health_now="$(date +%s)"
+	health_interval="$(uci -q get sheepfold.global.adguard_health_interval_seconds 2>/dev/null || printf 300)"
+	case "$health_interval" in ''|*[!0-9]*) health_interval=300 ;; esac
+	[ "$health_interval" -ge 60 ] || health_interval=60
+	[ "$health_interval" -le 3600 ] || health_interval=3600
+	[ $((health_now - LAST_ADGUARD_HEALTH_TICK)) -ge "$health_interval" ] || return 0
+
+	# События DHCP обновляют клиентские IP сразу, а этот редкий проход восстанавливает
+	# фильтр после перезапуска AdGuard Home или uhttpd без постоянного сканирования сети. §aghplan
+	"$DOMAIN_POLICY_HELPER" apply >/dev/null 2>&1 || true
+	LAST_ADGUARD_HEALTH_TICK="$health_now"
+}
+
 case "$COMMAND" in
-        run)
-                init_ram_log
-                echo "Sheepfold service started"
-                LAST_LEASES_STATE=""
-                LAST_FULL_SCAN=0
-                while :; do
+		run)
+				init_ram_log
+				echo "Sheepfold service started"
+				LAST_LEASES_STATE=""
+				LAST_FULL_SCAN=0
+				LAST_ADGUARD_HEALTH_TICK="$(date +%s)"
+				while :; do
                         handle_update_request
                         handle_reboot_request
-                        handle_router_control periodic
+					handle_router_control periodic
+					handle_adguard_health
 
                         DETECTION_MODE="$(uci -q get sheepfold.global.detection_mode 2>/dev/null || printf full)"
                         if [ "$DETECTION_MODE" != "disabled" ] && [ -x "$DETECTOR" ]; then
@@ -155,6 +206,7 @@ case "$COMMAND" in
                                                 LAST_LEASES_STATE="$LEASES_STATE"
                                                 [ "$SCAN_SCOPE" = "full" ] && LAST_FULL_SCAN="$NOW"
                                                 [ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
+                                                refresh_adguard_client_policy
                                         elif [ "$SIGNALS_CHANGED" = "1" ]; then
                                                 restore_signal_change
                                         fi
@@ -162,6 +214,7 @@ case "$COMMAND" in
                                         if run_detector scan full >/dev/null 2>&1; then
                                                 LAST_FULL_SCAN="$NOW"
                                                 [ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
+                                                refresh_adguard_client_policy
                                         fi
                                 fi
                         else
@@ -176,6 +229,9 @@ case "$COMMAND" in
                 handle_reboot_request
                 handle_router_control force
                 [ -x "$DETECTOR" ] && run_detector scan >/dev/null 2>&1 || true
+                # Ручной reload также может обнаружить новый IP клиента, поэтому управляемая
+                # лента AdGuard Home должна получить те же данные, что и фоновый цикл. §dompol
+                refresh_adguard_client_policy
                 echo "Sheepfold reload complete"
                 ;;
         *)

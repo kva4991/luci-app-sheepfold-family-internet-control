@@ -29,8 +29,8 @@
 
 ## Что уже работает
 
-- два IPK: Standard и AI Support;
-- один родительский и один детский APK с server-driven показом AI-функций;
+- две редакции роутерного пакета: Standard и AI Support, каждая в IPK для 24.10 и apk-tools v3 APK для 25.12;
+- один родительский и один детский Android APK с server-driven показом AI-функций;
 - HTTPS и закрепление сертификата;
 - router-side proxy для DeepSeek, Gemini и Grok;
 - API-ключи и выбор провайдера на роутере;

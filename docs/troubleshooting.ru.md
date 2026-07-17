@@ -88,6 +88,24 @@ npm.cmd test
 
 Менять общую Execution Policy Windows ради запуска тестов проекта не требуется.
 
+### PowerShell-скрипт показывает `Unexpected token` внутри русского текста
+
+**Причина:** Windows PowerShell 5.1 открыл UTF-8 файл без BOM как старую ANSI-кодировку. Новый PowerShell может разобрать тот же файл без ошибки, поэтому проверка только текущим shell недостаточна.
+
+**Исправление:** хранить Windows `.ps1` с русским текстом в UTF-8 BOM и проверять его именно `powershell.exe` 5.1. Для `tools/router-testing/*.ps1` это закреплено тестом `liveRouterHarness.test.mjs`. (§routerharness)
+
+### `ssh-keygen: Too many arguments` при пустой passphrase
+
+**Причина:** Windows PowerShell 5.1 удаляет настоящий пустой native-аргумент в `-N ''`, и `ssh-keygen` получает смещённый список параметров.
+
+**Исправление для скрипта:** передавать `-N '""'`; Windows native parser превращает эту строку именно в пустую passphrase. Не переходить ради обхода на пароль в коде или интерактивное ожидание, которое зависнет у агента.
+
+### `Export-ModuleMember can only be called from inside a module`
+
+**Причина:** общий helper имеет расширение `.ps1`, но загружается как настоящий `.psm1`-модуль.
+
+**Исправление:** для простого общего `.ps1` использовать dot-source: `. (Join-Path $PSScriptRoot 'helper.ps1')`. Либо осознанно преобразовать его в `.psm1`; не смешивать два механизма. (§routerharness)
+
 ## Android SDK и Gradle
 
 ### `gradle` не распознано

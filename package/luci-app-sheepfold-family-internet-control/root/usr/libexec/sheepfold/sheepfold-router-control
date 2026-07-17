@@ -11,6 +11,7 @@ DEVICE_RECLASSIFY="/usr/libexec/sheepfold/sheepfold-device-reclassify"
 DEVICE_PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
 LED_CONTROL="/usr/libexec/sheepfold/sheepfold-led-control"
 FEEDBACK="/usr/libexec/sheepfold/sheepfold-feedback"
+IPV6_CONTROL="/usr/libexec/sheepfold/sheepfold-ipv6-control"
 TOKEN_STATE_DIR="/etc/sheepfold/tokens"
 TOKEN_RUNTIME_LINK="/tmp/sheepfold/tokens"
 command="${1:-status}"
@@ -199,6 +200,15 @@ case "$command" in
     feedback-submit)
         shift
         exec "$FEEDBACK" submit "$@"
+        ;;
+    ipv6-apply)
+        exec "$IPV6_CONTROL" apply
+        ;;
+    ipv6-status)
+        exec "$IPV6_CONTROL" status
+        ;;
+    ipv6-release)
+        exec "$IPV6_CONTROL" release
         ;;
     *)
         exec "$LEGACY" "$@"

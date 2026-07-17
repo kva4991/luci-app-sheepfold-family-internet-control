@@ -3935,3 +3935,435 @@ msgstr "Чёрный список сайтов не действует."
 
 msgid "Until verified domains are available, strict allowlist groups are left online instead of accidentally blocking all internet access."
 msgstr "Пока проверенные домены не загружены, устройства групп со строгим доступом остаются в интернете, чтобы случайно не заблокировать им весь доступ."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "A device covered by the policy has no current IPv4 address."
+msgstr "У одного из устройств, к которым относится правило, сейчас нет IPv4-адреса."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AdGuard Home address"
+msgstr "Адрес AdGuard Home"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AdGuard Home address must contain only the protocol, host, and optional port."
+msgstr "Адрес AdGuard Home должен содержать только протокол, имя хоста и, при необходимости, порт."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home did not answer at the configured address."
+msgstr "AdGuard Home не ответил по указанному адресу."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home did not confirm that the old Sheepfold filter was disabled."
+msgstr "AdGuard Home не подтвердил отключение прежнего фильтра Sheepfold."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home did not confirm the Sheepfold filter."
+msgstr "AdGuard Home не подтвердил работу фильтра Sheepfold."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home is not selected in the integration chain."
+msgstr "AdGuard Home не выбран в цепочке интеграций."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home is selected, but Sheepfold cannot confirm the site lists."
+msgstr "AdGuard Home выбран, но Sheepfold не может подтвердить работу списков сайтов."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AdGuard Home password"
+msgstr "Пароль AdGuard Home"
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home rejected the configured username or password."
+msgstr "AdGuard Home отклонил указанный логин или пароль."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home rejected the requested filter change."
+msgstr "AdGuard Home отклонил запрошенное изменение фильтра."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home is temporarily limiting API requests."
+msgstr "AdGuard Home временно ограничивает частоту запросов к API."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home reported an internal API error."
+msgstr "AdGuard Home сообщил о внутренней ошибке API."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home returned an unexpected API response."
+msgstr "AdGuard Home вернул неожиданный ответ API."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Sheepfold refused an AdGuard Home action outside its managed filter."
+msgstr "Sheepfold отказался выполнять действие в AdGuard Home за пределами управляемого фильтра."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The AdGuard Home API request timed out."
+msgstr "Время ожидания ответа API AdGuard Home истекло."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The AdGuard Home API response is too large for safe processing on this router."
+msgstr "Ответ API AdGuard Home слишком большой для безопасной обработки на этом роутере."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "This AdGuard Home version does not provide the required API endpoint."
+msgstr "В этой версии AdGuard Home отсутствует необходимый метод API."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "AdGuard Home username"
+msgstr "Логин AdGuard Home"
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home was unavailable, so Sheepfold used its built-in filtering."
+msgstr "AdGuard Home оказался недоступен, поэтому Sheepfold применил встроенную фильтрацию."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Automatic AdGuard Home management"
+msgstr "Автоматическое управление AdGuard Home"
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Automatic AdGuard Home management is off; disable the old Sheepfold filter there manually."
+msgstr "Автоматическое управление AdGuard Home выключено. Отключите в нём прежний фильтр Sheepfold вручную."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Automatic management is off. Configure the lists in AdGuard Home and verify them there."
+msgstr "Автоматическое управление выключено. Настройте списки в AdGuard Home и проверьте их работу там."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Automatic management is off. Sheepfold will not change AdGuard Home and cannot confirm manually configured lists."
+msgstr "Автоматическое управление выключено. Sheepfold не будет изменять AdGuard Home и не сможет подтвердить работу списков, настроенных вручную."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Automatic mode uses AdGuard Home only when it is selected in the integration chain and Sheepfold confirms the managed filter. Otherwise the built-in filtering is used."
+msgstr "В автоматическом режиме AdGuard Home используется, только если он выбран в цепочке интеграций и Sheepfold подтвердил работу управляемого фильтра. В остальных случаях применяется встроенная фильтрация."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Automatically (recommended)"
+msgstr "Автоматически (рекомендуется)"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Built-in Sheepfold tools"
+msgstr "Встроенными средствами Sheepfold"
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "DNS filtering is disabled in AdGuard Home."
+msgstr "DNS-фильтрация в AdGuard Home выключена."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enter both the AdGuard Home username and password, or leave both fields empty."
+msgstr "Введите логин и пароль AdGuard Home либо оставьте оба поля пустыми."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Enter both the AdGuard Home username and password."
+msgstr "Введите и логин, и пароль AdGuard Home."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Leave both credential fields empty only when the local AdGuard Home API has no authentication."
+msgstr "Оставляйте оба поля пустыми только в том случае, если локальный API AdGuard Home работает без авторизации."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Only the Sheepfold-managed filter is changed; other AdGuard Home filters are kept."
+msgstr "Изменяется только фильтр под управлением Sheepfold; остальные фильтры AdGuard Home сохраняются."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Optional"
+msgstr "Необязательно"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Podkop routes already allowed traffic according to its own routing rules. Sheepfold does not change Podkop routes, marks, or sing-box settings."
+msgstr "Podkop направляет уже разрешённый трафик по собственным правилам маршрутизации. Sheepfold не изменяет маршруты, метки и настройки sing-box в Podkop."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Sheepfold adds and updates only its own filter. User filters and AdGuard Home settings are not overwritten."
+msgstr "Sheepfold добавляет и обновляет только собственный фильтр. Пользовательские фильтры и настройки AdGuard Home не перезаписываются."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site filtering"
+msgstr "Фильтрация сайтов"
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Site filtering is performed through"
+msgstr "Фильтрация сайтов выполняется через"
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Site filtering needs attention."
+msgstr "Фильтрация сайтов требует внимания."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Site lists are applied by AdGuard Home."
+msgstr "Списки сайтов применены через AdGuard Home."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Site lists are working through Sheepfold."
+msgstr "Списки сайтов работают через Sheepfold."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The AdGuard Home address is invalid."
+msgstr "Адрес AdGuard Home указан неверно."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The AdGuard Home API returned unreadable data."
+msgstr "API AdGuard Home вернул данные, которые не удалось прочитать."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The AdGuard Home credentials contain unsupported characters."
+msgstr "Логин или пароль AdGuard Home содержит неподдерживаемые символы."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The generated AdGuard Home filter is too large for safe application on this router."
+msgstr "Сформированный фильтр AdGuard Home слишком велик для безопасного применения на этом роутере."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The old AdGuard Home filter may still be active."
+msgstr "Прежний фильтр Sheepfold в AdGuard Home, возможно, всё ещё действует."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The password is used only by the router for local API calls and is never shown in status output."
+msgstr "Пароль используется только роутером для локальных запросов к API и никогда не выводится в статусе."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The previous Sheepfold filter could not be disabled in AdGuard Home."
+msgstr "Не удалось отключить прежний фильтр Sheepfold в AdGuard Home."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The router JSON parser required for the AdGuard Home API is unavailable."
+msgstr "На роутере недоступен JSON-парсер, необходимый для API AdGuard Home."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The Sheepfold AdGuard Home adapter is unavailable."
+msgstr "Адаптер Sheepfold для AdGuard Home недоступен."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The site lists were delegated without a confirmed Sheepfold-managed filter."
+msgstr "Списки сайтов были переданы AdGuard Home без подтверждения управляемого фильтра Sheepfold."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home returned an unreadable control-rule check result."
+msgstr "AdGuard Home вернул нечитаемый результат проверки контрольного правила."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Sheepfold could not prepare a safe AdGuard Home control rule."
+msgstr "Sheepfold не смог подготовить безопасное контрольное правило AdGuard Home."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home did not confirm the Sheepfold control rule."
+msgstr "AdGuard Home не подтвердил контрольное правило Sheepfold."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Control rules confirmed: %s of %s."
+msgstr "Контрольные правила подтверждены: %s из %s."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The AdGuard Home filter exists, but its control rules are not confirmed."
+msgstr "Фильтр Sheepfold существует в AdGuard Home, но его контрольные правила не подтверждены."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Save the integration settings or refresh the site lists to run a new check."
+msgstr "Сохраните настройки интеграции или обновите списки сайтов, чтобы выполнить новую проверку."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Use HTTPS for AdGuard Home on another device. Unencrypted HTTP is allowed only on this router."
+msgstr "Для AdGuard Home на другом устройстве используйте HTTPS. Незашифрованный HTTP разрешён только на этом роутере."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Use HTTPS when AdGuard Home is running on another device."
+msgstr "Если AdGuard Home работает на другом устройстве, используйте HTTPS."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Use the local AdGuard Home administration address without /control at the end."
+msgstr "Укажите локальный адрес панели управления AdGuard Home без /control в конце."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The AdGuard Home DNS server is not running."
+msgstr "DNS-сервер AdGuard Home не запущен."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home protection is disabled."
+msgstr "Защита AdGuard Home выключена."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home version: %s. DNS port: %s."
+msgstr "Версия AdGuard Home: %s. DNS-порт: %s."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home version: %s."
+msgstr "Версия AdGuard Home: %s."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The AdGuard Home DNS configuration could not be read; the active filter remains unchanged."
+msgstr "Не удалось прочитать DNS-конфигурацию AdGuard Home; действующий фильтр оставлен без изменений."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The Sheepfold filter is active in AdGuard Home, but the DNS path is not yet verified."
+msgstr "Фильтр Sheepfold активен в AdGuard Home, но путь DNS-запросов пока не проверен."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The filter engine is confirmed. A later end-to-end check must still prove that home devices send DNS requests through AdGuard Home."
+msgstr "Работа фильтра подтверждена. Следующая сквозная проверка должна ещё подтвердить, что домашние устройства отправляют DNS-запросы через AdGuard Home."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home returned an unreadable filter refresh result."
+msgstr "AdGuard Home вернул нечитаемый результат обновления фильтра."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "AdGuard Home contains multiple filters with the exact Sheepfold feed address."
+msgstr "В AdGuard Home найдено несколько фильтров с одинаковым адресом ленты Sheepfold."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The saved Sheepfold filter address is invalid and was not trusted."
+msgstr "Сохранённый адрес фильтра Sheepfold некорректен и не был принят как доверенный."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The local Sheepfold filter feed is unavailable to AdGuard Home."
+msgstr "Локальная лента фильтра Sheepfold недоступна для AdGuard Home."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The local Sheepfold filter feed returned unexpected content."
+msgstr "Локальная лента фильтра Sheepfold вернула неожиданное содержимое."
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "Consecutive failed AdGuard Home checks: %s."
+msgstr "Неудачных проверок AdGuard Home подряд: %s."
+
+
+#: htdocs/luci-static/resources/sheepfold/features/sites/status.js
+msgid "The router has no program for secure list downloads."
+msgstr "На роутере нет программы для безопасного скачивания списков."
+
+msgid "The source server did not answer or the connection was interrupted."
+msgstr "Сервер источника не ответил или соединение прервалось."
+
+msgid "The source server did not answer before the safe timeout."
+msgstr "Сервер источника не ответил за отведённое время."
+
+msgid "The source returned an empty file."
+msgstr "Источник вернул пустой файл."
+
+msgid "The downloaded file is too large for safe processing on this router."
+msgstr "Скачанный файл слишком велик для безопасной обработки на этом роутере."
+
+msgid "The unpacked list is too large for safe processing on this router."
+msgstr "Распакованный список слишком велик для безопасной обработки на этом роутере."
+
+msgid "This archive format is not supported."
+msgstr "Этот формат архива не поддерживается."
+
+msgid "The downloaded archive is damaged or cannot be unpacked safely."
+msgstr "Скачанный архив повреждён или его нельзя безопасно распаковать."
+
+msgid "The archive contains an unsafe file name."
+msgstr "Архив содержит небезопасное имя файла."
+
+msgid "No domain list was found in the archive."
+msgstr "В архиве не найден список доменов."
+
+msgid "The source returned a web page instead of a domain list."
+msgstr "Источник вернул веб-страницу вместо списка доменов."
+
+msgid "The downloaded file contains no valid domains."
+msgstr "В скачанном файле нет корректных доменов."
+
+msgid "The source contains too many domains for this router."
+msgstr "Источник содержит слишком много доменов для этого роутера."
+
+msgid "The combined lists contain too many domains for this router."
+msgstr "Объединённые списки содержат слишком много доменов для этого роутера."
+
+msgid "Too many sources of this list type are configured."
+msgstr "Настроено слишком много источников этого типа списка."
+
+msgid "The source address is invalid."
+msgstr "Адрес источника заполнен неверно."
+
+msgid "The new file contains far fewer domains than the last working copy. Sheepfold kept the previous copy."
+msgstr "В новом файле намного меньше доменов, чем в последней рабочей копии. Sheepfold сохранил предыдущую копию."
+
+msgid "The source could not be updated."
+msgstr "Источник не удалось обновить."
+
+msgid "Not yet"
+msgstr "Ещё не было"
+
+msgid "Unnamed source"
+msgstr "Источник без названия"
+
+msgid "The site list update timed out."
+msgstr "Истекло время ожидания обновления списков сайтов."
+
+msgid "Could not accept the reduced site list."
+msgstr "Не удалось принять уменьшившийся список сайтов."
+
+msgid "Updating site lists..."
+msgstr "Обновляются списки сайтов..."
+
+msgid "The reduced site list was accepted and applied."
+msgstr "Уменьшившийся список сайтов принят и применён."
+
+msgid "Try again"
+msgstr "Повторить"
+
+msgid "Accept reduced lists"
+msgstr "Принять уменьшившиеся списки"
+
+msgid "Accept a greatly reduced site list?"
+msgstr "Принять сильно уменьшившийся список сайтов?"
+
+msgid "One or more sources now contain far fewer domains than their last working copies. This can be a legitimate source cleanup, but it can also mean that the download is incomplete or damaged."
+msgstr "В одном или нескольких источниках теперь намного меньше доменов, чем в последних рабочих копиях. Возможно, автор источника действительно очистил список, но файл также мог скачаться не полностью или оказаться повреждённым."
+
+msgid "Sheepfold is currently using the previous working copies. Continue only after checking the source settings."
+msgstr "Сейчас Sheepfold использует предыдущие рабочие копии. Продолжайте только после проверки настроек источников."
+
+msgid "Site allowlist"
+msgstr "Белый список сайтов"
+
+msgid "Site blocklist"
+msgstr "Чёрный список сайтов"
+
+msgid "Working"
+msgstr "Работает"
+
+msgid "Update error"
+msgstr "Ошибка обновления"
+
+msgid "Waiting for first update"
+msgstr "Ожидает первого обновления"
+
+msgid "Domains in the last working copy"
+msgstr "Доменов в последней рабочей копии"
+
+msgid "Last successful update"
+msgstr "Последнее успешное обновление"
+
+msgid "Failed attempts"
+msgstr "Неудачных попыток"
+
+msgid "Next automatic attempt"
+msgstr "Следующая автоматическая попытка"
+
+msgid "Configured site list sources"
+msgstr "Настроенные источники списков сайтов"
+
+msgid "Review and accept reduced lists"
+msgstr "Проверить и принять уменьшившиеся списки"
+
+msgid "Domains before: %s; in the new file: %s."
+msgstr "Доменов было: %s; в новом файле: %s."
+
+msgid "Could not apply the IPv6 setting."
+msgstr "Не удалось применить настройку IPv6."
+
+msgid "Network compatibility"
+msgstr "Совместимость сети"
+
+msgid "Disable IPv6 on the router"
+msgstr "Выключить IPv6 на роутере"
+
+msgid "IPv6 is disabled automatically because the selected integration uses Podkop."
+msgstr "IPv6 выключен автоматически, потому что выбранная интеграция использует Podkop."
+
+msgid "Current Podkop releases do not provide complete IPv6 support. Enable this manually only when it is needed without Podkop."
+msgstr "Текущие версии Podkop пока не поддерживают IPv6 полностью. Включайте эту настройку вручную только при необходимости и без Podkop."
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Administrator devices must remain in the allowlist and outside ordinary groups."
+msgstr "Админские устройства должны оставаться в белом списке и вне обычных групп."

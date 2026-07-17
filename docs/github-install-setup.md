@@ -1,4 +1,4 @@
-# GitHub Install Setup
+# GitHub installation and release setup
 
 Repository:
 
@@ -6,68 +6,81 @@ Repository:
 https://github.com/kva4991/luci-app-sheepfold-family-internet-control
 ```
 
-Public install command:
+## Public install
 
 ```sh
 wget -O /tmp/sheepfold-install.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/install.sh
 sh /tmp/sheepfold-install.sh
 ```
 
-Public uninstall command:
+The installer reads the latest stable GitHub Release, asks for Standard or AI
+Support, detects the router package manager, and downloads the matching format:
+
+- OpenWrt 24.10 and older: `.ipk` installed by `opkg`;
+- OpenWrt 25.12 and newer: a real OpenWrt `.apk` installed by apk-tools v3.
+
+It does not confuse an OpenWrt APK with an Android APK. Package URLs must match
+the expected Sheepfold release-asset prefix, format, internal package name,
+version, and architecture.
+
+## Public uninstall
 
 ```sh
 wget -O /tmp/sheepfold-uninstall.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/uninstall.sh
 sh /tmp/sheepfold-uninstall.sh
 ```
 
-## Release Plan
+The uninstaller removes the package through the current router package manager,
+keeps `/etc/config/sheepfold` and client settings, and prints the remaining-state
+report.
 
-Current package builds are architecture-independent `.ipk` files with `Architecture: all`.
+## Canonical package build
 
-Already implemented locally:
+Public OpenWrt packages are built by
+`.github/workflows/build-openwrt-packages.yml` through the pinned official
+OpenWrt SDK Action (§owrtci1). The matrix contains Standard and AI Support for
+OpenWrt 24.10/IPK and 25.12/OpenWrt APK.
 
-1. Build `.ipk` package artifacts with the repository build script.
-2. Publish/test packages through GitHub Releases manually.
-3. Ask for application language first and default to `ru`; on first package install the choice is written to `/etc/sheepfold/install.language` and applied to both `sheepfold.global.language` and `luci.main.lang` (see [`docs/localization.ru.md`](localization.ru.md)).
-4. Ask for user-agreement consent.
-5. Ask whether to apply Sheepfold automatic setup and persist the intended automatic setup values when config exists.
-6. Detect existing AdGuard Home and Podkop installations.
-7. Apply the recommended Sheepfold `integration_mode` when `/etc/config/sheepfold` already exists.
+Run it in GitHub under `Actions → Build OpenWrt packages → Run workflow`, or:
 
-Still needed for the public one-command installer:
+```powershell
+gh workflow run "Build OpenWrt packages" --ref main
+gh run watch
+```
 
-1. Read the latest stable GitHub Release.
-2. Download the latest `.ipk`.
-3. Install missing dependencies through `opkg`.
-4. Install Sheepfold through `opkg install`.
-5. Enable and start the service.
-6. Restart `rpcd`, `uhttpd`, and `firewall` when needed.
+On PR/push, download the `sheepfold-openwrt-packages` Actions artifact. The
+bundle contains four router packages, per-build metadata, `SHA256SUMS`, and an
+aggregate manifest. `scripts/build-test-ipk.py` is only a fast local test
+builder and must not be used as the canonical public release chain.
 
-## Update Plan
+Full instructions, signing secrets, pinned SDK versions, and maintenance rules:
+[`github-actions-openwrt-build.ru.md`](github-actions-openwrt-build.ru.md).
 
-The installed LuCI "Update app" button and `update.sh` now use `/usr/libexec/sheepfold/sheepfold-updater` when the package is installed.
+## Publishing a stable release
 
-The updater currently:
+1. Merge and verify the intended commit in `main`.
+2. Make sure the package release number was increased.
+3. Run the full test suite and the OpenWrt workflow manually.
+4. Install the resulting package on the test router and verify update/config
+   preservation.
+5. Create a GitHub Release tag for the verified commit.
+6. Publish it as a normal Release, not a draft or Pre-release.
+7. Wait for `Build OpenWrt packages` to finish.
+8. Verify that the Release has two IPK files, two OpenWrt APK files,
+   `SHA256SUMS`, and `openwrt-build-manifest.json`.
 
-1. Check latest GitHub Release.
-2. Compare current and latest versions.
-3. Download the matching `.ipk` from the release assets.
-4. Install it with `opkg install`.
-5. Report success, no-update, or failure in localized text.
+Only the release-publishing job receives `contents: write`. A pre-release does
+not receive router assets because the updater deliberately follows
+`releases/latest`.
 
-Still needed:
+## Updating an installed router
 
-1. Create a settings backup before update.
-2. Restart only the required services after update.
-3. Add the Android-side update UI once Android authenticated API is complete.
+```sh
+wget -O /tmp/sheepfold-update.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/update.sh
+sh /tmp/sheepfold-update.sh
+```
 
-## Uninstall Plan
-
-The OpenWRT uninstall command should:
-
-1. Create a backup of Sheepfold settings and local data.
-2. Stop and disable the Sheepfold service if it exists.
-3. Remove the OpenWRT package through `opkg remove`.
-4. Keep or restore `/etc/config/sheepfold` so client lists are not lost.
-5. Print and save a report of remaining Sheepfold-related UCI settings, files, and nftables rules.
-6. Leave manual cleanup decisions to the router administrator.
+The installed updater compares package-manager versions, validates the trusted
+GitHub asset path and internal metadata, saves the UCI configuration before the
+package-manager transaction, and restores the configuration after a failed
+install. This is configuration recovery, not a binary firmware rollback.

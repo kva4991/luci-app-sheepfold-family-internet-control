@@ -34,6 +34,9 @@ WAN_STATE_FILE="$RUNTIME_DIR/wan-state"
 TOKEN_DIR="$RUNTIME_DIR/tokens"
 LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
 FIREWALL_HELPER="/usr/libexec/sheepfold/sheepfold-firewall"
+PACKAGE_MANAGER_HELPER="/usr/libexec/sheepfold/sheepfold-package-manager"
+
+[ ! -r "$PACKAGE_MANAGER_HELPER" ] || . "$PACKAGE_MANAGER_HELPER"
 
 mkdir -p "$RUNTIME_DIR"
 
@@ -369,15 +372,27 @@ json_string() {
 # Вспомогательные: версии пакетов
 # -----------------------------------------------------------------------------
 
-opkg_version() {
-        opkg status "$1" 2>/dev/null | sed -n 's/^Version: //p' | sed -n '1p'
+package_version() {
+        if command -v sheepfold_package_version >/dev/null 2>&1; then
+                sheepfold_package_version "$1"
+                return
+        fi
+        # Fallback нужен только для диагностики повреждённой/старой установки,
+        # где новый общий helper ещё отсутствует.
+        if command -v opkg >/dev/null 2>&1; then
+                opkg status "$1" 2>/dev/null | sed -n 's/^Version: //p' | sed -n '1p'
+        elif command -v apk >/dev/null 2>&1; then
+                apk info --from installed --fields version --format json "$1" 2>/dev/null |
+                        sed -n 's/^[[:space:]]*"version": "\([^"]*\)".*/\1/p' |
+                        sed -n '1p'
+        fi
 }
 
 # Возвращает первую найденную версию из списка альтернативных имён пакета.
 package_version_any() {
         for pkg in "$@"; do
                 local version
-                version="$(opkg_version "$pkg")"
+                version="$(package_version "$pkg")"
                 if [ -n "$version" ]; then
                         printf '%s' "$version"
                         return 0
@@ -386,16 +401,13 @@ package_version_any() {
         return 1
 }
 
-# Возвращает 0, если хотя бы один пакет из списка есть в opkg list-upgradable.
+# Возвращает 0, если хотя бы один пакет из списка можно обновить системным manager.
 package_upgradable_any() {
-        local upgradable pkg
-
-        command -v opkg >/dev/null 2>&1 || return 1
-        upgradable="$(opkg list-upgradable 2>/dev/null || true)"
-        [ -n "$upgradable" ] || return 1
+        local pkg
 
         for pkg in "$@"; do
-                if printf '%s\n' "$upgradable" | grep -q "^${pkg} "; then
+                if command -v sheepfold_package_is_upgradable >/dev/null 2>&1 &&
+                   sheepfold_package_is_upgradable "$pkg"; then
                         return 0
                 fi
         done
@@ -1406,7 +1418,7 @@ router_info() {
         sheepfold_package='luci-app-sheepfold-family-internet-control'
         [ "$(uci -q get sheepfold.global.product_variant 2>/dev/null || printf sheepfold)" != sheepfoldAi ] || \
                 sheepfold_package='luci-app-sheepfold-ai-support'
-        sheepfold_version="$(opkg_version "$sheepfold_package")"
+        sheepfold_version="$(package_version "$sheepfold_package")"
         podkop_version="$(package_version_any podkop luci-app-podkop || true)"
         adguard_version="$(package_version_any AdGuardHome adguardhome luci-app-adguardhome || true)"
         podkop_version_status="not_installed"
@@ -1622,6 +1634,7 @@ settings_import_applied() {
         repair_sheepfold_uci_sections
         sync_firewall || refresh_failed=1
         /usr/libexec/sheepfold/sheepfold-emergency-sites apply >/dev/null 2>&1 || refresh_failed=1
+        /usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || refresh_failed=1
 
         # Порт и состояние страницы блокировки могли измениться, поэтому старый
         # uhttpd надо остановить до чтения импортированных настроек.
@@ -1996,6 +2009,11 @@ case "$COMMAND" in
         site-lists-update)
                 /usr/libexec/sheepfold/sheepfold-site-lists update
                 ;;
+        site-lists-accept-shrink)
+                # Уменьшившийся файл принимается только отдельной командой после
+                # десятисекундного подтверждения в LuCI, а не обычным обновлением.
+                /usr/libexec/sheepfold/sheepfold-site-lists update --accept-shrink
+                ;;
         site-lists-cron-apply)
                 /usr/libexec/sheepfold/sheepfold-site-lists cron-apply
                 ;;
@@ -2117,7 +2135,7 @@ case "$COMMAND" in
                 echo "Wi-Fi:            wifi-enable  |  wifi-disable  |  wifi-automation-tick" >&2
                 echo "Мессенджеры:      messenger-disable  |  messenger-save-telegram  |  messenger-save-vk  |  messenger-status  |  messenger-check" >&2
                 echo "Время:            time-save" >&2
-                echo "Списки сайтов:    site-lists-update  |  site-lists-cron-apply  |  site-lists-status  |  site-lists-apply  |  emergency-sites-apply  |  emergency-sites-status" >&2
+                echo "Списки сайтов:    site-lists-update  |  site-lists-accept-shrink  |  site-lists-cron-apply  |  site-lists-status  |  site-lists-apply  |  emergency-sites-apply  |  emergency-sites-status" >&2
                 echo "Диагностика:      router-info  |  wan-status-tick  |  status" >&2
                 echo "WPS:              wps-button  |  wps-allowlist-window" >&2
                 echo "LED:              led-apply  |  led-blink-code  |  led-alert-start  |  led-alert-loop  |  led-alert-ack" >&2

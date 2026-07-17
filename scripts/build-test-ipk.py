@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
+"""Собирает воспроизводимый тестовый IPK с Unix-правами без OpenWrt SDK.
+
+Скрипт нужен для быстрых Windows- и live-router проходов; он пишет только в .build
+или явно заданный out-dir. Успешная сборка проверяет контейнер/права пакета, но не
+заменяет установку на OpenWrt и официальную сборку release в OpenWrt toolchain.
+"""
 import argparse
 import gzip
 import io
 import json
-import re
 import shutil
 import sys
 import tarfile
@@ -17,146 +22,22 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from po2lmo import compile_po
 from po2json import parse_po_entries
-
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-SOURCE_PKG_NAME = "luci-app-sheepfold-family-internet-control"
-PKG_DIR = ROOT_DIR / "package" / SOURCE_PKG_NAME
-
-VARIANTS = {
-    "sheepfold": {
-        "artifact": SOURCE_PKG_NAME,
-        "description": "Sheepfold family internet control without AI components.",
-    },
-    "sheepfoldAi": {
-        "artifact": "luci-app-sheepfold-ai-support",
-        "description": "Sheepfold family internet control with AI Support.",
-    },
-}
-
-AI_ONLY_PATHS = {
-    "root/usr/libexec/sheepfold/sheepfold-activity-log",
-    "root/usr/libexec/sheepfold/sheepfold-ai-gate",
-    "root/usr/libexec/sheepfold/sheepfold-ai-handler",
-    "root/usr/libexec/sheepfold/sheepfold-openssl-ensure",
-    "htdocs/luci-static/resources/view/sheepfold/ai.js",
-}
-AI_ONLY_PREFIXES = (
-    "root/usr/share/sheepfold/prompts/",
-)
-AI_TRANSLATION_PATTERN = re.compile(
-    r"(?:\bai\b|xai|deepseek|gemini|grok|ии[- ]?помощ|провайдер ии|"
-    r"журнал(?:ы|ов)? для ии|protected (?:per-device )?logs|individual logs|"
-    r"per-device logs|openssl)",
-    re.IGNORECASE,
+from sheepfold_variants import (
+    PACKAGE_DIR,
+    ROOT_DIR,
+    SOURCE_PACKAGE_NAME,
+    VARIANTS,
+    artifact_name,
+    filter_standard_po,
+    is_ai_only_path,
+    package_name,
+    transform_ai_payload,
+    transform_standard_payload,
 )
 
 
-def package_name(variant: str) -> str:
-    # Одинаковое внутреннее имя превращает смену редакции в обновление одного пакета.
-    # Разные имена остаются только у release-артефактов, чтобы человек различал IPK. §prodvar
-    return SOURCE_PKG_NAME
-
-
-def artifact_name(variant: str) -> str:
-    return str(VARIANTS[variant]["artifact"])
-
-
-def is_ai_only_path(package_relative_path: str) -> bool:
-    normalized = package_relative_path.replace("\\", "/")
-    return normalized in AI_ONLY_PATHS or any(
-        normalized == prefix.rstrip("/") or normalized.startswith(prefix)
-        for prefix in AI_ONLY_PREFIXES
-    )
-
-
-def strip_variant_blocks(text: str, marker: str) -> str:
-    """Удаляет помеченные блоки до упаковки противоположного варианта. §prodvar"""
-    pattern = re.compile(
-        rf"^[ \t]*(?:/\*|#|//)[ \t]*SHEEPFOLD_{marker}_BEGIN[ \t]*(?:\*/)?[ \t]*\r?\n"
-        r".*?"
-        rf"^[ \t]*(?:/\*|#|//)[ \t]*SHEEPFOLD_{marker}_END[ \t]*(?:\*/)?[ \t]*(?:\r?\n|$)",
-        re.MULTILINE | re.DOTALL,
-    )
-    previous = None
-    while previous != text:
-        previous = text
-        text = pattern.sub("", text)
-    return text
-
-
-def unwrap_variant_blocks(text: str, marker: str) -> str:
-    marker_line = re.compile(
-        rf"^[ \t]*(?:/\*|#|//)[ \t]*SHEEPFOLD_{marker}_(?:BEGIN|END)[ \t]*(?:\*/)?[ \t]*(?:\r?\n|$)",
-        re.MULTILINE,
-    )
-    return marker_line.sub("", text)
-
-
-def standard_hardening_script() -> bytes:
-    return b"""#!/bin/sh
-set -eu
-root="${1:-}"
-required='\
-/www/cgi-bin/sheepfold-api \
-/usr/libexec/sheepfold/sheepfold-api-legacy \
-/usr/libexec/sheepfold/sheepfold-router-control \
-/usr/libexec/sheepfold/sheepfold-api-client-status \
- /usr/libexec/sheepfold/sheepfold-access-request \
- /usr/libexec/sheepfold/sheepfold-device-detector \
- /usr/libexec/sheepfold/sheepfold-firewall \
- /usr/libexec/sheepfold/sheepfold-schedule-evaluator \
- /usr/libexec/sheepfold/sheepfold-emergency-sites \
- /usr/libexec/sheepfold/sheepfold-site-lists \
- /usr/libexec/sheepfold/sheepfold-admin-notification \
- /usr/libexec/sheepfold/sheepfold-domain-policy'
-for path in $required; do
-    [ -f "$root$path" ] || { echo "Sheepfold hardening check failed: missing $path" >&2; exit 1; }
-done
-grep -q 'query_token_forbidden' "$root/www/cgi-bin/sheepfold-api"
-for script in $required; do /bin/sh -n "$root$script"; done
-exit 0
-"""
-
-
-def transform_standard_payload(target: str, data: bytes) -> bytes:
-    if target == "./usr/libexec/sheepfold/sheepfold-runtime-hardening":
-        return standard_hardening_script()
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        return data
-    text = strip_variant_blocks(text, "AI")
-    text = unwrap_variant_blocks(text, "STANDARD")
-    if target.endswith("/acl.d/luci-app-sheepfold-family-internet-control.json"):
-        acl = json.loads(text)
-        write_files = acl[SOURCE_PKG_NAME]["write"]["file"]
-        write_files.pop("/usr/libexec/sheepfold/sheepfold-openssl-ensure", None)
-        text = json.dumps(acl, ensure_ascii=False, indent=2) + "\n"
-    if target.endswith("/PRIVACY_NOTICE.md"):
-        text = """# Sheepfold local storage privacy notice
-
-This storage belongs to the self-hosted Sheepfold installation. The standard
-product does not include an AI assistant or per-device activity collection.
-Configuration backups and administrative logs remain under the router owner's
-control unless the owner deliberately exports them.
-
-Never store passwords, access tokens, session cookies, or unmasked exports in
-publicly accessible directories. Remove the storage device only after Sheepfold
-has finished writing data.
-"""
-    if target.endswith("/sheepfold.css"):
-        text = re.sub(r"(?ms)^\.sf-ai[^\{]*\{.*?^\}\s*", "", text)
-    return text.encode("utf-8")
-
-
-def transform_ai_payload(data: bytes) -> bytes:
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        return data
-    text = strip_variant_blocks(text, "STANDARD")
-    return unwrap_variant_blocks(text, "AI").encode("utf-8")
+SOURCE_PKG_NAME = SOURCE_PACKAGE_NAME
+PKG_DIR = PACKAGE_DIR
 
 
 def read_make_value(name: str) -> str:
@@ -230,9 +111,9 @@ def add_tree(tar: tarfile.TarFile, source: Path, target_prefix: str, variant: st
         mode = 0o755 if is_executable_ipk_target(target) else 0o644
         data = path.read_bytes()
         if variant == "sheepfold":
-            data = transform_standard_payload(target, data)
+            data = transform_standard_payload(package_relative, data)
         else:
-            data = transform_ai_payload(data)
+            data = transform_ai_payload(package_relative, data)
         add_bytes(tar, target, data, mode)
 
 
@@ -283,7 +164,7 @@ ensure_global_option grok_api_key ''
 Version: {version}-{release}
 Architecture: all
 Maintainer: kva4991
-Depends: luci-base, firewall4, rpcd, uci, uclient-fetch, ca-bundle, uhttpd, uhttpd-mod-tls, curl
+Depends: luci-base, firewall4, rpcd, uci, uclient-fetch, ca-bundle, uhttpd, uhttpd-mod-tls, curl, jshn
 Conflicts: luci-app-sheepfold-ai-support
 Replaces: luci-app-sheepfold-ai-support
 Provides: sheepfold-family-internet-control
@@ -401,6 +282,8 @@ ensure_global_option router_ntp_client_auto_configure '1'
 ensure_global_option router_timezone_name 'Europe/Moscow'
 ensure_global_option router_timezone 'MSK-3'
 ensure_global_option router_ntp_servers 'ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org'
+ensure_global_option router_ipv6_disabled '0'
+ensure_global_option router_ipv6_mode_source 'default'
 ensure_global_option wps_short_press_action 'router_default'
 ensure_global_option wps_long_press_action 'router_default'
 ensure_global_option router_led_control 'router_default'
@@ -468,9 +351,29 @@ if [ "$(uci -q get sheepfold.global.integration_mode_user_set 2>/dev/null)" != "
         uci -q set sheepfold.global.adguard_integration="$([ "$has_adguard" = "0" ] && printf 1 || printf 0)"
         uci -q set sheepfold.global.podkop_compatibility="$([ "$has_podkop" = "0" ] && printf 1 || printf 0)"
 fi
+current_integration="$(uci -q get sheepfold.global.integration_mode 2>/dev/null || printf none)"
+ipv6_source="$(uci -q get sheepfold.global.router_ipv6_mode_source 2>/dev/null || printf default)"
+case "$current_integration" in
+        podkop|adguard_podkop)
+                if [ "$(uci -q get sheepfold.global.router_ipv6_disabled 2>/dev/null || printf 0)" != "1" ]; then
+                        uci -q set sheepfold.global.router_ipv6_disabled='1'
+                        uci -q set sheepfold.global.router_ipv6_mode_source='auto_podkop'
+                elif [ "$ipv6_source" = 'default' ]; then
+                        uci -q set sheepfold.global.router_ipv6_mode_source='auto_podkop'
+                fi
+                ;;
+        *)
+                if [ "$ipv6_source" = 'auto_podkop' ]; then
+                        uci -q set sheepfold.global.router_ipv6_disabled='0'
+                        uci -q set sheepfold.global.router_ipv6_mode_source='default'
+                fi
+                ;;
+esac
 uci -q set sheepfold.global.ui_asset_version='{version}-{release}'
 uci -q commit sheepfold
 find /usr/libexec/sheepfold -type f -exec chmod 0755 {{}} + 2>/dev/null || true
+[ -x /usr/libexec/sheepfold/sheepfold-ipv6-control ] && \
+        /usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || true
 for helper in \\
         /etc/hotplug.d/dhcp/90-sheepfold-device-signals \\
         /www/.well-known/sheepfold.json.sh \\
@@ -533,6 +436,14 @@ exit 0
         /usr/libexec/sheepfold/sheepfold-site-lists cron-remove >/dev/null 2>&1 || true
 [ -x /usr/libexec/sheepfold/sheepfold-domain-policy ] && \
         /usr/libexec/sheepfold/sheepfold-domain-policy clear >/dev/null 2>&1 || true
+# При обновлении новый postinst сразу применит настройку заново, поэтому не создаём
+# короткое окно с неожиданно включённым IPv6. При удалении возвращаем исходное состояние.
+if [ "${1:-remove}" != upgrade ] && [ -x /usr/libexec/sheepfold/sheepfold-ipv6-control ]; then
+        if ! /usr/libexec/sheepfold/sheepfold-ipv6-control release >/dev/null 2>&1; then
+                logger -t sheepfold 'Не удалось восстановить прежнее состояние IPv6 при удалении пакета.'
+                echo 'Sheepfold: не удалось восстановить прежнее состояние IPv6; проверьте системный журнал.' >&2
+        fi
+fi
 # Удаляем только собственные firewall-объекты и cron-блок Sheepfold.
 [ -x /usr/libexec/sheepfold/sheepfold-firewall ] && \
         /usr/libexec/sheepfold/sheepfold-firewall clear >/dev/null 2>&1 || true
@@ -557,17 +468,6 @@ exit 0
         add_bytes(tar, "./preinst", preinst, 0o755)
         add_bytes(tar, "./postinst", postinst, 0o755)
         add_bytes(tar, "./prerm", prerm, 0o755)
-
-
-def filter_standard_po(source: str) -> str:
-    blocks = re.split(r"(?:\r?\n){2,}", source)
-    kept = []
-    for block in blocks:
-        lowered = block.lower()
-        if AI_TRANSLATION_PATTERN.search(lowered):
-            continue
-        kept.append(block)
-    return "\n\n".join(kept).rstrip() + "\n"
 
 
 def bundled_i18n_files(variant: str) -> list[tuple[str, bytes, int]]:

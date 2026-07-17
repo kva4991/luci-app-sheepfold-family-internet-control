@@ -8,7 +8,9 @@
 'require sheepfold.core.security.random as secureRandom';
 'require sheepfold.features.administrators.model as administratorModel';
 'require sheepfold.features.administrators.view as administratorView';
+'require sheepfold.features.administrators.editor as administratorEditor';
 'require sheepfold.features.devices.access-lists as deviceAccessLists';
+'require sheepfold.features.devices.editor as deviceEditor';
 'require sheepfold.features.devices.inventory as deviceInventory';
 'require sheepfold.features.devices.selection as deviceSelection';
 'require sheepfold.features.devices.table as deviceTableModel';
@@ -17,6 +19,7 @@
 'require sheepfold.features.feedback.panel as feedbackPanel';
 'require sheepfold.features.groups.model as groupModel';
 'require sheepfold.features.groups.view as groupView';
+'require sheepfold.features.groups.editor as groupEditor';
 'require sheepfold.features.logs.model as logModel';
 'require sheepfold.features.messenger.settings as messengerSettings';
 'require sheepfold.features.pairing.qr as pairingQr';
@@ -24,6 +27,7 @@
 'require sheepfold.features.router.maintenance as routerMaintenance';
 'require sheepfold.features.schedules.model as scheduleModel';
 'require sheepfold.features.schedules.view as scheduleView';
+'require sheepfold.features.schedules.editor as scheduleEditor';
 'require sheepfold.features.settings.backup as settingsBackupModel';
 'require sheepfold.features.settings.draft as settingsDraftModel';
 'require sheepfold.features.sites.status as siteListStatus';
@@ -235,6 +239,10 @@ function appDiscoveryJson(port) {
 
 function validateSettingsDraft(options) {
         var portNumber;
+        var adguardUrl;
+        var adguardUrlParts;
+        var adguardUsername;
+        var adguardPassword;
 
         if (hasOwn(options, 'log_cache_path') && !validRamCachePath(options.log_cache_path))
                 throw new Error(_('Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen.'));
@@ -265,6 +273,25 @@ function validateSettingsDraft(options) {
         if (hasOwn(options, 'access_priority') &&
                 normalizeAccessOrder(options.access_priority).join(' ') !== String(options.access_priority).trim())
                 throw new Error(_('Access priority contains an unknown or duplicate rule.'));
+
+        if (hasOwn(options, 'adguard.url')) {
+                adguardUrl = String(options['adguard.url'] || '').trim();
+                adguardUrlParts = adguardUrl.match(/^(https?):\/\/([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(?::([0-9]{1,5}))?\/?$/i);
+                if (!adguardUrlParts)
+                        throw new Error(_('AdGuard Home address must contain only the protocol, host, and optional port.'));
+                if (adguardUrlParts[3] && (parseInt(adguardUrlParts[3], 10) < 1 || parseInt(adguardUrlParts[3], 10) > 65535))
+                        throw new Error(_('AdGuard Home address must contain only the protocol, host, and optional port.'));
+                if (adguardUrlParts[1].toLowerCase() === 'http' &&
+                        !/^(?:127\.0\.0\.1|localhost|\[::1\])$/i.test(adguardUrlParts[2]))
+                        throw new Error(_('Use HTTPS for AdGuard Home on another device. Unencrypted HTTP is allowed only on this router.'));
+        }
+
+        if (hasOwn(options, 'adguard.username') || hasOwn(options, 'adguard.password')) {
+                adguardUsername = String(sectionSettingValue('adguard', 'username', '') || '').trim();
+                adguardPassword = String(sectionSettingValue('adguard', 'password', '') || '');
+                if (Boolean(adguardUsername) !== Boolean(adguardPassword))
+                        throw new Error(_('Enter both the AdGuard Home username and password, or leave both fields empty.'));
+        }
 }
 
 function applySettingsSideEffects(options) {
@@ -278,17 +305,29 @@ function applySettingsSideEffects(options) {
         if (hasOwn(options, 'site_blocklist_mode') ||
                 hasOwn(options, 'site_allowlist_sources') ||
                 hasOwn(options, 'site_blocklist_sources') ||
-                hasOwn(options, 'integration_mode'))
-				chain = chain.then(function () {
-					return routerControl(['site-lists-apply']).then(function (result) {
-						ensureRouterControlOk(result, _('Could not apply site list policy.'));
-						return siteListStatus.load(true).catch(function () { return null; });
-					});
-				});
+                hasOwn(options, 'integration_mode') ||
+                hasOwn(options, 'site_filter_backend') ||
+                hasOwn(options, 'adguard_auto_manage') ||
+                hasOwn(options, 'adguard.url') ||
+                hasOwn(options, 'adguard.username') ||
+                hasOwn(options, 'adguard.password'))
+                chain = chain.then(function () {
+                        return routerControl(['site-lists-apply']).then(function (result) {
+                                ensureRouterControlOk(result, _('Could not apply site list policy.'));
+                                return siteListStatus.load(true).catch(function () { return null; });
+                        });
+                });
 
         if (hasOwn(options, 'router_led_control'))
                 chain = chain.then(function () {
                         return routerControl(['led-apply']);
+                });
+
+        if (hasOwn(options, 'router_ipv6_disabled') || hasOwn(options, 'integration_mode'))
+                chain = chain.then(function () {
+                        return routerControl(['ipv6-apply']).then(function (result) {
+                                ensureRouterControlOk(result, _('Could not apply the IPv6 setting.'));
+                        });
                 });
 
         if (hasOwn(options, 'schedule_conflict_internet'))
@@ -1547,65 +1586,49 @@ function showAdminSettingsModal(admin) {
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
         var apiPath = '/cgi-bin/sheepfold-api';
         var apiUrl = 'https://' + routerAddress + ':' + port + apiPath;
-        var temporaryPassword = admin.temporaryPassword || generatePairingCode();
+        // Каждый новый сеанс окна получает новый код. Переиспользование старого
+        // значения позволило бы повторно активировать когда-то сфотографированный QR.
+        var temporaryPassword = generatePairingCode();
         var pairingPayloadText = pairingPayload(routerAddress, port, admin.login, temporaryPassword);
         var pairingStartedAt = Math.floor(Date.now() / 1000);
         var stopPairingWatcher = null;
-        var accessRequests = checkboxControl(
-                _('May child devices send this administrator requests for 30 more minutes of internet?'),
-                !!admin.allowChildAccessRequests,
-                _('Disabled by default. A request only notifies the parent and never grants internet automatically.')
-        );
 
-        admin.temporaryPassword = temporaryPassword;
         activateAdministratorPairingCode(admin, temporaryPassword).then(function () {
                 stopPairingWatcher = startAdminPairingWatcher(admin, pairingStartedAt);
         }).catch(function () {
                 notify(_('Could not save settings.'), 'warning');
         });
 
-        ui.showModal(_('Administrator settings'), [
-                E('div', { 'class': 'sf-modal-pairing' }, [
-                        E('div', { 'class': 'sf-qr-wrap' }, [
-                                qrCode(pairingPayloadText),
-                                E('p', {}, _('Scan this QR code in the Android app for quick setup.'))
-                        ]),
-                        E('div', { 'class': 'sf-manual-settings' }, [
-                                field(_('Admin name'), admin.name),
-                                field(_('Login'), admin.login),
-                                passwordRevealField(_('Temporary password'), temporaryPassword),
-                                settingLine(_('Sheepfold API URL'), apiUrl),
-                                settingLine(_('Server IP address'), routerAddress),
-                                settingLine(_('Port'), port),
-                                accessRequests.node
-                        ])
-                ]),
-                E('div', { 'class': 'right' }, [
-                        E('button', {
-                                'class': 'btn cbi-button',
-                                'click': function () {
-                                        if (stopPairingWatcher)
-                                                stopPairingWatcher();
-                                        ui.hideModal();
-                                }
-                        }, _('Close')),
-                        E('button', {
-                                'class': 'btn cbi-button cbi-button-positive',
-                                'click': function () {
-                                        admin.allowChildAccessRequests = accessRequests.input.checked;
-                                        stageAdministrator(admin);
-                                        saveUciChanges(['sheepfold']).then(function () {
-                                                notifyCentered(_('Settings saved successfully.'));
-                                                if (stopPairingWatcher)
-                                                        stopPairingWatcher();
-                                                ui.hideModal();
-                                        }).catch(function () {
-                                                notify(_('Could not save settings.'), 'warning');
-                                        });
-                                }
-                        }, _('Save'))
-                ])
-        ]);
+        administratorEditor.openSettings({
+                checkboxControl: checkboxControl,
+                inputControl: inputControl,
+                passwordRevealField: passwordRevealField,
+                settingLine: settingLine
+        }, admin, {
+                qrNode: qrCode(pairingPayloadText),
+                temporaryPassword: temporaryPassword,
+                apiUrl: apiUrl,
+                routerAddress: routerAddress,
+                port: port
+        }, {
+                close: function () {
+                        if (stopPairingWatcher)
+                                stopPairingWatcher();
+                        ui.hideModal();
+                },
+                save: function (payload) {
+                        admin.allowChildAccessRequests = payload.allowChildAccessRequests;
+                        stageAdministrator(admin);
+                        saveUciChanges(['sheepfold']).then(function () {
+                                notifyCentered(_('Settings saved successfully.'));
+                                if (stopPairingWatcher)
+                                        stopPairingWatcher();
+                                ui.hideModal();
+                        }).catch(function () {
+                                notify(_('Could not save settings.'), 'warning');
+                        });
+                }
+        });
 }
 
 function pairingButton(device) {
@@ -2712,6 +2735,20 @@ function refreshSchedulePanel() {
         current.replaceWith(next);
 }
 
+function refreshGroupPanel() {
+        var page = document.querySelector('.sf-page');
+        var current;
+        var next;
+
+        if (!page || !activeOverviewView)
+                return;
+        current = page.querySelector('[data-management-panel="groups"]');
+        if (!current)
+                return;
+        next = activeOverviewView.renderManagementPanel('groups', activeOverviewView.renderGroups(true));
+        current.replaceWith(next);
+}
+
 function scheduleDayText(section) {
         return scheduleModel.dayText(section, listOptionValues, scheduleDays);
 }
@@ -2786,220 +2823,57 @@ function scheduleHasConflict(draft, ownName) {
         return match;
 }
 
+function scheduleEditorTargets(targetType) {
+        if (targetType === 'group') {
+                return safeUciSections('sheepfold', 'group').map(function (group) {
+                        return [group['.name'], group.name || group['.name']];
+                });
+        }
+
+        return devices.filter(function (device) {
+                return !device.adminDevice && device.status !== 'allow' && device.status !== 'blocked';
+        }).map(function (device) {
+                return [String(device.id), formattedDeviceDisplayId(device) + ' ' + (device.name || device.mac)];
+        });
+}
+
+function persistScheduleDraft(draft, ownName) {
+        var secName = ownName || ensureSection('sheepfold', 'schedule', 'schedule_' + Date.now().toString(36));
+
+        uci.set('sheepfold', secName, 'name', draft.name);
+        uci.set('sheepfold', secName, 'description', draft.description);
+        uci.set('sheepfold', secName, 'enabled', draft.enabled ? '1' : '0');
+        uci.set('sheepfold', secName, 'action', draft.action);
+        uci.set('sheepfold', secName, 'target_type', draft.targetType);
+        setUciList(secName, 'targets', draft.targets);
+        setUciList(secName, 'weekdays', draft.weekdays);
+        setUciList(secName, 'time_ranges', draft.timeRanges.map(function (run) { return run.start + '-' + run.end; }));
+        saveUciChanges(['sheepfold']).then(function () {
+                return routerControl(['schedule-sync']);
+        }).then(function () {
+                ui.hideModal();
+                notify(_('Schedule saved.'), 'info');
+                refreshSchedulePanel();
+        }, function () {
+                notify(_('Could not save schedule.'), 'warning');
+        });
+}
+
 function showScheduleEditor(section, copyMode) {
-        var ownName = !copyMode && section ? section['.name'] : '';
-        var draft = {
-                name: copyMode ? (section.name || '') + ' ' + _('copy') : section && section.name || '',
-                description: section && section.description || '',
-                enabled: section ? section.enabled !== '0' : true,
-                action: section && section.action === 'allow' ? 'allow' : 'block',
-                targetType: section && section.target_type === 'device' ? 'device' : 'group',
-                targets: section ? listOptionValues(section.targets) : [],
-                weekdays: section ? listOptionValues(section.weekdays) : ['mon', 'tue', 'wed', 'thu', 'fri'],
-                timeRanges: section ? scheduleRanges(section) : [{ start: '21:00', end: '07:00' }]
-        };
-        var nameInput = E('input', { 'class': 'cbi-input-text', 'value': draft.name, 'maxlength': '80' });
-        var descInput = E('textarea', { 'class': 'cbi-input-textarea', 'rows': '2', 'maxlength': '240' }, draft.description);
-        var enabledBox = E('input', { 'type': 'checkbox', 'checked': draft.enabled ? 'checked' : null });
-        var targetBox = E('div', { 'class': 'sf-schedule-targets' });
-        var rangeBox = E('div', { 'class': 'sf-time-ranges' });
-        var dayBox = E('div', { 'class': 'sf-day-row' });
-        var preview = E('div', { 'class': 'sf-note sf-schedule-preview' });
-        var modeSelect;
-
-        function selectedDays() {
-                return Array.prototype.slice.call(dayBox.querySelectorAll('[data-schedule-day]:checked')).map(function (node) {
-                        return node.value;
-                });
-        }
-
-        function updatePreview() {
-                draft.name = nameInput.value.trim();
-                draft.description = descInput.value.trim();
-                draft.enabled = enabledBox.checked;
-                draft.targetType = modeSelect.value;
-                draft.weekdays = selectedDays();
-                preview.textContent = (draft.action === 'allow' ? _('Allow internet') : _('Block internet')) +
-                        ' · ' + (draft.enabled ? _('Enabled') : _('Disabled')) +
-                        ' · ' + scheduleDayText({ weekdays: draft.weekdays }) +
-                        ' · ' + scheduleTimeText({ time_ranges: draft.timeRanges.map(function (run) { return run.start + '-' + run.end; }) });
-        }
-
-        function renderTargets() {
-                var entries;
-
-                if (draft.targetType === 'group') {
-                        entries = safeUciSections('sheepfold', 'group').map(function (group) {
-                                return [group['.name'], group.name || group['.name']];
-                        });
-                } else {
-                        entries = devices.filter(function (device) {
-                                return !device.adminDevice && device.status !== 'allow' && device.status !== 'blocked';
-                        }).map(function (device) {
-                                return [String(device.id), formattedDeviceDisplayId(device) + ' ' + (device.name || device.mac)];
-                        });
-                }
-                targetBox.replaceChildren.apply(targetBox, entries.map(function (item) {
-                        return E('label', { 'class': 'sf-check-field' }, [
-                                E('input', {
-                                        'type': 'checkbox',
-                                        'value': item[0],
-                                        'checked': draft.targets.indexOf(item[0]) !== -1 ? 'checked' : null,
-                                        'change': function () {
-                                                draft.targets = Array.prototype.slice.call(targetBox.querySelectorAll('input:checked')).map(function (node) {
-                                                        return node.value;
-                                                });
-                                                updatePreview();
-                                        }
-                                }),
-                                E('span', {}, item[1])
-                        ]);
-                }));
-                if (!entries.length)
-                        targetBox.appendChild(E('p', { 'class': 'sf-muted' }, _('No suitable devices or groups.')));
-        }
-
-        function renderRanges() {
-                rangeBox.replaceChildren.apply(rangeBox, draft.timeRanges.map(function (run, index) {
-                        var startInput = E('input', { 'type': 'time', 'value': run.start });
-                        var endInput = E('input', { 'type': 'time', 'value': run.end });
-
-                        startInput.addEventListener('change', function () { run.start = startInput.value; updatePreview(); });
-                        endInput.addEventListener('change', function () { run.end = endInput.value; updatePreview(); });
-                        return E('div', { 'class': 'sf-time-row' }, [
-                                startInput,
-                                E('span', {}, '—'),
-                                endInput,
-                                E('button', {
-                                        'class': 'sf-icon-btn sf-icon-danger',
-                                        'title': _('Remove time interval'),
-                                        'disabled': draft.timeRanges.length === 1 ? 'disabled' : null,
-                                        'click': function (ev) {
-                                                ev.preventDefault();
-                                                draft.timeRanges.splice(index, 1);
-                                                renderRanges();
-                                                updatePreview();
-                                        }
-                                }, '×')
-                        ]);
-                }));
-        }
-
-        function persistSchedule() {
-                var secName = ownName || ensureSection('sheepfold', 'schedule', 'schedule_' + Date.now().toString(36));
-
-                uci.set('sheepfold', secName, 'name', draft.name);
-                uci.set('sheepfold', secName, 'description', draft.description);
-                uci.set('sheepfold', secName, 'enabled', draft.enabled ? '1' : '0');
-                uci.set('sheepfold', secName, 'action', draft.action);
-                uci.set('sheepfold', secName, 'target_type', draft.targetType);
-                setUciList(secName, 'targets', draft.targets);
-                setUciList(secName, 'weekdays', draft.weekdays);
-                setUciList(secName, 'time_ranges', draft.timeRanges.map(function (run) { return run.start + '-' + run.end; }));
-                saveUciChanges(['sheepfold']).then(function () {
-                        return routerControl(['schedule-sync']);
-                }).then(function () {
-                        ui.hideModal();
-                        notify(_('Schedule saved.'), 'info');
-                        refreshSchedulePanel();
-                }, function () {
-                        notify(_('Could not save schedule.'), 'warning');
-                });
-        }
-
-        function validateAndSave() {
-                var conflict;
-
-                updatePreview();
-                if (!draft.name || !draft.targets.length || !draft.weekdays.length || draft.timeRanges.some(function (run) {
-                        return timeToMinutes(run.start) < 0 || timeToMinutes(run.end) < 0 || run.start === run.end;
-                })) {
-                        notify(_('Enter a name, select targets and days, and set a valid time interval.'), 'warning');
-                        return;
-                }
-                conflict = scheduleHasConflict(draft, ownName);
-                if (conflict) {
-                        showScheduleConflictDisclaimer(persistSchedule,
-                                _('This rule overlaps the opposite rule:') + ' «' + conflict + '». ' + scheduleConflictResultText());
-                        return;
-                }
-                persistSchedule();
-        }
-
-        modeSelect = E('select', {
-                'class': 'cbi-input-select',
-                'change': function (ev) {
-                        draft.targetType = ev.currentTarget.value;
-                        draft.targets = [];
-                        renderTargets();
-                        updatePreview();
-                }
-        }, [
-                E('option', { 'value': 'group', 'selected': draft.targetType === 'group' ? 'selected' : null }, _('Groups')),
-                E('option', { 'value': 'device', 'selected': draft.targetType === 'device' ? 'selected' : null }, _('Individual devices'))
-        ]);
-
-        var actionNodes = ['allow', 'block'].map(function (action) {
-                return E('label', { 'class': 'sf-action-choice sf-action-choice-' + action }, [
-                        E('input', {
-                                'type': 'radio',
-                                'name': 'schedule_action',
-                                'value': action,
-                                'checked': draft.action === action ? 'checked' : null,
-                                'change': function () { draft.action = action; updatePreview(); }
-                        }),
-                        E('span', {}, action === 'allow' ? _('Allow internet') : _('Block internet'))
-                ]);
-        });
-        var dayNodes = scheduleDays.map(function (item) {
-                return E('label', { 'class': 'sf-day-chip' }, [
-                        E('input', {
-                                'type': 'checkbox',
-                                'data-schedule-day': '1',
-                                'value': item[0],
-                                'checked': draft.weekdays.indexOf(item[0]) !== -1 ? 'checked' : null,
-                                'change': updatePreview
-                        }),
-                        E('span', {}, _(item[1]))
-                ]);
-        });
-        dayBox.replaceChildren.apply(dayBox, dayNodes);
-
-        nameInput.addEventListener('input', updatePreview);
-        descInput.addEventListener('input', updatePreview);
-        enabledBox.addEventListener('change', updatePreview);
-        renderTargets();
-        renderRanges();
-        updatePreview();
-
-        ui.showModal(ownName ? _('Edit schedule') : _('Add schedule'), [
-                E('div', { 'class': 'sf-schedule-editor' }, [
-                        E('label', { 'class': 'sf-field sf-field-wide' }, [E('span', {}, _('Schedule name')), nameInput]),
-                        E('label', { 'class': 'sf-field sf-field-wide' }, [E('span', {}, _('Description')), descInput]),
-                        E('label', { 'class': 'sf-toggle-line' }, [enabledBox, E('span', {}, _('Schedule enabled'))]),
-                        E('div', { 'class': 'sf-action-choices' }, actionNodes),
-                        E('label', { 'class': 'sf-field sf-field-wide' }, [E('span', {}, _('Apply to')), modeSelect]),
-                        targetBox,
-                        E('strong', {}, _('Days of week')),
-                        dayBox,
-                        E('strong', {}, _('Time intervals')),
-                        rangeBox,
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        draft.timeRanges.push({ start: '15:00', end: '16:00' });
-                                        renderRanges();
-                                        updatePreview();
-                                }
-                        }, _('Add time interval')),
-                        preview
-                ]),
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
-                        E('button', { 'class': 'btn cbi-button-positive', 'click': validateAndSave }, _('Save'))
-                ])
-        ]);
+        return scheduleEditor.open({
+                listValues: listOptionValues,
+                ranges: function (value) { return scheduleModel.ranges(value, listOptionValues); },
+                days: scheduleDays,
+                targets: scheduleEditorTargets,
+                dayText: scheduleDayText,
+                timeText: scheduleTimeText,
+                timeToMinutes: scheduleModel.timeToMinutes,
+                findConflict: scheduleHasConflict,
+                conflictResultText: scheduleConflictResultText,
+                showConflict: showScheduleConflictDisclaimer,
+                persist: persistScheduleDraft,
+                notify: notify
+        }, section, copyMode);
 }
 
 function setScheduleEnabled(section, enabled) {
@@ -3042,7 +2916,7 @@ function bedtimeEditor() {
                         'class': 'sf-action sf-action-positive',
                         'click': function (ev) {
                                 ev.preventDefault();
-                                if (timeToMinutes(timeInput.value) < 0) {
+                                if (scheduleModel.timeToMinutes(timeInput.value) < 0) {
                                         notify(_('Enter a valid bedtime.'), 'warning');
                                         return;
                                 }
@@ -3057,235 +2931,135 @@ function bedtimeEditor() {
         ]);
 }
 
-function showGroupSettingsModal(groupName, section, onSave) {
-        var nameField = inputControl(_('Group name'), groupName, section && section.protected === '1' ? { 'readonly': 'readonly' } : {});
-        var colorField = inputControl(_('Group color'), groupColor(groupName, section), { 'type': 'color' });
-        var currentDeviceIds = devices.filter(function (device) {
+function currentGroupDeviceIds(groupName) {
+        return devices.filter(function (device) {
                 return normalizeGroupName(device.group) === groupName;
         }).map(function (device) {
                 return device.id;
         });
-        var deviceSelector = createDeviceSelectionBox({
-                selectedIds: currentDeviceIds
+}
+
+function groupNameExists(newName, oldName) {
+        return newName !== oldName && safeUciSections('sheepfold', 'group').some(function (item) {
+                return normalizeGroupName(item.name || item['.name']) === newName;
         });
-        var scheduleSelector = scheduleCheckboxes(listOptionValues(section && section.schedules));
-        var allowlistOnlyField = checkboxControl(
-                _('Allow only selected whitelist sources for this group'),
-                section && section.allowlist_only === '1',
-                _('Devices in this group will be limited to domains from the selected whitelist sources and manually allowed emergency-useful sites.')
+}
+
+function persistGroupSettings(payload, section, onSave) {
+        var membershipChanges = groupModel.membershipChanges(
+                devices,
+                payload.oldName,
+                payload.newName,
+                payload.selectedDevices.map(function (device) { return device.id; }),
+                normalizeGroupName
         );
+        var changesByMac = {};
+        var sectionName;
+
+        membershipChanges.forEach(function (change) {
+                changesByMac[normalizeMac(change.device.mac)] = change;
+        });
+        sectionName = ensureGroupSection(payload.oldName, section);
+        uci.set('sheepfold', sectionName, 'name', payload.newName);
+        uci.set('sheepfold', sectionName, 'color', payload.color);
+        uci.set('sheepfold', sectionName, 'schedules', payload.selectedSchedules);
+        uci.set('sheepfold', sectionName, 'allowlist_only', payload.allowlistOnly ? '1' : '0');
         /* SHEEPFOLD_AI_BEGIN */
-        var activityLogField = checkboxControl(
-                _('Enable activity journal for all devices in this group'),
-                section && section.activity_log_enabled === '1',
-                _('Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices.')
-        );
+        uci.set('sheepfold', sectionName, 'activity_log_enabled', payload.activityLogEnabled ? '1' : '0');
         /* SHEEPFOLD_AI_END */
-        var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
+        if (!section)
+                uci.set('sheepfold', sectionName, 'protected', '0');
 
-        function showError(message) {
-                conflictNote.textContent = message;
-                conflictNote.hidden = false;
-        }
+        safeUciSections('sheepfold', 'device').forEach(function (deviceSection) {
+                var change = changesByMac[normalizeMac(deviceSection.mac)];
 
-        function saveGroupSettings() {
-                var oldName = groupName;
-                var newName = normalizeGroupName(nameField.input.value.trim());
-                var color = colorField.input.value;
-                var sectionName;
-                var selectedDevices;
-                var membershipChanges;
-                var changesByMac = {};
-                var selectedSchedules = scheduleSelector.values();
-
-                conflictNote.hidden = true;
-                conflictNote.textContent = '';
-
-                if (!newName) {
-                        showError(_('Group name is required.'));
+                if (!change)
                         return;
-                }
+                uci.set('sheepfold', deviceSection['.name'], 'group', change.nextGroup || NOT_CONFIGURED_GROUP);
+                if (payload.oldName === noRestrictionsGroupName() && !change.linked)
+                        markNoRestrictionsAutoExcluded(deviceSection['.name']);
+                if (payload.oldName === personalDevicesGroupName() && !change.linked)
+                        markPersonalDevicesAutoExcluded(deviceSection['.name']);
+        });
 
-                if (newName !== oldName && safeUciSections('sheepfold', 'group').some(function (item) {
-                        return normalizeGroupName(item.name || item['.name']) === newName;
-                })) {
-                        showError(_('This group already exists.'));
-                        return;
-                }
+        payload.selectedDevices.forEach(function (device) {
+                var sectionDeviceName = ensureSheepfoldDeviceSection(device);
 
-                if (!validGroupColor(color))
-                        color = groupAutoColor(newName);
+                uci.set('sheepfold', sectionDeviceName, 'mac', normalizeMac(device.mac));
+                uci.set('sheepfold', sectionDeviceName, 'name', device.name || device.mac);
+                uci.set('sheepfold', sectionDeviceName, 'ip', device.ip || '');
+                uci.set('sheepfold', sectionDeviceName, 'group', payload.newName);
+                if (payload.oldName === noRestrictionsGroupName() && payload.newName !== noRestrictionsGroupName())
+                        markNoRestrictionsAutoExcluded(sectionDeviceName);
+                if (payload.oldName === personalDevicesGroupName() && payload.newName !== personalDevicesGroupName())
+                        markPersonalDevicesAutoExcluded(sectionDeviceName);
+        });
 
-                selectedDevices = deviceSelector.selectedDevices();
-                membershipChanges = groupModel.membershipChanges(
-                        devices,
-                        oldName,
-                        newName,
-                        selectedDevices.map(function (device) { return device.id; }),
-                        normalizeGroupName
-                );
+        saveSheepfoldAccessChanges().then(function () {
+                // Карточки читают локальный inventory: обновляем его только после
+                // успешного commit и не перезагружаем всю страницу LuCI.
                 membershipChanges.forEach(function (change) {
-                        changesByMac[normalizeMac(change.device.mac)] = change;
+                        change.device.group = change.nextGroup || NOT_CONFIGURED_GROUP;
                 });
-                sectionName = ensureGroupSection(oldName, section);
-                uci.set('sheepfold', sectionName, 'name', newName);
-                uci.set('sheepfold', sectionName, 'color', color);
-                uci.set('sheepfold', sectionName, 'schedules', selectedSchedules);
-                uci.set('sheepfold', sectionName, 'allowlist_only', allowlistOnlyField.input.checked ? '1' : '0');
-                /* SHEEPFOLD_AI_BEGIN */
-                uci.set('sheepfold', sectionName, 'activity_log_enabled', activityLogField.input.checked ? '1' : '0');
-                /* SHEEPFOLD_AI_END */
-                if (!section)
-                        uci.set('sheepfold', sectionName, 'protected', '0');
+                notify(_('Group saved.'), 'info');
+                if (onSave)
+                        onSave();
+                ui.hideModal();
+        }, function () {
+                notify(_('Could not save group.'), 'warning');
+        });
+}
 
-                safeUciSections('sheepfold', 'device').forEach(function (deviceSection) {
-                        var change = changesByMac[normalizeMac(deviceSection.mac)];
+function persistNewGroup(payload, onSave) {
+        var sectionName = ensureGroupSection(payload.name, null);
 
-                        if (change) {
-                                uci.set('sheepfold', deviceSection['.name'], 'group', change.nextGroup || NOT_CONFIGURED_GROUP);
+        uci.set('sheepfold', sectionName, 'name', payload.name);
+        uci.set('sheepfold', sectionName, 'color', payload.color);
+        uci.set('sheepfold', sectionName, 'protected', '0');
+        uci.set('sheepfold', sectionName, 'auto_assignable', '0');
+        uci.set('sheepfold', sectionName, 'allowlist_only', '0');
+        /* SHEEPFOLD_AI_BEGIN */
+        uci.set('sheepfold', sectionName, 'activity_log_enabled', '0');
+        /* SHEEPFOLD_AI_END */
+        uci.set('sheepfold', sectionName, 'personal', payload.personal ? '1' : '0');
 
-                                if (oldName === noRestrictionsGroupName() && !change.linked)
-                                        markNoRestrictionsAutoExcluded(deviceSection['.name']);
-                                if (oldName === personalDevicesGroupName() && !change.linked)
-                                        markPersonalDevicesAutoExcluded(deviceSection['.name']);
-                        }
-                });
+        saveUciChanges(['sheepfold']).then(function () {
+                notify(_('Group created.'), 'info');
+                if (onSave)
+                        onSave();
+                ui.hideModal();
+        }, function () {
+                notify(_('Could not create group.'), 'warning');
+        });
+}
 
-                selectedDevices.forEach(function (device) {
-                        var sectionDeviceName = ensureSheepfoldDeviceSection(device);
+function groupEditorDependencies() {
+        return {
+                inputControl: inputControl,
+                checkboxControl: checkboxControl,
+                createDeviceSelector: createDeviceSelectionBox,
+                scheduleCheckboxes: scheduleCheckboxes,
+                listValues: listOptionValues,
+                currentDeviceIds: currentGroupDeviceIds,
+                groupColor: groupColor,
+                normalize: normalizeGroupName,
+                nameExists: groupNameExists,
+                validColor: validGroupColor,
+                automaticColor: groupAutoColor,
+                nextColor: nextAvailableGroupColor,
+                schedulesConflict: schedulesConflict,
+                showScheduleConflict: showScheduleConflictDisclaimer,
+                persistSettings: persistGroupSettings,
+                persistNew: persistNewGroup
+        };
+}
 
-                        uci.set('sheepfold', sectionDeviceName, 'mac', normalizeMac(device.mac));
-                        uci.set('sheepfold', sectionDeviceName, 'name', device.name || device.mac);
-                        uci.set('sheepfold', sectionDeviceName, 'ip', device.ip || '');
-                        uci.set('sheepfold', sectionDeviceName, 'group', newName);
-                        if (oldName === noRestrictionsGroupName() && newName !== noRestrictionsGroupName())
-                                markNoRestrictionsAutoExcluded(sectionDeviceName);
-                        if (oldName === personalDevicesGroupName() && newName !== personalDevicesGroupName())
-                                markPersonalDevicesAutoExcluded(sectionDeviceName);
-                });
-
-                saveSheepfoldAccessChanges().then(function () {
-                        // Карточки групп читают локальный inventory. Синхронизируем его после
-                        // успешного commit, чтобы обновить только панель и не перезагружать LuCI.
-                        membershipChanges.forEach(function (change) {
-                                change.device.group = change.nextGroup || NOT_CONFIGURED_GROUP;
-                        });
-                        notify(_('Group saved.'), 'info');
-                        if (onSave)
-                                onSave();
-                        ui.hideModal();
-                }, function () {
-                        notify(_('Could not save group.'), 'warning');
-                });
-        }
-
-        ui.showModal(_('Group settings'), [
-                E('div', { 'class': 'sf-device-editor' }, [
-                        conflictNote,
-                        E('div', { 'class': 'sf-grid two' }, [
-                                nameField.node,
-                                colorField.node
-                        ]),
-                        E('strong', {}, _('Group schedules')),
-                        scheduleSelector.node,
-                        allowlistOnlyField.node,
-                        /* SHEEPFOLD_AI_BEGIN */
-                        activityLogField ? activityLogField.node : '',
-                        /* SHEEPFOLD_AI_END */
-                        E('strong', {}, _('Assigned devices')),
-                        deviceSelector.node
-                ]),
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', {
-                                'class': 'btn cbi-button',
-                                'click': ui.hideModal
-                        }, _('Cancel')),
-                        E('button', {
-                                'class': 'btn cbi-button cbi-button-positive',
-                                'click': function () {
-                                        if (schedulesConflict(scheduleSelector.values())) {
-                                                showScheduleConflictDisclaimer(saveGroupSettings);
-                                                return;
-                                        }
-
-                                        saveGroupSettings();
-                                }
-                        }, _('Save'))
-                ])
-        ]);
+function showGroupSettingsModal(groupName, section, onSave) {
+        return groupEditor.openSettings(groupEditorDependencies(), groupName, section, onSave);
 }
 
 function showAddGroupModal(existingNames, onSave) {
-        var nameField = inputControl(_('Group name'), '');
-        var colorField = inputControl(_('Group color'), nextAvailableGroupColor(_('Custom')), { 'type': 'color' }, _('Automatic color'));
-        var personalField = checkboxControl(_('Personal group'), false, _('Only devices belonging to one person can be added to this group.'));
-        var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
-
-        function showError(message) {
-                conflictNote.textContent = message;
-                conflictNote.hidden = false;
-        }
-
-        ui.showModal(_('Add group'), [
-                E('div', { 'class': 'sf-device-editor' }, [
-                        conflictNote,
-                        E('div', { 'class': 'sf-grid two' }, [
-                                nameField.node,
-                                colorField.node
-                        ]),
-                        personalField.node
-                ]),
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', {
-                                'class': 'btn cbi-button',
-                                'click': ui.hideModal
-                        }, _('Cancel')),
-                        E('button', {
-                                'class': 'btn cbi-button cbi-button-positive',
-                                'click': function () {
-                                        var groupName = normalizeGroupName(nameField.input.value.trim());
-                                        var color = colorField.input.value;
-                                        var sectionName;
-
-                                        conflictNote.hidden = true;
-                                        conflictNote.textContent = '';
-
-                                        if (!groupName) {
-                                                showError(_('Group name is required.'));
-                                                return;
-                                        }
-
-                                        if (existingNames[groupName]) {
-                                                showError(_('This group already exists.'));
-                                                return;
-                                        }
-
-                                        if (!validGroupColor(color))
-                                                color = nextAvailableGroupColor(groupName);
-
-                                        sectionName = ensureGroupSection(groupName, null);
-                                        uci.set('sheepfold', sectionName, 'name', groupName);
-                                        uci.set('sheepfold', sectionName, 'color', color);
-                                        uci.set('sheepfold', sectionName, 'protected', '0');
-                                        uci.set('sheepfold', sectionName, 'auto_assignable', '0');
-                                        uci.set('sheepfold', sectionName, 'allowlist_only', '0');
-                                        /* SHEEPFOLD_AI_BEGIN */
-                                        uci.set('sheepfold', sectionName, 'activity_log_enabled', '0');
-                                        /* SHEEPFOLD_AI_END */
-                                        uci.set('sheepfold', sectionName, 'personal', personalField.input.checked ? '1' : '0');
-
-                                        saveUciChanges(['sheepfold']).then(function () {
-                                                notify(_('Group created.'), 'info');
-                                                if (onSave)
-                                                        onSave();
-                                                ui.hideModal();
-                                        }, function () {
-                                                notify(_('Could not create group.'), 'warning');
-                                        });
-                                }
-                        }, _('Save'))
-                ])
-        ]);
+        return groupEditor.openAdd(groupEditorDependencies(), existingNames, onSave);
 }
 
 function nextAdminId() {
@@ -3343,311 +3117,184 @@ function adminTableRow(admin) {
         ]);
 }
 
-function showAddAdministratorModal(onAdd) {
-        var nameField = inputControl(_('Admin name'), '');
-        var loginField = inputControl(_('Login'), '');
-        var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
-        var assignedToAnyAdmin = adminAssignedDeviceIds(null);
-        var selector = createDeviceSelectionBox({
-                filter: function (device) {
-                        return adminDeviceCanBeBound(device) && !assignedToAnyAdmin[device.id];
-                }
-        });
+function createAdministratorDeviceSelector(admin) {
+        var assignedToOtherAdmin = adminAssignedDeviceIds(admin || null);
 
-        function showError(message) {
-                conflictNote.textContent = message;
-                conflictNote.hidden = false;
-        }
-
-        function saveAdministrator() {
-                var name = nameField.input.value.trim();
-                var login = loginField.input.value.trim();
-                var admin;
-
-                conflictNote.hidden = true;
-                conflictNote.textContent = '';
-
-                if (!name || !login) {
-                        showError(_('Name and login are required.'));
-                        return;
-                }
-
-                if (adminLoginExists(login)) {
-                        showError(_('This login is already used.'));
-                        return;
-                }
-
-                admin = {
-                        id: nextAdminId(),
-                        name: name,
-                        login: login,
-                        deviceIds: selector.selectedIds(),
-                        temporaryPassword: generatePairingCode(),
-                        allowChildAccessRequests: false
-                };
-
-                admins.push(admin);
-                stageAdministrator(admin);
-                applyAdminDeviceBindings(admin, selector.selectedDevices(), []).then(function () {
-                        if (onAdd)
-                                onAdd(admin);
-                        notify(_('Administrator added.'), 'info');
-                        ui.hideModal();
-                        window.setTimeout(function () {
-                                window.location.reload();
-                        }, 700);
-                }, function (error) {
-                        notify(error && error.message ? error.message : _('Could not save device settings.'), 'warning');
-                });
-        }
-
-        function modalActions() {
-                return E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', {
-                                'class': 'btn cbi-button',
-                                'click': ui.hideModal
-                        }, _('Cancel')),
-                        E('button', {
-                                'class': 'btn cbi-button cbi-button-positive',
-                                'click': function () {
-                                        saveAdministrator();
-                                }
-                        }, _('Save'))
-                ]);
-        }
-
-        ui.showModal(_('Add administrator'), [
-                E('div', { 'class': 'sf-device-editor' }, [
-                        conflictNote,
-                        E('div', { 'class': 'sf-grid two' }, [
-                                nameField.node,
-                                loginField.node
-                        ]),
-                        modalActions(),
-                        E('strong', {}, _('Assigned devices')),
-                        selector.node
-                ]),
-                modalActions()
-        ]);
-}
-
-function showAdminDeviceBindingModal(admin, onSave) {
-        var assignedToOtherAdmin = adminAssignedDeviceIds(admin);
-        var selector = createDeviceSelectionBox({
-                selectedIds: admin.deviceIds || [],
+        return createDeviceSelectionBox({
+                selectedIds: admin && admin.deviceIds || [],
                 filter: function (device) {
                         return adminDeviceCanBeBound(device) && !assignedToOtherAdmin[device.id];
                 }
         });
-        var actionRow;
+}
 
-        function saveBindings() {
-                var previousIds = admin.deviceIds || [];
-                var selectedDevices = selector.selectedDevices();
+function persistNewAdministrator(payload, onAdd) {
+        var admin = {
+                id: nextAdminId(),
+                name: payload.name,
+                login: payload.login,
+                deviceIds: payload.selectedIds,
+                allowChildAccessRequests: false
+        };
 
-                admin.deviceIds = selector.selectedIds();
-                applyAdminDeviceBindings(admin, selectedDevices, previousIds).then(function () {
-                        if (onSave)
-                                onSave();
-                        ui.hideModal();
-                        notify(_('Device bindings saved.'), 'info');
-                        window.setTimeout(function () {
-                                window.location.reload();
-                        }, 700);
-                }, function (error) {
-                        admin.deviceIds = previousIds;
-                        notify(error && error.message ? error.message : _('Could not save device settings.'), 'warning');
-                });
+        admins.push(admin);
+        stageAdministrator(admin);
+        applyAdminDeviceBindings(admin, payload.selectedDevices, []).then(function () {
+                if (onAdd)
+                        onAdd(admin);
+                refreshUserListsWithoutPageReload();
+                notify(_('Administrator added.'), 'info');
+                ui.hideModal();
+        }, function (error) {
+                admins = admins.filter(function (candidate) { return candidate !== admin; });
+                notify(error && error.message ? error.message : _('Could not save device settings.'), 'warning');
+        });
+}
+
+function showAddAdministratorModal(onAdd) {
+        administratorEditor.openAdd({
+                inputControl: inputControl,
+                loginExists: adminLoginExists,
+                createDeviceSelector: function () {
+                        return createAdministratorDeviceSelector(null);
+                }
+        }, function (payload) {
+                persistNewAdministrator(payload, onAdd);
+        });
+}
+
+function persistAdministratorDeviceBindings(admin, payload, previousIds, onSave) {
+        admin.deviceIds = payload.selectedIds;
+        applyAdminDeviceBindings(admin, payload.selectedDevices, previousIds).then(function () {
+                if (onSave)
+                        onSave();
+                refreshUserListsWithoutPageReload();
+                ui.hideModal();
+                notify(_('Device bindings saved.'), 'info');
+        }, function (error) {
+                admin.deviceIds = previousIds;
+                notify(error && error.message ? error.message : _('Could not save device settings.'), 'warning');
+        });
+}
+
+function showAdminDeviceBindingModal(admin, onSave) {
+        var previousIds = (admin.deviceIds || []).slice();
+
+        administratorEditor.openBinding({
+                createDeviceSelector: function () {
+                        return createAdministratorDeviceSelector(admin);
+                }
+        }, admin, function (payload) {
+                persistAdministratorDeviceBindings(admin, payload, previousIds, onSave);
+        });
+}
+
+function validateDeviceSettings(device, payload) {
+        var group = normalizeGroupName(payload.group || NOT_CONFIGURED_GROUP);
+
+        if (isAdminDevice(device) && (payload.status !== 'allow' || group !== NOT_CONFIGURED_GROUP))
+                return _('Administrator devices must remain in the allowlist and outside ordinary groups.');
+        if (payload.status === 'allow' && macInSheepfoldList('blocklist', device.mac))
+                return _('This device is already in the blocklist. Remove it from the blocklist before adding it to the allowlist.');
+        if (payload.status === 'blocked' && macInSheepfoldList('allowlist', device.mac))
+                return _('This device is already in the allowlist. Remove it from the allowlist before adding it to the blocklist.');
+        if (payload.staticLease && !payload.ip)
+                return _('Static lease requires an IP address.');
+
+        return '';
+}
+
+function persistDeviceSettings(device, payload) {
+        var sectionName = ensureSheepfoldDeviceSection(device);
+        var staticSectionName = '';
+        var oldGroup = normalizeGroupName(device.group);
+        var newGroup = normalizeGroupName(payload.group || NOT_CONFIGURED_GROUP);
+        var status = payload.status;
+        var activityLogEnabled = false;
+        var configs = ['sheepfold'];
+
+        if (isAdminDevice(device)) {
+                newGroup = NOT_CONFIGURED_GROUP;
+                status = 'allow';
+        }
+        /* SHEEPFOLD_AI_BEGIN */
+        activityLogEnabled = !isAdminDevice(device) && status !== 'allow' && status !== 'blocked' && payload.activityLogEnabled;
+        /* SHEEPFOLD_AI_END */
+
+        uci.set('sheepfold', sectionName, 'mac', device.mac);
+        uci.set('sheepfold', sectionName, 'name', payload.name);
+        uci.set('sheepfold', sectionName, 'ip', payload.ip);
+        uci.set('sheepfold', sectionName, 'group', newGroup);
+        uci.set('sheepfold', sectionName, 'device_type', payload.deviceType);
+        uci.set('sheepfold', sectionName, 'manual_device_type', payload.deviceType === 'unknown' ? '0' : '1');
+        uci.set('sheepfold', sectionName, 'status', status);
+        /* SHEEPFOLD_AI_BEGIN */
+        uci.set('sheepfold', sectionName, 'activity_log_enabled', activityLogEnabled ? '1' : '0');
+        /* SHEEPFOLD_AI_END */
+
+        if (oldGroup === noRestrictionsGroupName() && newGroup !== noRestrictionsGroupName())
+                markNoRestrictionsAutoExcluded(sectionName);
+        if (oldGroup === personalDevicesGroupName() && newGroup !== personalDevicesGroupName())
+                markPersonalDevicesAutoExcluded(sectionName);
+
+        if (status === 'allow')
+                updateMacList('allowlist', device.mac, true);
+        else if (status !== 'blocked')
+                updateMacList('allowlist', device.mac, false);
+        if (status === 'blocked')
+                updateMacList('blocklist', device.mac, true);
+        else if (status !== 'allow')
+                updateMacList('blocklist', device.mac, false);
+
+        if (payload.staticLease) {
+                staticSectionName = ensureStaticDhcpSection(device);
+                uci.set('dhcp', staticSectionName, 'mac', device.mac);
+                uci.set('dhcp', staticSectionName, 'ip', payload.ip);
+                uci.set('dhcp', staticSectionName, 'name', payload.name);
+                configs.push('dhcp');
         }
 
-        function modalActions() {
-                return E('div', { 'class': 'sf-modal-actions right' }, [
-                        E('button', {
-                                'class': 'btn cbi-button',
-                                'click': ui.hideModal
-                        }, _('Cancel')),
-                        E('button', {
-                                'class': 'btn cbi-button cbi-button-positive',
-                                'click': saveBindings
-                        }, _('Save'))
-                ]);
-        }
-
-        actionRow = modalActions();
-
-        ui.showModal(_('Assign devices to administrator') + ' ' + admin.name, [
-                E('div', { 'class': 'sf-binding-modal' }, [
-                        E('div', { 'class': 'sf-section-intro' }, [
-                                E('p', {}, _('Select administrator devices') + ' ' + admin.name + '. ' + _('Selected administrator devices can manage Sheepfold.')),
-                                E('p', {}, _('Blocklisted devices are not available for binding.')),
-                                /* SHEEPFOLD_AI_BEGIN */
-                                E('p', {}, _('When a device is assigned to an administrator, Sheepfold removes it from ordinary groups and schedules, disables activity logging for it, and adds it to the allowlist.')),
-                                /* SHEEPFOLD_AI_END */
-                                E('p', {}, _('Administrator devices are removed from ordinary groups and schedules and added to the allowlist.'))
-                        ]),
-                        actionRow,
-                        selector.node
-                ]),
-                modalActions()
-        ]);
+        saveUciChanges(configs.filter(function (config, index) {
+                return configs.indexOf(config) === index;
+        })).then(applySheepfoldAccessRuntime).then(function () {
+                // Локальный inventory меняется только после успешного commit: иначе
+                // таблица могла бы показать доступ, которого firewall не применил.
+                device.name = payload.name;
+                device.ip = payload.ip;
+                device.group = newGroup;
+                device.deviceType = payload.deviceType;
+                device.manualDeviceType = payload.deviceType !== 'unknown';
+                device.status = status;
+                device.statusBadge = deviceStatusBadge(status, null);
+                device.staticLease = payload.staticLease;
+                if (staticSectionName)
+                        device.staticSection = staticSectionName;
+                /* SHEEPFOLD_AI_BEGIN */
+                device.activityLogEnabled = activityLogEnabled;
+                /* SHEEPFOLD_AI_END */
+                notify(_('Device settings saved.'), 'info');
+                ui.hideModal();
+                refreshUserListsWithoutPageReload();
+                refreshGroupPanel();
+        }, function () {
+                notify(_('Could not save device settings.'), 'warning');
+        });
 }
 
 function showDeviceSettingsModal(device) {
-        var knownGroups = sheepfoldGroupOptions();
-        var knownGroupValues = knownGroups.map(function (item) { return item[0]; });
-        var groupIsCustom = device.group && knownGroupValues.indexOf(device.group) === -1;
-        var nameField = inputControl(_('Device name'), device.name);
-        var ipField = inputControl(_('IP address'), device.ip);
-        var groupField = selectControl(_('Group'), groupIsCustom ? '__custom' : device.group, knownGroups.concat([
-                ['__custom', _('Custom')]
-        ]));
-        var customGroupField = inputControl(_('Use custom group'), groupIsCustom ? device.group : '');
-        var typeField = deviceTypeSelectControl(_('Device type'), displayDeviceType(device));
-        var statusField = selectControl(_('Access mode'), device.status, [
-                ['new', _('Not configured')],
-                ['allow', _('Allowlist')],
-                ['blocked', _('Blocklist')],
-                ['scheduled', _('Scheduled')],
-                ['restricted', _('Restricted')]
-        ]);
-        var staticLeaseField = checkboxControl(
-                device.staticLease ? _('Permanent DHCP lease') : _('Create permanent DHCP lease'),
-                device.staticLease,
-                device.staticLease ? _('Existing permanent DHCP lease will be updated, not removed.') : '',
-                device.staticLease ? { 'disabled': 'disabled' } : null
-        );
-        /* SHEEPFOLD_AI_BEGIN */
-        var activityLogField = checkboxControl(
-                _('Enable activity journal for this device'),
-                device.activityLogEnabled,
-                _('Activity journal is sensitive. It is not collected for administrators, allowlist, or blocklist devices.')
-        );
-        /* SHEEPFOLD_AI_END */
-        var conflictNote = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
-        var infoLines = E('div', { 'class': 'sf-device-info-lines' }, [
-                settingLine(_('ID'), formattedDeviceDisplayId(device)),
-                settingLine(_('MAC address'), device.mac),
-                settingLine(_('Hostname'), device.hostname || '-'),
-                settingLine(_('Detection source'), device.sourceLabel || '-')
-        ]);
-
-        function updateCustomGroupVisibility() {
-                customGroupField.node.hidden = groupField.input.value === '__custom' ? null : 'hidden';
-        }
-
-        groupField.input.addEventListener('change', updateCustomGroupVisibility);
-        updateCustomGroupVisibility();
-
-        ui.showModal(_('Device settings'), [
-                E('div', { 'class': 'sf-device-editor' }, [
-                        infoLines,
-                        conflictNote,
-                        E('div', { 'class': 'sf-grid two' }, [
-                                nameField.node,
-                                ipField.node,
-                                typeField.node,
-                                groupField.node,
-                                customGroupField.node,
-                                statusField.node,
-                                staticLeaseField.node,
-                                /* SHEEPFOLD_AI_BEGIN */
-                                activityLogField.node
-                                /* SHEEPFOLD_AI_END */
-                        ])
-                ]),
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', {
-                                'class': 'btn cbi-button',
-                                'click': ui.hideModal
-                        }, _('Cancel')),
-                        E('button', {
-                                'class': 'btn cbi-button cbi-button-positive',
-                                'click': function () {
-                                        var sectionName;
-                                        var staticSectionName;
-                                        var name = nameField.input.value.trim() || device.name;
-                                        var ip = ipField.input.value.trim();
-                                        var group = groupField.input.value === '__custom' ?
-                                                customGroupField.input.value.trim() :
-                                                groupField.input.value;
-                                        var oldGroup = normalizeGroupName(device.group);
-                                        var newGroup = normalizeGroupName(group || NOT_CONFIGURED_GROUP);
-                                        var deviceType = typeField.input.value;
-                                        var status = statusField.input.value;
-                                        var configs = ['sheepfold'];
-
-                                        conflictNote.hidden = true;
-                                        conflictNote.textContent = '';
-
-                                        if (status === 'allow' && macInSheepfoldList('blocklist', device.mac)) {
-                                                conflictNote.textContent = _('This device is already in the blocklist. Remove it from the blocklist before adding it to the allowlist.');
-                                                conflictNote.hidden = false;
-                                                return;
-                                        }
-
-                                        if (status === 'blocked' && macInSheepfoldList('allowlist', device.mac)) {
-                                                conflictNote.textContent = _('This device is already in the allowlist. Remove it from the allowlist before adding it to the blocklist.');
-                                                conflictNote.hidden = false;
-                                                return;
-                                        }
-
-                                        if (staticLeaseField.input.checked && !ip) {
-                                                notify(_('Static lease requires an IP address.'), 'warning');
-                                                return;
-                                        }
-
-                                        sectionName = ensureSheepfoldDeviceSection(device);
-                                        uci.set('sheepfold', sectionName, 'mac', device.mac);
-                                        uci.set('sheepfold', sectionName, 'name', name);
-                                        uci.set('sheepfold', sectionName, 'ip', ip);
-                                        uci.set('sheepfold', sectionName, 'group', newGroup);
-                                        uci.set('sheepfold', sectionName, 'device_type', deviceType);
-                                        uci.set('sheepfold', sectionName, 'manual_device_type', deviceType === 'unknown' ? '0' : '1');
-                                        uci.set('sheepfold', sectionName, 'status', status);
-                                        /* SHEEPFOLD_AI_BEGIN */
-                                        uci.set('sheepfold', sectionName, 'activity_log_enabled', activityLogField.input.checked ? '1' : '0');
-                                        /* SHEEPFOLD_AI_END */
-
-                                        if (oldGroup === noRestrictionsGroupName() && newGroup !== noRestrictionsGroupName())
-                                                markNoRestrictionsAutoExcluded(sectionName);
-
-                                        if (status === 'allow')
-                                                updateMacList('allowlist', device.mac, true);
-                                        else if (status !== 'blocked')
-                                                updateMacList('allowlist', device.mac, false);
-
-                                        if (status === 'blocked')
-                                                updateMacList('blocklist', device.mac, true);
-                                        else if (status !== 'allow')
-                                                updateMacList('blocklist', device.mac, false);
-
-                                        if (staticLeaseField.input.checked) {
-                                                staticSectionName = ensureStaticDhcpSection(device);
-                                                uci.set('dhcp', staticSectionName, 'mac', device.mac);
-                                                uci.set('dhcp', staticSectionName, 'ip', ip);
-                                                uci.set('dhcp', staticSectionName, 'name', name);
-                                                configs.push('dhcp');
-                                        }
-
-                                        saveUciChanges(configs.filter(function (config, index) {
-                                                return configs.indexOf(config) === index;
-                                        })).then(function () {
-                                                return routerControl(['schedule-sync']).then(function (result) {
-                                                        return ensureRouterControlOk(result, _('Could not apply internet access rules.'));
-                                                });
-                                        }).then(function () {
-                                                notify(_('Device settings saved.'), 'info');
-                                                ui.hideModal();
-                                                window.setTimeout(function () {
-                                                        window.location.reload();
-                                                }, 700);
-                                        }, function () {
-                                                notify(_('Could not save device settings.'), 'warning');
-                                        });
-                                }
-                        }, _('Save'))
-                ])
-        ]);
+        deviceEditor.open({
+                groups: sheepfoldGroupOptions(),
+                notConfiguredGroup: NOT_CONFIGURED_GROUP,
+                inputControl: inputControl,
+                selectControl: selectControl,
+                deviceTypeControl: deviceTypeSelectControl,
+                checkboxControl: checkboxControl,
+                displayDeviceType: displayDeviceType,
+                displayId: formattedDeviceDisplayId,
+                settingLine: settingLine,
+                validate: function (payload) { return validateDeviceSettings(device, payload); },
+                persist: function (payload) { persistDeviceSettings(device, payload); }
+        }, device);
 }
 
 function deviceTable(rows, options) {
@@ -4537,12 +4184,14 @@ function saveGlobalOptions(options) {
         var usbOptions = {};
         var cloudOptions = {};
         var gdriveOptions = {};
+        var adguardOptions = {};
         var configs = ['sheepfold'];
 
         Object.keys(options).forEach(function (key) {
                 var usbParts = key.match(/^usb\.(.+)$/);
                 var cloudParts = key.match(/^cloud\.(.+)$/);
                 var gdriveParts = key.match(/^gdrive\.(.+)$/);
+                var adguardParts = key.match(/^adguard\.(.+)$/);
 
                 if (usbParts)
                         usbOptions[usbParts[1]] = options[key];
@@ -4550,6 +4199,8 @@ function saveGlobalOptions(options) {
                         cloudOptions[cloudParts[1]] = options[key];
                 else if (gdriveParts)
                         gdriveOptions[gdriveParts[1]] = options[key];
+                else if (adguardParts)
+                        adguardOptions[adguardParts[1]] = options[key];
                 else
                         globalOptions[key] = options[key];
         });
@@ -4595,6 +4246,13 @@ function saveGlobalOptions(options) {
                         uci.set('sheepfold', 'gdrive', 'authorized', '0');
                 Object.keys(gdriveOptions).forEach(function (option) {
                         uci.set('sheepfold', 'gdrive', option, gdriveOptions[option]);
+                });
+        }
+
+        if (Object.keys(adguardOptions).length) {
+                ensureSheepfoldNamedSection('adguard', 'integration');
+                Object.keys(adguardOptions).forEach(function (option) {
+                        uci.set('sheepfold', 'adguard', option, adguardOptions[option]);
                 });
         }
 
@@ -4926,6 +4584,71 @@ function globalFlagOptionField(label, option, defaultValue, hint) {
         return control.node;
 }
 
+function integrationUsesPodkop(mode) {
+        return mode === 'podkop' || mode === 'adguard_podkop';
+}
+
+function updateRouterIpv6Control(mode) {
+        var forced = integrationUsesPodkop(mode);
+
+        document.querySelectorAll('[data-router-ipv6-control]').forEach(function (input) {
+                input.checked = forced || settingValue('router_ipv6_disabled', '0') === '1';
+                input.disabled = forced;
+        });
+        document.querySelectorAll('[data-router-ipv6-note]').forEach(function (note) {
+                note.textContent = forced ?
+                        _('IPv6 is disabled automatically because the selected integration uses Podkop.') :
+                        _('Current Podkop releases do not provide complete IPv6 support. Enable this manually only when it is needed without Podkop.');
+        });
+}
+
+function syncRouterIpv6DraftForIntegration(mode) {
+        var current = settingValue('router_ipv6_disabled', '0');
+        var source = settingValue('router_ipv6_mode_source', 'default');
+
+        if (integrationUsesPodkop(mode)) {
+                if (current !== '1')
+                        setSettingsDraftOptions({
+                                router_ipv6_disabled: '1',
+                                router_ipv6_mode_source: 'auto_podkop'
+                        });
+                else if (source === 'default')
+                        setSettingsDraftOption('router_ipv6_mode_source', 'auto_podkop');
+        } else if (source === 'auto_podkop') {
+                setSettingsDraftOptions({
+                        router_ipv6_disabled: '0',
+                        router_ipv6_mode_source: 'default'
+                });
+        }
+
+        updateRouterIpv6Control(mode);
+}
+
+function routerIpv6Field() {
+        var mode = settingValue('integration_mode', 'none');
+        var forced = integrationUsesPodkop(mode);
+        var control = checkboxControl(
+                _('Disable IPv6 on the router'),
+                forced || settingValue('router_ipv6_disabled', '0') === '1',
+                null,
+                {
+                        'data-router-ipv6-control': '1',
+                        'disabled': forced ? 'disabled' : null,
+                        'change': function (ev) {
+                                setSettingsDraftOptions({
+                                        router_ipv6_disabled: ev.currentTarget.checked ? '1' : '0',
+                                        router_ipv6_mode_source: 'manual'
+                                });
+                        }
+                }
+        );
+
+        control.node.appendChild(E('small', { 'data-router-ipv6-note': '1' }, forced ?
+                _('IPv6 is disabled automatically because the selected integration uses Podkop.') :
+                _('Current Podkop releases do not provide complete IPv6 support. Enable this manually only when it is needed without Podkop.')));
+        return control.node;
+}
+
 function sectionFlagOptionField(section, label, option, defaultValue, hint) {
         var control = checkboxControl(label, sectionSettingValue(section, option, defaultValue || '0') === '1', hint, {
                 'change': function (ev) {
@@ -4943,20 +4666,45 @@ function sectionInputField(section, label, option, defaultValue, placeholder, hi
                 'value': sectionSettingValue(section, option, defaultValue || ''),
                 'placeholder': placeholder || ''
         });
+        var fieldControl = input;
+        var inputValue = function () {
+                return secret ? input.value : input.value.trim();
+        };
 
         input.addEventListener('input', function () {
-                setSettingsDraftSectionOption(section, option, input.value.trim());
+                setSettingsDraftSectionOption(section, option, inputValue());
         });
         input.addEventListener('keydown', function (ev) {
                 if (ev.key === 'Enter') {
                         ev.preventDefault();
-                        setSettingsDraftSectionOption(section, option, input.value.trim());
+                        setSettingsDraftSectionOption(section, option, inputValue());
                 }
         });
 
+        if (secret) {
+                fieldControl = E('span', { 'class': 'sf-secret-row' }, [
+                        input,
+                        E('button', {
+                                'class': 'sf-icon-action sf-secret-toggle',
+                                'type': 'button',
+                                'title': _('Show secret'),
+                                'aria-label': _('Show secret'),
+                                'click': function (ev) {
+                                        var visible;
+
+                                        ev.preventDefault();
+                                        visible = input.type === 'password';
+                                        input.type = visible ? 'text' : 'password';
+                                        ev.currentTarget.setAttribute('title', visible ? _('Hide secret') : _('Show secret'));
+                                        ev.currentTarget.setAttribute('aria-label', visible ? _('Hide secret') : _('Show secret'));
+                                }
+                        }, iconSvg('eye'))
+                ]);
+        }
+
         return E('label', { 'class': 'sf-field sf-field-wide' }, [
                 E('span', {}, label),
-                input,
+                fieldControl,
                 hint ? E('small', {}, hint) : ''
         ]);
 }
@@ -5006,6 +4754,95 @@ function globalInputOptionField(label, option, defaultValue, placeholder, hint, 
                 fieldControl,
                 hint ? E('small', {}, hint) : ''
         ]);
+}
+
+function siteFilteringIntegrationBox() {
+        var container = E('div', { 'class': 'sf-site-filter-settings' });
+
+        function rebuild() {
+                var backend = settingValue('site_filter_backend', 'auto');
+                var autoManage = settingValue('adguard_auto_manage', '1') === '1';
+                var backendSelect = E('select', {
+                        'class': 'cbi-input-select',
+                        'change': function (ev) {
+                                setSettingsDraftOption('site_filter_backend', ev.currentTarget.value);
+                                rebuild();
+                        }
+                }, [
+                        ['auto', _('Automatically (recommended)')],
+                        ['adguard', 'AdGuard Home'],
+                        ['sheepfold', _('Built-in Sheepfold tools')]
+                ].map(function (item) {
+                        return E('option', {
+                                'value': item[0],
+                                'selected': item[0] === backend ? 'selected' : null
+                        }, item[1]);
+                }));
+                var autoManageControl = checkboxControl(
+                        _('Automatic AdGuard Home management'),
+                        autoManage,
+                        _('Sheepfold adds and updates only its own filter. User filters and AdGuard Home settings are not overwritten.'),
+                        {
+                                'change': function (ev) {
+                                        setSettingsDraftOption('adguard_auto_manage', ev.currentTarget.checked ? '1' : '0');
+                                        rebuild();
+                                }
+                        }
+                );
+                var fields = [
+                        E('div', { 'class': 'sf-filter-backend-row' }, [
+                                E('label', { 'class': 'sf-field sf-field-wide sf-filter-backend-control' }, [
+                                        E('span', {}, _('Site filtering is performed through')),
+                                        backendSelect,
+                                        E('small', {}, _('Automatic mode uses AdGuard Home only when it is selected in the integration chain and Sheepfold confirms the managed filter. Otherwise the built-in filtering is used.'))
+                                ]),
+                                siteListStatus.compactPanel()
+                        ]),
+                        autoManageControl.node
+                ];
+
+                if (backend !== 'sheepfold' && autoManage) {
+                        fields.push(
+                                E('div', { 'class': 'sf-grid two sf-adguard-credentials' }, [
+                                        sectionInputField(
+                                                'adguard',
+                                                _('AdGuard Home address'),
+                                                'url',
+                                                'http://127.0.0.1:3000',
+                                                'http://127.0.0.1:3000',
+                                                _('Use the local AdGuard Home administration address without /control at the end.'),
+                                                false
+                                        ),
+                                        sectionInputField(
+                                                'adguard',
+                                                _('AdGuard Home username'),
+                                                'username',
+                                                '',
+                                                _('Optional'),
+                                                _('Leave both credential fields empty only when the local AdGuard Home API has no authentication.'),
+                                                false
+                                        ),
+                                        sectionInputField(
+                                                'adguard',
+                                                _('AdGuard Home password'),
+                                                'password',
+                                                '',
+                                                '',
+                                                _('The password is used only by the router for local API calls and is never shown in status output.'),
+                                                true
+                                        )
+                                ])
+                        );
+                } else if (!autoManage && backend !== 'sheepfold') {
+                        fields.push(E('p', { 'class': 'sf-note sf-note-warning' },
+                                _('Automatic management is off. Sheepfold will not change AdGuard Home and cannot confirm manually configured lists.')));
+                }
+
+                container.replaceChildren.apply(container, fields);
+        }
+
+        rebuild();
+        return container;
 }
 
 function appPortField() {
@@ -5510,21 +5347,24 @@ function saveUciChanges(configs) {
         });
 }
 
-function saveSheepfoldAccessChanges() {
-        return saveUciChanges(['sheepfold']).then(function () {
-                // Таблица уже показывает новое состояние, поэтому и nftables должен получить
-                // его сразу, а не через следующий цикл фоновой службы Sheepfold.
-                return routerControl(['schedule-sync']).then(function (result) {
-                        return ensureRouterControlOk(result, _('Could not apply internet access rules.'));
+function applySheepfoldAccessRuntime() {
+        // Таблица уже показывает новое состояние, поэтому и nftables должен получить
+        // его сразу, а не через следующий цикл фоновой службы Sheepfold.
+        return routerControl(['schedule-sync']).then(function (result) {
+                return ensureRouterControlOk(result, _('Could not apply internet access rules.'));
+        }).then(function () {
+                // Состав клиентских правил AdGuard Home зависит не только от доменов,
+                // но и от групп, статуса и IP устройства. Поэтому любой подтверждённый
+                // доступ пересобирает управляемый Sheepfold-фильтр сразу. §dompol
+                return routerControl(['site-lists-apply']).then(function (result) {
+                        ensureRouterControlOk(result, _('Could not apply site list policy.'));
+                        return siteListStatus.load(true).catch(function () { return null; });
                 });
-		}).then(function () {
-			// Перенос устройства в строгую группу должен сразу изменить реальное
-			// правило, но helper не перезапускает dnsmasq, если домены не менялись. §dompol
-			return routerControl(['site-lists-apply']).then(function (result) {
-				ensureRouterControlOk(result, _('Could not apply site list policy.'));
-				return siteListStatus.load(true).catch(function () { return null; });
-			});
-		});
+        });
+}
+
+function saveSheepfoldAccessChanges() {
+        return saveUciChanges(['sheepfold']).then(applySheepfoldAccessRuntime);
 }
 
 function buildRouterDevices(dhcpLeases, arpTable) {
@@ -6199,12 +6039,13 @@ return view.extend({
                         'change': function (ev) {
                                 var nextMode = ev.currentTarget.value;
 
-                                setSettingsDraftOptions({
-                                        integration_mode: nextMode,
-                                        integration_mode_source: 'manual',
-                                        integration_mode_user_set: '1'
-                                });
-                                modeNote.textContent = self.integrationModeNotes(nextMode);
+                                 setSettingsDraftOptions({
+                                         integration_mode: nextMode,
+                                         integration_mode_source: 'manual',
+                                         integration_mode_user_set: '1'
+                                 });
+                                 syncRouterIpv6DraftForIntegration(nextMode);
+                                 modeNote.textContent = self.integrationModeNotes(nextMode);
                         }
                 }, [
                         ['none', _('None')],
@@ -6224,25 +6065,21 @@ return view.extend({
                                 ])
                         ]),
                         E('div', { 'class': 'sf-grid two' }, [
-                                E('div', { 'class': 'sf-box sf-status-card sf-status-warning' }, [
+                                E('div', { 'class': 'sf-box sf-status-card' }, [
                                         E('h4', {}, _('AdGuard Home status')),
-                                        E('p', {}, _('AdGuard Home filters DNS requests after Sheepfold allows a device. It helps block ads, trackers, and unwanted domains.')),
-                                        E('strong', {}, 'API: pending'),
-                                        E('p', {}, _('AdGuard Home API check should use the local AdGuard Home API when credentials are configured.'))
+                                        E('p', {}, _('AdGuard Home filters DNS requests after Sheepfold allows a device. It helps block ads, trackers, and unwanted domains.'))
                                 ]),
-                                E('div', { 'class': 'sf-box sf-status-card sf-status-warning' }, [
+                                E('div', { 'class': 'sf-box sf-status-card' }, [
                                         E('h4', {}, _('Podkop status')),
-                                        E('p', {}, _('Podkop routes already allowed traffic according to its own routing rules. Sheepfold must not overwrite Podkop routing.')),
-                                        E('strong', {}, 'service/package: pending'),
-                                        E('p', {}, _('Podkop has no stable Sheepfold-facing API yet; detect package/service state and show conservative notes.'))
+                                        E('p', {}, _('Podkop routes already allowed traffic according to its own routing rules. Sheepfold does not change Podkop routes, marks, or sing-box settings.'))
                                 ])
                         ]),
                         E('div', { 'class': 'sf-note' }, [
                                 E('strong', {}, _('Mode notes')),
                                 modeNote
                         ]),
-                        E('div', { 'class': 'sf-note' }, _('Automatic router changes must show integration-specific notes and create/export a backup before applying.')),
-                        actionButton(_('Prepare integration settings'), 'danger', _('Integration setup must show planned changes, create an export, and require confirmation before applying.'))
+			settingsDivider(_('Site filtering')),
+			siteFilteringIntegrationBox()
                 ]);
         },
 
@@ -6385,8 +6222,10 @@ return view.extend({
                         timeAutomationField(_('Enable Wi-Fi automatically'), 'wifi_auto_enable_mode', 'wifi_auto_enable_time', '07:00'),
                         timeAutomationField(_('Disable Wi-Fi automatically'), 'wifi_auto_disable_mode', 'wifi_auto_disable_time', '23:00'),
                         settingsDivider(_('Router time and NTP')),
-                        routerTimeSettingsField(),
-                        settingsDivider(_('WPS button')),
+                         routerTimeSettingsField(),
+                         settingsDivider(_('Network compatibility')),
+                         routerIpv6Field(),
+                         settingsDivider(_('WPS button')),
                         wpsActionField(_('WPS short button press'), 'wps_short_press_action'),
                         wpsActionField(_('WPS long button press'), 'wps_long_press_action'),
                         settingsDivider(_('Router LEDs')),
@@ -6394,8 +6233,7 @@ return view.extend({
                         settingsDivider(_('Access priority')),
                         accessPriorityField(),
                         scheduleConflictPolicyField(),
-				settingsDivider(_('Site list sources')),
-				siteListStatus.panel(),
+			settingsDivider(_('Site list sources')),
 				siteListsUpdateIntervalField(),
                         globalTextareaOptionField(
                                 _('Whitelist sources'),
@@ -6414,6 +6252,7 @@ return view.extend({
                                 _('Could not save site blacklist sources.'),
                                 _('One source per line: name | URL. Use updateable external sources instead of manually maintaining a huge list.')
                         ),
+                        siteListStatus.panel(),
                         settingsDivider(_('Other actions')),
                         saveSelectGlobalField(_('Export mode'), 'export_mode', 'safe', [
                                 ['safe', _('Readable JSON without secrets')],

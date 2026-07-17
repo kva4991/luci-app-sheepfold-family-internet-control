@@ -4,6 +4,28 @@ set -eu
 COMMAND="${1:-check}"
 OWNER="kva4991"
 REPO="luci-app-sheepfold-family-internet-control"
+case "$0" in
+        */*) SCRIPT_DIR="${0%/*}" ;;
+        *) SCRIPT_DIR="/usr/libexec/sheepfold" ;;
+esac
+PACKAGE_MANAGER_HELPER="${SHEEPFOLD_PACKAGE_MANAGER_HELPER:-${SCRIPT_DIR}/sheepfold-package-manager}"
+if [ ! -r "$PACKAGE_MANAGER_HELPER" ]; then
+        printf 'Sheepfold package manager adapter was not found: %s\n' "$PACKAGE_MANAGER_HELPER" >&2
+        exit 1
+fi
+. "$PACKAGE_MANAGER_HELPER"
+PACKAGE_MANAGER="$(sheepfold_package_manager)" || {
+        printf 'OpenWrt package manager was not found (opkg or apk).\n' >&2
+        exit 1
+}
+case "$PACKAGE_MANAGER" in
+        opkg) PACKAGE_EXTENSION='ipk' ;;
+        apk) PACKAGE_EXTENSION='apk' ;;
+        *)
+                printf 'Unsupported OpenWrt package manager: %s\n' "$PACKAGE_MANAGER" >&2
+                exit 1
+                ;;
+esac
 PRODUCT_VARIANT="$(uci -q get sheepfold.global.product_variant 2>/dev/null || printf sheepfold)"
 case "$PRODUCT_VARIANT" in
         sheepfoldAi) ASSET_PACKAGE="luci-app-sheepfold-ai-support" ;;
@@ -14,7 +36,7 @@ WORK_DIR="${SHEEPFOLD_UPDATE_WORK_DIR:-/tmp/sheepfold/update}"
 RUNTIME_DIR="${SHEEPFOLD_UPDATE_RUNTIME_DIR:-/tmp/sheepfold}"
 API_URL="${SHEEPFOLD_UPDATE_API_URL:-https://api.github.com/repos/${OWNER}/${REPO}/releases/latest}"
 RELEASE_JSON="${WORK_DIR}/latest-release.json"
-PACKAGE_FILE="${WORK_DIR}/${ASSET_PACKAGE}-latest.ipk"
+PACKAGE_FILE="${WORK_DIR}/${ASSET_PACKAGE}-latest.${PACKAGE_EXTENSION}"
 LOG_FILE="${RUNTIME_DIR}/update.log"
 STATUS_FILE="${RUNTIME_DIR}/update.status"
 PID_FILE="${RUNTIME_DIR}/update.pid"
@@ -24,6 +46,7 @@ CONFIG_BACKUP="${WORK_DIR}/sheepfold-config-before-update"
 CONFIG_BACKUP_STATE="${WORK_DIR}/sheepfold-config-before-update.state"
 SHEEPFOLD_INIT="${SHEEPFOLD_UPDATE_SERVICE_INIT:-/etc/init.d/sheepfold}"
 RPCD_INIT="${SHEEPFOLD_UPDATE_RPCD_INIT:-/etc/init.d/rpcd}"
+JSHN_LIBRARY="${SHEEPFOLD_UPDATE_JSHN_LIBRARY:-/usr/share/libubox/jshn.sh}"
 LANGUAGE="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
 DOWNLOAD_TIMEOUT_SECONDS="${SHEEPFOLD_UPDATE_DOWNLOAD_TIMEOUT:-120}"
 MAX_DOWNLOAD_BYTES="${SHEEPFOLD_UPDATE_MAX_DOWNLOAD_BYTES:-67108864}"
@@ -50,7 +73,7 @@ text() {
                         no_downloader) printf '%s' "Не найден загрузчик. Установите uclient-fetch, curl или wget." ;;
                         download_too_large) printf 'Загрузка превышает безопасный размер %s байт.' "$1" ;;
                         no_tag) printf '%s' "Не удалось прочитать тег последнего stable-релиза с GitHub." ;;
-                        no_package) printf 'Последний stable-релиз %s не содержит пакет Sheepfold .ipk.' "$1" ;;
+                        no_package) printf 'Последний stable-релиз %s не содержит пакет Sheepfold для OpenWrt.' "$1" ;;
                         no_package_version) printf '%s' "Не удалось прочитать версию пакета Sheepfold из имени файла релиза." ;;
                         current_version) printf 'Текущая установленная версия: %s' "${1:-unknown}" ;;
                         latest_release) printf 'Последний stable-релиз: %s' "$1" ;;
@@ -60,7 +83,7 @@ text() {
                         no_updates) printf '%s' "Обновлений нет. Установленная версия уже актуальна." ;;
                         downloading_package) printf '%s' "Загрузка пакета..." ;;
                         empty_package) printf '%s' "Загруженный пакет пустой." ;;
-                        invalid_package) printf 'Загруженный IPK не прошёл проверку: %s.' "$1" ;;
+                        invalid_package) printf 'Загруженный пакет OpenWrt не прошёл проверку: %s.' "$1" ;;
                         untrusted_package_url) printf '%s' "GitHub вернул адрес пакета вне официального раздела релизов Sheepfold." ;;
                         installing_package) printf '%s' "Установка пакета..." ;;
                         install_failed) printf 'Установка пакета завершилась ошибкой, код %s.' "$1" ;;
@@ -86,7 +109,7 @@ text() {
                 no_downloader) printf '%s' "No downloader found. Install uclient-fetch, curl, or wget." ;;
                 download_too_large) printf 'Download exceeds the safe size of %s bytes.' "$1" ;;
                 no_tag) printf '%s' "Could not read latest stable release tag from GitHub." ;;
-                no_package) printf 'Latest stable release %s does not contain a Sheepfold .ipk package.' "$1" ;;
+                no_package) printf 'Latest stable release %s does not contain a Sheepfold package for OpenWrt.' "$1" ;;
                 no_package_version) printf '%s' "Could not read Sheepfold package version from release asset name." ;;
                 current_version) printf 'Current installed version: %s' "${1:-unknown}" ;;
                 latest_release) printf 'Latest stable release: %s' "$1" ;;
@@ -96,7 +119,7 @@ text() {
                 no_updates) printf '%s' "No updates available. Installed version is already current." ;;
                 downloading_package) printf '%s' "Downloading package..." ;;
                 empty_package) printf '%s' "Downloaded package is empty." ;;
-                invalid_package) printf 'Downloaded IPK validation failed: %s.' "$1" ;;
+                invalid_package) printf 'Downloaded OpenWrt package validation failed: %s.' "$1" ;;
                 untrusted_package_url) printf '%s' "GitHub returned a package URL outside the official Sheepfold release path." ;;
                 installing_package) printf '%s' "Installing package..." ;;
                 install_failed) printf 'Package installation failed with exit code %s.' "$1" ;;
@@ -177,19 +200,41 @@ fetch() {
 }
 
 current_version() {
-        opkg status "$INSTALLED_PACKAGE" 2>/dev/null | sed -n 's/^Version: //p' | sed -n '1p'
+        sheepfold_package_version "$INSTALLED_PACKAGE"
 }
 
 latest_package_version() {
-        basename "$PACKAGE_URL" | sed -n "s/^${ASSET_PACKAGE}_\\([^_]*\\)_all\\.ipk$/\\1/p" | sed -n '1p'
+        case "$PACKAGE_MANAGER" in
+                opkg)
+                        basename "$PACKAGE_URL" |
+                                sed -n "s/^${ASSET_PACKAGE}_\\([^_]*\\)_all\\.ipk$/\\1/p" |
+                                sed -n '1p'
+                        ;;
+                apk)
+                        basename "$PACKAGE_URL" |
+                                sed -n "s/^${ASSET_PACKAGE}-\\(.*\\)\\.apk$/\\1/p" |
+                                sed -n '1p'
+                        ;;
+        esac
 }
 
 trusted_package_url() {
-        # Одного JSON от API недостаточно: opkg получает только asset из официального release path (§updsafe).
+        # Одного JSON от API недостаточно: устанавливаем только asset из официального
+        # release path и с точным префиксом выбранной редакции (§updsafe).
         trusted_prefix="https://github.com/${OWNER}/${REPO}/releases/download/"
-        case "$PACKAGE_URL" in
-                "$trusted_prefix"*/"${ASSET_PACKAGE}_"*_all.ipk) return 0 ;;
-                *) return 1 ;;
+        case "$PACKAGE_MANAGER" in
+                opkg)
+                        case "$PACKAGE_URL" in
+                                "$trusted_prefix"*/"${ASSET_PACKAGE}_"*_all.ipk) return 0 ;;
+                                *) return 1 ;;
+                        esac
+                        ;;
+                apk)
+                        case "$PACKAGE_URL" in
+                                "$trusted_prefix"*/"${ASSET_PACKAGE}-"*.apk) return 0 ;;
+                                *) return 1 ;;
+                        esac
+                        ;;
         esac
 }
 
@@ -241,6 +286,8 @@ package_validation_reason() {
                         package_version) printf '%s' 'версия внутри пакета не совпадает с именем файла' ;;
                         architecture) printf '%s' 'неподдерживаемая архитектура пакета' ;;
                         data_archive) printf '%s' 'повреждён или небезопасен data.tar.gz' ;;
+                        apk_integrity) printf '%s' 'нарушена целостность APK-контейнера' ;;
+                        apk_metadata) printf '%s' 'не читаются метаданные APK-пакета' ;;
                         *) printf '%s' 'неизвестная ошибка структуры пакета' ;;
                 esac
                 return
@@ -255,6 +302,8 @@ package_validation_reason() {
                 package_version) printf '%s' 'embedded version does not match the asset filename' ;;
                 architecture) printf '%s' 'package architecture is unsupported' ;;
                 data_archive) printf '%s' 'data.tar.gz is damaged or unsafe' ;;
+                apk_integrity) printf '%s' 'APK container integrity check failed' ;;
+                apk_metadata) printf '%s' 'APK package metadata cannot be read' ;;
                 *) printf '%s' 'unknown package structure error' ;;
         esac
 }
@@ -264,7 +313,7 @@ validation_error() {
         rm -f "$WORK_DIR"/validate-*.$$ 2>/dev/null || true
 }
 
-validate_package() {
+validate_ipk_package() {
         outer_list="$WORK_DIR/validate-outer.$$.list"
         control_archive="$WORK_DIR/validate-control.$$.tar.gz"
         control_list="$WORK_DIR/validate-control.$$.list"
@@ -341,6 +390,68 @@ validate_package() {
         return 0
 }
 
+validate_apk_package() {
+        apk_metadata="$WORK_DIR/validate-apk.$$"
+        rm -f "$apk_metadata" 2>/dev/null || true
+
+        # --allow-untrusted допускает релизный ключ проекта, которого ещё нет в
+        # системном keyring, но verify всё равно проверяет структуру и хеши ADB.
+        if ! apk verify --allow-untrusted "$PACKAGE_FILE" >/dev/null 2>&1; then
+                validation_error apk_integrity
+                return 1
+        fi
+        if ! apk adbdump --allow-untrusted --format json "$PACKAGE_FILE" > "$apk_metadata" 2>/dev/null || \
+           [ ! -s "$apk_metadata" ] || \
+           [ ! -r "$JSHN_LIBRARY" ]; then
+                validation_error apk_metadata
+                return 1
+        fi
+
+        # json_load_file читает большой список payload-путей прямо из файла и не
+        # заталкивает весь adbdump в аргумент shell, где легко упереться в ARG_MAX.
+        . "$JSHN_LIBRARY"
+        json_init
+        if ! json_load_file "$apk_metadata" || ! json_select info; then
+                validation_error apk_metadata
+                return 1
+        fi
+        json_get_var package_name name
+        json_get_var package_version version
+        json_get_var package_architecture arch
+        json_select ..
+
+        if [ "$package_name" != "$INSTALLED_PACKAGE" ]; then
+                validation_error package_name
+                return 1
+        fi
+        if [ "$package_version" != "$LATEST_VERSION" ]; then
+                validation_error package_version
+                return 1
+        fi
+        if [ -z "$package_architecture" ]; then
+                validation_error architecture
+                return 1
+        fi
+        router_architecture="$(apk --print-arch 2>/dev/null || true)"
+        case "$package_architecture" in
+                all|noarch|"$router_architecture") ;;
+                *)
+                        validation_error architecture
+                        return 1
+                        ;;
+        esac
+
+        rm -f "$apk_metadata"
+        return 0
+}
+
+validate_package() {
+        case "$PACKAGE_MANAGER" in
+                opkg) validate_ipk_package ;;
+                apk) validate_apk_package ;;
+        esac
+}
+
 backup_config() {
         rm -f "$CONFIG_BACKUP" "$CONFIG_BACKUP_STATE"
         umask 077
@@ -383,7 +494,7 @@ version_is_newer() {
         [ -z "$current" ] && return 0
         [ -z "$latest" ] && return 1
 
-        opkg compare-versions "$latest" '>' "$current" >/dev/null 2>&1
+        sheepfold_package_is_newer "$latest" "$current"
 }
 
 read_release_info() {
@@ -391,7 +502,14 @@ read_release_info() {
         fetch "$API_URL" "$RELEASE_JSON"
 
         TAG="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RELEASE_JSON" | sed -n '1p')"
-        PACKAGE_URL="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*_all\.ipk\)".*/\1/p' "$RELEASE_JSON" | grep "/${ASSET_PACKAGE}_" | sed -n '1p')"
+        case "$PACKAGE_MANAGER" in
+                opkg)
+                        PACKAGE_URL="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*_all\.ipk\)".*/\1/p' "$RELEASE_JSON" | grep "/${ASSET_PACKAGE}_" | sed -n '1p')"
+                        ;;
+                apk)
+                        PACKAGE_URL="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\.apk\)".*/\1/p' "$RELEASE_JSON" | grep "/${ASSET_PACKAGE}-" | sed -n '1p')"
+                        ;;
+        esac
         LATEST_VERSION="$(latest_package_version)"
 
         if [ -z "${TAG:-}" ]; then
@@ -450,8 +568,8 @@ install_update() {
                 exit 1
         fi
 
-        # Не полагаемся на сообщение opkg о malformed package: до установки проверяем
-        # контейнер, метаданные и оба вложенных архива самостоятельно (§updsafe).
+        # Не полагаемся только на сообщение package manager: до установки проверяем
+        # контейнер и внутренние метаданные выбранного формата (§updsafe).
         if ! validate_package; then
                 cleanup_install_files
                 return 1
@@ -464,7 +582,7 @@ install_update() {
         fi
 
         say installing_package
-        if opkg install "$PACKAGE_FILE"; then
+        if sheepfold_package_install_file "$PACKAGE_FILE" 0; then
                 install_code=0
         else
                 install_code="$?"

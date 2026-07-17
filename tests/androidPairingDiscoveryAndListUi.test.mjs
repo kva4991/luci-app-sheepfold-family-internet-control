@@ -1,3 +1,8 @@
+/*
+ * Защищает контракт discovery/pairing Android и одинаковую модель выбора устройств
+ * в LuCI. Это статическая/модельная проверка без телефона и роутера; она не доказывает
+ * реальное HTTPS-сопряжение, которое остаётся live-router Android-сценарием.
+ */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,7 +65,8 @@ describe('Android pairing discovery and access-list UI', () => {
     assert.match(removeAction, /refreshUserListsWithoutPageReload/);
     assert.doesNotMatch(removeAction, /window\.location\.reload/);
     assert.match(overview, /data-metric/);
-    assert.match(overview, /function saveSheepfoldAccessChanges[\s\S]*schedule-sync/);
+    assert.match(overview, /function applySheepfoldAccessRuntime[\s\S]*schedule-sync[\s\S]*site-lists-apply/);
+    assert.match(overview, /function saveSheepfoldAccessChanges[\s\S]*applySheepfoldAccessRuntime/);
     assert.match(addModal, /persistDeviceListMembership/);
   });
 

@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+PACKAGE_MANAGER_HELPER="/usr/libexec/sheepfold/sheepfold-package-manager"
+[ ! -r "$PACKAGE_MANAGER_HELPER" ] || . "$PACKAGE_MANAGER_HELPER"
+
 uci_disable_logs() {
     uci -q set sheepfold.global.ai_individual_logs='0' 2>/dev/null || true
     uci -q commit sheepfold 2>/dev/null || true
@@ -21,15 +24,16 @@ openssl_works() {
 }
 
 if ! openssl_works; then
-    if ! command -v opkg >/dev/null 2>&1; then
+    if ! command -v sheepfold_package_manager >/dev/null 2>&1 ||
+       ! sheepfold_package_manager >/dev/null 2>&1; then
         uci_disable_logs
-        echo "opkg is unavailable; OpenSSL could not be installed." >&2
+        echo "The OpenWrt package manager is unavailable; OpenSSL could not be installed." >&2
         exit 1
     fi
 
-    opkg update >/dev/null 2>&1 || true
-    opkg install openssl-util >/dev/null 2>&1 || \
-        opkg install openssl >/dev/null 2>&1 || true
+    sheepfold_package_update_indexes >/dev/null 2>&1 || true
+    sheepfold_package_install_named openssl-util >/dev/null 2>&1 || \
+        sheepfold_package_install_named openssl >/dev/null 2>&1 || true
 fi
 
 if ! openssl_works; then

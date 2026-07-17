@@ -11,7 +11,7 @@ Before interpreting iterative owner feedback or writing a completion message, re
 - In LuCI Russian UI headings, keep the product word in English: `Sheepfold`.
 - Do not use `Овчарня` in public product text unless the owner explicitly asks to discuss the old/internal name.
 - Sheepfold builds two router packages from one shared source tree: `Sheepfold` and `Sheepfold - AI Support`, plus one parent APK and one child APK shared by both packages. Android product flavors for AI are forbidden. The APKs contain the small AI client but hide every AI-related screen until the connected router returns the positive server capability described in `docs/product-variants.ru.md` (§prodvar).
-- Standard Sheepfold IPK must not ship AI backend, AI prompts, provider-key settings, AI LuCI UI, or detailed per-device activity collection. The ordinary administrative/system event journal remains part of both IPKs. Never infer Android AI availability locally: missing/invalid capability means disabled.
+- Standard Sheepfold router packages must not ship AI backend, AI prompts, provider-key settings, AI LuCI UI, or detailed per-device activity collection. The ordinary administrative/system event journal remains part of both editions in either OpenWrt package format. Never infer Android AI availability locally: missing/invalid capability means disabled.
 
 Correct examples:
 
@@ -47,6 +47,7 @@ Avoid:
 ## Coding Style
 
 - Use camelCase for JavaScript/Kotlin variables, functions, object fields, and UI state names whenever the surrounding platform does not require another convention.
+- Use camelCase for test filenames, internal test identifiers, and test-category keys. Keep human-readable `describe()` and `it()` titles as natural phrases.
 - Variable names must tell a human reviewer what the value contains. For new project-owned local variables and private fields, treat 15 characters as a practical guideline rather than a hard limit. A clear longer name is better than a cryptic abbreviation or a refactor performed only to shorten the name. External contracts, generated names, constants, and platform-required identifiers are exempt (§pm3kq7r).
 - Keep OpenWRT/UCI/package keys in their native format, usually snake_case or uppercase Make variables, for example `app_port`, `ui_asset_version`, `PKG_RELEASE`, and `SHEEPFOLD_UI_ASSET_VERSION`.
 - Do not convert external API fields, UCI options, package metadata, Android resource names, or documented protocol keys to camelCase unless the external contract itself uses camelCase.
@@ -126,9 +127,13 @@ Avoid:
 
 - Use `rg` / `rg --files` as the default repository search tool. Do not recursively dump the whole tree or read every document when a focused search and §-tag can locate the relevant contract.
 - Use 7-Zip only to inspect or manually extract archives, APKs, and IPKs. Never use 7-Zip to build a Sheepfold `.ipk`; on Windows use `python scripts/build-test-ipk.py`, which preserves the OpenWrt gzip-tar layout and Unix modes.
-- Use `node --test <target>` while developing and `npm.cmd test` once before publication when the changed surface requires the full suite. In PowerShell prefer `npm.cmd` over `npm` if execution policy blocks `npm.ps1`.
+- Treat `.github/workflows/build-openwrt-packages.yml` as the canonical public package builder: OpenWrt 24.10 produces IPK and 25.12 produces a real apk-tools v3 package through the pinned official OpenWrt SDK Action. `scripts/build-test-ipk.py` is a fast test fixture, not a release builder; never obtain an OpenWrt APK by renaming or repacking an IPK (§owrtci1).
+- Keep Standard and AI Support preparation centralized in `scripts/sheepfold_variants.py`. Any change to variant markers, AI-only paths, release prefixes, or internal package identity must update both SDK-feed and archive-level tests before release (§prodvar, §owrtci1).
+- Use `node --test <target>` while developing, then run the relevant overlapping category from `docs/test-strategy.ru.md` (§testcat). Use `npm.cmd run test:list` to discover categories and `npm.cmd run test:category -- luci devices` to combine them without duplicate files. Run full `npm.cmd test` before push/PR/merge/release and after shared API/UCI/package/security contracts; do not repeat the long full suite after every narrow edit. In PowerShell prefer `npm.cmd` over `npm` if execution policy blocks `npm.ps1`.
+- Every new `tests/*.test.mjs` file must be assigned in `tests/categories.mjs`. Keep `tests/testCategories.test.mjs` green; do not place an IPK-building or long network test into `smoke`.
 - Use the checked-in `android\gradlew.bat` and `android-child\gradlew.bat`; do not require or invoke a global Gradle installation.
-- Use Git Bash for shell syntax/behavior checks, `gh` for GitHub Actions and PR evidence, and Windows OpenSSH `ssh`/`scp` for approved live-router checks. Do not install duplicate replacements unless a task demonstrates a missing capability.
+- Use Git Bash for shell syntax/behavior checks, `gh` for GitHub Actions and PR evidence, and the documented `tools/router-testing/` harness for approved live-router checks (§routerharness). After one-time SSH/DPAPI setup, prefer `npm.cmd run router:readOnly`, `router:fullSafe` and `router:frontend` over scattered manual `ssh`/`scp` commands. Do not install duplicate replacements unless a task demonstrates a missing capability.
+- Every new or meaningfully changed test file and test helper script must begin with a concise purpose note (§testwhy): what behavior or risk it verifies, why this level/technique is appropriate, what state it may change and restore, and what a passing result does not prove. Explain the test design rather than narrating code. Bring a touched legacy test into compliance; migrate untouched files gradually instead of creating an unrelated repository-wide comment-only diff.
 - The canonical Windows installer and readiness check are `tools\windows\setup.ps1` and `tools\windows\check.ps1`. Update their manifest, tests, documentation, and `§toolwin` references together when the tool contract changes.
 
 ## Agent Playbook
@@ -167,10 +172,11 @@ Avoid:
 
 ## Site Lists And AdGuard Home
 
-- Sheepfold built-in site allow/block lists are a fallback for routers without AdGuard Home.
-- If AdGuard Home is detected on the router, Sheepfold should explain that domain allow/block lists can be configured more flexibly in AdGuard Home and can be disabled in Sheepfold.
-- During installation or first setup, when AdGuard Home is installed, prefer not to enable Sheepfold duplicate site filtering silently. Show a clear user-facing notice instead.
-- Keep device access control in Sheepfold; do not move Sheepfold device allowlist/blocklist semantics into AdGuard Home. This rule is about domain/site lists only.
+- Sheepfold owns the selected site-list sources and policy. The policy may be executed by the built-in dnsmasq/nftables backend or by the single Sheepfold-managed AdGuard Home URL filter (§dompol).
+- If AdGuard Home is detected, recommend `site_filter_backend=auto`, explain the effective executor in LuCI, and show a verified status. An API failure must use the built-in fallback instead of displaying a false successful state.
+- Never enable a second independent copy of the same site policy silently. Automatic management may add, refresh, enable, or disable only Sheepfold's owned filter; it must preserve every user-created AdGuard Home filter and custom rule.
+- Keep device access control in Sheepfold; do not move Sheepfold device allowlist/blocklist semantics into AdGuard Home. AdGuard Home receives only the generated domain policy scoped to router-observed clients.
+- Do not silently expand the meaning of an already enabled `adguard_auto_manage=1`: it grants control only over Sheepfold's owned URL filter. Every future write to global protection, DNS, clients, DHCP, logs, TLS, rewrites, Safe Search, or blocked services needs its own explicit preview and confirmation. Read `docs/adguard-home-automatic-management-roadmap.ru.md` before extending this adapter (§aghplan).
 
 ## User Agreement And Privacy
 
@@ -335,8 +341,12 @@ Avoid:
 - Do not add several `config ... 'global'` sections in the same UCI file. LuCI and commands like `uci get sheepfold.global.*` can otherwise read or write the wrong section.
 - When renaming UCI sections, add an install/update migration in `postinst` so existing routers are fixed automatically.
 
-## OpenWRT Test Package Builds
+## OpenWRT Package Managers And Test Builds
 
+- Installed backend code must use `/usr/libexec/sheepfold/sheepfold-package-manager` for package detection, installed versions, named installs, local-file installs, removal, and version comparison. Do not add direct `opkg`/`apk` branches to each feature (§pkgmgr1).
+- OpenWrt 24.10 and older use `opkg`; OpenWrt 25.12 and newer use `apk` v3. If both commands exist, prefer the platform-native `opkg` on the older system. Never run a mass `opkg upgrade` or `apk upgrade` from Sheepfold.
+- `install.sh` may contain a minimal bootstrap copy of the adapter contract because the installed helper does not exist before the first installation. Keep that copy narrow and behaviorally covered; after installation, the shared adapter is the source of truth.
+- Release and live-router paths must keep `.ipk` and OpenWrt `.apk` distinct from Android APKs. Select assets by the exact OpenWrt package-name prefix, validate internal package name/version/architecture, and never obtain OpenWrt APKs by renaming IPKs.
 - Test `.ipk` files for this project must be built in the OpenWRT/ipkg-compatible format used by `opkg`: a gzip-compressed tar containing `./debian-binary`, `./data.tar.gz`, and `./control.tar.gz`.
 - Do not switch the local test builder to Debian `ar` container format unless it is verified on the target OpenWRT `opkg`; the Xiaomi AX3000T test router rejected that format as `Malformed package file`.
 
@@ -357,6 +367,7 @@ Avoid:
 
 - The LuCI setting is `Use together with` / `Использование совместно с`.
 - Supported integration modes are `none`, `adguard`, `podkop`, and `adguard_podkop`.
+- Current Podkop compatibility forces the visible `router_ipv6_disabled` setting on for `podkop` and `adguard_podkop`. Manage only Sheepfold's sysctl file, remember and restore previous kernel values, and never rewrite foreign network/DHCP/Podkop configuration for this feature. Revisit the rule when Podkop officially supports IPv6 (§ipv6pod).
 - Keep this setting: it defines the Sheepfold compatibility plan for DNS/routing diagnostics and safe apply-time behavior, not merely whether third-party packages are installed.
 - Do not model AdGuard Home and Podkop as mutually exclusive; they can be used together.
 - The installer must detect existing AdGuard Home and Podkop installations and choose the matching Sheepfold `integration_mode`.
@@ -398,6 +409,9 @@ Avoid:
 - Never interpret “configured entries exist but all are invalid” as an intentional empty list. Only an actually empty source setting may clear the resulting list. Retry a failed source after one day and notify administrators after three consecutive failed cycles without notification spam (§slstres).
 - Keep per-source status, limits, and failure reasons. Do not run multi-million-entry desktop/server filters on a router merely because an upstream project publishes them; choose resource-sized variants or delegate to AdGuard Home (§slstres).
 - Do not claim that site filtering works merely because sources download successfully. Verify the complete runtime path from cache to DNS/firewall and all four AdGuard Home/Podkop modes before presenting the feature as enforced (§slstres, §uirunfx).
+- Keep traffic topology and site-list execution separate: `integration_mode` describes Sheepfold/AdGuard Home/Podkop, while `site_filter_backend=auto|adguard|sheepfold` chooses who applies domain lists. Do not infer one setting solely from the other after the user has saved a choice (§dompol).
+- Automatic AdGuard Home management owns exactly one token-protected URL filter. Never edit `AdGuardHome.yaml`, call `filtering/set_rules`, or alter another filter. The official `filtering/set_url` body keeps `enabled`, `name`, and the new URL inside `data`; protect this shape with tests (§dompol).
+- AdGuard Home `$client` rules use router-observed IPv4. A MAC identifier works only when AdGuard Home itself runs DHCP, so refresh the owned feed after lease changes and fall back instead of claiming success when a required client has no current IPv4 (§dompol).
 - LuCI must expose `Whitelist sources` / `Источники белых списков` and `Site blacklist sources` / `Источники чёрного списка сайтов` in Settings -> Misc.
 - Groups may enable a “whitelist sources only” mode. This is different from device allowlist and must not override the device blocklist.
 - Site blacklist mode values: disabled, enabled for everyone, enabled for everyone except allowlist and administrators.

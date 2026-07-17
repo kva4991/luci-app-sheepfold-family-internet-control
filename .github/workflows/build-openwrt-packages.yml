@@ -1,0 +1,186 @@
+name: Build OpenWrt packages
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openwrt-packages-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
+
+jobs:
+  build:
+    name: ${{ matrix.edition }} / OpenWrt ${{ matrix.openwrt }} / ${{ matrix.packageFormat }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - edition: Standard
+            variant: sheepfold
+            openwrt: 24.10.7
+            sdkArch: aarch64_cortex-a53-24.10.7
+            packageFormat: ipk
+          - edition: AI Support
+            variant: sheepfoldAi
+            openwrt: 24.10.7
+            sdkArch: aarch64_cortex-a53-24.10.7
+            packageFormat: ipk
+          - edition: Standard
+            variant: sheepfold
+            openwrt: 25.12.5
+            sdkArch: aarch64_cortex-a53-25.12.5
+            packageFormat: apk
+          - edition: AI Support
+            variant: sheepfoldAi
+            openwrt: 25.12.5
+            sdkArch: aarch64_cortex-a53-25.12.5
+            packageFormat: apk
+
+    steps:
+      - name: Check out the exact commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare variant feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .build/openwrt-feed .build/sdk-output .build/release-assets
+          mkdir -p .build/openwrt-feed .build/sdk-output .build/release-assets
+          python3 scripts/prepare-openwrt-sdk-feed.py \
+            --variant "${{ matrix.variant }}" \
+            --out-dir .build/openwrt-feed
+
+      # v11 закреплён полным commit SHA: релизная сборка не должна незаметно
+      # измениться из-за обновления внешнего Action. §owrtci1
+      - name: Build with the official OpenWrt SDK
+        uses: openwrt/gh-action-sdk@7fc2640243284ecc44f4a9c3f749a61746ee02cb
+        env:
+          ARCH: ${{ matrix.sdkArch }}
+          ARTIFACTS_DIR: ${{ github.workspace }}/.build/sdk-output
+          BUILD_LOG: 1
+          CONTAINER: ghcr.io/openwrt/sdk
+          FEED_DIR: ${{ github.workspace }}/.build/openwrt-feed
+          FEEDNAME: sheepfold
+          INDEX: 0
+          KEY_BUILD: ${{ matrix.packageFormat == 'ipk' && secrets.OPENWRT_IPK_SIGNING_KEY || '' }}
+          PACKAGES: luci-app-sheepfold-family-internet-control
+          PRIVATE_KEY: ${{ matrix.packageFormat == 'apk' && secrets.OPENWRT_APK_PRIVATE_KEY || '' }}
+          V: s
+
+      - name: Verify OpenWrt APK with the SDK apk tool
+        if: matrix.packageFormat == 'apk'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$(find .build/sdk-output -type f \
+            -name 'luci-app-sheepfold-family-internet-control*.apk' -print -quit)"
+          test -n "$package"
+          docker run --rm --entrypoint /bin/sh \
+            -v "$PWD/$package:/package.apk:ro" \
+            sdk -ec '
+              tool=/builder/staging_dir/host/bin/apk
+              test -x "$tool"
+              "$tool" verify --allow-untrusted /package.apk >&2
+              "$tool" adbdump --allow-untrusted --format json /package.apk
+            ' > .build/apk-metadata.json
+          test -s .build/apk-metadata.json
+
+      - name: Collect the verified release file
+        shell: bash
+        run: |
+          set -euo pipefail
+          metadata_args=()
+          if [ "${{ matrix.packageFormat }}" = apk ]; then
+            metadata_args=(--apk-metadata .build/apk-metadata.json)
+          fi
+          python3 scripts/collect-openwrt-package.py \
+            --search-root .build/sdk-output \
+            --out-dir .build/release-assets \
+            --variant "${{ matrix.variant }}" \
+            --format "${{ matrix.packageFormat }}" \
+            --openwrt-version "${{ matrix.openwrt }}" \
+            --sdk-arch "${{ matrix.sdkArch }}" \
+            "${metadata_args[@]}"
+
+      - name: Upload matrix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-package-${{ matrix.variant }}-${{ matrix.packageFormat }}
+          path: .build/release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload SDK logs after a failed build
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-build-logs-${{ matrix.variant }}-${{ matrix.packageFormat }}
+          path: .build/sdk-output/logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+  bundle:
+    name: Bundle verified OpenWrt packages
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out manifest tooling
+        uses: actions/checkout@v4
+
+      - name: Download all matrix artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: openwrt-package-*
+          path: .build/release-bundle
+          merge-multiple: true
+
+      - name: Create checksums and build manifest
+        run: python3 scripts/create-openwrt-release-manifest.py --directory .build/release-bundle
+
+      - name: Upload complete OpenWrt bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: sheepfold-openwrt-packages
+          path: .build/release-bundle/*
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-release:
+    name: Attach packages to published release
+    if: github.event_name == 'release' && github.event.release.prerelease == false
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download complete OpenWrt bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: sheepfold-openwrt-packages
+          path: .build/release-bundle
+
+      - name: Upload packages and checksums to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "${{ github.event.release.tag_name }}" \
+            .build/release-bundle/*.ipk \
+            .build/release-bundle/*.apk \
+            .build/release-bundle/SHA256SUMS \
+            .build/release-bundle/openwrt-build-manifest.json \
+            --clobber

@@ -3,6 +3,30 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "test:list": "node scripts/run-test-category.mjs --list",
+    "test:category": "node scripts/run-test-category.mjs",
+    "test:smoke": "node scripts/run-test-category.mjs smoke",
+    "test:luci": "node scripts/run-test-category.mjs luci",
+    "test:access": "node scripts/run-test-category.mjs access",
+    "test:devices": "node scripts/run-test-category.mjs devices",
+    "test:sites": "node scripts/run-test-category.mjs sites",
+    "test:backend": "node scripts/run-test-category.mjs backend",
+    "test:backendFast": "node scripts/run-test-category.mjs backendFast",
+    "test:policySimulation": "node scripts/run-test-category.mjs policySimulation",
+    "test:networkIntegration": "node scripts/run-test-category.mjs networkIntegration",
+    "test:android": "node scripts/run-test-category.mjs android",
+    "test:security": "node scripts/run-test-category.mjs security",
+    "test:messaging": "node scripts/run-test-category.mjs messaging",
+    "test:ai": "node scripts/run-test-category.mjs ai",
+    "test:packaging": "node scripts/run-test-category.mjs packaging",
+    "test:tooling": "node scripts/run-test-category.mjs tooling",
+    "router:setup": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/setupRouterTest.ps1",
+    "router:readOnly": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runRouterTests.ps1 -Profile readOnly",
+    "router:install": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runRouterTests.ps1 -Profile install",
+    "router:writeSafe": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runRouterTests.ps1 -Profile writeSafe",
+    "router:fullSafe": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runRouterTests.ps1 -Profile fullSafe",
+    "router:frontend": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runFrontendTests.ps1",
+    "router:allSafe": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runAllRouterTests.ps1"
   }
 }

@@ -1,0 +1,151 @@
+# Категории автоматических тестов
+
+<!-- §testcat -->
+
+Этот документ отвечает на вопрос, какие автоматические тесты запускать при конкретной проблеме. Он не заменяет ручные сценарии из [`testing-cases.ru.md`](testing-cases.ru.md) и проверки на живом роутере из [`live-router-testing.ru.md`](live-router-testing.ru.md).
+
+<!-- §testwhy -->
+
+## Обязательная шапка теста
+
+Каждый новый или существенно изменённый test-файл и вспомогательный тестовый скрипт начинается с короткого объяснения:
+
+- какую пользовательскую функцию или риск регрессии он защищает;
+- почему выбран именно этот уровень проверки;
+- какое состояние тест может изменить и как восстанавливает его;
+- чего успешный тест не доказывает и какая следующая проверка остаётся нужна.
+
+Комментарий должен объяснять замысел конкретного теста, а не пересказывать вызовы и assertions. При содержательной правке старого теста его шапка приводится к этому правилу; не затронутые файлы можно переносить постепенно, без отдельного массового коммита из комментариев.
+
+## Основной принцип
+
+Тестовые категории намеренно пересекаются. Один файл может проверять несколько границ: например сопряжение относится к Android, устройствам и безопасности. При изменении двух областей запускаются обе категории одной командой; runner удалит повторы файлов.
+
+```powershell
+npm.cmd run test:category -- luci devices
+```
+
+Список категорий и число файлов:
+
+```powershell
+npm.cmd run test:list
+```
+
+Каноническая карта находится в `tests/categories.mjs`, runner — в `scripts/run-test-category.mjs`. Тест `tests/testCategories.test.mjs` не позволяет добавить новый `*.test.mjs` без категории или оставить ссылку на удалённый файл.
+
+## Категории
+
+| Команда | Когда запускать |
+| --- | --- |
+| `npm.cmd run test:smoke` | Быстрая проверка после небольшого изменения; исключает долгие HTTP/shell-стенды и сборку IPK |
+| `npm.cmd run test:luci` | Вкладки, таблицы, модалки, формы, переводы, CSS/JS LuCI, `overview.js` и frontend-модули |
+| `npm.cmd run test:access` | Белый/чёрный список устройств, расписания, группы, администраторы, временный доступ, приоритеты |
+| `npm.cmd run test:devices` | DHCP/ARP, автообнаружение, типы, ID, присутствие и сопряжение устройств |
+| `npm.cmd run test:sites` | Белые/чёрные списки сайтов, аварийно-полезные сайты, DNS/nftables и AdGuard Home; набор медленный |
+| `npm.cmd run test:backend` | Router backend, UCI, API, сервисы, импорт/экспорт и системные действия; набор широкий и может быть долгим |
+| `npm.cmd run test:backendFast` | Быстрые backend-контракты без долгих HTTP/DNS/firewall-стендов и без сборки IPK; основной выбор во время точечной разработки |
+| `npm.cmd run test:policySimulation` | Глубокие и долгие shell-сценарии классификатора устройств и вычислителя расписаний |
+| `npm.cmd run test:networkIntegration` | Долгие AdGuard Home, DNS, nftables и site-list стенды; запускать при изменении сетевой интеграции и перед контрольной точкой |
+| `npm.cmd run test:android` | Общие контракты родительского и детского APK; после Kotlin/XML-правок дополнительно нужен Gradle |
+| `npm.cmd run test:security` | Авторизация, TLS, rate limit, секреты, firewall-границы и безопасное обновление |
+| `npm.cmd run test:messaging` | Telegram, команды мессенджера и запрос ребёнка на временный доступ |
+| `npm.cmd run test:ai` | Провайдеры, настройки и видимость AI-функций; состав Standard/AI IPK проверяется отдельно категорией `packaging` |
+| `npm.cmd run test:packaging` | Makefile, Standard/AI test-IPK и SDK feed, GitHub Actions IPK/OpenWrt APK matrix, локализация, права, updater и product boundary |
+| `npm.cmd run test:tooling` | Windows-окружение, скрипты сборки, карта категорий и инфраструктура тестов |
+
+Произвольное объединение:
+
+```powershell
+npm.cmd run test:category -- access sites security
+```
+
+## Обычный цикл разработки
+
+1. До правки выбрать одну ближайшую категорию по месту ошибки.
+2. Во время работы запускать конкретный файл или даже один сценарий:
+
+   ```powershell
+   node --test tests/devicePresence.test.mjs
+   node --test --test-name-pattern "rejects duplicate" tests/adguardIntegration.test.mjs
+   ```
+
+3. После завершения запустить целую категорию подсистемы.
+4. Если правка пересекла соседний контракт, добавить вторую категорию.
+5. Выполнить `git diff --check` независимо от выбранной категории.
+
+Для backend-правки сначала использовать `test:backendFast`. Полный `test:backend` включает долгие сетевые стенды и глубокие симуляции, поэтому на обычном Windows-компьютере может выполняться больше пяти минут. Изменение классификатора устройств или вычислителя расписаний требует `test:policySimulation`; изменение AdGuard Home, DNS, nftables или загрузки внешних списков — `test:networkIntegration`. Перед PR/слиянием всё равно действует правило полного прогона.
+
+Имена файлов `*.test.mjs`, внутренних идентификаторов и категорий тестов оформляются в `camelCase`, как имена переменных. Человекочитаемые заголовки `describe()` и `it()` остаются обычными фразами: они предназначены для отчёта, а не для обращения из кода.
+
+Документация без изменения команд, контрактов и примеров кода обычно не требует Node-тестов. Достаточны проверка ссылок/тегов по месту и `git diff --check`.
+
+## Когда нужен полный прогон
+
+Команда полного набора остаётся:
+
+```powershell
+npm.cmd test
+```
+
+Полный набор обязателен:
+
+- перед `push`, созданием PR, слиянием в `main` и публикацией release;
+- перед передачей IPK/APK пользователю как новой проверяемой сборки;
+- после изменения общего API dispatcher, `sheepfold-router-control*`, схемы UCI, defaults/migration, firewall-приоритета или общей аутентификации;
+- после изменения `Makefile`, сборщика IPK, product variants, общих зависимостей или updater;
+- после изменения общей LuCI-композиции/сохранения, которое затрагивает несколько вкладок;
+- после рефакторинга shared helper, которым пользуются разные категории;
+- после изменения карты категорий или test runner;
+- когда целевой тест обнаружил расхождение в соседней подсистеме либо невозможно уверенно назвать одну-две затронутые области.
+
+Полный прогон не нужно повторять после каждой мелкой правки. Если после последнего успешного полного прогона изменились только документы, повтор не требуется; если изменился исполняемый код, решение принимается заново по правилам выше.
+
+## IPK-зависимые тесты на Windows/Codex
+
+Категория `packaging` может запускать Python-сборщик из Node. В ограниченной песочнице это иногда даёт `spawnSync python EPERM`, хотя Python исправен. Надёжный путь — заранее собрать оба пакета прямой командой и передать их тестам:
+
+К этой группе относятся прежде всего `productVariants.test.mjs`, `testIpkI18n.test.mjs`, `testIpkPermissions.test.mjs` и `updateTransportSafety.test.mjs`: без заранее переданного IPK они могут запускать `scripts/build-test-ipk.py` дочерним процессом. Это не тесты реального IPv6, firewall или роутера; им нужен только разрешённый запуск дочернего Python и запись временных архивов. Если среда Codex возвращает `EPERM` или `spawnSync(...).status === null`, запустить их вне песочницы либо использовать заранее собранные IPK по примеру ниже.
+
+`openWrtVariantFeed.test.mjs` аналогично запускает подготовщик SDK feed. В
+ограниченной среде сначала подготовить оба каталога прямым Python, затем передать
+их тесту:
+
+```powershell
+python scripts\prepare-openwrt-sdk-feed.py --variant sheepfold --out-dir .build\sdk-standard
+python scripts\prepare-openwrt-sdk-feed.py --variant sheepfoldAi --out-dir .build\sdk-ai
+$env:SHEEPFOLD_TEST_STANDARD_SDK_FEED=(Resolve-Path .build\sdk-standard).Path
+$env:SHEEPFOLD_TEST_AI_SDK_FEED=(Resolve-Path .build\sdk-ai).Path
+node --test tests\openWrtVariantFeed.test.mjs
+```
+
+```powershell
+python scripts/build-test-ipk.py --variant all --out-dir .build/category-ipk
+$env:SHEEPFOLD_TEST_IPK=(Get-ChildItem .build/category-ipk/luci-app-sheepfold-family-internet-control_*_all.ipk | Sort-Object LastWriteTime | Select-Object -Last 1).FullName
+$env:SHEEPFOLD_TEST_IPK_DIR=(Resolve-Path .build/category-ipk).Path
+npm.cmd run test:packaging
+```
+
+Перед использованием готового IPK убедиться, что его версия совпадает с `PKG_VERSION-PKG_RELEASE`. Не подставлять старый архив с тем же удобным именем после изменения package payload.
+
+## Android и живой роутер
+
+Категория `android` проверяет договорённости исходного кода, но не заменяет сборку:
+
+```powershell
+android\gradlew.bat -p android :app:assembleDebug
+android-child\gradlew.bat -p android-child :app:assembleDebug
+```
+
+Категории `sites`, `access` и `backend` не доказывают поведение конкретного железа. Firewall, Wi-Fi/WPS/LED, DHCP-события, DNS-путь и интеграционные топологии дополнительно проверяются по [`live-router-testing.ru.md`](live-router-testing.ru.md).
+
+Проверки на живом роутере не входят в `npm.cmd test`: они меняют настоящее состояние OpenWrt, Wi-Fi, firewall, sysctl и интеграций, поэтому запускаются вручную на отдельном тестовом роутере.
+
+## Правило поддержки карты
+
+При добавлении теста разработчик обязан:
+
+1. Добавить файл минимум в одну предметную категорию.
+2. Добавить в `smoke` только если он не собирает IPK, не поднимает долгий сетевой стенд и стабильно выполняется быстро.
+3. Не включать packaging-тест в обычную предметную категорию только из-за одного статического assertion внутри файла; тяжёлая сборка делает всю категорию тяжёлой.
+4. Обновить описание категории, если смысл набора изменился.
+5. Запустить `node --test tests/testCategories.test.mjs` и саму изменённую категорию.

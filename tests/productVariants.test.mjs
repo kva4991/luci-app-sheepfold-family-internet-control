@@ -1,3 +1,8 @@
+/*
+ * Защищает границу Standard/AI Support на уровне настоящего IPK-архива. Тест
+ * проверяет состав, но не установку opkg и не runtime LuCI; это отдельно делает
+ * безопасный контур живого роутера.
+ */
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -97,6 +102,7 @@ describe('product variant boundary §prodvar', () => {
       const standardDefaults = standard.data.get('usr/share/sheepfold/sheepfold.uci.defaults').toString('utf8');
       const aiDefaults = ai.data.get('usr/share/sheepfold/sheepfold.uci.defaults').toString('utf8');
       const standardOverview = standard.data.get('www/luci-static/resources/view/sheepfold/overview.js').toString('utf8');
+      const aiOverview = ai.data.get('www/luci-static/resources/view/sheepfold/overview.js').toString('utf8');
       const aiApi = ai.data.get('www/cgi-bin/sheepfold-api').toString('utf8');
       const aiLegacy = ai.data.get('usr/libexec/sheepfold/sheepfold-api-legacy').toString('utf8');
       const updater = ai.data.get('usr/libexec/sheepfold/sheepfold-updater').toString('utf8');
@@ -111,6 +117,24 @@ describe('product variant boundary §prodvar', () => {
       assert.match(aiDefaults, /option product_variant 'sheepfoldAi'/);
       assert.doesNotMatch(aiDefaults, /option product_variant 'sheepfold'/);
       assert.doesNotMatch(standardOverview, /AI assistant|deepseek_|gemini_|grok_|activity_log_enabled/);
+      assert.match(standardOverview, /require sheepfold\.features\.schedules\.editor as scheduleEditor/);
+      assert.match(aiOverview, /require sheepfold\.features\.schedules\.editor as scheduleEditor/);
+      assert.match(standardOverview, /require sheepfold\.features\.groups\.editor as groupEditor/);
+      assert.match(aiOverview, /require sheepfold\.features\.groups\.editor as groupEditor/);
+      assert.match(standardOverview, /require sheepfold\.features\.administrators\.editor as administratorEditor/);
+      assert.match(aiOverview, /require sheepfold\.features\.administrators\.editor as administratorEditor/);
+      assert.match(standardOverview, /require sheepfold\.features\.devices\.editor as deviceEditor/);
+      assert.match(aiOverview, /require sheepfold\.features\.devices\.editor as deviceEditor/);
+      assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/schedules/editor.js'));
+      assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/schedules/editor.js'));
+      assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/groups/editor.js'));
+      assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/groups/editor.js'));
+      assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/administrators/editor.js'));
+      assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/administrators/editor.js'));
+      assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/devices/editor.js'));
+      assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/devices/editor.js'));
+      assert.doesNotMatch(standard.data.get('www/luci-static/resources/sheepfold/features/devices/editor.js').toString('utf8'), /activity_log_enabled|activityLogEnabled|activityLogField/);
+      assert.doesNotMatch(standard.data.get('www/luci-static/resources/sheepfold/features/groups/editor.js').toString('utf8'), /activity_log_enabled|activityLogEnabled|activityLogField/);
       assert.doesNotMatch([...standard.data.values()].map((value) => value.toString('utf8')).join('\n'), /SHEEPFOLD_(?:AI|STANDARD)_(?:BEGIN|END)/);
       assert.match(aiApi, /\/ai-assistant\)/);
       assert.match(standardLegacy, /"capabilities":\{"aiAssistant":%s\}/);
@@ -132,7 +156,7 @@ describe('product variant boundary §prodvar', () => {
       assert.match(ai.control.get('control').toString('utf8'), /Depends:.*uhttpd-mod-tls.*curl/);
 
       const installer = readFileSync(join(root, 'install.sh'), 'utf8');
-      assert.match(installer, /opkg --force-reinstall install "\$PACKAGE_FILE"/);
+      assert.match(installer, /sheepfold_package_install_file "\$PACKAGE_FILE" 1/);
       assert.match(installer, /CURRENT_PACKAGE_VERSION.*TARGET_PACKAGE_VERSION/s);
       assert.match(installer, /"\$CURRENT_PACKAGE_VERSION" = "\$TARGET_PACKAGE_VERSION"/);
       assert.match(installer, /sheepfold\.config\.before-install/);

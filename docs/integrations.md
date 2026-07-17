@@ -44,7 +44,7 @@ adguard_podkop
 
 When the user selects an integration mode, LuCI should show integration-specific notes before applying changes.
 
-Automatic router changes are allowed only after explicit confirmation.
+Saving the integration settings is the explicit confirmation for Sheepfold-owned changes. Routine refreshes may then update the owned filter without another modal. Broad third-party configuration changes still require a separate preview and confirmation.
 
 This setting is needed. It is not a cosmetic label and it must not simply mean "AdGuard/Podkop is installed". It controls the compatibility plan Sheepfold should use when preparing firewall, DNS, domain allowlist, diagnostics, and troubleshooting notes.
 
@@ -60,6 +60,8 @@ Suggested confirmation copy:
 ```text
 Sheepfold can adjust router settings for this integration. Review the planned changes before applying them. A backup/export should be created first.
 ```
+
+For current Podkop releases, Sheepfold also enables `Disable IPv6 on the router`. The setting is visible in `Settings -> Misc`, is disabled by default without Podkop, and is forced on for `podkop` and `adguard_podkop`. Sheepfold owns only its sysctl file and restores the previous kernel values when automatic Podkop compatibility is no longer required. See [`podkop-ipv6.ru.md`](podkop-ipv6.ru.md) (§ipv6pod).
 
 Russian:
 
@@ -88,28 +90,30 @@ Recommended installation defaults:
 | Podkop only | `podkop` |
 | AdGuard Home and Podkop | `adguard_podkop` |
 
-Allowed automatic actions after confirmation:
+Allowed automatic actions after the user saves the settings:
 
 - check whether AdGuard Home is reachable;
 - check whether Podkop is installed/enabled;
 - detect Dnsmasq and firewall state;
 - create a Sheepfold config export before changes;
 - enable integration flags in Sheepfold config;
+- add, refresh, enable, or disable the single AdGuard Home URL filter owned by Sheepfold;
 - show commands/changes that still require manual action.
 
 Suggested apply-time skeleton:
 
 1. Read selected `integration_mode`.
 2. Run detection checks for AdGuard Home, Podkop, Dnsmasq, firewall4/nftables, and Sheepfold-owned chains/sets.
-3. Show a planned-changes preview in LuCI.
-4. Create/export a Sheepfold backup before applying.
-5. Apply only Sheepfold-owned UCI options and Sheepfold-owned firewall/nftables state automatically.
+3. Save the selected mode, site-filter backend, endpoint, and credentials only after normal LuCI Save.
+4. Apply only Sheepfold-owned UCI options, firewall/nftables state, and the owned AdGuard Home URL filter.
+5. Confirm the effective state by reading the API again; otherwise activate the built-in fallback.
 6. Mark checks that need manual action instead of silently changing third-party configs.
-7. Log the administrator, selected mode, checks, planned changes, result, and warnings with secrets masked.
+7. Log the selected mode, checks, result, and warnings without credentials or the private feed token.
 
 Avoid automatic destructive changes:
 
-- do not overwrite AdGuard Home config blindly;
+- do not edit AdGuardHome.yaml or replace custom filtering rules;
+- do not remove, disable, rename, or rewrite filters that are not identified by Sheepfold's private feed URL;
 - do not overwrite Podkop config blindly;
 - do not reset firewall rules outside Sheepfold-owned chains/sets;
 - do not restart major services without warning.
@@ -122,12 +126,23 @@ Sheepfold should not replace AdGuard Home. The intended chain is:
 2. AdGuard Home DNS filtering.
 3. Podkop routing.
 
-Possible integration points:
+Implemented integration points:
 
-- discover clients from AdGuard Home;
-- map AdGuard clients to Sheepfold devices by IP/MAC/name;
 - expose integration status in LuCI;
-- avoid taking over DNS rules in a way that breaks AdGuard Home.
+- read server/protection/version/DNS-port state and non-sensitive DNS configuration counts through the official read-only API;
+- verify reserved `.test` control rules through `filtering/check_host`, matching both exact rule text and the Sheepfold-owned filter ID;
+- fetch the private loopback feed through `uhttpd` and compare it byte-for-byte before asking AdGuard Home to refresh;
+- publish one token-protected loopback feed;
+- add, refresh, enable, and disable only the filter named `Sheepfold family site policy` through the official API;
+- scope per-device rules to current IPv4 addresses observed by the OpenWrt router;
+- fall back to built-in Sheepfold filtering when the API or managed filter cannot be confirmed.
+- retry the active policy periodically, notify once after three consecutive failures, and notify once after recovery.
+
+The private feed URL is ownership evidence. It is kept in a mode-`0600` file so a token rotation can disable the previous URL before enabling the new one. A filter name alone is never accepted as ownership evidence. Duplicate exact URLs are reported as a conflict instead of selecting one arbitrarily.
+
+The existing automatic-management consent is intentionally limited to this owned filter. Read-only server and DNS diagnostics do not broaden that write permission. The staged plan for verified rule checks, separately confirmed repair actions, Podkop DNS-chain guidance, and settings that must remain untouched is recorded in [the AdGuard Home automatic-management roadmap](adguard-home-automatic-management-roadmap.ru.md) (§aghplan).
+
+`integration_mode` describes the traffic topology. It is separate from `site_filter_backend=auto|adguard|sheepfold`, which selects the site-list executor. `adguard_auto_manage=1` is the default. When it is off, Sheepfold does not alter AdGuard Home and reports manual delegation as unverified.
 
 LuCI should display AdGuard Home status when this mode is selected or detected:
 
@@ -138,14 +153,17 @@ LuCI should display AdGuard Home status when this mode is selected or detected:
 - last check time;
 - whether credentials/API endpoint are configured in Sheepfold.
 
-Use the local AdGuard Home API only when credentials are configured by the parent/admin. Do not store or display the full password/token in logs or exports.
+Use the local AdGuard Home API only with credentials configured by the parent/admin. HTTP is accepted only for `127.0.0.1`, `localhost`, or `[::1]`; a remote AdGuard Home endpoint must use HTTPS. Curl receives Basic Auth through a mode-`0600` temporary config instead of command-line arguments. Status and logs never contain the password or private feed token. A safe backup masks the password; only the explicitly encrypted full backup may contain it.
 
 LuCI notes for this mode:
 
 - Sheepfold should block/allow devices before DNS filtering.
 - AdGuard Home remains responsible for DNS filtering.
 - Emergency-useful sites may need special care, because DNS filtering and domain allowlisting can overlap.
-- If AdGuard Home is not reachable, show a warning and do not enable automatic mode silently.
+- If AdGuard Home is not reachable or has filtering disabled, show the reason and use built-in filtering rather than reporting a false successful state.
+- A confirmed API and URL filter are not proof that LAN clients actually use AdGuard Home for DNS. Until an end-to-end check exists, LuCI must show `filter confirmed, client DNS path not checked` as a warning rather than full success.
+- `filtering/check_host` confirms the AdGuard Home engine decision only. Its query is restricted to Sheepfold's fixed `.test` domains and, where needed, one router-observed IPv4 client; it must not become a generic host-check proxy.
+- Do not use a MAC address in `$client` rules unless AdGuard Home itself is the DHCP server. Sheepfold therefore uses router-observed IPv4 addresses and refreshes its owned feed after lease changes.
 
 Useful external reference:
 

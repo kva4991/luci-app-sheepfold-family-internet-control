@@ -1,3 +1,8 @@
+/*
+ * Защищает визуальный редактор расписаний и совпадение его UCI-контракта с
+ * реальным evaluator/firewall. Тест не открывает LuCI, поэтому загрузка модулей
+ * и геометрия окна дополнительно проверяются browser smoke на живом роутере.
+ */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -7,6 +12,7 @@ import { spawnSync } from 'node:child_process';
 const overview = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js', 'utf8');
 const scheduleModel = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/model.js', 'utf8');
 const scheduleView = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js', 'utf8');
+const scheduleEditor = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/editor.js', 'utf8');
 const styles = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/sheepfold.css', 'utf8');
 const defaults = readFileSync('package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/sheepfold.uci.defaults', 'utf8');
 const makefile = readFileSync('package/luci-app-sheepfold-family-internet-control/Makefile', 'utf8');
@@ -106,7 +112,8 @@ describe('Schedule editor and access priority UI', () => {
   });
 
   it('edits and persists recurring rules without forcing deletion', () => {
-    assert.match(overview, /function showScheduleEditor\(section, copyMode\)/);
+    assert.match(overview, /function showScheduleEditor\(section, copyMode\)[\s\S]*scheduleEditor\.open/);
+    assert.match(scheduleEditor, /function open\(deps, section, copyMode\)/);
     assert.match(overview, /setUciList\(secName, 'time_ranges', draft\.timeRanges\.map/);
     assert.match(overview, /uci\.set\('sheepfold', section, option, values\)/);
     assert.match(overview, /uci\.set\('sheepfold', secName, 'enabled', draft\.enabled \? '1' : '0'\)/);
@@ -121,8 +128,11 @@ describe('Schedule editor and access priority UI', () => {
     assert.match(scheduleModel, /if \(end < start\)\s+end \+= 1440/);
     assert.match(scheduleModel, /\[-week, 0, week\]/);
     assert.match(overview, /scheduleModel\.windowsOverlap/);
-    assert.match(overview, /dayBox\.querySelectorAll\('\[data-schedule-day\]:checked'\)/);
-    assert.doesNotMatch(overview, /document\.querySelectorAll\('\[data-schedule-day\]:checked'\)/);
+    assert.match(scheduleEditor, /dayBox\.querySelectorAll\('\[data-schedule-day\]:checked'\)/);
+    assert.doesNotMatch(scheduleEditor, /document\.querySelectorAll\('\[data-schedule-day\]:checked'\)/);
+    assert.match(overview, /timeToMinutes: scheduleModel\.timeToMinutes/);
+    assert.doesNotMatch(overview, /(^|[^.])\btimeToMinutes\(/m);
+    assert.doesNotMatch(overview, /\bscheduleRanges\(/);
   });
 
   it('persists and enforces the selected schedule conflict outcome', () => {

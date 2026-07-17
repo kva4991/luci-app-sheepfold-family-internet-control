@@ -10,12 +10,16 @@ UCI_HELPER="${SHEEPFOLD_DOMAIN_POLICY_UCI_HELPER:-uci}"
 DNSMASQ_BIN="${SHEEPFOLD_DOMAIN_POLICY_DNSMASQ_BIN:-dnsmasq}"
 DNSMASQ_INIT="${SHEEPFOLD_DOMAIN_POLICY_DNSMASQ_INIT:-/etc/init.d/dnsmasq}"
 FIREWALL_HELPER="${SHEEPFOLD_DOMAIN_POLICY_FIREWALL_HELPER:-/usr/libexec/sheepfold/sheepfold-firewall}"
+ADGUARD_HELPER="${SHEEPFOLD_ADGUARD_HELPER:-/usr/libexec/sheepfold/sheepfold-adguard}"
 NOTIFICATION_HELPER="${SHEEPFOLD_NOTIFICATION_HELPER:-/usr/libexec/sheepfold/sheepfold-admin-notification}"
 LOG_HELPER="${SHEEPFOLD_LOG_HELPER:-/usr/libexec/sheepfold/sheepfold-log}"
 MAX_CONFIG_BYTES="${SHEEPFOLD_DOMAIN_POLICY_MAX_CONFIG_BYTES:-33554432}"
 MAX_LINE_BYTES="${SHEEPFOLD_DOMAIN_POLICY_MAX_LINE_BYTES:-900}"
 LOCK_WAIT_SECONDS="${SHEEPFOLD_DOMAIN_POLICY_LOCK_WAIT_SECONDS:-15}"
 LOCK_DIR="$RUNTIME_DIR/apply.lock"
+ADGUARD_RESULT_REASON=''
+ADGUARD_FALLBACK=0
+ADGUARD_CLEANUP_FAILED=0
 
 case "$MAX_CONFIG_BYTES:$MAX_LINE_BYTES:$LOCK_WAIT_SECONDS" in
 	*[!0-9:]*) echo 'Invalid domain policy numeric limit' >&2; exit 2 ;;
@@ -103,6 +107,32 @@ integration_mode() {
 	printf '%s' "$im_mode"
 }
 
+site_filter_backend() {
+	sfb_backend="$(uci_get sheepfold.global.site_filter_backend auto)"
+	case "$sfb_backend" in auto|adguard|sheepfold) ;; *) sfb_backend=auto ;; esac
+	printf '%s' "$sfb_backend"
+}
+
+adguard_auto_manage() {
+	[ "$(uci_get sheepfold.global.adguard_auto_manage 1)" = 1 ] && printf 1 || printf 0
+}
+
+integration_uses_adguard() {
+	case "$1" in adguard|adguard_podkop) return 0 ;; *) return 1 ;; esac
+}
+
+adguard_status_value() {
+	key="$1"
+	[ -x "$ADGUARD_HELPER" ] || return 0
+	"$ADGUARD_HELPER" status 2>/dev/null | sed -n "s/^$key=//p" | sed -n '1p'
+}
+
+status_text_value() {
+	stv_text="$1"
+	stv_key="$2"
+	printf '%s\n' "$stv_text" | sed -n "s/^$stv_key=//p" | sed -n '1p'
+}
+
 site_blocklist_mode() {
 	sbm_mode="$(uci_get sheepfold.global.site_blocklist_mode disabled)"
 	case "$sbm_mode" in disabled|all|except_allowlist_admins) ;; *) sbm_mode=disabled ;; esac
@@ -141,6 +171,14 @@ write_state() {
 	ws_reason="$7"
 	ws_config_path="${8:-}"
 	ws_tmp="$ws_file.tmp.$$"
+	ws_adguard_status=''
+	[ ! -x "$ADGUARD_HELPER" ] || ws_adguard_status="$($ADGUARD_HELPER status 2>/dev/null || true)"
+	case "$ws_backend" in
+		dnsmasq) ws_effective_backend=sheepfold ;;
+		adguard) ws_effective_backend=adguard ;;
+		disabled|waiting_for_lists|unsupported|error) ws_effective_backend="$ws_backend" ;;
+		*) ws_effective_backend=unknown ;;
+	esac
 	{
 		printf 'backend=%s\n' "$(safe_value "$ws_backend")"
 		printf 'integration_mode=%s\n' "$(safe_value "$ws_integration")"
@@ -148,6 +186,38 @@ write_state() {
 		printf 'allowlist_ready=%s\n' "$ws_allow_ready"
 		printf 'blocklist_ready=%s\n' "$ws_block_ready"
 		printf 'reason=%s\n' "$(safe_value "$ws_reason")"
+		printf 'requested_backend=%s\n' "$(site_filter_backend)"
+		printf 'effective_backend=%s\n' "$(safe_value "$ws_effective_backend")"
+		printf 'adguard_auto_manage=%s\n' "$(adguard_auto_manage)"
+		printf 'adguard_reason=%s\n' "$(safe_value "$ADGUARD_RESULT_REASON")"
+		printf 'adguard_fallback=%s\n' "$ADGUARD_FALLBACK"
+		printf 'adguard_cleanup_failed=%s\n' "$ADGUARD_CLEANUP_FAILED"
+		# Диагностика копируется одним снимком: так UI видит согласованное состояние,
+		# а helper не запускается отдельно для каждого поля. §aghplan
+		printf 'adguard_server_running=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" server_running)")"
+		printf 'adguard_protection_enabled=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" protection_enabled)")"
+		printf 'adguard_server_version=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" server_version)")"
+		printf 'adguard_dns_port=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" dns_port)")"
+		printf 'adguard_dns_address_count=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" dns_address_count)")"
+		printf 'adguard_dns_info_available=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" dns_info_available)")"
+		printf 'adguard_dns_info_reason=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" dns_info_reason)")"
+		printf 'adguard_upstream_count=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" upstream_count)")"
+		printf 'adguard_fallback_count=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" fallback_count)")"
+		printf 'adguard_bootstrap_count=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" bootstrap_count)")"
+		printf 'adguard_filter_status_checked=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" filter_status_checked)")"
+		printf 'adguard_engine_checked=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" engine_checked)")"
+		printf 'adguard_engine_check_reason=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" engine_check_reason)")"
+		printf 'adguard_engine_checks_required=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" engine_checks_required)")"
+		printf 'adguard_engine_checks_passed=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" engine_checks_passed)")"
+		printf 'adguard_managed_filter_id=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" managed_filter_id)")"
+		printf 'adguard_managed_filter_matches=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" managed_filter_matches)")"
+		printf 'adguard_consecutive_failures=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" consecutive_failures)")"
+		printf 'adguard_first_failed_at=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" first_failed_at)")"
+		printf 'adguard_last_failed_at=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" last_failed_at)")"
+		printf 'adguard_last_failure_reason=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" last_failure_reason)")"
+		printf 'adguard_health_notified=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" health_notified)")"
+		printf 'adguard_dns_path_status=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" dns_path_status)")"
+		printf 'adguard_dns_path_reason=%s\n' "$(safe_value "$(status_text_value "$ws_adguard_status" dns_path_reason)")"
 		printf 'config_path=%s\n' "$(safe_value "$ws_config_path")"
 		printf 'applied_at=%s\n' "$(date +%s)"
 	} > "$ws_tmp"
@@ -241,6 +311,8 @@ clear_local_policy() {
 	clp_integration="$2"
 	clp_requested="$3"
 	clp_reason="$4"
+	clp_allow_ready="${5:-0}"
+	clp_block_ready="${6:-0}"
 	clp_conf_dir="$(dnsmasq_conf_dir)" || {
 		write_state "$STATUS_FILE" error "$clp_integration" "$clp_requested" 0 0 invalid_confdir ''
 		return 1
@@ -286,7 +358,8 @@ clear_local_policy() {
 		return 1
 	fi
 	rm -f "$clp_backup" "$clp_active_backup"
-	write_state "$STATUS_FILE" "$clp_backend" "$clp_integration" "$clp_requested" 0 0 "$clp_reason" "$clp_target"
+	write_state "$STATUS_FILE" "$clp_backend" "$clp_integration" "$clp_requested" \
+		"$clp_allow_ready" "$clp_block_ready" "$clp_reason" "$clp_target"
 	return 0
 }
 
@@ -408,26 +481,98 @@ apply_dnsmasq_policy() {
 
 apply_policy() {
 	ap_integration="$(integration_mode)"
+	ap_filter_backend="$(site_filter_backend)"
+	ap_adguard_auto="$(adguard_auto_manage)"
 	ap_block_mode="$(site_blocklist_mode)"
 	ap_allow_requested=0
 	allowlist_policy_requested && ap_allow_requested=1
 	ap_requested=0
 	[ "$ap_allow_requested" = 1 ] && ap_requested=1
 	[ "$ap_block_mode" != disabled ] && ap_requested=1
+	ADGUARD_RESULT_REASON=''
+	ADGUARD_FALLBACK=0
+	ADGUARD_CLEANUP_FAILED=0
 
 	if [ "$ap_requested" = 0 ]; then
+		if [ "$ap_adguard_auto" = 1 ] && [ -x "$ADGUARD_HELPER" ]; then
+			if ! "$ADGUARD_HELPER" disable >/dev/null 2>&1; then
+				ADGUARD_RESULT_REASON="$(adguard_status_value reason)"
+				[ -n "$ADGUARD_RESULT_REASON" ] || ADGUARD_RESULT_REASON=adguard_cleanup_failed
+				ADGUARD_CLEANUP_FAILED=1
+			fi
+		elif [ "$(adguard_status_value reason)" = active ]; then
+			ADGUARD_RESULT_REASON=manual_cleanup_required
+			ADGUARD_CLEANUP_FAILED=1
+		fi
 		clear_local_policy disabled "$ap_integration" 0 disabled
 		return $?
 	fi
 
-	case "$ap_integration" in
-		adguard|adguard_podkop)
-			# AdGuard остаётся единственным владельцем DNS-фильтрации. Sheepfold не
-			# переписывает его API или YAML без отдельного согласия владельца. §dompol
-			clear_local_policy adguard "$ap_integration" 1 delegated_to_adguard
-			return $?
+	ap_try_adguard=0
+	case "$ap_filter_backend" in
+		adguard)
+			if integration_uses_adguard "$ap_integration"; then
+				if [ "$ap_adguard_auto" = 1 ]; then
+					ap_try_adguard=1
+				else
+					ADGUARD_RESULT_REASON=manual_unverified
+					clear_local_policy adguard "$ap_integration" 1 manual_unverified
+					return $?
+				fi
+			else
+				ADGUARD_RESULT_REASON=topology_without_adguard
+				ADGUARD_FALLBACK=1
+			fi
+			;;
+		auto)
+			if integration_uses_adguard "$ap_integration"; then
+				if [ "$ap_adguard_auto" = 1 ]; then
+					ap_try_adguard=1
+				else
+					ADGUARD_RESULT_REASON=manual_unverified
+					clear_local_policy adguard "$ap_integration" 1 manual_unverified
+					return $?
+				fi
+			fi
+			;;
+		sheepfold)
+			if [ "$ap_adguard_auto" != 1 ] && [ "$(adguard_status_value reason)" = active ]; then
+				ADGUARD_RESULT_REASON=manual_cleanup_required
+				ADGUARD_CLEANUP_FAILED=1
+			fi
 			;;
 	esac
+
+	if [ "$ap_try_adguard" = 1 ]; then
+		if [ -x "$ADGUARD_HELPER" ] && "$ADGUARD_HELPER" sync >/dev/null 2>&1; then
+			ap_adguard_allow="$(adguard_status_value allowlist_ready)"
+			ap_adguard_block="$(adguard_status_value blocklist_ready)"
+			[ "$ap_adguard_allow" = 1 ] || ap_adguard_allow=0
+			[ "$ap_adguard_block" = 1 ] || ap_adguard_block=0
+			ADGUARD_RESULT_REASON=active
+			if clear_local_policy adguard "$ap_integration" 1 active "$ap_adguard_allow" "$ap_adguard_block"; then
+				log_event "DNS-политика списков сайтов применена через AdGuard Home"
+				return 0
+			fi
+			"$ADGUARD_HELPER" disable >/dev/null 2>&1 || true
+			return 1
+		fi
+
+		ADGUARD_RESULT_REASON="$(adguard_status_value reason)"
+		[ -n "$ADGUARD_RESULT_REASON" ] || ADGUARD_RESULT_REASON=adguard_helper_unavailable
+		ADGUARD_FALLBACK=1
+	fi
+
+	# Встроенный backend остаётся страховкой: ошибка API AdGuard не должна оставлять
+	# семью ни без фильтрации, ни с ложной зелёной плашкой в LuCI. §dompol
+	if [ "$ap_adguard_auto" = 1 ] && [ -x "$ADGUARD_HELPER" ]; then
+		# После сбоя sync фильтр выключается ради безопасного fallback, но серия сбоев
+		# должна сохраниться до уведомления и последующего восстановления. §aghplan
+		if ! SHEEPFOLD_ADGUARD_PRESERVE_HEALTH=1 "$ADGUARD_HELPER" disable >/dev/null 2>&1; then
+			[ -n "$ADGUARD_RESULT_REASON" ] || ADGUARD_RESULT_REASON=adguard_cleanup_failed
+			ADGUARD_CLEANUP_FAILED=1
+		fi
+	fi
 
 	if ! dnsmasq_supports_nftset; then
 		clear_local_policy unsupported "$ap_integration" 1 dnsmasq_nftset_unavailable
@@ -443,8 +588,8 @@ show_status() {
 	if [ -r "$STATUS_FILE" ]; then
 		cat "$STATUS_FILE"
 	else
-		printf 'backend=unknown\nintegration_mode=%s\nrequested=0\nallowlist_ready=0\nblocklist_ready=0\nreason=not_applied\nconfig_path=\napplied_at=\n' \
-			"$(integration_mode)"
+		printf 'backend=unknown\nintegration_mode=%s\nrequested=0\nallowlist_ready=0\nblocklist_ready=0\nreason=not_applied\nrequested_backend=%s\neffective_backend=unknown\nadguard_auto_manage=%s\nadguard_reason=\nadguard_fallback=0\nadguard_cleanup_failed=0\nadguard_server_running=\nadguard_protection_enabled=\nadguard_server_version=\nadguard_dns_port=\nadguard_dns_address_count=\nadguard_dns_info_available=\nadguard_dns_info_reason=\nadguard_upstream_count=\nadguard_fallback_count=\nadguard_bootstrap_count=\nadguard_filter_status_checked=\nadguard_engine_checked=\nadguard_engine_check_reason=not_checked\nadguard_engine_checks_required=0\nadguard_engine_checks_passed=0\nadguard_managed_filter_id=\nadguard_managed_filter_matches=0\nadguard_consecutive_failures=0\nadguard_first_failed_at=\nadguard_last_failed_at=\nadguard_last_failure_reason=\nadguard_health_notified=0\nadguard_dns_path_status=not_checked\nadguard_dns_path_reason=client_probe_required\nconfig_path=\napplied_at=\n' \
+			"$(integration_mode)" "$(site_filter_backend)" "$(adguard_auto_manage)"
 	fi
 }
 

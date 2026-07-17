@@ -1,3 +1,8 @@
+/*
+ * Симулирует сбои, усечение и восстановление внешних источников списков сайтов во
+ * временном каталоге. Тест защищает атомарный cache/retry, но не доказывает доступность
+ * конкретного URL из сети пользователя и фактическое применение DNS/firewall.
+ */
 import {
   chmodSync,
   mkdtempSync,
@@ -291,12 +296,31 @@ esac
       .map((name) => readFileSync(join(state, name), 'utf8'));
     assert.ok(failures.some((entry) => /^reason=suspicious_shrink$/m.test(entry)));
 
+    const rejectedStatus = runUpdater('status', commonEnv);
+    assert.equal(rejectedStatus.status, 0, rejectedStatus.stderr || rejectedStatus.stdout);
+    assert.match(rejectedStatus.stdout, /^source_count=1$/m);
+    assert.match(rejectedStatus.stdout, /^source_1_kind=allowlist$/m);
+    assert.match(rejectedStatus.stdout, /^source_1_label=School list$/m);
+    assert.match(rejectedStatus.stdout, /^source_1_status=error$/m);
+    assert.match(rejectedStatus.stdout, /^source_1_cached_count=20$/m);
+    assert.match(rejectedStatus.stdout, /^source_1_reason=suspicious_shrink$/m);
+    assert.match(rejectedStatus.stdout, /^source_1_can_accept_shrink=1$/m);
+    assert.match(rejectedStatus.stdout, /^source_1_previous_count=20$/m);
+    assert.match(rejectedStatus.stdout, /^source_1_candidate_count=2$/m);
+    assert.doesNotMatch(rejectedStatus.stdout, /https:\/\/lists\.test\/school/);
+
     const accepted = runUpdater(['update', '--accept-shrink'], {
       ...commonEnv,
       LIST_FILE: posix(relative(repoRoot, shortList)),
     });
     assert.equal(accepted.status, 0, accepted.stderr || accepted.stdout);
     assert.equal(readFileSync(cache, 'utf8'), 'entry-1.example\nentry-2.example\n');
+
+    const acceptedStatus = runUpdater('status', commonEnv);
+    assert.equal(acceptedStatus.status, 0, acceptedStatus.stderr || acceptedStatus.stdout);
+    assert.match(acceptedStatus.stdout, /^source_1_status=ok$/m);
+    assert.match(acceptedStatus.stdout, /^source_1_cached_count=2$/m);
+    assert.match(acceptedStatus.stdout, /^source_1_can_accept_shrink=0$/m);
   });
 
   it('keeps the previous aggregate when valid sources exceed the router budget', () => {

@@ -174,7 +174,7 @@ submit() {
 	umask 077
 	trap 'rm -f "$payload_file" "$response_file"' EXIT INT TERM
 
-	# jshn входит в базовый стек OpenWrt/libubox и корректно экранирует произвольный
+	# Пакет jshn ставит shell-библиотеку libubox и корректно экранирует произвольный
 	# пользовательский текст. Ручная склейка JSON здесь ломалась бы на кавычках и переносах.
 	. /usr/share/libubox/jshn.sh
 	json_init

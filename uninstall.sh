@@ -5,6 +5,7 @@ PACKAGE="luci-app-sheepfold-family-internet-control"
 REPORT="/tmp/sheepfold-uninstall-report.txt"
 STAMP="$(date +%Y%m%d-%H%M%S 2>/dev/null || echo unknown-time)"
 BACKUP_DIR="/root/sheepfold-backup-${STAMP}"
+PACKAGE_MANAGER_HELPER="/usr/libexec/sheepfold/sheepfold-package-manager"
 
 : > "${REPORT}"
 
@@ -31,10 +32,36 @@ if [ ! -r /etc/openwrt_release ]; then
     exit 1
 fi
 
-if ! command -v opkg >/dev/null 2>&1; then
-    log "ERROR: opkg was not found."
+if [ -r "${PACKAGE_MANAGER_HELPER}" ]; then
+    . "${PACKAGE_MANAGER_HELPER}"
+else
+    # Удаление должно работать и после частично повреждённой установки, когда
+    # общий helper уже потерян, но системный package manager ещё доступен.
+    sheepfold_package_manager() {
+        if command -v opkg >/dev/null 2>&1; then printf '%s\n' opkg
+        elif command -v apk >/dev/null 2>&1; then printf '%s\n' apk
+        else return 127
+        fi
+    }
+    sheepfold_package_is_installed() {
+        case "$(sheepfold_package_manager)" in
+            opkg) opkg status "$1" >/dev/null 2>&1 ;;
+            apk) apk info -e "$1" >/dev/null 2>&1 ;;
+        esac
+    }
+    sheepfold_package_remove() {
+        case "$(sheepfold_package_manager)" in
+            opkg) opkg remove "$@" ;;
+            apk) apk del "$@" ;;
+        esac
+    }
+fi
+
+if ! PACKAGE_MANAGER="$(sheepfold_package_manager 2>/dev/null)"; then
+    log "ERROR: OpenWrt package manager was not found."
     exit 1
 fi
+log "Package manager: ${PACKAGE_MANAGER}"
 
 mkdir -p "${BACKUP_DIR}"
 log "Backup directory: ${BACKUP_DIR}"
@@ -59,11 +86,11 @@ else
     log "Sheepfold init script was not found."
 fi
 
-if opkg status "${PACKAGE}" >/dev/null 2>&1; then
+if sheepfold_package_is_installed "${PACKAGE}"; then
     log "Removing package, keeping user settings and client lists."
-    run opkg remove "${PACKAGE}"
+    run sheepfold_package_remove "${PACKAGE}"
 else
-    log "Package is not installed according to opkg."
+    log "Package is not installed according to ${PACKAGE_MANAGER}."
 fi
 
 if [ -r "${BACKUP_DIR}/sheepfold.config" ] && [ ! -e /etc/config/sheepfold ]; then

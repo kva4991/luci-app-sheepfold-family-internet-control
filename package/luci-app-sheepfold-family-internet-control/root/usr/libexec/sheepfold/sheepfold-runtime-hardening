@@ -21,6 +21,8 @@ DEVICE_PRESENCE="$(path /usr/libexec/sheepfold/sheepfold-device-presence)"
 DEVICE_RECLASSIFY="$(path /usr/libexec/sheepfold/sheepfold-device-reclassify)"
 DHCP_SIGNALS="$(path /etc/hotplug.d/dhcp/90-sheepfold-device-signals)"
 LED_CONTROL="$(path /usr/libexec/sheepfold/sheepfold-led-control)"
+IPV6_CONTROL="$(path /usr/libexec/sheepfold/sheepfold-ipv6-control)"
+PACKAGE_MANAGER="$(path /usr/libexec/sheepfold/sheepfold-package-manager)"
 PAIR_ACTIVATE="$(path /usr/libexec/sheepfold/sheepfold-pair-activate)"
 PAIR_DEVICE="$(path /usr/libexec/sheepfold/sheepfold-pair-device)"
 PAIR_COMMON="$(path /usr/libexec/sheepfold/sheepfold-pair-common)"
@@ -34,12 +36,20 @@ SCHEDULE_EVALUATOR="$(path /usr/libexec/sheepfold/sheepfold-schedule-evaluator)"
 EMERGENCY_SITES="$(path /usr/libexec/sheepfold/sheepfold-emergency-sites)"
 SITE_LISTS="$(path /usr/libexec/sheepfold/sheepfold-site-lists)"
 DOMAIN_POLICY="$(path /usr/libexec/sheepfold/sheepfold-domain-policy)"
+ADGUARD_ADAPTER="$(path /usr/libexec/sheepfold/sheepfold-adguard)"
+ADGUARD_FEED="$(path /www/cgi-bin/sheepfold-adguard-list)"
+VARIANT_REQUIRED=""
+VARIANT_EXECUTABLES=""
+# SHEEPFOLD_AI_BEGIN
 AI_GATE="$(path /usr/libexec/sheepfold/sheepfold-ai-gate)"
 AI_HANDLER="$(path /usr/libexec/sheepfold/sheepfold-ai-handler)"
 ACTIVITY_LOG="$(path /usr/libexec/sheepfold/sheepfold-activity-log)"
+OPENSSL_ENSURE="$(path /usr/libexec/sheepfold/sheepfold-openssl-ensure)"
+VARIANT_REQUIRED="$AI_GATE $AI_HANDLER $ACTIVITY_LOG $OPENSSL_ENSURE"
+VARIANT_EXECUTABLES="$VARIANT_REQUIRED"
+# SHEEPFOLD_AI_END
 MAINTENANCE_WINDOW="$(path /usr/libexec/sheepfold/sheepfold-maintenance-window)"
 KEY_DERIVE="$(path /usr/libexec/sheepfold/sheepfold-key-derive)"
-OPENSSL_ENSURE="$(path /usr/libexec/sheepfold/sheepfold-openssl-ensure)"
 USB_STORAGE="$(path /usr/libexec/sheepfold/sheepfold-usb-storage)"
 WELL_KNOWN_GENERATOR="$(path /www/.well-known/sheepfold.json.sh)"
 ACL="$(path /usr/share/rpcd/acl.d/luci-app-sheepfold-family-internet-control.json)"
@@ -55,10 +65,11 @@ for required in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
     "$DEVICE_MDNS_UCODE" "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" \
-    "$DHCP_SIGNALS" "$LED_CONTROL" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+    "$DHCP_SIGNALS" "$LED_CONTROL" "$IPV6_CONTROL" "$PACKAGE_MANAGER" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
     "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" \
-    "$FIREWALL" "$SCHEDULE_EVALUATOR" "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$AI_GATE" "$AI_HANDLER" \
-    "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$OPENSSL_ENSURE" \
+    "$FIREWALL" "$SCHEDULE_EVALUATOR" "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" \
+    "$ADGUARD_ADAPTER" "$ADGUARD_FEED" $VARIANT_REQUIRED \
+    "$MAINTENANCE_WINDOW" "$KEY_DERIVE" \
     "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$ACL" "$PRIVACY_NOTICE" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND" \
     "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
@@ -69,11 +80,11 @@ done
 for executable in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
-    "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
+    "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" "$PACKAGE_MANAGER" \
     "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$FIREWALL" "$SCHEDULE_EVALUATOR" \
-    "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$AI_GATE" \
-    "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" "$KEY_DERIVE" \
-    "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
+    "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$ADGUARD_ADAPTER" "$ADGUARD_FEED" \
+    "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" $VARIANT_EXECUTABLES \
+    "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
@@ -89,10 +100,19 @@ grep -q 'sheepfold-api-legacy' "$CGI" || die "public CGI does not delegate throu
 grep -q '\[ "\$path_info" = "/pair-token" \]' "$CGI" || die "public CGI does not return 404 for pair-token"
 ! grep -q '^generate_pair_token_json()' "$CGI" || die "pair-token generator is present in public CGI"
 ! grep -q '^[[:space:]]*/pair-token)' "$CGI" || die "pair-token route is present in public CGI"
+# SHEEPFOLD_AI_BEGIN
 grep -q 'AI_HANDLER=' "$CGI" || die "role-aware AI handler is not connected"
+# SHEEPFOLD_AI_END
 grep -q '/router-info|/pair-status)' "$CGI" || die "diagnostic routes are not intercepted"
 grep -q 'query_token_forbidden' "$CGI" || die "Bearer token is still accepted in query string"
 grep -q 'legacy_settings_writer_disabled' "$CGI" || die "legacy untyped settings writer remains enabled"
+
+# AdGuard adapter владеет только своей URL-лентой и не заменяет правила пользователя. §dompol
+grep -q '/control/filtering/add_url' "$ADGUARD_ADAPTER" || die "AdGuard managed-filter creation is missing"
+grep -q '/control/filtering/set_url' "$ADGUARD_ADAPTER" || die "AdGuard managed-filter toggle is missing"
+! grep -q '/control/filtering/set_rules' "$ADGUARD_ADAPTER" || die "AdGuard user rules can be overwritten"
+grep -q 'REMOTE_ADDR' "$ADGUARD_FEED" || die "AdGuard feed is not restricted to loopback"
+grep -q 'requested_token' "$ADGUARD_FEED" || die "AdGuard feed token check is missing"
 
 # Pairing не создаёт администратора и повторно проверяет blocklist.
 grep -q 'PAIR_DEVICE=.*/sheepfold-pair-device' "$CONTROL" || die "pair-admin-device is not intercepted"
@@ -192,6 +212,7 @@ grep -q 'system.\$SECTION.sheepfold_managed' "$CUDY_FIX_INSTALL" || die "LED fix
 grep -q 'find_equivalent_section' "$CUDY_FIX_INSTALL" || die "LED fix does not preserve existing equivalent settings"
 grep -q 'system.\$SECTION.sheepfold_managed' "$CUDY_FIX_UNINSTALL" || die "LED fix rollback does not verify ownership"
 
+# SHEEPFOLD_AI_BEGIN
 # AI gate проверяет идентичность, роль, согласие и квоту серверными данными.
 grep -q 'device_identity_mismatch' "$AI_GATE" || die "AI device identity verification is missing"
 grep -q 'client_role_mismatch' "$AI_GATE" || die "AI role verification is missing"
@@ -201,27 +222,33 @@ grep -q 'privileged_context_forbidden' "$AI_GATE" || die "AI privileged context 
 grep -q 'Проверенная роль: ребёнок' "$AI_HANDLER" || die "child AI prompt is missing"
 grep -q 'Обезличенное состояние роутера' "$AI_HANDLER" || die "AI diagnostics masking is missing"
 
-# Журналы и ключи должны быть транзакционными.
+# Журнал активности входит только в AI Support.
 grep -q 'sheepfold.log' "$ACTIVITY_LOG" || die "explicit activity-log filename format is missing"
 grep -q 'restore_staged_logs' "$ACTIVITY_LOG" || die "activity-log rollback is missing"
 ! grep -q 'mtime "+7"' "$ACTIVITY_LOG" || die "hard-coded seven-day retention remains"
+# SHEEPFOLD_AI_END
+
+# Общие ключи и хранилища должны быть транзакционными.
 grep -q '.key-derive.lock' "$KEY_DERIVE" || die "key initialization lock is missing"
 grep -q 'extroot_not_implemented_safely' "$USB_STORAGE" || die "unsafe automatic extroot remains enabled"
 grep -q 'PRIVACY_NOTICE_SOURCE' "$USB_STORAGE" || die "USB privacy notice is not copied after mount"
 
 # LuCI не получает общий read/write wildcard на runtime-каталог.
 ! grep -q '"/tmp/sheepfold/\*"' "$ACL" || die "broad runtime ACL wildcard remains"
+# SHEEPFOLD_AI_BEGIN
 grep -q 'sheepfold-openssl-ensure' "$ACL" || die "OpenSSL verification helper is absent from LuCI ACL"
 grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable individual logs"
+# SHEEPFOLD_AI_END
 
 for script in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
     "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
     "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$FIREWALL" "$SCHEDULE_EVALUATOR" \
-    "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$PAIR_API" "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-    "$AI_GATE" "$AI_HANDLER" "$ACTIVITY_LOG" "$MAINTENANCE_WINDOW" \
-    "$KEY_DERIVE" "$OPENSSL_ENSURE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
+    "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$ADGUARD_ADAPTER" "$ADGUARD_FEED" \
+    "$PAIR_API" "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+    $VARIANT_EXECUTABLES "$MAINTENANCE_WINDOW" \
+    "$KEY_DERIVE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
     /bin/sh -n "$script" || die "shell syntax error in $script"
 done

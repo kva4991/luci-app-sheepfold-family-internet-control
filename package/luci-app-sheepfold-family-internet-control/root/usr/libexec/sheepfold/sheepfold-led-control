@@ -4,6 +4,9 @@ set -eu
 LEGACY="/usr/libexec/sheepfold/sheepfold-router-control-legacy"
 PROFILE_ROOT="/usr/share/sheepfold/router-profiles"
 INSTALL_LOCK="/tmp/sheepfold/led-dependency-install.lock"
+PACKAGE_MANAGER_HELPER="/usr/libexec/sheepfold/sheepfold-package-manager"
+
+[ ! -r "$PACKAGE_MANAGER_HELPER" ] || . "$PACKAGE_MANAGER_HELPER"
 
 board_name() {
     if [ -r /tmp/sysinfo/board_name ]; then
@@ -69,7 +72,8 @@ dependency_installed() {
     package="$1"
     command_name="$(dependency_command 2>/dev/null || true)"
 
-    opkg status "$package" 2>/dev/null | grep -q '^Status:.* installed' || return 1
+    command -v sheepfold_package_is_installed >/dev/null 2>&1 || return 1
+    sheepfold_package_is_installed "$package" || return 1
     [ -z "$command_name" ] || command -v "$command_name" >/dev/null 2>&1
 }
 
@@ -124,19 +128,20 @@ install_dependency() {
         return 0
     fi
 
-    command -v opkg >/dev/null 2>&1 || {
-        echo "opkg is unavailable." >&2
+    command -v sheepfold_package_manager >/dev/null 2>&1 &&
+        sheepfold_package_manager >/dev/null 2>&1 || {
+        echo "The OpenWrt package manager is unavailable." >&2
         return 3
     }
 
     acquire_install_lock
-    if ! opkg update; then
+    if ! sheepfold_package_update_indexes; then
         release_install_lock
         echo "Could not update package lists." >&2
         return 4
     fi
 
-    if ! opkg install "$package"; then
+    if ! sheepfold_package_install_named "$package"; then
         release_install_lock
         echo "Could not install $package." >&2
         return 5

@@ -1,0 +1,1166 @@
+#!/bin/sh
+set -eu
+
+COMMAND="${1:-status}"
+SITE_LIST_DIR="${SHEEPFOLD_SITE_LIST_RUNTIME_DIR:-/tmp/sheepfold/site-lists}"
+RUNTIME_DIR="${SHEEPFOLD_ADGUARD_RUNTIME_DIR:-/tmp/sheepfold/adguard}"
+STATUS_FILE="$RUNTIME_DIR/status"
+ACTIVE_FEED="$RUNTIME_DIR/filter.txt"
+CANDIDATE_FEED="$RUNTIME_DIR/filter.candidate"
+TOKEN_FILE="${SHEEPFOLD_ADGUARD_TOKEN_FILE:-/etc/sheepfold/adguard-feed.token}"
+OWNED_URL_FILE="${SHEEPFOLD_ADGUARD_OWNED_URL_FILE:-/etc/sheepfold/adguard-owned-feed.url}"
+HEALTH_FILE="${SHEEPFOLD_ADGUARD_HEALTH_FILE:-$RUNTIME_DIR/health.state}"
+NOTIFICATION_HELPER="${SHEEPFOLD_NOTIFICATION_HELPER:-/usr/libexec/sheepfold/sheepfold-admin-notification}"
+UCI_HELPER="${SHEEPFOLD_ADGUARD_UCI_HELPER:-uci}"
+CURL_BIN="${SHEEPFOLD_ADGUARD_CURL_BIN:-curl}"
+JSHN_LIB="${SHEEPFOLD_ADGUARD_JSHN_LIB:-/usr/share/libubox/jshn.sh}"
+MAX_FEED_BYTES="${SHEEPFOLD_ADGUARD_MAX_FEED_BYTES:-33554432}"
+MAX_API_BYTES="${SHEEPFOLD_ADGUARD_MAX_API_BYTES:-8388608}"
+CONNECT_TIMEOUT="${SHEEPFOLD_ADGUARD_CONNECT_TIMEOUT:-5}"
+GET_TIMEOUT="${SHEEPFOLD_ADGUARD_GET_TIMEOUT:-20}"
+POST_TIMEOUT="${SHEEPFOLD_ADGUARD_POST_TIMEOUT:-30}"
+FILTER_NAME='Sheepfold family site policy'
+CONTROL_BLOCK_DOMAIN='sheepfold-policy-check.test'
+CONTROL_ALLOW_DOMAIN='sheepfold-emergency-check.test'
+CONTROL_STRICT_DOMAIN='sheepfold-strict-check.test'
+CONTROL_BLOCK_RULE='||sheepfold-policy-check.test^$important'
+CONTROL_ALLOW_RULE='@@||sheepfold-emergency-check.test^$important'
+LOCK_DIR="$RUNTIME_DIR/sync.lock"
+
+case "$MAX_FEED_BYTES" in ''|*[!0-9]*) MAX_FEED_BYTES=33554432 ;; esac
+[ "$MAX_FEED_BYTES" -ge 1024 ] || MAX_FEED_BYTES=1024
+case "$MAX_API_BYTES" in ''|*[!0-9]*) MAX_API_BYTES=8388608 ;; esac
+[ "$MAX_API_BYTES" -ge 1024 ] || MAX_API_BYTES=1024
+case "$CONNECT_TIMEOUT" in ''|*[!0-9]*) CONNECT_TIMEOUT=5 ;; esac
+case "$GET_TIMEOUT" in ''|*[!0-9]*) GET_TIMEOUT=20 ;; esac
+case "$POST_TIMEOUT" in ''|*[!0-9]*) POST_TIMEOUT=30 ;; esac
+[ "$CONNECT_TIMEOUT" -ge 1 ] && [ "$CONNECT_TIMEOUT" -le 60 ] || CONNECT_TIMEOUT=5
+[ "$GET_TIMEOUT" -ge 1 ] && [ "$GET_TIMEOUT" -le 120 ] || GET_TIMEOUT=20
+[ "$POST_TIMEOUT" -ge 1 ] && [ "$POST_TIMEOUT" -le 120 ] || POST_TIMEOUT=30
+
+mkdir -p "$RUNTIME_DIR"
+chmod 700 "$RUNTIME_DIR" 2>/dev/null || true
+
+ADGUARD_REASON='not_checked'
+SERVER_RUNNING=0
+PROTECTION_ENABLED=0
+SERVER_VERSION=''
+DNS_PORT=0
+DNS_ADDRESS_COUNT=0
+DNS_INFO_AVAILABLE=0
+DNS_INFO_REASON='not_checked'
+UPSTREAM_COUNT=0
+FALLBACK_COUNT=0
+BOOTSTRAP_COUNT=0
+ENGINE_CHECKED=0
+ENGINE_CHECK_REASON='not_checked'
+ENGINE_CHECKS_REQUIRED=0
+ENGINE_CHECKS_PASSED=0
+FILTER_STATUS_CHECKED=0
+DNS_PATH_STATUS='not_checked'
+DNS_PATH_REASON='client_probe_required'
+FILTERING_ENABLED=0
+FILTER_FOUND=0
+FILTER_ENABLED=0
+FILTER_RULES=0
+FILTER_ID=0
+FILTER_MATCHES=0
+FILTER_NAME_MATCH=0
+ALLOWLIST_READY=0
+BLOCKLIST_READY=0
+RULE_COUNT=0
+HTTP_CODE=000
+
+safe_value() {
+	printf '%s' "${1:-}" | tr '\n\r\t=' '    ' | cut -c1-500
+}
+
+value_from_file() {
+	key="$1"
+	file="$2"
+	sed -n "s/^$key=//p" "$file" 2>/dev/null | sed -n '1p'
+}
+
+health_reason_text() {
+	case "$1" in
+		authentication_failed) printf 'AdGuard Home отклонил логин или пароль' ;;
+		api_timeout) printf 'AdGuard Home не ответил вовремя' ;;
+		api_unreachable|api_server_error) printf 'сервер AdGuard Home недоступен' ;;
+		server_not_running) printf 'служба AdGuard Home остановлена' ;;
+		protection_disabled|filtering_disabled) printf 'фильтрация AdGuard Home выключена' ;;
+		filter_disable_not_confirmed) printf 'AdGuard Home не подтвердил отключение старого фильтра Sheepfold' ;;
+		duplicate_managed_filter) printf 'в AdGuard Home найдено несколько одинаковых фильтров Sheepfold' ;;
+		owned_filter_cleanup_failed) printf 'не удалось безопасно отключить прежний фильтр Sheepfold' ;;
+		control_rule_not_confirmed|invalid_check_response) printf 'AdGuard Home не подтвердил применение контрольных правил Sheepfold' ;;
+		*) printf 'не удалось применить фильтрацию Sheepfold через AdGuard Home' ;;
+	esac
+}
+
+write_health_state() {
+	wh_count="$1"
+	wh_first="$2"
+	wh_notified="$3"
+	wh_reason="$4"
+	wh_tmp="$HEALTH_FILE.tmp.$$"
+	umask 077
+	{
+		printf 'count=%s\n' "$wh_count"
+		printf 'first_failed_at=%s\n' "$wh_first"
+		printf 'last_failed_at=%s\n' "$(date +%s)"
+		printf 'notified=%s\n' "$wh_notified"
+		printf 'reason=%s\n' "$(safe_value "$wh_reason")"
+	} > "$wh_tmp"
+	chmod 600 "$wh_tmp" 2>/dev/null || true
+	mv -f "$wh_tmp" "$HEALTH_FILE"
+}
+
+record_health_failure() {
+	rhf_reason="$1"
+	# Параллельный запуск означает только занятый lock, а не поломку AdGuard Home.
+	[ "$rhf_reason" != busy ] || return 0
+	rhf_now="$(date +%s)"
+	rhf_count="$(value_from_file count "$HEALTH_FILE")"
+	rhf_first="$(value_from_file first_failed_at "$HEALTH_FILE")"
+	rhf_notified="$(value_from_file notified "$HEALTH_FILE")"
+	case "$rhf_count" in ''|*[!0-9]*) rhf_count=0 ;; esac
+	case "$rhf_first" in ''|*[!0-9]*) rhf_first="$rhf_now" ;; esac
+	[ "$rhf_notified" = 1 ] || rhf_notified=0
+	rhf_count=$((rhf_count + 1))
+	write_health_state "$rhf_count" "$rhf_first" "$rhf_notified" "$rhf_reason"
+
+	if [ "$rhf_count" -ge 3 ] && [ "$rhf_notified" != 1 ] && [ -x "$NOTIFICATION_HELPER" ]; then
+		rhf_title='Не работает фильтрация через AdGuard Home'
+		rhf_message="Sheepfold три раза подряд не смог обновить свой фильтр. Причина: $(health_reason_text "$rhf_reason"). Встроенная фильтрация Sheepfold остаётся страховочным вариантом."
+		if "$NOTIFICATION_HELPER" enqueue adguard_unavailable \
+			"adguard-health:$rhf_first" "$rhf_title" "$rhf_message" >/dev/null 2>&1; then
+			rhf_notified=1
+			write_health_state "$rhf_count" "$rhf_first" "$rhf_notified" "$rhf_reason"
+		fi
+	fi
+}
+
+record_health_success() {
+	[ -f "$HEALTH_FILE" ] || return 0
+	rhs_notified="$(value_from_file notified "$HEALTH_FILE")"
+	rhs_first="$(value_from_file first_failed_at "$HEALTH_FILE")"
+	if [ "$rhs_notified" = 1 ] && [ -x "$NOTIFICATION_HELPER" ]; then
+		[ -n "$rhs_first" ] || rhs_first=unknown
+		"$NOTIFICATION_HELPER" enqueue adguard_recovered \
+			"adguard-health-recovered:$rhs_first" 'Фильтрация через AdGuard Home восстановлена' \
+			'Sheepfold снова успешно обновляет и проверяет свой фильтр в AdGuard Home.' >/dev/null 2>&1 || true
+	fi
+	rm -f "$HEALTH_FILE"
+}
+
+uci_get() {
+	value="$($UCI_HELPER -q get "$1" 2>/dev/null || true)"
+	[ -n "$value" ] && printf '%s' "$value" || printf '%s' "${2:-}"
+}
+
+write_status() {
+	state="$1"
+	reason="$2"
+	tmp="$STATUS_FILE.tmp.$$"
+	{
+		printf 'status=%s\n' "$(safe_value "$state")"
+		printf 'reason=%s\n' "$(safe_value "$reason")"
+		printf 'server_running=%s\n' "$SERVER_RUNNING"
+		printf 'protection_enabled=%s\n' "$PROTECTION_ENABLED"
+		printf 'server_version=%s\n' "$(safe_value "$SERVER_VERSION")"
+		printf 'dns_port=%s\n' "$DNS_PORT"
+		printf 'dns_address_count=%s\n' "$DNS_ADDRESS_COUNT"
+		printf 'dns_info_available=%s\n' "$DNS_INFO_AVAILABLE"
+		printf 'dns_info_reason=%s\n' "$(safe_value "$DNS_INFO_REASON")"
+		printf 'upstream_count=%s\n' "$UPSTREAM_COUNT"
+		printf 'fallback_count=%s\n' "$FALLBACK_COUNT"
+		printf 'bootstrap_count=%s\n' "$BOOTSTRAP_COUNT"
+		printf 'filter_status_checked=%s\n' "$FILTER_STATUS_CHECKED"
+		printf 'engine_checked=%s\n' "$ENGINE_CHECKED"
+		printf 'engine_check_reason=%s\n' "$(safe_value "$ENGINE_CHECK_REASON")"
+		printf 'engine_checks_required=%s\n' "$ENGINE_CHECKS_REQUIRED"
+		printf 'engine_checks_passed=%s\n' "$ENGINE_CHECKS_PASSED"
+		printf 'dns_path_status=%s\n' "$(safe_value "$DNS_PATH_STATUS")"
+		printf 'dns_path_reason=%s\n' "$(safe_value "$DNS_PATH_REASON")"
+		printf 'filtering_enabled=%s\n' "$FILTERING_ENABLED"
+		printf 'managed_filter_found=%s\n' "$FILTER_FOUND"
+		printf 'managed_filter_enabled=%s\n' "$FILTER_ENABLED"
+		printf 'managed_filter_rules=%s\n' "$FILTER_RULES"
+		printf 'managed_filter_id=%s\n' "$FILTER_ID"
+		printf 'managed_filter_matches=%s\n' "$FILTER_MATCHES"
+		printf 'generated_rules=%s\n' "$RULE_COUNT"
+		printf 'allowlist_ready=%s\n' "$ALLOWLIST_READY"
+		printf 'blocklist_ready=%s\n' "$BLOCKLIST_READY"
+		printf 'consecutive_failures=%s\n' "$(value_from_file count "$HEALTH_FILE")"
+		printf 'first_failed_at=%s\n' "$(value_from_file first_failed_at "$HEALTH_FILE")"
+		printf 'last_failed_at=%s\n' "$(value_from_file last_failed_at "$HEALTH_FILE")"
+		printf 'last_failure_reason=%s\n' "$(safe_value "$(value_from_file reason "$HEALTH_FILE")")"
+		printf 'health_notified=%s\n' "$(value_from_file notified "$HEALTH_FILE")"
+		printf 'updated_at=%s\n' "$(date +%s)"
+	} > "$tmp"
+	chmod 600 "$tmp" 2>/dev/null || true
+	mv -f "$tmp" "$STATUS_FILE"
+}
+
+load_json_lib() {
+	[ -r "$JSHN_LIB" ] || { ADGUARD_REASON='json_parser_unavailable'; return 1; }
+	# shellcheck source=/usr/share/libubox/jshn.sh
+	. "$JSHN_LIB"
+}
+
+valid_base_url() {
+	checked_url="${1%/}"
+	printf '%s' "$checked_url" | grep -Eq '^https?://(\[[0-9A-Fa-f:]+\]|[A-Za-z0-9.-]+)(:[0-9]{1,5})?/?$' || return 1
+	checked_authority="${checked_url#*://}"
+	checked_authority="${checked_authority%/}"
+	checked_port=''
+	case "$checked_authority" in
+		\[*\]) ;;
+		\[*\]:*) checked_port="${checked_authority##*:}" ;;
+		*:*) checked_port="${checked_authority##*:}" ;;
+	esac
+	if [ -n "$checked_port" ] && { [ "$checked_port" -lt 1 ] || [ "$checked_port" -gt 65535 ]; }; then
+		return 1
+	fi
+	case "$checked_url" in
+		https://*) return 0 ;;
+		http://127.0.0.1|http://127.0.0.1:*|http://localhost|http://localhost:*|http://\[::1\]|http://\[::1\]:*) return 0 ;;
+		*) ADGUARD_REASON='insecure_remote_url'; return 1 ;;
+	esac
+}
+
+ensure_feed_token() {
+	if [ -s "$TOKEN_FILE" ] && grep -Eq '^[0-9a-f]{32,128}$' "$TOKEN_FILE"; then
+		return 0
+	fi
+
+	mkdir -p "${TOKEN_FILE%/*}"
+	umask 077
+	token="$(dd if=/dev/urandom bs=24 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+	case "$token" in
+		''|*[!0-9a-f]*) token="$(printf '%s' "$$:$(date +%s)" | cksum | awk '{ printf "%08x%08x%08x%08x", $1, $2, $1, $2 }')" ;;
+	esac
+	printf '%s\n' "$token" > "$TOKEN_FILE"
+	chmod 600 "$TOKEN_FILE" 2>/dev/null || true
+}
+
+uhttpd_http_port() {
+	listeners="$($UCI_HELPER -q get uhttpd.main.listen_http 2>/dev/null || true)"
+	for listener in $listeners; do
+		port="${listener##*:}"
+		port="${port%]}"
+		case "$port" in ''|*[!0-9]*) continue ;; esac
+		[ "$port" -ge 1 ] && [ "$port" -le 65535 ] && { printf '%s' "$port"; return 0; }
+	done
+	printf '80'
+}
+
+feed_url() {
+	ensure_feed_token
+	printf 'http://127.0.0.1:%s/cgi-bin/sheepfold-adguard-list?token=%s' \
+		"$(uhttpd_http_port)" "$(cat "$TOKEN_FILE")"
+}
+
+valid_owned_feed_url() {
+	vof_url="$1"
+	printf '%s' "$vof_url" | grep -Eq \
+		'^http://127\.0\.0\.1:[0-9]{1,5}/cgi-bin/sheepfold-adguard-list\?token=[0-9a-f]{32,128}$' || return 1
+	vof_port="${vof_url#http://127.0.0.1:}"
+	vof_port="${vof_port%%/*}"
+	[ "$vof_port" -ge 1 ] && [ "$vof_port" -le 65535 ]
+}
+
+saved_owned_url() {
+	[ -s "$OWNED_URL_FILE" ] || return 1
+	sof_url="$(sed -n '1p' "$OWNED_URL_FILE" 2>/dev/null || true)"
+	valid_owned_feed_url "$sof_url" || return 1
+	printf '%s' "$sof_url"
+}
+
+save_owned_url() {
+	sou_url="$1"
+	valid_owned_feed_url "$sou_url" || { ADGUARD_REASON='invalid_owned_filter_url'; return 1; }
+	mkdir -p "${OWNED_URL_FILE%/*}"
+	sou_tmp="$OWNED_URL_FILE.tmp.$$"
+	umask 077
+	printf '%s\n' "$sou_url" > "$sou_tmp"
+	chmod 600 "$sou_tmp" 2>/dev/null || true
+	mv -f "$sou_tmp" "$OWNED_URL_FILE"
+}
+
+api_action_allowed() {
+	# Текущий флаг автоматического управления разрешает только собственный URL-фильтр.
+	# Явный allowlist не даст будущему рефакторингу случайно открыть запись в общий
+	# DNS, clients, DHCP или custom rules AdGuard Home. §aghplan
+	case "$1:$2" in
+		GET:/control/status|\
+		GET:/control/dns_info|\
+		GET:/control/filtering/check_host|\
+		GET:/control/filtering/status|\
+		POST:/control/filtering/add_url|\
+		POST:/control/filtering/set_url|\
+		POST:/control/filtering/refresh) return 0 ;;
+		*) ADGUARD_REASON='api_action_forbidden'; return 1 ;;
+	esac
+}
+
+valid_api_query() {
+	vaq_path="$1"
+	vaq_query="$2"
+	case "$vaq_path" in
+		/control/filtering/check_host)
+			# Запросы check_host строятся только для зарезервированных контрольных
+			# доменов. Произвольный URL-параметр через общий HTTP-helper не проходит. §aghplan
+			printf '%s' "$vaq_query" | grep -Eq \
+				'^(name=sheepfold-(policy|emergency)-check\.test&qtype=A|name=sheepfold-strict-check\.test&qtype=A&client=([0-9]{1,3}\.){3}[0-9]{1,3})$'
+			;;
+		*) [ -z "$vaq_query" ] ;;
+	esac
+}
+
+request_api() {
+	method="$1"
+	path="$2"
+	body_file="${3:-}"
+	response_file="$4"
+	query="${5:-}"
+	api_action_allowed "$method" "$path" || return 1
+	valid_api_query "$path" "$query" || { ADGUARD_REASON='api_action_forbidden'; return 1; }
+	configured_url="$(uci_get sheepfold.adguard.url http://127.0.0.1:3000)"
+	if ! valid_base_url "$configured_url"; then
+		[ "$ADGUARD_REASON" = insecure_remote_url ] || ADGUARD_REASON='invalid_url'
+		return 1
+	fi
+	api_base="${configured_url%/}"
+	username="$(uci_get sheepfold.adguard.username '')"
+	password="$(uci_get sheepfold.adguard.password '')"
+	auth_file=''
+	if { [ -n "$username" ] && [ -z "$password" ]; } || { [ -z "$username" ] && [ -n "$password" ]; }; then
+		ADGUARD_REASON='credentials_incomplete'
+		return 1
+	fi
+	credential_text="$username$password"
+	credential_single_line="$(printf '%s' "$credential_text" | tr -d '\r\n')"
+	[ "$credential_single_line" = "$credential_text" ] || { ADGUARD_REASON='credentials_invalid'; return 1; }
+	case "$username" in *:*) ADGUARD_REASON='credentials_invalid'; return 1 ;; esac
+	if [ -n "$username" ]; then
+		auth_file="$RUNTIME_DIR/curl-auth.$$"
+		umask 077
+		# Файл конфигурации не показывает пароль в argv процесса curl. Кавычки и
+		# обратные слеши экранируются как требует синтаксис curl --config. §dompol
+		auth_value="$(printf '%s:%s' "$username" "$password" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+		printf 'user = "%s"\n' "$auth_value" > "$auth_file"
+		chmod 600 "$auth_file" 2>/dev/null || true
+	fi
+	rm -f "$response_file"
+	CURL_RC=0
+
+	if [ "$method" = GET ]; then
+		if [ -n "$auth_file" ]; then
+			if HTTP_CODE="$($CURL_BIN -sS --connect-timeout "$CONNECT_TIMEOUT" --max-time "$GET_TIMEOUT" \
+				--config "$auth_file" -o "$response_file" -w '%{http_code}' \
+				"$api_base$path${query:+?$query}" 2>/dev/null)"; then CURL_RC=0; else CURL_RC=$?; HTTP_CODE=000; fi
+		else
+			if HTTP_CODE="$($CURL_BIN -sS --connect-timeout "$CONNECT_TIMEOUT" --max-time "$GET_TIMEOUT" \
+				-o "$response_file" -w '%{http_code}' "$api_base$path${query:+?$query}" 2>/dev/null)"; then CURL_RC=0; else CURL_RC=$?; HTTP_CODE=000; fi
+		fi
+	else
+		if [ -n "$auth_file" ]; then
+			if HTTP_CODE="$($CURL_BIN -sS --connect-timeout "$CONNECT_TIMEOUT" --max-time "$POST_TIMEOUT" \
+				--config "$auth_file" -H 'Content-Type: application/json' \
+				-X POST --data-binary "@$body_file" -o "$response_file" -w '%{http_code}' \
+				"$api_base$path" 2>/dev/null)"; then CURL_RC=0; else CURL_RC=$?; HTTP_CODE=000; fi
+		else
+			if HTTP_CODE="$($CURL_BIN -sS --connect-timeout "$CONNECT_TIMEOUT" --max-time "$POST_TIMEOUT" \
+				-H 'Content-Type: application/json' -X POST --data-binary "@$body_file" \
+				-o "$response_file" -w '%{http_code}' "$api_base$path" 2>/dev/null)"; then CURL_RC=0; else CURL_RC=$?; HTTP_CODE=000; fi
+		fi
+	fi
+	[ -z "$auth_file" ] || rm -f "$auth_file"
+	if [ "$CURL_RC" -ne 0 ]; then
+		[ "$CURL_RC" -eq 28 ] && ADGUARD_REASON='api_timeout' || ADGUARD_REASON='api_unreachable'
+		return 1
+	fi
+	if [ -f "$response_file" ]; then
+		response_size="$(wc -c < "$response_file" | tr -d ' ')"
+		case "$response_size" in ''|*[!0-9]*) response_size=0 ;; esac
+		if [ "$response_size" -gt "$MAX_API_BYTES" ]; then
+			ADGUARD_REASON='api_response_too_large'
+			rm -f "$response_file"
+			return 1
+		fi
+	fi
+
+	case "$HTTP_CODE" in
+		200) return 0 ;;
+		400|422) ADGUARD_REASON='api_request_rejected' ;;
+		401|403) ADGUARD_REASON='authentication_failed' ;;
+		404) ADGUARD_REASON='api_unsupported' ;;
+		408) ADGUARD_REASON='api_timeout' ;;
+		429) ADGUARD_REASON='api_rate_limited' ;;
+		500|502|503|504) ADGUARD_REASON='api_server_error' ;;
+		*) ADGUARD_REASON='api_http_error' ;;
+	esac
+	return 1
+}
+
+json_array_count() {
+	jac_name="$1"
+	jac_target="$2"
+	jac_keys=''
+	json_select "$jac_name" 2>/dev/null || return 1
+	json_get_keys jac_keys
+	json_select ..
+	jac_count=0
+	for jac_key in $jac_keys; do
+		jac_count=$((jac_count + 1))
+	done
+	eval "$jac_target=\$jac_count"
+}
+
+parse_server_status() {
+	json_file="$1"
+	load_json_lib || return 1
+	SERVER_RUNNING=''
+	PROTECTION_ENABLED=''
+	SERVER_VERSION=''
+	DNS_PORT=''
+	DNS_ADDRESS_COUNT=0
+
+	json_init
+	json_load "$(cat "$json_file")" 2>/dev/null || { ADGUARD_REASON='invalid_api_response'; return 1; }
+	json_get_var SERVER_RUNNING running
+	json_get_var PROTECTION_ENABLED protection_enabled
+	json_get_var SERVER_VERSION version
+	json_get_var DNS_PORT dns_port
+	case "$SERVER_RUNNING:$PROTECTION_ENABLED" in
+		0:0|0:1|1:0|1:1) ;;
+		*) ADGUARD_REASON='invalid_api_response'; return 1 ;;
+	esac
+	case "$DNS_PORT" in ''|*[!0-9]*) ADGUARD_REASON='invalid_api_response'; return 1 ;; esac
+	[ "$DNS_PORT" -ge 1 ] && [ "$DNS_PORT" -le 65535 ] || { ADGUARD_REASON='invalid_api_response'; return 1; }
+	[ -n "$SERVER_VERSION" ] && [ "${#SERVER_VERSION}" -le 100 ] || { ADGUARD_REASON='invalid_api_response'; return 1; }
+	json_array_count dns_addresses DNS_ADDRESS_COUNT || { ADGUARD_REASON='invalid_api_response'; return 1; }
+}
+
+parse_dns_info() {
+	json_file="$1"
+	load_json_lib || return 1
+	UPSTREAM_COUNT=0
+	FALLBACK_COUNT=0
+	BOOTSTRAP_COUNT=0
+
+	json_init
+	json_load "$(cat "$json_file")" 2>/dev/null || { ADGUARD_REASON='invalid_api_response'; return 1; }
+	# Храним только количество адресов. Сами upstream могут раскрывать локальную
+	# топологию, поэтому их нет ни в status-файле, ни в LuCI, ни в журнале. §aghplan
+	json_array_count upstream_dns UPSTREAM_COUNT || { ADGUARD_REASON='invalid_api_response'; return 1; }
+	json_array_count fallback_dns FALLBACK_COUNT || FALLBACK_COUNT=0
+	json_array_count bootstrap_dns BOOTSTRAP_COUNT || BOOTSTRAP_COUNT=0
+}
+
+parse_filter_status() {
+	json_file="$1"
+	wanted_url="$2"
+	load_json_lib || return 1
+	FILTERING_ENABLED=0
+	FILTER_FOUND=0
+	FILTER_ENABLED=0
+	FILTER_RULES=0
+	FILTER_ID=0
+	FILTER_MATCHES=0
+	FILTER_NAME_MATCH=0
+	FILTER_STATUS_CHECKED=0
+
+	json_init
+	json_load "$(cat "$json_file")" 2>/dev/null || { ADGUARD_REASON='invalid_api_response'; return 1; }
+	json_get_var FILTERING_ENABLED enabled
+	case "$FILTERING_ENABLED" in
+		0|1) ;;
+		*) ADGUARD_REASON='invalid_api_response'; return 1 ;;
+	esac
+
+	filter_list_type=''
+	json_get_type filter_list_type filters 2>/dev/null || { ADGUARD_REASON='invalid_api_response'; return 1; }
+	[ "$filter_list_type" = array ] || { ADGUARD_REASON='invalid_api_response'; return 1; }
+	json_select filters 2>/dev/null || { ADGUARD_REASON='invalid_api_response'; return 1; }
+	filter_keys=''
+	json_get_keys filter_keys
+	for filter_key in $filter_keys; do
+		filter_entry_type=''
+		json_get_type filter_entry_type "$filter_key" 2>/dev/null || { ADGUARD_REASON='invalid_api_response'; return 1; }
+		[ "$filter_entry_type" = object ] || { ADGUARD_REASON='invalid_api_response'; return 1; }
+		json_select "$filter_key" 2>/dev/null || continue
+		pf_url=''
+		pf_enabled=''
+		pf_rules=''
+		pf_id=''
+		pf_name=''
+		json_get_var pf_url url
+		json_get_var pf_enabled enabled
+		json_get_var pf_rules rules_count
+		json_get_var pf_id id
+		json_get_var pf_name name
+		if [ "$pf_url" = "$wanted_url" ]; then
+			FILTER_MATCHES=$((FILTER_MATCHES + 1))
+			case "$pf_enabled" in 0|1) ;; *) ADGUARD_REASON='invalid_api_response'; return 1 ;; esac
+			case "$pf_rules" in ''|*[!0-9]*) ADGUARD_REASON='invalid_api_response'; return 1 ;; esac
+			case "$pf_id" in ''|*[!0-9]*) ADGUARD_REASON='invalid_api_response'; return 1 ;; esac
+			[ "$pf_id" -ge 1 ] || { ADGUARD_REASON='invalid_api_response'; return 1; }
+			FILTER_FOUND=1
+			FILTER_ENABLED="$pf_enabled"
+			FILTER_RULES="$pf_rules"
+			FILTER_ID="$pf_id"
+			[ "$pf_name" = "$FILTER_NAME" ] && FILTER_NAME_MATCH=1 || FILTER_NAME_MATCH=0
+		fi
+		json_select ..
+	done
+	json_select ..
+	[ "$FILTER_MATCHES" -le 1 ] || { ADGUARD_REASON='duplicate_managed_filter'; return 1; }
+	FILTER_STATUS_CHECKED=1
+}
+
+parse_check_host() {
+	check_file="$1"
+	expected_rule="$2"
+	expected_filter_id="$3"
+	load_json_lib || return 1
+	check_reason=''
+	check_found=0
+
+	json_init
+	json_load "$(cat "$check_file")" 2>/dev/null || { ADGUARD_REASON='invalid_check_response'; return 1; }
+	json_get_var check_reason reason
+	[ -n "$check_reason" ] && [ "${#check_reason}" -le 100 ] || { ADGUARD_REASON='invalid_check_response'; return 1; }
+	check_rules_type=''
+	json_get_type check_rules_type rules 2>/dev/null || { ADGUARD_REASON='invalid_check_response'; return 1; }
+	[ "$check_rules_type" = array ] || { ADGUARD_REASON='invalid_check_response'; return 1; }
+	json_select rules 2>/dev/null || { ADGUARD_REASON='invalid_check_response'; return 1; }
+	check_keys=''
+	json_get_keys check_keys
+	for check_key in $check_keys; do
+		check_entry_type=''
+		json_get_type check_entry_type "$check_key" 2>/dev/null || { ADGUARD_REASON='invalid_check_response'; return 1; }
+		[ "$check_entry_type" = object ] || { ADGUARD_REASON='invalid_check_response'; return 1; }
+		json_select "$check_key" 2>/dev/null || continue
+		check_text=''
+		check_filter_id=''
+		json_get_var check_text text
+		json_get_var check_filter_id filter_list_id
+		if [ "$check_text" = "$expected_rule" ] && [ "$check_filter_id" = "$expected_filter_id" ]; then
+			check_found=1
+		fi
+		json_select ..
+	done
+	json_select ..
+	[ "$check_found" = 1 ] || { ADGUARD_REASON='control_rule_not_confirmed'; return 1; }
+}
+
+check_control_rule() {
+	ccr_domain="$1"
+	ccr_rule="$2"
+	ccr_client="${3:-}"
+	valid_domain "$ccr_domain" || { ADGUARD_REASON='invalid_control_rule'; return 1; }
+	[ -z "$ccr_client" ] || valid_ipv4 "$ccr_client" || { ADGUARD_REASON='invalid_control_rule'; return 1; }
+	ccr_query="name=$ccr_domain&qtype=A"
+	[ -z "$ccr_client" ] || ccr_query="$ccr_query&client=$ccr_client"
+	ccr_response="$RUNTIME_DIR/api-check-host-$ENGINE_CHECKS_REQUIRED.json"
+	ENGINE_CHECKS_REQUIRED=$((ENGINE_CHECKS_REQUIRED + 1))
+	request_api GET /control/filtering/check_host '' "$ccr_response" "$ccr_query" || return 1
+	parse_check_host "$ccr_response" "$ccr_rule" "$FILTER_ID" || return 1
+	ENGINE_CHECKS_PASSED=$((ENGINE_CHECKS_PASSED + 1))
+}
+
+verify_engine_rules() {
+	ENGINE_CHECKED=0
+	ENGINE_CHECK_REASON='not_checked'
+	ENGINE_CHECKS_REQUIRED=0
+	ENGINE_CHECKS_PASSED=0
+	[ "$FILTER_FOUND" = 1 ] && [ "$FILTER_ENABLED" = 1 ] && [ "$FILTER_ID" -ge 1 ] || {
+		ADGUARD_REASON='filter_not_confirmed'
+		return 1
+	}
+
+	check_control_rule "$CONTROL_BLOCK_DOMAIN" "$CONTROL_BLOCK_RULE" || {
+		ENGINE_CHECK_REASON="$ADGUARD_REASON"
+		return 1
+	}
+	check_control_rule "$CONTROL_ALLOW_DOMAIN" "$CONTROL_ALLOW_RULE" || {
+		ENGINE_CHECK_REASON="$ADGUARD_REASON"
+		return 1
+	}
+	strict_client="$(sed -n '1p' "$RUNTIME_DIR/strict-ips" 2>/dev/null || true)"
+	if [ -n "$strict_client" ]; then
+		strict_chunk="$(sed -n '1p' "$RUNTIME_DIR/strict-client-chunks" 2>/dev/null || true)"
+		[ -n "$strict_chunk" ] || {
+			ADGUARD_REASON='invalid_control_rule'
+			ENGINE_CHECK_REASON="$ADGUARD_REASON"
+			return 1
+		}
+		strict_rule="||$CONTROL_STRICT_DOMAIN^\$client=$strict_chunk,important"
+		check_control_rule "$CONTROL_STRICT_DOMAIN" "$strict_rule" "$strict_client" || {
+			ENGINE_CHECK_REASON="$ADGUARD_REASON"
+			return 1
+		}
+	fi
+
+	ENGINE_CHECKED=1
+	ENGINE_CHECK_REASON='control_rules_confirmed'
+}
+
+probe_api() {
+	probe_mode="${1:-require_active}"
+	probe_url="${2:-}"
+	server_response="$RUNTIME_DIR/api-server-status.json"
+	dns_response="$RUNTIME_DIR/api-dns-info.json"
+	filter_response="$RUNTIME_DIR/api-filter-status.json"
+	[ -n "$probe_url" ] && wanted_url="$probe_url" || wanted_url="$(feed_url)"
+	DNS_INFO_AVAILABLE=0
+	DNS_INFO_REASON='not_checked'
+	FILTER_STATUS_CHECKED=0
+	ENGINE_CHECKED=0
+	ENGINE_CHECK_REASON='not_checked'
+	ENGINE_CHECKS_REQUIRED=0
+	ENGINE_CHECKS_PASSED=0
+	DNS_PATH_STATUS='not_checked'
+	DNS_PATH_REASON='client_probe_required'
+
+	request_api GET /control/status '' "$server_response" || return 1
+	parse_server_status "$server_response" || return 1
+	if [ "$probe_mode" != allow_inactive ]; then
+		[ "$SERVER_RUNNING" = 1 ] || { ADGUARD_REASON='server_not_running'; return 1; }
+		[ "$PROTECTION_ENABLED" = 1 ] || { ADGUARD_REASON='protection_disabled'; return 1; }
+	fi
+
+	# dns_info расширяет диагностику, но его отсутствие не выключает подтверждённый
+	# URL-фильтр. Некоторые старые сборки AdGuard Home могли иметь иной API. §aghplan
+	if request_api GET /control/dns_info '' "$dns_response"; then
+		if parse_dns_info "$dns_response"; then
+			DNS_INFO_AVAILABLE=1
+			DNS_INFO_REASON='available'
+		else
+			DNS_INFO_REASON="$ADGUARD_REASON"
+		fi
+	else
+		DNS_INFO_REASON="$ADGUARD_REASON"
+	fi
+
+	request_api GET /control/filtering/status '' "$filter_response" || return 1
+	parse_filter_status "$filter_response" "$wanted_url" || return 1
+	ADGUARD_REASON='reachable'
+}
+
+write_add_request() (
+	load_json_lib || exit 1
+	json_init
+	json_add_string name "$FILTER_NAME"
+	json_add_string url "$1"
+	json_add_boolean whitelist 0
+	json_dump
+)
+
+write_set_request() (
+	load_json_lib || exit 1
+	json_init
+	json_add_string url "$1"
+	json_add_boolean whitelist 0
+	json_add_object data
+	json_add_boolean enabled "$2"
+	json_add_string name "$FILTER_NAME"
+	json_add_string url "$1"
+	json_close_object
+	json_dump
+)
+
+write_refresh_request() (
+	load_json_lib || exit 1
+	json_init
+	json_add_boolean whitelist 0
+	json_dump
+)
+
+post_json() {
+	path="$1"
+	request_file="$2"
+	response_file="$RUNTIME_DIR/api-response.json"
+	request_api POST "$path" "$request_file" "$response_file"
+}
+
+refresh_filter() {
+	request_file="$RUNTIME_DIR/refresh-request.json"
+	response_file="$RUNTIME_DIR/api-response.json"
+	write_refresh_request > "$request_file" || { ADGUARD_REASON='json_parser_unavailable'; return 1; }
+	post_json /control/filtering/refresh "$request_file" || return 1
+	load_json_lib || return 1
+	json_init
+	json_load "$(cat "$response_file")" 2>/dev/null || { ADGUARD_REASON='invalid_refresh_response'; return 1; }
+	refresh_updated=''
+	json_get_var refresh_updated updated
+	case "$refresh_updated" in ''|*[!0-9]*) ADGUARD_REASON='invalid_refresh_response'; return 1 ;; esac
+}
+
+ensure_filter_enabled() {
+	wanted_url="$(feed_url)"
+	request_file="$RUNTIME_DIR/filter-request.json"
+
+	if [ "$FILTER_FOUND" = 0 ]; then
+		write_add_request "$wanted_url" > "$request_file" || { ADGUARD_REASON='json_parser_unavailable'; return 1; }
+		post_json /control/filtering/add_url "$request_file" || return 1
+	elif [ "$FILTER_ENABLED" = 0 ] || [ "$FILTER_NAME_MATCH" != 1 ]; then
+		write_set_request "$wanted_url" 1 > "$request_file" || { ADGUARD_REASON='json_parser_unavailable'; return 1; }
+		post_json /control/filtering/set_url "$request_file" || return 1
+	fi
+
+	refresh_filter || return 1
+	probe_api || return 1
+	[ "$FILTER_FOUND" = 1 ] && [ "$FILTER_ENABLED" = 1 ] || {
+		ADGUARD_REASON='filter_not_confirmed'
+		return 1
+	}
+}
+
+valid_ipv4() {
+	printf '%s\n' "$1" | awk -F. '
+	BEGIN { valid = 1 }
+	NF != 4 { valid = 0 }
+	{
+		for (i = 1; i <= 4; i++)
+			if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255)
+				valid = 0
+	}
+	END { exit(valid ? 0 : 1) }'
+}
+
+valid_domain() {
+	printf '%s' "$1" | grep -Eq '^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$'
+}
+
+append_unique() {
+	file="$1"
+	value="$2"
+	[ -n "$value" ] || return 0
+	grep -qxF "$value" "$file" 2>/dev/null || printf '%s\n' "$value" >> "$file"
+}
+
+sort_unique_file() {
+	file="$1"
+	tmp="$file.sorted.$$"
+	LC_ALL=C sort -u "$file" > "$tmp"
+	mv -f "$tmp" "$file"
+}
+
+normalize_mac() {
+	printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+collect_policy_clients() {
+	strict_groups="$RUNTIME_DIR/strict-groups"
+	strict_ips="$RUNTIME_DIR/strict-ips"
+	exempt_macs="$RUNTIME_DIR/exempt-macs"
+	exempt_ips="$RUNTIME_DIR/exempt-ips"
+	missing_clients=0
+	: > "$strict_groups"
+	: > "$strict_ips"
+	: > "$exempt_macs"
+	: > "$exempt_ips"
+
+	sections="$($UCI_HELPER -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=group$/\1/p')"
+	for section in $sections; do
+		[ "$(uci_get "sheepfold.$section.allowlist_only" 0)" = 1 ] || continue
+		# В актуальном интерфейсе устройство хранит имя группы, но старый импорт мог
+		# сохранить имя UCI-секции. Поддерживаем оба значения, не меняя конфиг молча. §dompol
+		append_unique "$strict_groups" "$section"
+		append_unique "$strict_groups" "$(uci_get "sheepfold.$section.name" '')"
+	done
+
+	for mac in $($UCI_HELPER -q get sheepfold.allowlist.mac 2>/dev/null || true); do
+		append_unique "$exempt_macs" "$(normalize_mac "$mac")"
+	done
+
+	device_sections="$($UCI_HELPER -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p')"
+	for section in $device_sections; do
+		mac="$(normalize_mac "$(uci_get "sheepfold.$section.mac" '')")"
+		status="$(uci_get "sheepfold.$section.status" '')"
+		# Старые импорты могли сохранить статус устройства, но не продублировать MAC
+		# в секции allowlist. Явный статус остаётся достаточным источником истины. §dompol
+		case "$status" in allow|allowed) append_unique "$exempt_macs" "$mac" ;; esac
+		admin_device="$(uci_get "sheepfold.$section.admin_device" 0)"
+		if [ "$admin_device" = 1 ]; then
+			append_unique "$exempt_macs" "$mac"
+			# Администратор может остаться в строгой группе после старого импорта,
+			# но админский статус всё равно не должен превращать его устройство в детское. §dompol
+			continue
+		fi
+		group="$(uci_get "sheepfold.$section.group" '')"
+		grep -qxF "$group" "$strict_groups" 2>/dev/null || continue
+		# Белый и чёрный списки устройств имеют собственную явную политику доступа.
+		# Строгая групповая фильтрация не должна незаметно менять её поверх старого UCI. §dompol
+		case "$status" in allow|allowed|block|blocked) continue ;; esac
+		ip="$(uci_get "sheepfold.$section.ip" '')"
+		if valid_ipv4 "$ip"; then
+			append_unique "$strict_ips" "$ip"
+		else
+			missing_clients=1
+		fi
+	done
+
+	if [ "$(uci_get sheepfold.global.site_blocklist_mode disabled)" = except_allowlist_admins ]; then
+		while IFS= read -r wanted_mac; do
+			[ -n "$wanted_mac" ] || continue
+			found=0
+			for section in $device_sections; do
+				mac="$(normalize_mac "$(uci_get "sheepfold.$section.mac" '')")"
+				[ "$mac" = "$wanted_mac" ] || continue
+				ip="$(uci_get "sheepfold.$section.ip" '')"
+				if valid_ipv4 "$ip"; then
+					append_unique "$exempt_ips" "$ip"
+					found=1
+				fi
+			done
+			[ "$found" = 1 ] || missing_clients=1
+		done < "$exempt_macs"
+	fi
+
+	# Стабильный порядок не вызывает лишний refresh AdGuard после перестановки UCI-секций. §dompol
+	for policy_file in "$strict_groups" "$strict_ips" "$exempt_macs" "$exempt_ips"; do
+		sort_unique_file "$policy_file"
+	done
+
+	[ "$missing_clients" = 0 ] || { ADGUARD_REASON='client_ip_missing'; return 1; }
+}
+
+collect_emergency_domains() {
+	output="$1"
+	: > "$output"
+	sections="$($UCI_HELPER -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=emergency_site$/\1/p')"
+	for section in $sections; do
+		[ "$(uci_get "sheepfold.$section.enabled" 1)" = 1 ] || continue
+		domain="$(uci_get "sheepfold.$section.domain" '')"
+		domain="$(printf '%s' "$domain" | tr '[:upper:]' '[:lower:]')"
+		valid_domain "$domain" && append_unique "$output" "$domain"
+	done
+	sort_unique_file "$output"
+}
+
+build_client_chunks() {
+	input="$1"
+	output="$2"
+	negate="$3"
+	awk -v negate="$negate" '
+	BEGIN { line = "" }
+	NF {
+		value = (negate == "1" ? "~" : "") $0
+		if (line != "" && length(line) + length(value) + 1 > 650) {
+			print line
+			line = value
+		} else {
+			line = line (line == "" ? "" : "|") value
+		}
+	}
+	END { if (line != "") print line }
+	' "$input" > "$output"
+}
+
+emit_domain_rules() {
+	domains="$1"
+	prefix="$2"
+	modifier="$3"
+	output="$4"
+	[ -s "$domains" ] || return 0
+	awk -v prefix="$prefix" -v modifier="$modifier" '
+	/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/ {
+		print prefix $0 "^" modifier
+	}' "$domains" >> "$output"
+}
+
+generate_feed() {
+	block_mode="$(uci_get sheepfold.global.site_blocklist_mode disabled)"
+	case "$block_mode" in disabled|all|except_allowlist_admins) ;; *) block_mode=disabled ;; esac
+	emergency_domains="$RUNTIME_DIR/emergency.domains"
+	strict_chunks="$RUNTIME_DIR/strict-client-chunks"
+	exempt_chunks="$RUNTIME_DIR/exempt-client-chunks"
+	ALLOWLIST_READY=0
+	BLOCKLIST_READY=0
+	RULE_COUNT=0
+
+	collect_policy_clients || return 1
+	collect_emergency_domains "$emergency_domains"
+	build_client_chunks "$RUNTIME_DIR/strict-ips" "$strict_chunks" 0
+	build_client_chunks "$RUNTIME_DIR/exempt-ips" "$exempt_chunks" 0
+
+	{
+		printf '! Generated by Sheepfold. Manual changes are discarded.\n'
+		printf '! Uses AdGuard Home client modifiers with router-observed IPv4 addresses.\n'
+		printf '! Control rules use reserved .test domains and never open a real service.\n'
+		printf '%s\n' "$CONTROL_BLOCK_RULE"
+		printf '||%s^\n' "$CONTROL_ALLOW_DOMAIN"
+		printf '%s\n' "$CONTROL_ALLOW_RULE"
+	} > "$CANDIDATE_FEED"
+
+	# Аварийно-полезные сайты сильнее обычного чёрного списка сайтов. Исключения
+	# добавляются только из редактируемого списка Sheepfold и не превращают широкий портал в пресет. §dompol
+	emit_domain_rules "$emergency_domains" '@@||' '$important' "$CANDIDATE_FEED"
+
+	if [ -s "$strict_chunks" ]; then
+		[ -s "$SITE_LIST_DIR/allowlist.domains" ] || { ADGUARD_REASON='waiting_for_lists'; return 1; }
+		ALLOWLIST_READY=1
+		while IFS= read -r clients; do
+			[ -n "$clients" ] || continue
+			printf '||*^$client=%s\n' "$clients" >> "$CANDIDATE_FEED"
+			printf '||%s^$client=%s,important\n' "$CONTROL_STRICT_DOMAIN" "$clients" >> "$CANDIDATE_FEED"
+			emit_domain_rules "$SITE_LIST_DIR/allowlist.domains" '@@||' "\$client=$clients,important" "$CANDIDATE_FEED"
+			emit_domain_rules "$emergency_domains" '@@||' "\$client=$clients,important" "$CANDIDATE_FEED"
+		done < "$strict_chunks"
+	elif [ -s "$SITE_LIST_DIR/allowlist.domains" ]; then
+		# Список уже готов, даже если в строгих группах пока нет ни одного устройства.
+		ALLOWLIST_READY=1
+	fi
+
+	if [ "$block_mode" != disabled ] && [ -s "$SITE_LIST_DIR/blocklist.domains" ]; then
+		BLOCKLIST_READY=1
+		if [ "$block_mode" = except_allowlist_admins ] && [ -s "$exempt_chunks" ]; then
+			# Сначала блокируем домен для всех, затем важным исключением разрешаем его
+			# администраторам и белому списку. Несколько отрицательных $client-правил
+			# пересекались бы и могли заново заблокировать исключённое устройство. §dompol
+			emit_domain_rules "$SITE_LIST_DIR/blocklist.domains" '||' '' "$CANDIDATE_FEED"
+			while IFS= read -r clients; do
+				emit_domain_rules "$SITE_LIST_DIR/blocklist.domains" '@@||' "\$client=$clients,important" "$CANDIDATE_FEED"
+			done < "$exempt_chunks"
+		else
+			emit_domain_rules "$SITE_LIST_DIR/blocklist.domains" '||' '' "$CANDIDATE_FEED"
+		fi
+	fi
+
+	feed_size="$(wc -c < "$CANDIDATE_FEED" | tr -d ' ')"
+	[ "$feed_size" -le "$MAX_FEED_BYTES" ] || { ADGUARD_REASON='feed_too_large'; rm -f "$CANDIDATE_FEED"; return 1; }
+	RULE_COUNT="$(grep -vc '^[!#]' "$CANDIDATE_FEED" 2>/dev/null || true)"
+	case "$RULE_COUNT" in ''|*[!0-9]*) RULE_COUNT=0 ;; esac
+	chmod 600 "$CANDIDATE_FEED" 2>/dev/null || true
+}
+
+disable_url_confirmed() {
+	duc_url="$1"
+	valid_owned_feed_url "$duc_url" || { ADGUARD_REASON='invalid_owned_filter_url'; return 1; }
+	probe_api allow_inactive "$duc_url" || return 1
+	[ "$FILTER_FOUND" = 1 ] || return 0
+	duc_request="$RUNTIME_DIR/filter-disable-request.json"
+	write_set_request "$duc_url" 0 > "$duc_request" || {
+		ADGUARD_REASON='json_parser_unavailable'
+		return 1
+	}
+	post_json /control/filtering/set_url "$duc_request" || return 1
+	probe_api allow_inactive "$duc_url" || return 1
+	[ "$FILTER_FOUND" = 0 ] || [ "$FILTER_ENABLED" = 0 ] || {
+		ADGUARD_REASON='filter_disable_not_confirmed'
+		return 1
+	}
+}
+
+cleanup_rotated_filter() {
+	crf_current="$1"
+	crf_old="$(saved_owned_url 2>/dev/null || true)"
+	[ -n "$crf_old" ] || return 0
+	[ "$crf_old" != "$crf_current" ] || return 0
+	# Токен входит в URL, поэтому старый адрес нельзя писать в журнал или status-файл.
+	# Отключение подтверждается повторным чтением API, а не одним успешным POST. §aghplan
+	disable_url_confirmed "$crf_old"
+}
+
+verify_local_feed() {
+	vlf_url="$1"
+	valid_owned_feed_url "$vlf_url" || { ADGUARD_REASON='invalid_owned_filter_url'; return 1; }
+	vlf_config="$RUNTIME_DIR/feed-check.curl.$$"
+	vlf_output="$RUNTIME_DIR/feed-check.out.$$"
+	vlf_escaped_url="$(printf '%s' "$vlf_url" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+	vlf_escaped_output="$(printf '%s' "$vlf_output" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+	umask 077
+	{
+		printf 'url = "%s"\n' "$vlf_escaped_url"
+		printf 'output = "%s"\n' "$vlf_escaped_output"
+		printf 'write-out = "%%{http_code}"\n'
+		printf 'silent\nshow-error\n'
+		printf 'connect-timeout = %s\n' "$CONNECT_TIMEOUT"
+		printf 'max-time = %s\n' "$GET_TIMEOUT"
+		printf 'max-filesize = %s\n' "$MAX_FEED_BYTES"
+	} > "$vlf_config"
+	chmod 600 "$vlf_config" 2>/dev/null || true
+	vlf_code=000
+	if vlf_code="$($CURL_BIN --config "$vlf_config" 2>/dev/null)"; then
+		vlf_rc=0
+	else
+		vlf_rc=$?
+	fi
+	rm -f "$vlf_config"
+	if [ "$vlf_rc" -ne 0 ] || [ "$vlf_code" != 200 ]; then
+		rm -f "$vlf_output"
+		ADGUARD_REASON='feed_unreachable'
+		return 1
+	fi
+	if ! cmp -s "$ACTIVE_FEED" "$vlf_output"; then
+		rm -f "$vlf_output"
+		ADGUARD_REASON='feed_mismatch'
+		return 1
+	fi
+	rm -f "$vlf_output"
+}
+
+sync_filter() {
+	acquire_lock || return 1
+	trap 'release_lock' 0
+	generate_feed || { write_status error "$ADGUARD_REASON"; return 1; }
+	sync_url="$(feed_url)"
+	cleanup_rotated_filter "$sync_url" || { write_status error "$ADGUARD_REASON"; rm -f "$CANDIDATE_FEED"; return 1; }
+	probe_api require_active "$sync_url" || { write_status error "$ADGUARD_REASON"; rm -f "$CANDIDATE_FEED"; return 1; }
+	[ "$FILTERING_ENABLED" = 1 ] || {
+		ADGUARD_REASON='filtering_disabled'
+		write_status error "$ADGUARD_REASON"
+		rm -f "$CANDIDATE_FEED"
+		return 1
+	}
+
+	if [ -f "$ACTIVE_FEED" ] && cmp -s "$ACTIVE_FEED" "$CANDIDATE_FEED" && \
+		[ "$FILTER_FOUND" = 1 ] && [ "$FILTER_ENABLED" = 1 ] && [ "$FILTER_NAME_MATCH" = 1 ]; then
+		rm -f "$CANDIDATE_FEED"
+		verify_local_feed "$sync_url" || { write_status error "$ADGUARD_REASON"; return 1; }
+		verify_engine_rules || { write_status error "$ADGUARD_REASON"; return 1; }
+		ADGUARD_REASON='active'
+		RULE_COUNT="$FILTER_RULES"
+		save_owned_url "$sync_url" || { write_status error "$ADGUARD_REASON"; return 1; }
+		write_status active active
+		return 0
+	fi
+
+	backup="$RUNTIME_DIR/filter.backup"
+	had_old=0
+	if [ -f "$ACTIVE_FEED" ]; then
+		cp "$ACTIVE_FEED" "$backup"
+		had_old=1
+	fi
+	mv -f "$CANDIDATE_FEED" "$ACTIVE_FEED"
+	chmod 600 "$ACTIVE_FEED" 2>/dev/null || true
+
+	if ! verify_local_feed "$sync_url" || ! ensure_filter_enabled || ! verify_engine_rules; then
+		failure="$ADGUARD_REASON"
+		failure_checks_required="$ENGINE_CHECKS_REQUIRED"
+		failure_checks_passed="$ENGINE_CHECKS_PASSED"
+		cleanup_failure=0
+		if [ "$had_old" = 1 ]; then
+			mv -f "$backup" "$ACTIVE_FEED"
+			refresh_filter >/dev/null 2>&1 || true
+		else
+			rm -f "$ACTIVE_FEED" "$backup"
+			disable_owned_filter_confirmed >/dev/null 2>&1 || cleanup_failure=1
+		fi
+		ENGINE_CHECK_REASON="$failure"
+		ENGINE_CHECKS_REQUIRED="$failure_checks_required"
+		ENGINE_CHECKS_PASSED="$failure_checks_passed"
+		if [ "$cleanup_failure" = 1 ]; then
+			ADGUARD_REASON='filter_disable_not_confirmed'
+		else
+			ADGUARD_REASON="$failure"
+		fi
+		write_status error "$ADGUARD_REASON"
+		return 1
+	fi
+
+	rm -f "$backup"
+	FILTER_RULES="$RULE_COUNT"
+	ADGUARD_REASON='active'
+	save_owned_url "$sync_url" || {
+		save_failure="$ADGUARD_REASON"
+		disable_url_confirmed "$sync_url" >/dev/null 2>&1 || true
+		ADGUARD_REASON="$save_failure"
+		write_status error "$ADGUARD_REASON"
+		return 1
+	}
+	write_status active active
+}
+
+disable_owned_filter_confirmed() {
+	[ "$FILTER_FOUND" = 1 ] || return 0
+	disable_request="$RUNTIME_DIR/filter-disable-request.json"
+	write_set_request "$(feed_url)" 0 > "$disable_request" || {
+		ADGUARD_REASON='json_parser_unavailable'
+		return 1
+	}
+	post_json /control/filtering/set_url "$disable_request" || return 1
+	probe_api allow_inactive || return 1
+	# Исчезнувший фильтр также считается безопасно очищенным; если он остался,
+	# API обязан подтвердить enabled=false, а не только принять POST. §aghplan
+	[ "$FILTER_FOUND" = 0 ] || [ "$FILTER_ENABLED" = 0 ] || {
+		ADGUARD_REASON='filter_disable_not_confirmed'
+		return 1
+	}
+}
+
+disable_filter() {
+	acquire_lock || return 1
+	trap 'release_lock' 0
+	if [ ! -s "$TOKEN_FILE" ] && [ ! -f "$ACTIVE_FEED" ]; then
+		ADGUARD_REASON='disabled'
+		write_status disabled disabled
+		return 0
+	fi
+
+	# Даже при выключенной глобальной защите API может безопасно отключить только
+	# принадлежащий Sheepfold фильтр. Это очистка владения, а не включение защиты. §aghplan
+	df_current="$(feed_url)"
+	df_old="$(saved_owned_url 2>/dev/null || true)"
+	disable_url_confirmed "$df_current" || { write_status error "$ADGUARD_REASON"; return 1; }
+	if [ -n "$df_old" ] && [ "$df_old" != "$df_current" ]; then
+		disable_url_confirmed "$df_old" || { write_status error "$ADGUARD_REASON"; return 1; }
+	fi
+	rm -f "$ACTIVE_FEED" "$CANDIDATE_FEED"
+	rm -f "$OWNED_URL_FILE"
+	[ "${SHEEPFOLD_ADGUARD_PRESERVE_HEALTH:-0}" = 1 ] || rm -f "$HEALTH_FILE"
+	ADGUARD_REASON='disabled'
+	write_status disabled disabled
+}
+
+acquire_lock() {
+	waited=0
+	while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+		[ "$waited" -lt 15 ] || { ADGUARD_REASON='busy'; return 1; }
+		waited=$((waited + 1))
+		sleep 1
+	done
+}
+
+release_lock() {
+	rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+
+show_status() {
+	if [ -r "$STATUS_FILE" ]; then
+		cat "$STATUS_FILE"
+	else
+		printf 'status=unknown\nreason=not_checked\nserver_running=0\nprotection_enabled=0\nserver_version=\ndns_port=0\ndns_address_count=0\ndns_info_available=0\ndns_info_reason=not_checked\nupstream_count=0\nfallback_count=0\nbootstrap_count=0\nfilter_status_checked=0\nengine_checked=0\nengine_check_reason=not_checked\nengine_checks_required=0\nengine_checks_passed=0\ndns_path_status=not_checked\ndns_path_reason=client_probe_required\nfiltering_enabled=0\nmanaged_filter_found=0\nmanaged_filter_enabled=0\nmanaged_filter_rules=0\nmanaged_filter_id=0\nmanaged_filter_matches=0\ngenerated_rules=0\nallowlist_ready=0\nblocklist_ready=0\nconsecutive_failures=\nfirst_failed_at=\nlast_failed_at=\nlast_failure_reason=\nhealth_notified=\nupdated_at=\n'
+	fi
+}
+
+case "$COMMAND" in
+	sync|apply)
+		if sync_filter; then
+			record_health_success
+			write_status active active
+		else
+			sync_result=$?
+			sync_reason="$ADGUARD_REASON"
+			record_health_failure "$sync_reason"
+			write_status error "$sync_reason"
+			exit "$sync_result"
+		fi
+		;;
+	disable|clear) disable_filter ;;
+	probe)
+		if probe_api; then
+			[ "$FILTERING_ENABLED" = 1 ] && ADGUARD_REASON='reachable' || ADGUARD_REASON='filtering_disabled'
+			write_status reachable "$ADGUARD_REASON"
+		else
+			write_status error "$ADGUARD_REASON"
+			exit 1
+		fi
+		;;
+	generate) generate_feed; cat "$CANDIDATE_FEED"; rm -f "$CANDIDATE_FEED" ;;
+	status) show_status ;;
+	*) echo 'Usage: sheepfold-adguard [sync|disable|probe|generate|status]' >&2; exit 2 ;;
+esac

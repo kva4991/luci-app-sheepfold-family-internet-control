@@ -143,6 +143,8 @@ write_failure_state() {
 	label="$7"
 	url="$8"
 	reason="$9"
+	previous_count="${10:-}"
+	candidate_count="${11:-}"
 	tmp="$state_file.tmp.$$"
 	umask 077
 	{
@@ -155,6 +157,8 @@ write_failure_state() {
 		printf 'label=%s\n' "$(safe_text "$label")"
 		printf 'url=%s\n' "$(safe_text "$url")"
 		printf 'reason=%s\n' "$(safe_text "$reason")"
+		printf 'previous_count=%s\n' "$(safe_text "$previous_count")"
+		printf 'candidate_count=%s\n' "$(safe_text "$candidate_count")"
 	} > "$tmp"
 	chmod 600 "$tmp" 2>/dev/null || true
 	mv -f "$tmp" "$state_file"
@@ -166,6 +170,8 @@ record_failure() {
 	rf_label="$3"
 	rf_url="$4"
 	rf_reason="$5"
+	rf_previous_count="${6:-}"
+	rf_candidate_count="${7:-}"
 	rf_state="$(state_file_for "$rf_key")"
 	rf_now="$(date +%s)"
 	rf_count="$(value_from_file count "$rf_state")"
@@ -178,7 +184,7 @@ record_failure() {
 	rf_next=$((rf_now + RETRY_SECONDS))
 
 	write_failure_state "$rf_state" "$rf_count" "$rf_first" "$rf_next" "$rf_notified" \
-		"$rf_kind" "$rf_label" "$rf_url" "$rf_reason"
+		"$rf_kind" "$rf_label" "$rf_url" "$rf_reason" "$rf_previous_count" "$rf_candidate_count"
 
 	if [ "$rf_count" -ge 3 ] && [ "$rf_notified" != 1 ] && [ -x "$NOTIFICATION_HELPER" ]; then
 		rf_title="Не обновляется $(kind_text "$rf_kind")"
@@ -187,7 +193,7 @@ record_failure() {
 			"site-list:$rf_key:$rf_first" "$rf_title" "$rf_message" >/dev/null 2>&1; then
 			rf_notified=1
 			write_failure_state "$rf_state" "$rf_count" "$rf_first" "$rf_next" "$rf_notified" \
-				"$rf_kind" "$rf_label" "$rf_url" "$rf_reason"
+				"$rf_kind" "$rf_label" "$rf_url" "$rf_reason" "$rf_previous_count" "$rf_candidate_count"
 		fi
 	fi
 
@@ -409,10 +415,13 @@ install_source_cache() {
 	"$SORT_HELPER" -u "$isc_unsorted" > "$isc_candidate"
 	rm -f "$isc_unsorted"
 	isc_candidate_count="$(wc -l < "$isc_candidate" | tr -d ' ')"
+	SOURCE_CANDIDATE_COUNT="$isc_candidate_count"
+	SOURCE_PREVIOUS_COUNT=0
 
 	if [ -s "$isc_cache" ] && [ "$ACCEPT_SUSPICIOUS_SHRINK" != 1 ]; then
 		isc_previous_count="$(wc -l < "$isc_cache" | tr -d ' ')"
 		case "$isc_previous_count" in ''|*[!0-9]*) isc_previous_count=0 ;; esac
+		SOURCE_PREVIOUS_COUNT="$isc_previous_count"
 		# Короткая страница ошибки иногда содержит несколько похожих на домены строк. Не заменяем ею большой рабочий список (§slstres).
 		if [ "$isc_previous_count" -ge "$SHRINK_CHECK_MIN_DOMAINS" ] && \
 			[ $((isc_candidate_count * 100)) -lt $((isc_previous_count * MIN_RETAINED_PERCENT)) ]; then
@@ -441,6 +450,8 @@ process_source() {
 	ps_download="$RAW_DIR/$ps_key.download"
 	ps_payload="$RAW_DIR/$ps_key.payload"
 	ps_reason=''
+	SOURCE_PREVIOUS_COUNT=''
+	SOURCE_CANDIDATE_COUNT=''
 
 	printf '%s\n' "$ps_key" >> "$pk_active_keys"
 	if download_with_retries "$ps_url" "$ps_download"; then
@@ -473,7 +484,8 @@ process_source() {
 	pk_failed=$((pk_failed + 1))
 	FAILURE_COUNT=0
 	NEXT_RETRY_AT=0
-	record_failure "$ps_key" "$ps_kind" "$ps_label" "$ps_url" "$ps_reason"
+	record_failure "$ps_key" "$ps_kind" "$ps_label" "$ps_url" "$ps_reason" \
+		"$SOURCE_PREVIOUS_COUNT" "$SOURCE_CANDIDATE_COUNT"
 	if [ -s "$ps_cache" ]; then
 		# Ошибка источника не выкидывает его прошлые домены из общего списка.
 		printf '%s\n' "$ps_cache" >> "$pk_active_paths"
@@ -785,6 +797,99 @@ bootstrap_missing() {
 	update_lists
 }
 
+emit_source_status() {
+	ess_kind="$1"
+	ess_line="$2"
+	ess_index="$3"
+	ess_valid=1
+	ess_label=''
+	ess_url=''
+	ess_key=''
+	ess_state=''
+	ess_meta=''
+	ess_status=pending
+	ess_reason=''
+	ess_failure_count=0
+	ess_next_retry=''
+	ess_cached_count=0
+	ess_updated_at=''
+	ess_accept_shrink=0
+	ess_previous_count=''
+	ess_candidate_count=''
+
+	if ess_record="$(source_record "$ess_line")"; then
+		ess_label="$(printf '%s\n' "$ess_record" | cut -f1)"
+		ess_url="$(printf '%s\n' "$ess_record" | cut -f2-)"
+		ess_key="$(source_key "$ess_kind" "$ess_url")"
+	else
+		ess_valid=0
+		ess_label="$(printf '%s' "${ess_line%%|*}" | trim)"
+		[ -n "$ess_label" ] || ess_label='Некорректный источник'
+		ess_key="$(source_key "$ess_kind" "invalid:$ess_line")"
+	fi
+
+	ess_state="$(state_file_for "$ess_key")"
+	ess_meta="$SOURCE_CACHE_DIR/$ess_key.meta"
+	if [ -r "$ess_meta" ]; then
+		ess_cached_count="$(value_from_file count "$ess_meta")"
+		ess_updated_at="$(value_from_file updated_at "$ess_meta")"
+		case "$ess_cached_count" in ''|*[!0-9]*) ess_cached_count=0 ;; esac
+		case "$ess_updated_at" in ''|*[!0-9]*) ess_updated_at='' ;; esac
+		ess_status=ok
+	fi
+
+	if [ -r "$ess_state" ]; then
+		ess_status=error
+		ess_reason="$(value_from_file reason "$ess_state")"
+		ess_failure_count="$(value_from_file count "$ess_state")"
+		ess_next_retry="$(value_from_file next_retry_at "$ess_state")"
+		ess_previous_count="$(value_from_file previous_count "$ess_state")"
+		ess_candidate_count="$(value_from_file candidate_count "$ess_state")"
+		case "$ess_failure_count" in ''|*[!0-9]*) ess_failure_count=0 ;; esac
+		case "$ess_next_retry" in ''|*[!0-9]*) ess_next_retry='' ;; esac
+		case "$ess_previous_count" in ''|*[!0-9]*) ess_previous_count='' ;; esac
+		case "$ess_candidate_count" in ''|*[!0-9]*) ess_candidate_count='' ;; esac
+		[ "$ess_reason" = suspicious_shrink ] && ess_accept_shrink=1
+	elif [ "$ess_valid" = 0 ]; then
+		ess_status=error
+		ess_reason=invalid_source
+	fi
+
+	# URL намеренно не входит в runtime-статус: он может содержать закрытый путь
+	# или пользовательские параметры. Редактировать адрес можно в самой настройке.
+	printf 'source_%s_kind=%s\n' "$ess_index" "$(safe_text "$ess_kind")"
+	printf 'source_%s_label=%s\n' "$ess_index" "$(safe_text "$ess_label")"
+	printf 'source_%s_status=%s\n' "$ess_index" "$ess_status"
+	printf 'source_%s_cached_count=%s\n' "$ess_index" "$ess_cached_count"
+	printf 'source_%s_updated_at=%s\n' "$ess_index" "$ess_updated_at"
+	printf 'source_%s_reason=%s\n' "$ess_index" "$(safe_text "$ess_reason")"
+	printf 'source_%s_failure_count=%s\n' "$ess_index" "$ess_failure_count"
+	printf 'source_%s_next_retry_at=%s\n' "$ess_index" "$ess_next_retry"
+	printf 'source_%s_can_accept_shrink=%s\n' "$ess_index" "$ess_accept_shrink"
+	printf 'source_%s_previous_count=%s\n' "$ess_index" "$ess_previous_count"
+	printf 'source_%s_candidate_count=%s\n' "$ess_index" "$ess_candidate_count"
+}
+
+emit_configured_sources() {
+	ecs_index=0
+	for ecs_kind in allowlist blocklist; do
+		case "$ecs_kind" in
+			allowlist) ecs_option=site_allowlist_sources ;;
+			blocklist) ecs_option=site_blocklist_sources ;;
+		esac
+		ecs_file="$RAW_DIR/status-$ecs_kind.sources.$$"
+		printf '%s\n' "$(global_get "$ecs_option" '')" | tr ';' '\n' > "$ecs_file"
+		while IFS= read -r ecs_line; do
+			ecs_line="$(printf '%s' "$ecs_line" | trim)"
+			[ -n "$ecs_line" ] || continue
+			ecs_index=$((ecs_index + 1))
+			emit_source_status "$ecs_kind" "$ecs_line" "$ecs_index"
+		done < "$ecs_file"
+		rm -f "$ecs_file"
+	done
+	printf 'source_count=%s\n' "$ecs_index"
+}
+
 status() {
 	if [ -r "$STATUS_FILE" ]; then
 		cat "$STATUS_FILE"
@@ -796,6 +901,7 @@ status() {
 	if [ -x "$POLICY_HELPER" ]; then
 		"$POLICY_HELPER" status 2>/dev/null | sed 's/^/policy_/'
 	fi
+	emit_configured_sources
 }
 
 case "$COMMAND" in

@@ -10,14 +10,16 @@
 
 [Feedback backend setup: Yandex Cloud + YDB](docs/yandex-cloud-ydb-feedback.ru.md)
 
+[How official IPK and OpenWrt APK packages are built](docs/github-actions-openwrt-build.ru.md)
+
 Sheepfold is a family internet access control system for an OpenWRT router.
 
 It is being built as an OpenWRT router application with a LuCI web interface, backend service, Android companion app named **Sheepfold**, and messenger bot integration for managing household internet access.
 
 ## Installation
 
-The install script currently performs first-run questions and integration detection, but it does not yet download and install the latest `.ipk` by itself.
-It first asks for application language (`ru` by default, `en` for English), then asks for user-agreement consent and offers automatic setup. Full automatic setup is the default and may assign confidently detected infrastructure devices to the `No restrictions` group. Reduced mode can be selected explicitly for routers with very little free space; it avoids heavy port checks but can still auto-assign confidently detected infrastructure devices.
+The installer performs the first-run questions, detects AdGuard Home/Podkop, downloads the matching package from the latest stable release, and installs it with the native OpenWrt package manager: `.ipk` through `opkg` on 24.10 and older, or an OpenWrt `.apk` through apk v3 on 25.12 and newer.
+It first asks for application language (`ru` by default, `en` for English), then the Sheepfold product, user-agreement consent, and automatic setup mode. Full automatic setup is the default and may assign confidently detected infrastructure devices to the `No restrictions` group. Reduced mode can be selected explicitly for routers with very little free space; it avoids heavy port checks but can still auto-assign confidently detected infrastructure devices.
 
 ```sh
 wget -O /tmp/sheepfold-install.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/install.sh
@@ -26,7 +28,7 @@ sh /tmp/sheepfold-install.sh
 
 ## Update
 
-After the OpenWRT package is installed, the update script delegates to the installed Sheepfold updater. The updater checks the latest stable GitHub Release, compares versions, downloads the `.ipk`, and runs `opkg install` when a newer package is available.
+After the OpenWrt package is installed, the update script delegates to the installed Sheepfold updater. The updater checks the latest stable GitHub Release, compares versions, downloads the package format used by the current OpenWrt release, validates its internal metadata, and installs it only when a newer version is available.
 
 ```sh
 wget -O /tmp/sheepfold-update.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/update.sh

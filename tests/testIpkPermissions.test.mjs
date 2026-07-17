@@ -1,3 +1,8 @@
+/*
+ * Разбирает собранный тестовый IPK и защищает Unix executable-права package hooks,
+ * CGI и backend-файлов. Работает только во временном каталоге; успешный разбор не
+ * доказывает, что opkg конкретной прошивки установит и запустит пакет.
+ */
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -101,6 +106,17 @@ describe('test IPK executable permissions', () => {
     assert.equal(mode, '0o755');
   });
 
+  it('ships the IPv6 compatibility helper as executable in data.tar.gz', () => {
+    const ipkPath = buildTestIpk();
+    const mode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-ipv6-control',
+      './usr/libexec/sheepfold/sheepfold-package-manager',
+    );
+
+    assert.equal(mode, '0o755');
+  });
+
   it('ships the fw4 synchronizer as executable in data.tar.gz', () => {
     const ipkPath = buildTestIpk();
     const mode = tarMode(
@@ -129,6 +145,24 @@ describe('test IPK executable permissions', () => {
     );
 
     assert.equal(mode, '0o755');
+  });
+
+  it('ships the AdGuard adapter and its loopback feed as executable files', () => {
+    const ipkPath = buildTestIpk();
+    assert.equal(tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-adguard',
+    ), '0o755');
+    assert.equal(tarMode(
+      ipkPath,
+      './www/cgi-bin/sheepfold-adguard-list',
+    ), '0o755');
+  });
+
+  it('declares jshn for the AdGuard Home API JSON parser', () => {
+    const control = controlText(buildTestIpk(), './control');
+
+    assert.match(control, /^Depends:.*(?:^|, )jshn(?:,|$)/m);
   });
 
   it('ships the schedule evaluator as executable in data.tar.gz', () => {
@@ -179,12 +213,16 @@ describe('test IPK executable permissions', () => {
     );
 
     assert.match(hardening, /sheepfold-admin-notification/);
+    assert.match(hardening, /sheepfold-ipv6-control/);
     assert.match(hardening, /sheepfold-domain-policy/);
+    assert.match(hardening, /sheepfold-adguard/);
+    assert.match(hardening, /sheepfold-adguard-list/);
   });
 
   it('ships an executable uninstall hook that removes Sheepfold cron jobs', () => {
     const ipkPath = buildTestIpk();
     assert.equal(controlMode(ipkPath, './prerm'), '0o755');
+    const packagedPrerm = controlText(ipkPath, './prerm');
     const buildPy = readFileSync(buildScript, 'utf8');
     const makefile = readFileSync(
       resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control/Makefile'),
@@ -192,8 +230,19 @@ describe('test IPK executable permissions', () => {
     );
     assert.match(buildPy, /sheepfold-site-lists cron-remove/);
     assert.match(buildPy, /sheepfold-domain-policy clear/);
+    assert.match(buildPy, /\$\{1:-remove\}" != upgrade[\s\S]*sheepfold-ipv6-control release/);
     assert.match(makefile, /sheepfold-site-lists cron-remove/);
     assert.match(makefile, /sheepfold-domain-policy clear/);
+    assert.match(makefile, /\$\$\{1:-remove\}" != upgrade[\s\S]*sheepfold-ipv6-control release/);
+    assert.match(packagedPrerm, /\$\{1:-remove\}" != upgrade[\s\S]*sheepfold-ipv6-control release/);
+    assert.match(packagedPrerm, /logger -t sheepfold[\s\S]*IPv6/);
+
+    const syntax = spawnSync('sh', ['-n'], {
+      cwd: repoRoot,
+      input: packagedPrerm,
+      encoding: 'utf8',
+    });
+    assert.equal(syntax.status, 0, syntax.error?.message || syntax.stderr || syntax.stdout);
   });
 
   it('postinst chmods all libexec helpers after install', () => {

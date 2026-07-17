@@ -9,7 +9,8 @@ ASSET_PACKAGE="luci-app-sheepfold-family-internet-control"
 AGREEMENT_URL="https://github.com/${OWNER}/${REPO}/blob/main/docs/user-agreement.ru.md"
 RELEASE_API="https://api.github.com/repos/${OWNER}/${REPO}/releases/latest"
 INSTALL_DIR="/tmp/sheepfold-install"
-PACKAGE_FILE="${INSTALL_DIR}/${ASSET_PACKAGE}.ipk"
+PACKAGE_FILE=''
+PACKAGE_MANAGER_HELPER="/usr/libexec/sheepfold/sheepfold-package-manager"
 
 echo "Sheepfold Family Internet Control installer"
 echo "Repository: ${OWNER}/${REPO}"
@@ -72,13 +73,89 @@ case "${PRODUCT_CHOICE}" in
         exit 1
         ;;
 esac
-PACKAGE_FILE="${INSTALL_DIR}/${ASSET_PACKAGE}.ipk"
 echo "Release artifact: ${ASSET_PACKAGE}"
 
-if ! command -v opkg >/dev/null 2>&1; then
-    echo "ERROR: opkg was not found." >&2
+# При первой установке общий адаптер ещё не лежит на роутере. Этот bootstrap
+# повторяет только минимальный публичный контракт, нужный для установки самого
+# пакета; все дальнейшие операции выполняет установленный единый адаптер.
+if [ -r "$PACKAGE_MANAGER_HELPER" ]; then
+    . "$PACKAGE_MANAGER_HELPER"
+else
+    sheepfold_package_manager() {
+        if command -v opkg >/dev/null 2>&1; then
+            printf '%s\n' opkg
+        elif command -v apk >/dev/null 2>&1; then
+            printf '%s\n' apk
+        else
+            return 127
+        fi
+    }
+
+    sheepfold_package_is_installed() {
+        bootstrap_manager="$(sheepfold_package_manager)" || return $?
+        case "$bootstrap_manager" in
+            opkg) opkg status "$1" >/dev/null 2>&1 ;;
+            apk) apk info -e "$1" >/dev/null 2>&1 ;;
+        esac
+    }
+
+    sheepfold_package_version() {
+        bootstrap_name="$1"
+        bootstrap_manager="$(sheepfold_package_manager)" || return $?
+        case "$bootstrap_manager" in
+            opkg)
+                opkg status "$bootstrap_name" 2>/dev/null |
+                    sed -n 's/^Version: //p' |
+                    sed -n '1p'
+                ;;
+            apk)
+                apk info -e "$bootstrap_name" >/dev/null 2>&1 || return 1
+                apk info --from installed --fields version --format json "$bootstrap_name" 2>/dev/null |
+                    sed -n 's/^[[:space:]]*"version": "\([^"]*\)".*/\1/p' |
+                    sed -n '1p'
+                ;;
+        esac
+    }
+
+    sheepfold_package_install_file() {
+        bootstrap_file="${1:-}"
+        bootstrap_force="${2:-0}"
+        [ -n "$bootstrap_file" ] && [ -f "$bootstrap_file" ] || return 2
+        bootstrap_manager="$(sheepfold_package_manager)" || return $?
+        case "$bootstrap_manager" in
+            opkg)
+                if [ "$bootstrap_force" = 1 ]; then
+                    opkg --force-reinstall install "$bootstrap_file"
+                else
+                    opkg install "$bootstrap_file"
+                fi
+                ;;
+            apk)
+                if [ "$bootstrap_force" = 1 ]; then
+                    apk add --allow-untrusted --force-reinstall "$bootstrap_file"
+                else
+                    apk add --allow-untrusted "$bootstrap_file"
+                fi
+                ;;
+        esac
+    }
+fi
+
+if ! PACKAGE_MANAGER="$(sheepfold_package_manager)"; then
+    echo "ERROR: OpenWrt package manager was not found (opkg or apk)." >&2
     exit 1
 fi
+
+case "$PACKAGE_MANAGER" in
+    opkg) PACKAGE_EXTENSION='ipk' ;;
+    apk) PACKAGE_EXTENSION='apk' ;;
+    *)
+        echo "ERROR: Unsupported OpenWrt package manager: ${PACKAGE_MANAGER}." >&2
+        exit 1
+        ;;
+esac
+PACKAGE_FILE="${INSTALL_DIR}/${ASSET_PACKAGE}.${PACKAGE_EXTENSION}"
+echo "Package manager: ${PACKAGE_MANAGER}"
 
 echo ""
 echo "Before installation, read the user agreement and data processing consent:"
@@ -134,7 +211,7 @@ case "${AUTO_CONFIGURE_ACCEPTED}" in
 esac
 
 package_installed() {
-    opkg status "$1" 2>/dev/null | grep -q '^Status: .* installed$'
+    sheepfold_package_is_installed "$1"
 }
 
 service_exists() {
@@ -188,6 +265,24 @@ apply_selected_settings() {
     fi
     uci -q set sheepfold.global.adguard_integration="${ADGUARD_DETECTED}"
     uci -q set sheepfold.global.podkop_compatibility="${PODKOP_DETECTED}"
+    current_integration="$(uci -q get sheepfold.global.integration_mode 2>/dev/null || printf none)"
+    ipv6_source="$(uci -q get sheepfold.global.router_ipv6_mode_source 2>/dev/null || printf default)"
+    case "${current_integration}" in
+        podkop|adguard_podkop)
+            if [ "$(uci -q get sheepfold.global.router_ipv6_disabled 2>/dev/null || printf 0)" != "1" ]; then
+                uci -q set sheepfold.global.router_ipv6_disabled='1'
+                uci -q set sheepfold.global.router_ipv6_mode_source='auto_podkop'
+            elif [ "${ipv6_source}" = 'default' ]; then
+                uci -q set sheepfold.global.router_ipv6_mode_source='auto_podkop'
+            fi
+            ;;
+        *)
+            if [ "${ipv6_source}" = 'auto_podkop' ]; then
+                uci -q set sheepfold.global.router_ipv6_disabled='0'
+                uci -q set sheepfold.global.router_ipv6_mode_source='default'
+            fi
+            ;;
+    esac
     uci -q set sheepfold.global.auto_configure="${AUTO_CONFIGURE}"
     uci -q set sheepfold.global.detection_mode="${DETECTION_MODE}"
     uci -q set sheepfold.global.no_restrictions_auto_assign="${NO_RESTRICTIONS_AUTO_ASSIGN}"
@@ -195,6 +290,8 @@ apply_selected_settings() {
     uci -q set sheepfold.podkop.enabled="${PODKOP_DETECTED}"
     uci -q commit sheepfold
     uci -q commit luci 2>/dev/null || true
+    [ -x /usr/libexec/sheepfold/sheepfold-ipv6-control ] && \
+        /usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || true
 }
 
 if [ ! -r /etc/config/sheepfold ]; then
@@ -236,11 +333,18 @@ if ! fetch_to_file "$RELEASE_API" "$release_json"; then
     exit 1
 fi
 
-# GitHub latest excludes drafts and pre-releases. Choose only the architecture-independent
-# OpenWrt package published by this project, as Sheepfold does not contain native binaries.
-package_url="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*_all\.ipk\)".*/\1/p' "$release_json" | grep "/${ASSET_PACKAGE}_" | head -n 1)"
+# GitHub latest excludes drafts and pre-releases. Выбираем только OpenWrt-артефакт
+# активной редакции: строгий префикс не даёт принять Android APK за пакет роутера.
+case "$PACKAGE_MANAGER" in
+    opkg)
+        package_url="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*_all\.ipk\)".*/\1/p' "$release_json" | grep "/${ASSET_PACKAGE}_" | head -n 1)"
+        ;;
+    apk)
+        package_url="$(sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\.apk\)".*/\1/p' "$release_json" | grep "/${ASSET_PACKAGE}-" | head -n 1)"
+        ;;
+esac
 if [ -z "$package_url" ]; then
-    echo "ERROR: The latest stable release does not contain the Sheepfold all.ipk package." >&2
+    echo "ERROR: The latest stable release does not contain the Sheepfold OpenWrt .${PACKAGE_EXTENSION} package." >&2
     exit 1
 fi
 
@@ -255,7 +359,7 @@ if [ ! -s "$PACKAGE_FILE" ]; then
     exit 1
 fi
 
-echo "Installing Sheepfold with opkg..."
+echo "Installing Sheepfold with ${PACKAGE_MANAGER}..."
 CONFIG_BACKUP="${INSTALL_DIR}/sheepfold.config.before-install"
 if [ -s /etc/config/sheepfold ]; then
     cp /etc/config/sheepfold "$CONFIG_BACKUP"
@@ -263,8 +367,15 @@ if [ -s /etc/config/sheepfold ]; then
 fi
 
 CURRENT_PRODUCT_VARIANT="$(uci -q get sheepfold.global.product_variant 2>/dev/null || true)"
-CURRENT_PACKAGE_VERSION="$(opkg status "$INSTALLED_PACKAGE" 2>/dev/null | sed -n 's/^Version: //p' | sed -n '1p')"
-TARGET_PACKAGE_VERSION="$(basename "$package_url" | sed -n "s/^${ASSET_PACKAGE}_\\([^_]*\\)_all\\.ipk$/\\1/p" | sed -n '1p')"
+CURRENT_PACKAGE_VERSION="$(sheepfold_package_version "$INSTALLED_PACKAGE" 2>/dev/null || true)"
+case "$PACKAGE_MANAGER" in
+    opkg)
+        TARGET_PACKAGE_VERSION="$(basename "$package_url" | sed -n "s/^${ASSET_PACKAGE}_\\([^_]*\\)_all\\.ipk$/\\1/p" | sed -n '1p')"
+        ;;
+    apk)
+        TARGET_PACKAGE_VERSION="$(basename "$package_url" | sed -n "s/^${ASSET_PACKAGE}-\\(.*\\)\\.apk$/\\1/p" | sed -n '1p')"
+        ;;
+esac
 if [ -z "$CURRENT_PRODUCT_VARIANT" ]; then
     if package_installed "$LEGACY_AI_PACKAGE"; then
         CURRENT_PRODUCT_VARIANT="sheepfoldAi"
@@ -273,21 +384,21 @@ if [ -z "$CURRENT_PRODUCT_VARIANT" ]; then
     fi
 fi
 
-# На одной версии opkg иначе ответит "up to date" и не заменит payload редакции.
-# Конфиг вынесен в отдельную копию, потому что --force-reinstall штатно удаляет
-# установленный пакет перед немедленной установкой выбранного IPK. §prodvar
+# На одной версии менеджер пакетов иначе не заменит payload другой редакции.
+# Конфиг вынесен в отдельную копию, потому что принудительная переустановка может
+# удалить установленный payload перед немедленной установкой выбранного пакета. §prodvar
 if package_installed "$INSTALLED_PACKAGE" && \
    [ "$CURRENT_PRODUCT_VARIANT" != "$PRODUCT_VARIANT" ] && \
    [ -n "$CURRENT_PACKAGE_VERSION" ] && \
    [ "$CURRENT_PACKAGE_VERSION" = "$TARGET_PACKAGE_VERSION" ]; then
     echo "Switching Sheepfold product while preserving the existing configuration..."
-    if opkg --force-reinstall install "$PACKAGE_FILE"; then
+    if sheepfold_package_install_file "$PACKAGE_FILE" 1; then
         INSTALL_CODE=0
     else
         INSTALL_CODE="$?"
     fi
 else
-    if opkg install "$PACKAGE_FILE"; then
+    if sheepfold_package_install_file "$PACKAGE_FILE" 0; then
         INSTALL_CODE=0
     else
         INSTALL_CODE="$?"

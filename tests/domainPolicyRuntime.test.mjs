@@ -1,3 +1,8 @@
+/*
+ * Симулирует runtime белых/чёрных списков сайтов, DNS и firewall в изолированном
+ * временном стенде. Все файлы создаются вне реального /etc; зелёный результат не
+ * заменяет проверку dnsmasq/nftables и трафика клиента на живом OpenWrt.
+ */
 import {
   chmodSync,
   existsSync,
@@ -46,6 +51,10 @@ function executable(path, body) {
 
 function scenario({
   integrationMode = 'none',
+  siteFilterBackend = 'auto',
+  adguardAutoManage = '1',
+  adguardSyncResult = 'success',
+  adguardReason = 'active',
   siteBlocklistMode = 'except_allowlist_admins',
   allowlistOnly = '1',
   nftset = true,
@@ -62,6 +71,7 @@ function scenario({
   const restartCount = join(root, 'restart.count');
   const firewallLog = join(root, 'firewall.log');
   const notificationLog = join(root, 'notification.log');
+  const adguardLog = join(root, 'adguard.log');
   const domainResetCount = join(root, 'domain-reset.count');
   const target = join(dnsmasqDir, 'sheepfold-domain-policy.conf');
   mkdirSync(bin, { recursive: true });
@@ -77,11 +87,32 @@ function scenario({
 #!/bin/sh
 case "$*" in
   *"get sheepfold.global.integration_mode") printf '%s' "$INTEGRATION_MODE" ;;
+  *"get sheepfold.global.site_filter_backend") printf '%s' "$SITE_FILTER_BACKEND" ;;
+  *"get sheepfold.global.adguard_auto_manage") printf '%s' "$ADGUARD_AUTO_MANAGE" ;;
   *"get sheepfold.global.site_blocklist_mode") printf '%s' "$SITE_BLOCKLIST_MODE" ;;
   *"get sheepfold.child.allowlist_only") printf '%s' "$ALLOWLIST_ONLY" ;;
   *"get dhcp.@dnsmasq[0].confdir") printf '%s' "$DNSMASQ_CONF_DIR" ;;
   *"show sheepfold") printf 'sheepfold.child=group\n' ;;
   *) exit 1 ;;
+esac
+`);
+  executable(join(bin, 'adguard'), `
+#!/bin/sh
+printf '%s\n' "$1" >> "$ADGUARD_LOG"
+case "$1" in
+  sync)
+    [ "$ADGUARD_SYNC_RESULT" = success ]
+    ;;
+  disable) exit 0 ;;
+  status)
+    printf 'reason=%s\n' "$ADGUARD_REASON"
+    printf 'allowlist_ready=1\nblocklist_ready=1\n'
+    printf 'server_running=1\nprotection_enabled=1\nserver_version=v0.107.66\ndns_port=53\n'
+    printf 'dns_address_count=2\ndns_info_available=1\ndns_info_reason=available\n'
+    printf 'upstream_count=2\nfallback_count=1\nbootstrap_count=2\n'
+    printf 'engine_checked=1\ndns_path_status=not_checked\ndns_path_reason=client_probe_required\n'
+    ;;
+  *) exit 2 ;;
 esac
 `);
   executable(join(bin, 'dnsmasq'), `
@@ -132,6 +163,11 @@ exit 0
     ...process.env,
     PATH: shellPath,
     INTEGRATION_MODE: integrationMode,
+    SITE_FILTER_BACKEND: siteFilterBackend,
+    ADGUARD_AUTO_MANAGE: adguardAutoManage,
+    ADGUARD_SYNC_RESULT: adguardSyncResult,
+    ADGUARD_REASON: adguardReason,
+    ADGUARD_LOG: posix(relative(repoRoot, adguardLog)),
     SITE_BLOCKLIST_MODE: siteBlocklistMode,
     ALLOWLIST_ONLY: allowlistOnly,
     DNSMASQ_CONF_DIR: posix(relative(repoRoot, dnsmasqDir)),
@@ -149,6 +185,7 @@ exit 0
     SHEEPFOLD_DOMAIN_POLICY_DNSMASQ_BIN: posix(relative(repoRoot, join(bin, 'dnsmasq'))),
     SHEEPFOLD_DOMAIN_POLICY_DNSMASQ_INIT: posix(relative(repoRoot, join(bin, 'dnsmasq-init'))),
     SHEEPFOLD_DOMAIN_POLICY_FIREWALL_HELPER: posix(relative(repoRoot, join(bin, 'firewall'))),
+    SHEEPFOLD_ADGUARD_HELPER: posix(relative(repoRoot, join(bin, 'adguard'))),
     SHEEPFOLD_NOTIFICATION_HELPER: posix(relative(repoRoot, join(bin, 'notification'))),
     SHEEPFOLD_LOG_HELPER: posix(relative(repoRoot, join(bin, 'log'))),
     SHEEPFOLD_DOMAIN_POLICY_ALLOW_RELATIVE_PATHS: '1',
@@ -166,6 +203,7 @@ exit 0
     restartCount,
     firewallLog,
     notificationLog,
+    adguardLog,
   };
 }
 
@@ -193,7 +231,7 @@ describe('runtime policy for site allowlists and blocklists', () => {
     assert.match(readFileSync(test.firewallLog, 'utf8'), /^sync:1:1$/m);
   });
 
-  it('delegates DNS filtering to AdGuard without leaving local enforcement active', () => {
+  it('uses the confirmed Sheepfold-managed AdGuard filter without local DNS rules', () => {
     const test = scenario({
       integrationMode: 'adguard_podkop',
       oldConfig: 'nftset=/old.example/4#inet#fw4#old\n',
@@ -204,8 +242,44 @@ describe('runtime policy for site allowlists and blocklists', () => {
     assert.equal(existsSync(test.target), false);
     assert.equal(existsSync(test.active), false);
     assert.match(readFileSync(test.status, 'utf8'), /^backend=adguard$/m);
-    assert.match(readFileSync(test.status, 'utf8'), /^reason=delegated_to_adguard$/m);
+    assert.match(readFileSync(test.status, 'utf8'), /^reason=active$/m);
+    assert.match(readFileSync(test.status, 'utf8'), /^adguard_reason=active$/m);
+    assert.match(readFileSync(test.status, 'utf8'), /^adguard_server_running=1$/m);
+    assert.match(readFileSync(test.status, 'utf8'), /^adguard_server_version=v0\.107\.66$/m);
+    assert.match(readFileSync(test.status, 'utf8'), /^adguard_dns_path_status=not_checked$/m);
+    assert.match(readFileSync(test.adguardLog, 'utf8'), /^sync$/m);
     assert.equal(readFileSync(test.restartCount, 'utf8').trim(), '1');
+  });
+
+  it('falls back to built-in filtering when the AdGuard API cannot be confirmed', () => {
+    const test = scenario({
+      integrationMode: 'adguard',
+      adguardSyncResult: 'failure',
+      adguardReason: 'authentication_failed',
+    });
+    const result = test.run();
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(readFileSync(test.status, 'utf8'), /^backend=dnsmasq$/m);
+    assert.match(readFileSync(test.status, 'utf8'), /^adguard_reason=authentication_failed$/m);
+    assert.match(readFileSync(test.status, 'utf8'), /^adguard_fallback=1$/m);
+    assert.match(readFileSync(test.adguardLog, 'utf8'), /^sync$/m);
+    assert.match(readFileSync(test.adguardLog, 'utf8'), /^disable$/m);
+  });
+
+  it('reports manual AdGuard delegation as unverified when automatic management is off', () => {
+    const test = scenario({
+      integrationMode: 'adguard',
+      siteFilterBackend: 'adguard',
+      adguardAutoManage: '0',
+      oldConfig: 'nftset=/old.example/4#inet#fw4#old\n',
+      oldActive: 'backend=dnsmasq\nallowlist_ready=1\nblocklist_ready=1\n',
+    });
+    const result = test.run();
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(existsSync(test.target), false);
+    assert.match(readFileSync(test.status, 'utf8'), /^backend=adguard$/m);
+    assert.match(readFileSync(test.status, 'utf8'), /^reason=manual_unverified$/m);
+    assert.doesNotMatch(readFileSync(test.adguardLog, 'utf8'), /^(sync|disable)$/m);
   });
 
   it('restores the previous dnsmasq file when the new configuration cannot start', () => {

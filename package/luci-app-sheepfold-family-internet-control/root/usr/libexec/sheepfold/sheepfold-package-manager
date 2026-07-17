@@ -1,0 +1,163 @@
+#!/bin/sh
+# Единый адаптер системного менеджера пакетов OpenWrt. Его можно source-ить из
+# backend-скриптов или вызывать как CLI. На 24.10 приоритет у opkg даже при
+# дополнительно установленном apk; на 25.12, где opkg отсутствует, выбирается apk.
+# Функции не выполняют массовое upgrade: Sheepfold обновляет только явно названные
+# пакеты и никогда не пытается обновить всю прошивку через package manager (§pkgmgr1).
+
+sheepfold_package_manager() {
+    if command -v opkg >/dev/null 2>&1; then
+        printf '%s\n' opkg
+    elif command -v apk >/dev/null 2>&1; then
+        printf '%s\n' apk
+    else
+        return 127
+    fi
+}
+
+sheepfold_package_is_installed() {
+    _sf_pm_manager="$(sheepfold_package_manager)" || return $?
+    case "$_sf_pm_manager" in
+        opkg) opkg status "$1" >/dev/null 2>&1 ;;
+        apk) apk info -e "$1" >/dev/null 2>&1 ;;
+    esac
+}
+
+sheepfold_package_version() {
+    _sf_pm_name="$1"
+    _sf_pm_manager="$(sheepfold_package_manager)" || return $?
+    case "$_sf_pm_manager" in
+        opkg)
+            opkg status "$_sf_pm_name" 2>/dev/null |
+                sed -n 's/^Version: //p' |
+                sed -n '1p'
+            ;;
+        apk)
+            apk info -e "$_sf_pm_name" >/dev/null 2>&1 || return 1
+            # apk-tools v3 умеет стабильный JSON query. Так мы не разбираем
+            # локализованный вывод и не добавляем jsonfilter только ради версии.
+            apk info --from installed --fields version --format json "$_sf_pm_name" 2>/dev/null |
+                sed -n 's/^[[:space:]]*"version": "\([^"]*\)".*/\1/p' |
+                sed -n '1p'
+            ;;
+    esac
+}
+
+sheepfold_package_update_indexes() {
+    _sf_pm_manager="$(sheepfold_package_manager)" || return $?
+    case "$_sf_pm_manager" in
+        opkg) opkg update ;;
+        apk) apk update ;;
+    esac
+}
+
+sheepfold_package_install_named() {
+    [ "$#" -gt 0 ] || return 2
+    _sf_pm_manager="$(sheepfold_package_manager)" || return $?
+    case "$_sf_pm_manager" in
+        opkg) opkg install "$@" ;;
+        apk) apk add "$@" ;;
+    esac
+}
+
+sheepfold_package_install_file() {
+    _sf_pm_file="${1:-}"
+    _sf_pm_force="${2:-0}"
+    [ -n "$_sf_pm_file" ] && [ -f "$_sf_pm_file" ] || return 2
+    _sf_pm_manager="$(sheepfold_package_manager)" || return $?
+    case "$_sf_pm_manager" in
+        opkg)
+            if [ "$_sf_pm_force" = 1 ]; then
+                opkg --force-reinstall install "$_sf_pm_file"
+            else
+                opkg install "$_sf_pm_file"
+            fi
+            ;;
+        apk)
+            if [ "$_sf_pm_force" = 1 ]; then
+                apk add --allow-untrusted --force-reinstall "$_sf_pm_file"
+            else
+                apk add --allow-untrusted "$_sf_pm_file"
+            fi
+            ;;
+    esac
+}
+
+sheepfold_package_remove() {
+    [ "$#" -gt 0 ] || return 2
+    _sf_pm_manager="$(sheepfold_package_manager)" || return $?
+    case "$_sf_pm_manager" in
+        opkg) opkg remove "$@" ;;
+        apk) apk del "$@" ;;
+    esac
+}
+
+sheepfold_package_is_newer() {
+    _sf_pm_candidate="${1:-}"
+    _sf_pm_current="${2:-}"
+    [ -n "$_sf_pm_candidate" ] && [ -n "$_sf_pm_current" ] || return 2
+    _sf_pm_manager="$(sheepfold_package_manager)" || return $?
+    case "$_sf_pm_manager" in
+        opkg) opkg compare-versions "$_sf_pm_candidate" '>' "$_sf_pm_current" >/dev/null 2>&1 ;;
+        apk) [ "$(apk version -t "$_sf_pm_candidate" "$_sf_pm_current" 2>/dev/null)" = '>' ] ;;
+    esac
+}
+
+sheepfold_package_list_upgradable() {
+    _sf_pm_manager="$(sheepfold_package_manager)" || return $?
+    case "$_sf_pm_manager" in
+        opkg) opkg list-upgradable ;;
+        apk) apk version -l '<' ;;
+    esac
+}
+
+sheepfold_package_is_upgradable() {
+    _sf_pm_name="${1:-}"
+    [ -n "$_sf_pm_name" ] || return 2
+    _sf_pm_manager="$(sheepfold_package_manager)" || return $?
+    case "$_sf_pm_manager" in
+        opkg)
+            opkg list-upgradable 2>/dev/null | grep -q "^${_sf_pm_name} "
+            ;;
+        apk)
+            apk version -l '<' "$_sf_pm_name" 2>/dev/null | grep -q "^${_sf_pm_name}-"
+            ;;
+    esac
+}
+
+sheepfold_package_usage() {
+    cat <<'EOF'
+Usage: sheepfold-package-manager COMMAND [ARGS...]
+
+Commands:
+  manager
+  installed PACKAGE
+  version PACKAGE
+  update
+  install PACKAGE...
+  install-file FILE [FORCE: 0|1]
+  remove PACKAGE...
+  newer CANDIDATE_VERSION CURRENT_VERSION
+  upgradable
+  is-upgradable PACKAGE
+EOF
+}
+
+if [ "${0##*/}" = 'sheepfold-package-manager' ]; then
+    _sf_pm_command="${1:-}"
+    [ "$#" -eq 0 ] || shift
+    case "$_sf_pm_command" in
+        manager) sheepfold_package_manager ;;
+        installed) [ "$#" -eq 1 ] || exit 2; sheepfold_package_is_installed "$1" ;;
+        version) [ "$#" -eq 1 ] || exit 2; sheepfold_package_version "$1" ;;
+        update) [ "$#" -eq 0 ] || exit 2; sheepfold_package_update_indexes ;;
+        install) sheepfold_package_install_named "$@" ;;
+        install-file) [ "$#" -ge 1 ] && [ "$#" -le 2 ] || exit 2; sheepfold_package_install_file "$@" ;;
+        remove) sheepfold_package_remove "$@" ;;
+        newer) [ "$#" -eq 2 ] || exit 2; sheepfold_package_is_newer "$1" "$2" ;;
+        upgradable) [ "$#" -eq 0 ] || exit 2; sheepfold_package_list_upgradable ;;
+        is-upgradable) [ "$#" -eq 1 ] || exit 2; sheepfold_package_is_upgradable "$1" ;;
+        -h|--help|help|'') sheepfold_package_usage ;;
+        *) sheepfold_package_usage >&2; exit 2 ;;
+    esac
+fi
