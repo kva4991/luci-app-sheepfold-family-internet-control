@@ -101,12 +101,16 @@ function Invoke-SheepfoldSsh {
     )
 
     $target = '{0}@{1}' -f $Config.routerUser, $Config.routerHost
+    # Git выдаёт PowerShell-файлы с CRLF, но многострочная команда исполняется
+    # BusyBox ash на роутере. Оставшийся CR превращает `then` в другой токен и
+    # ломает if/elif ещё до запуска проверки, поэтому нормализуем команды здесь.
+    $normalizedCommand = $RemoteCommand.Replace("`r`n", "`n").Replace("`r", "`n")
     $previousPreference = $ErrorActionPreference
     try {
         # OpenSSH пишет диагностику в stderr; в Windows PowerShell 5 это не должно
         # стать исключением раньше, чем мы прочитаем настоящий process exit code.
         $ErrorActionPreference = 'Continue'
-        $output = & ssh.exe @(Get-SheepfoldSshArgs -Config $Config) $target $RemoteCommand 2>&1
+        $output = & ssh.exe @(Get-SheepfoldSshArgs -Config $Config) $target $normalizedCommand 2>&1
         $exitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousPreference

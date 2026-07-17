@@ -99,45 +99,8 @@ printf 'configured-secret-count=%s\n' "$count"
 }
 
 function New-RemoteBackup {
-    $template = @'
-set -eu
-run_dir='__RUN_DIR__'
-mkdir -p "$run_dir/config"
-chmod 700 "$run_dir" "$run_dir/config"
-: > "$run_dir/absent-configs"
-for name in sheepfold dhcp wireless firewall; do
-    if [ -f "/etc/config/$name" ]; then
-        cp -p "/etc/config/$name" "$run_dir/config/$name"
-    else
-        printf '%s\n' "$name" >> "$run_dir/absent-configs"
-    fi
-done
-case '__PACKAGE_MANAGER__' in
-    opkg)
-        if opkg status luci-app-sheepfold-family-internet-control >/dev/null 2>&1; then
-            opkg status luci-app-sheepfold-family-internet-control > "$run_dir/package-status.txt"
-        elif opkg status luci-app-sheepfold-ai-support >/dev/null 2>&1; then
-            opkg status luci-app-sheepfold-ai-support > "$run_dir/package-status.txt"
-        else
-            : > "$run_dir/package-status.txt"
-        fi
-        ;;
-    apk)
-        if apk info -e luci-app-sheepfold-family-internet-control >/dev/null 2>&1; then
-            apk info --from installed --fields name,version --format json luci-app-sheepfold-family-internet-control > "$run_dir/package-status.txt"
-        elif apk info -e luci-app-sheepfold-ai-support >/dev/null 2>&1; then
-            apk info --from installed --fields name,version --format json luci-app-sheepfold-ai-support > "$run_dir/package-status.txt"
-        else
-            : > "$run_dir/package-status.txt"
-        fi
-        ;;
-esac
-tar -czf "$run_dir/config-backup.tgz" -C "$run_dir" config absent-configs package-status.txt
-tar -tzf "$run_dir/config-backup.tgz" >/dev/null
-chmod 600 "$run_dir/config-backup.tgz"
-'@
-    $backupCommand = $template.Replace('__RUN_DIR__', $remoteDir).Replace('__PACKAGE_MANAGER__', $packageManager)
-    Invoke-LoggedSsh -Command $backupCommand | Out-Null
+    Write-TestLog 'Создаётся резервная копия известных UCI-конфигов.'
+    Invoke-LoggedSsh -Command "sh '$remoteDir/routerState.sh' backup '$remoteDir' '$packageManager'" | Out-Null
 
     $localBackup = Join-Path $privateDir 'config-backup.tgz'
     Receive-SheepfoldFile -Config $config -RemotePath "$remoteDir/config-backup.tgz" -LocalPath $localBackup
@@ -155,29 +118,8 @@ chmod 600 "$run_dir/config-backup.tgz"
 }
 
 function Restore-RemoteBackup {
-    $template = @'
-set -eu
-run_dir='__RUN_DIR__'
-for name in sheepfold dhcp wireless firewall; do
-    if grep -qx "$name" "$run_dir/absent-configs"; then
-        rm -f "/etc/config/$name"
-    elif [ -f "$run_dir/config/$name" ]; then
-        cp -p "$run_dir/config/$name" "/etc/config/$name"
-    fi
-done
-uci -q commit sheepfold || true
-if [ -x /usr/libexec/sheepfold/sheepfold-router-control ]; then
-    /usr/libexec/sheepfold/sheepfold-router-control settings-import-applied >/dev/null 2>&1 || true
-fi
-for name in sheepfold dhcp wireless firewall; do
-    if grep -qx "$name" "$run_dir/absent-configs"; then
-        [ ! -e "/etc/config/$name" ] || exit 1
-    elif [ -f "$run_dir/config/$name" ]; then
-        cmp -s "$run_dir/config/$name" "/etc/config/$name" || exit 1
-    fi
-done
-'@
-    Invoke-LoggedSsh -Command ($template.Replace('__RUN_DIR__', $remoteDir)) | Out-Null
+    Write-TestLog 'Восстанавливается точная резервная копия известных UCI-конфигов.'
+    Invoke-LoggedSsh -Command "sh '$remoteDir/routerState.sh' restore '$remoteDir'" | Out-Null
 }
 
 function Resolve-TestPackage {
@@ -277,13 +219,21 @@ function Remove-RemoteRunDirectory {
     Invoke-LoggedSsh -Command $cleanup -AllowFailure | Out-Null
 }
 
+$remoteDirReady = $false
 Write-TestLog "Профиль: $Profile; роутер: $($config.routerHost):$($config.sshPort); вариант: $Variant"
-$remoteScriptSource = Join-Path $PSScriptRoot 'remoteChecks.sh'
-$normalizedScript = Join-Path $reportDir 'remoteChecks.sh'
-$scriptText = (Get-Content -LiteralPath $remoteScriptSource -Raw -Encoding UTF8).Replace("`r`n", "`n")
-[System.IO.File]::WriteAllText($normalizedScript, $scriptText, (New-Object System.Text.UTF8Encoding($false)))
 
-$preflightCommand = @'
+try {
+    $unixScripts = @{}
+    foreach ($scriptName in @('remoteChecks.sh', 'routerState.sh')) {
+        $sourcePath = Join-Path $PSScriptRoot $scriptName
+        $copyPath = Join-Path $reportDir $scriptName
+        $scriptText = (Get-Content -LiteralPath $sourcePath -Raw -Encoding UTF8).Replace("`r`n", "`n")
+        [System.IO.File]::WriteAllText($copyPath, $scriptText, (New-Object System.Text.UTF8Encoding($false)))
+        $unixScripts[$scriptName] = $copyPath
+    }
+
+    Write-TestLog 'Проверяется OpenWrt и системный менеджер пакетов.'
+    $preflightCommand = @'
 ubus call system board >/dev/null || exit 1
 if command -v opkg >/dev/null 2>&1; then
     printf 'package-manager=opkg\n'
@@ -294,24 +244,30 @@ else
 fi
 printf preflight-ok
 '@
-$probe = Invoke-LoggedSsh -Command $preflightCommand
-if (($probe.Output -join "`n") -notmatch 'preflight-ok') {
-    throw 'Предполётная проверка OpenWrt и системного менеджера пакетов не пройдена.'
-}
-$packageManagerLine = $probe.Output |
-    Where-Object { [string]$_ -match '^package-manager=(opkg|apk)$' } |
-    Select-Object -Last 1
-if (-not $packageManagerLine) {
-    throw 'Не удалось определить системный менеджер пакетов роутера.'
-}
-$packageManager = ([string]$packageManagerLine) -replace '^package-manager=', ''
-Write-TestLog "Определён системный менеджер пакетов: $packageManager"
+    $probe = Invoke-LoggedSsh -Command $preflightCommand
+    if (($probe.Output -join "`n") -notmatch 'preflight-ok') {
+        throw 'Предполётная проверка OpenWrt и системного менеджера пакетов не пройдена.'
+    }
+    $packageManagerLine = $probe.Output |
+        Where-Object { [string]$_ -match '^package-manager=(opkg|apk)$' } |
+        Select-Object -Last 1
+    if (-not $packageManagerLine) {
+        throw 'Не удалось определить системный менеджер пакетов роутера.'
+    }
+    $packageManager = ([string]$packageManagerLine) -replace '^package-manager=', ''
+    Write-TestLog "Определён системный менеджер пакетов: $packageManager"
 
-Assert-SafeSecretState
-Invoke-LoggedSsh -Command "mkdir -p '$remoteDir' && chmod 700 '$remoteDir'" | Out-Null
-Send-SheepfoldFile -Config $config -LocalPath $normalizedScript -RemotePath "$remoteDir/remoteChecks.sh"
+    Write-TestLog 'Проверяется наличие настроенных чувствительных полей без чтения их значений.'
+    Assert-SafeSecretState
+    Write-TestLog 'Создаётся изолированный временный каталог на роутере.'
+    Invoke-LoggedSsh -Command "mkdir -p '$remoteDir' && chmod 700 '$remoteDir'" | Out-Null
+    $remoteDirReady = $true
+    Write-TestLog 'Передаются сценарии безопасных проверок и backup/restore.'
+    foreach ($scriptName in @('remoteChecks.sh', 'routerState.sh')) {
+        Send-SheepfoldFile -Config $config -LocalPath $unixScripts[$scriptName] -RemotePath "$remoteDir/$scriptName"
+    }
+    Write-TestLog 'Подготовка тестового контура завершена.'
 
-try {
     switch ($Profile) {
         'readOnly' {
             Invoke-RemoteChecks -Mode readOnly
@@ -355,6 +311,8 @@ try {
     Write-TestLog "Профиль $Profile остановлен: $($_.Exception.Message)"
     throw
 } finally {
-    Remove-RemoteRunDirectory
+    if ($remoteDirReady) {
+        Remove-RemoteRunDirectory
+    }
     Write-TestLog "Отчёт сохранён: $reportDir"
 }

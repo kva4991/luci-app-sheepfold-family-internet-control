@@ -13,6 +13,10 @@ const workflowPath = join(root, '.github/workflows/build-openwrt-packages.yml');
 const validationWorkflowPath = join(root, '.github/workflows/placeholder.yml');
 const workflow = readFileSync(workflowPath, 'utf8');
 const validationWorkflow = readFileSync(validationWorkflowPath, 'utf8');
+const packageMakefile = readFileSync(
+  join(root, 'package/luci-app-sheepfold-family-internet-control/Makefile'),
+  'utf8',
+);
 
 describe('OpenWrt GitHub Actions build §owrtci1', () => {
   it('builds both product editions for current IPK and APK releases', () => {
@@ -35,6 +39,13 @@ describe('OpenWrt GitHub Actions build §owrtci1', () => {
     assert.match(workflow, /verify --allow-untrusted \/package\.apk/);
     assert.match(workflow, /adbdump --allow-untrusted --format json/);
     assert.match(workflow, /scripts\/collect-openwrt-package\.py/);
+  });
+
+  it('uses the cross-version LuCI HTTPS dependency', () => {
+    const dependencyLine = packageMakefile.match(/^LUCI_DEPENDS:=.*$/m)?.[0] ?? '';
+
+    assert.match(dependencyLine, /\+uhttpd .*\+luci-ssl/);
+    assert.doesNotMatch(dependencyLine, /uhttpd-mod-tls/);
   });
 
   it('publishes only a complete verified matrix and scopes release writes', () => {

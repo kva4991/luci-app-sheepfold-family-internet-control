@@ -164,7 +164,7 @@ ensure_global_option grok_api_key ''
 Version: {version}-{release}
 Architecture: all
 Maintainer: kva4991
-Depends: luci-base, firewall4, rpcd, uci, uclient-fetch, ca-bundle, uhttpd, uhttpd-mod-tls, curl, jshn
+Depends: luci-base, firewall4, rpcd, uci, uclient-fetch, ca-bundle, uhttpd, luci-ssl, curl, jshn
 Conflicts: luci-app-sheepfold-ai-support
 Replaces: luci-app-sheepfold-ai-support
 Provides: sheepfold-family-internet-control

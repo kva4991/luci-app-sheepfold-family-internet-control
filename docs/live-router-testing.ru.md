@@ -282,6 +282,7 @@ tools/router-testing/
   setupRouterTest.ps1
   runRouterTests.ps1
   remoteChecks.sh
+  routerState.sh
   runFrontendTests.ps1
   frontendSmoke.mjs
   runAllRouterTests.ps1

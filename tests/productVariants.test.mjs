@@ -152,8 +152,8 @@ describe('product variant boundary §prodvar', () => {
       assert.match(aiControl, /Replaces: luci-app-sheepfold-ai-support/);
       assert.doesNotMatch(standardControl, /Conflicts: luci-app-sheepfold-family-internet-control/);
       assert.doesNotMatch(aiControl, /Conflicts: luci-app-sheepfold-family-internet-control/);
-      assert.match(standard.control.get('control').toString('utf8'), /Depends:.*uhttpd-mod-tls.*curl/);
-      assert.match(ai.control.get('control').toString('utf8'), /Depends:.*uhttpd-mod-tls.*curl/);
+      assert.match(standard.control.get('control').toString('utf8'), /Depends:.*uhttpd, luci-ssl, curl/);
+      assert.match(ai.control.get('control').toString('utf8'), /Depends:.*uhttpd, luci-ssl, curl/);
 
       const installer = readFileSync(join(root, 'install.sh'), 'utf8');
       assert.match(installer, /sheepfold_package_install_file "\$PACKAGE_FILE" 1/);

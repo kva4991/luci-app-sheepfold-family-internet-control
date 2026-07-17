@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=197
+PKG_RELEASE:=198
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -10,7 +10,9 @@ SHEEPFOLD_PRODUCT_VARIANT:=sheepfoldAi
 
 LUCI_TITLE:=Sheepfold Family Internet Control
 LUCI_DESCRIPTION:=Family internet access control for OpenWRT with LuCI, Android, and bot support.
-LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +jshn +uclient-fetch +ca-bundle +uhttpd +uhttpd-mod-tls +curl
+# luci-ssl остаётся общим HTTPS-метапакетом для OpenWrt 24.10 и 25.12.
+# Отдельного uhttpd-mod-tls в feed 25.12 уже нет, поэтому он ломает установку APK.
+LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +jshn +uclient-fetch +ca-bundle +uhttpd +luci-ssl +curl
 
 # Supported LuCI languages (gettext)
 LUCI_LANGUAGES:=en ru zh_Hans
