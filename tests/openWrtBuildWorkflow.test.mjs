@@ -3,6 +3,7 @@
  * но ловит опасные изменения матрицы, permissions и закрепления Action до push.
  */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +47,26 @@ describe('OpenWrt GitHub Actions build §owrtci1', () => {
 
     assert.match(dependencyLine, /\+uhttpd .*\+luci-ssl/);
     assert.doesNotMatch(dependencyLine, /uhttpd-mod-tls/);
+  });
+
+  it('keeps the SDK-generated post-install script syntactically valid', () => {
+    const postinst = packageMakefile.match(
+      /define Package\/\$\(PKG_NAME\)\/postinst\n([\s\S]*?)\nendef/,
+    )?.[1];
+    assert.ok(postinst, 'Package postinst block must be present');
+
+    // Make экранирует shell-переменные двойным долларом. Перед bash -n
+    // возвращаем текст в тот вид, в котором SDK положит его внутрь пакета.
+    const syntaxCheck = spawnSync('bash', ['-n'], {
+      cwd: root,
+      input: postinst.replaceAll('$$', '$'),
+      encoding: 'utf8',
+    });
+    assert.equal(
+      syntaxCheck.status,
+      0,
+      syntaxCheck.error?.message || syntaxCheck.stderr || syntaxCheck.stdout,
+    );
   });
 
   it('publishes only a complete verified matrix and scopes release writes', () => {

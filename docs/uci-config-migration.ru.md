@@ -140,7 +140,7 @@ uci -q delete sheepfold.global.old_name 2>/dev/null || true
 - [ ] `root/usr/share/sheepfold/sheepfold.uci.defaults` (первая установка)
 - [ ] `scripts/build-test-ipk.sh` и `scripts/build-test-ipk.py` — если дублируют логику postinst
 - [ ] `docs/backend-design.ru.md` — структура секций
-- [ ] тесты: `tests/test-lib-device.sh`, при необходимости новый shell-тест миграции
+- [ ] тесты: синтаксис SDK- и test-IPK-вариантов `postinst`, `tests/test-lib-device.sh`, при необходимости новый shell-тест миграции
 - [ ] **не** возвращать `root/etc/config/sheepfold` в payload пакета
 
 Поля вроде `ui_asset_version` задаются в `postinst` из `PKG_VERSION-PKG_RELEASE`, а не через шаблон в пакете.

@@ -79,11 +79,8 @@ restore_state() {
         fi
     done
 
-    uci -q commit sheepfold || true
-    if [ -x /usr/libexec/sheepfold/sheepfold-router-control ]; then
-        /usr/libexec/sheepfold/sheepfold-router-control settings-import-applied >/dev/null 2>&1 || true
-    fi
-
+    # Здесь намеренно нет uci commit и вызова backend: они переписали бы только
+    # что восстановленный файл и сделали бы побайтовую проверку бессмысленной.
     for name in sheepfold dhcp wireless firewall; do
         if grep -qx "$name" "$run_dir/absent-configs"; then
             [ ! -e "/etc/config/$name" ] || exit 66

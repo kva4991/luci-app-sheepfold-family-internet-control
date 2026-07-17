@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=198
+PKG_RELEASE:=199
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -67,7 +67,8 @@ recover_sheepfold_config() {
 			cp "$$candidate" /etc/config/sheepfold
 			chmod 600 /etc/config/sheepfold 2>/dev/null || true
 			return 0
-		done
+		fi
+	done
 	if [ -r /usr/share/sheepfold/sheepfold.uci.defaults ]; then
 		cp /usr/share/sheepfold/sheepfold.uci.defaults /etc/config/sheepfold
 	else

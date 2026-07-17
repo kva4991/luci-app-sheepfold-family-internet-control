@@ -109,6 +109,24 @@ describe('product variant boundary §prodvar', () => {
       const standardPostinst = standard.control.get('postinst').toString('utf8');
       const aiPostinst = ai.control.get('postinst').toString('utf8');
 
+      // Оба варианта формируют собственный postinst. Синтаксис проверяем для
+      // каждого архива, иначе ошибка установки проявится только на роутере.
+      for (const [variantName, postinst] of [
+        ['Standard', standardPostinst],
+        ['AI Support', aiPostinst],
+      ]) {
+        const syntaxCheck = spawnSync('bash', ['-n'], {
+          cwd: root,
+          input: postinst,
+          encoding: 'utf8',
+        });
+        assert.equal(
+          syntaxCheck.status,
+          0,
+          `${variantName} postinst syntax error:\n${syntaxCheck.stderr || syntaxCheck.stdout}`,
+        );
+      }
+
       assert.doesNotMatch(standardApi, /\/ai-assistant\)|AI_HANDLER|AI_GATE/);
       assert.doesNotMatch(standardLegacy, /deepseek_request|gemini_request|ai_assistant_json|aiContextPreview/);
       assert.doesNotMatch(standardDefaults, /ai_provider|deepseek_|gemini_|grok_|activity_log_enabled/);

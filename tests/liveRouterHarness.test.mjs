@@ -87,6 +87,7 @@ describe('live router automation §routerharness', () => {
     assert.match(remote, /apk info --from installed --fields version --format json/);
     assert.doesNotMatch(runnerCode, /(?:opkg|apk) upgrade|sysupgrade|firstboot|jffs2reset/i);
     assert.doesNotMatch(stateCode, /(?:opkg|apk) upgrade|sysupgrade|firstboot|jffs2reset/i);
+    assert.doesNotMatch(stateCode, /settings-import-applied|uci\s+(?:-q\s+)?commit/);
     assert.match(routerState, /\/tmp\/sheepfold-live-test-/);
     assert.match(remote, /02:53:48:45:45:50/);
     assert.match(remote, /trap restore_state EXIT HUP INT TERM/);
