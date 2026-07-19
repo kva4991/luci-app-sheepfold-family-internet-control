@@ -84,6 +84,17 @@ describe('overview UI release 148', () => {
     assert.match(css, /\.sf-log-filters/);
   });
 
+  it('contains the wide router information table inside the mobile panel', () => {
+    const css = readFileSync(cssPath, 'utf8');
+
+    // Широкие Wi-Fi-колонки прокручиваются внутри таблицы, но строка 760px не
+    // должна растягивать весь документ LuCI на узком экране телефона.
+    assert.match(css, /\.sf-info-body\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\);[\s\S]*min-width: 0;[\s\S]*max-width: 100%;/);
+    assert.match(css, /\.sf-info-body > \*,[\s\S]*\.sf-info-grid > \*[\s\S]*min-width: 0;[\s\S]*max-width: 100%;/);
+    assert.match(css, /\.sf-info-table\s*\{[\s\S]*min-width: 0;[\s\S]*max-width: 100%;/);
+    assert.match(css, /@media \(max-width: 900px\)[\s\S]*\.sf-info-table\s*\{[\s\S]*overflow-x: auto;[\s\S]*\.sf-info-table-row\s*\{[\s\S]*min-width: 760px;/);
+  });
+
   it('keeps current settings labels and package release in sync', () => {
     const overview = readFileSync(overviewPath, 'utf8');
     const po = readFileSync(poPath, 'utf8');

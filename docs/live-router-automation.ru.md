@@ -122,7 +122,13 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 `tools\router-testing` в
 `C:\Users\User\Documents\pesochnica\sheepfold-router-harness\tools\router-testing`
 и исполнять копию. Это сохраняет незакоммиченный исходник, если Kaspersky
-Endpoint Security ошибочно поместит поведенческий harness в карантин. (§winsbx1)
+Endpoint Security ошибочно поместит поведенческий harness в карантин, но сама
+`pesochnica` не является исключением антивируса. Если защита удаляет и копию,
+не обфусцировать сценарий и не отключать антивирус: использовать только
+подтверждённое владельцем исключение либо выполнить короткие `ssh`/`scp` шаги
+вручную. Ручной fallback обязан сохранить локальный backup, сверить SHA-256
+пакета до `apk add`/`opkg install`, после установки запустить `remoteChecks.sh`
+в режиме `readOnly` и удалить только проверенный каталог с префиксом `/tmp/sheepfold-install-`. (§winsbx1)
 
 ## Работа агента
 

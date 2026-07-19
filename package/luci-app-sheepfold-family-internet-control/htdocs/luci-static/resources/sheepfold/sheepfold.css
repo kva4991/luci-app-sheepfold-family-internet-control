@@ -2061,7 +2061,17 @@
 
 .sf-info-body {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: 14px;
+        min-width: 0;
+        max-width: 100%;
+}
+
+.sf-info-body > *,
+.sf-info-grid,
+.sf-info-grid > * {
+        min-width: 0;
+        max-width: 100%;
 }
 
 .sf-info-grid {
@@ -2091,6 +2101,8 @@
 
 .sf-info-table {
         display: grid;
+        min-width: 0;
+        max-width: 100%;
         border: 1px solid #d7dee8;
         border-radius: 8px;
         overflow: hidden;

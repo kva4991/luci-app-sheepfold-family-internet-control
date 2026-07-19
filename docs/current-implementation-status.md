@@ -14,7 +14,7 @@ device documents supplement that contract instead of redefining it.
 Current OpenWRT package version in the repository:
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-230_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-231_all.ipk
 ```
 
 The package uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries.
@@ -116,4 +116,4 @@ GitHub run and a live-router round-trip before a public stable release.
 
 Documents under `docs/` mix current implementation notes and target product requirements. When a document describes an API, schedule engine, messenger bot, AI assistant, or complete enforcement behavior, treat it as the intended contract unless this status file says the feature is already implemented.
 
-The historical implementation audit is recorded in [`implementation-audit-2026-07-16.ru.md`](implementation-audit-2026-07-16.ru.md) (§implaudit). The newer pre-merge evidence is recorded in [`merge-readiness-plan.ru.md`](merge-readiness-plan.ru.md) (§mrgready): on 2026-07-19 the complete Node suite passed with 373 passed tests and one intentionally skipped concurrency test, both Android debug APKs compiled, both test IPK variants `0.1.0-230` were packaged, and the read-only live-router profile passed against the installed `0.1.0-r219`. The current `0.1.0-230` package still needs a real OpenWrt SDK build and live-router install/runtime round-trip before a public release.
+The historical implementation audit is recorded in [`implementation-audit-2026-07-16.ru.md`](implementation-audit-2026-07-16.ru.md) (§implaudit). The newer pre-merge evidence is recorded in [`merge-readiness-plan.ru.md`](merge-readiness-plan.ru.md) (§mrgready): on 2026-07-19 the complete Node suite passed with 373 passed tests and one intentionally skipped concurrency test, both Android debug APKs compiled, and both test IPK variants `0.1.0-230` were packaged. The official SDK-built `0.1.0-r230` OpenWrt APK was then installed on the live router with a verified backup and SHA-256; backend read-only checks passed, but the mobile frontend smoke found document-wide overflow in Settings -> Information. The `0.1.0-231` source contains the bounded-grid fix and passed the complete LuCI category, packaging category outside the Windows sandbox, and a temporary live-router CSS smoke on desktop/mobile. The official `r231` SDK build and package install still need to complete before this fix is considered released.
