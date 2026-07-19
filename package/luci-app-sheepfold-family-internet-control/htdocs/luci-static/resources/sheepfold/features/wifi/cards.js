@@ -21,10 +21,12 @@ function bandKind(band, channel) {
 
 function readNetworks(sections, getValue) {
 	return sections.filter(function (section) {
-		return section.disabled !== '1' && (!section.mode || section.mode === 'ap');
+		return !section.mode || section.mode === 'ap';
 	}).map(function (section) {
 		var device = section.device || '';
 		var sectionName = section['.name'] || '';
+		var radioDisabled = device ? getValue('wireless', device, 'disabled', '0') === '1' : false;
+		var interfaceDisabled = section.disabled === '1';
 		var band = device ? (getValue('wireless', device, 'band', '') || getValue('wireless', device, 'hwmode', '')) : '';
 		var channel = device ? (getValue('wireless', device, 'channel', 'auto') || 'auto') : 'auto';
 		var ssid = section.ssid || (sectionName ? getValue('wireless', sectionName, 'ssid', '') : '') || '';
@@ -33,7 +35,8 @@ function readNetworks(sections, getValue) {
 
 		return {
 			title: ssid || device || _('Network'), bandKind: bandKind(band, channel), sectionName: sectionName,
-			device: device, ssid: ssid, password: password, encryption: encryption, channel: channel
+			device: device, ssid: ssid, password: password, encryption: encryption, channel: channel,
+			enabled: !interfaceDisabled && !radioDisabled, radioDisabled: radioDisabled
 		};
 	});
 }
@@ -43,14 +46,16 @@ function editorSnapshot(editor) {
 		ssid: String(editor.ssidInput.value || '').trim(),
 		password: String(editor.passwordInput.value || ''),
 		encryption: String(editor.securitySelect.value || ''),
-		channel: String(editor.channelSelect.value || 'auto')
+		channel: String(editor.channelSelect.value || 'auto'),
+		enabled: !!editor.enabledInput.checked
 	};
 }
 
 function editorIsDirty(editor) {
 	var current = editorSnapshot(editor);
 	return current.ssid !== editor.original.ssid || current.password !== editor.original.password ||
-		current.encryption !== editor.original.encryption || current.channel !== editor.original.channel;
+		current.encryption !== editor.original.encryption || current.channel !== editor.original.channel ||
+		current.enabled !== editor.original.enabled;
 }
 
 function securityOptions(value) {
@@ -66,8 +71,25 @@ function securityOptions(value) {
 }
 
 function networkBox(network, index, deps) {
+	var card;
 	var ssidInput = E('input', { 'class': 'cbi-input-text', 'value': network.ssid || '' });
 	var passwordInput = E('input', { 'class': 'cbi-input-text', 'value': network.password || '' });
+	var enabledInput = E('input', {
+		'type': 'checkbox',
+		'checked': network.enabled ? 'checked' : null,
+		'aria-label': _('Turn this Wi-Fi network on or off.')
+	});
+	var powerState = E('span', { 'class': 'sf-wifi-power-state', 'aria-live': 'polite' });
+	var powerControl = E('label', {
+		'class': 'sf-wifi-power',
+		'title': _('Turn this Wi-Fi network on or off.')
+	}, [
+		enabledInput,
+		E('span', { 'class': 'sf-wifi-power-track', 'aria-hidden': 'true' }, [
+			E('span', { 'class': 'sf-wifi-power-knob' })
+		]),
+		powerState
+	]);
 	var securitySelect = E('select', { 'class': 'cbi-input-select' }, securityOptions(network.encryption).map(function (item) {
 		return E('option', { 'value': item[0], 'selected': item[0] === network.encryption ? 'selected' : null }, item[1]);
 	}));
@@ -82,25 +104,34 @@ function networkBox(network, index, deps) {
 		qrWrap.replaceChildren(deps.qrCode(deps.qrPayload(ssidInput.value, passwordInput.value, securitySelect.value)));
 	}
 
+	function updatePowerState() {
+		powerState.textContent = enabledInput.checked ? _('On') : _('Off');
+		if (card)
+			card.classList.toggle('is-disabled', !enabledInput.checked);
+	}
+
 	ssidInput.addEventListener('input', updateQr);
 	passwordInput.addEventListener('input', updateQr);
 	securitySelect.addEventListener('change', updateQr);
+	enabledInput.addEventListener('change', updatePowerState);
 	updateQr();
 
 	deps.registerEditor({
 		sectionName: network.sectionName || '', device: network.device || '', ssidInput: ssidInput,
 		passwordInput: passwordInput, securitySelect: securitySelect, channelSelect: channelSelect,
+		enabledInput: enabledInput, radioDisabled: !!network.radioDisabled,
 		original: {
 			ssid: String(network.ssid || '').trim(), password: String(network.password || ''),
-			encryption: String(network.encryption || 'none'), channel: String(network.channel || 'auto')
+			encryption: String(network.encryption || 'none'), channel: String(network.channel || 'auto'),
+			enabled: !!network.enabled
 		}
 	});
 
-	return E('div', {
-		'class': 'sf-box sf-wifi-network',
+	card = E('div', {
+		'class': 'sf-box sf-wifi-network' + (network.enabled ? '' : ' is-disabled'),
 		'style': 'background-color: ' + deps.cardColor(index) + ';'
 	}, [
-		E('h4', { 'class': 'sf-wifi-title' }, deps.title(network)),
+		E('h4', { 'class': 'sf-wifi-title' }, deps.title(network, powerControl)),
 		E('div', { 'class': 'sf-wifi-fields' }, [
 			E('label', { 'class': 'sf-field' }, [E('span', {}, _('SSID')), ssidInput]),
 			E('label', { 'class': 'sf-field' }, [E('span', {}, _('Password')), passwordInput]),
@@ -109,6 +140,9 @@ function networkBox(network, index, deps) {
 		]),
 		E('div', { 'class': 'sf-wifi-qr' }, [qrWrap, E('small', {}, _('Scan to connect to this Wi-Fi network.'))])
 	]);
+	updatePowerState();
+
+	return card;
 }
 
 return baseclass.extend({

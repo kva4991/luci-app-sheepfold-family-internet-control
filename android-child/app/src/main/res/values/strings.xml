@@ -12,6 +12,7 @@
     <string name="access_mode_scheduled">По расписанию</string>
     <string name="access_mode_temporary">Временный доступ</string>
     <string name="access_mode_restricted">Ограниченный доступ</string>
+    <string name="access_mode_default">По правилу для новых устройств</string>
     <string name="access_mode_unknown">Режим неизвестен</string>
 
     <!-- Таймер и время -->
@@ -20,12 +21,16 @@
     <string name="last_updated">Обновлено: %1$s</string>
 
     <!-- Кнопки -->
-    <string name="btn_refresh">Обновить</string>
+    <string name="btn_refresh">Обновить\nданные</string>
 
     <!-- Первичная настройка -->
     <string name="setup_title">Настройка</string>
     <string name="setup_hint">Введите адрес роутера, например 192.168.1.1</string>
     <string name="setup_transport_hint">Используется HTTPS с закреплением сертификата домашнего роутера.</string>
+    <string name="setup_server_search">Автопоиск сервера Sheepfold</string>
+    <string name="setup_searching_hint">Ищем Sheepfold в текущей локальной сети. Поиск может занять до 30 секунд.</string>
+    <string name="setup_not_found_manual">Возможно, вы подключились не к той Wi-Fi-сети? Можете вручную ввести IP-адрес сервера.</string>
+    <string name="setup_retry">Повторить автопоиск</string>
     <string name="setup_save">Сохранить</string>
 
     <!-- Уведомления -->
@@ -49,6 +54,7 @@
     <string name="access_internet_label">Интернет</string>
     <string name="access_mode_label">Режим</string>
     <string name="access_time_label">Оставшееся время</string>
+    <string name="access_next_change_label">Следующее изменение доступа</string>
     <string name="access_message_label">Сообщение</string>
     <string name="access_request_30_minutes">Попросить 30 минут интернета</string>
     <string name="access_request_sent">Просьба отправлена родителю. Интернет включится только после его подтверждения.</string>

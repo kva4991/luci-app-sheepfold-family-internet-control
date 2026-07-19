@@ -19,6 +19,9 @@ object ChildRouterHttps {
 
     fun open(context: Context, url: URL): Pair<HttpsURLConnection, CapturedPin?> {
         require(url.protocol.equals("https", ignoreCase = true)) { "Поддерживается только HTTPS" }
+        require(ChildLocalRouterAddress.isLocalIpLiteral(url.host)) {
+            "Укажите локальный IP-адрес роутера Sheepfold"
+        }
         val key = pinKey(url)
         val expected = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(key, null)

@@ -141,10 +141,12 @@ Debug APK output:
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-After the wrapper build, the project also copies the APK to:
+The explicit `exportDebugApk` task copies the APK to `SHEEPFOLD_APK_OUTPUT_DIR`.
+On the owner's current Windows computer use:
 
 ```text
-%USERPROFILE%\Downloads\sheepfold-v<current-version>.apk
+C:\Users\User\Documents\pesochnica\sheepfold-parent-v<current-version>.apk
 ```
 
-To copy it somewhere else, set `SHEEPFOLD_APK_OUTPUT_DIR` before building.
+Set `SHEEPFOLD_APK_OUTPUT_DIR` before the export task; an ordinary
+`assembleDebug` keeps its artifact inside the Android project.

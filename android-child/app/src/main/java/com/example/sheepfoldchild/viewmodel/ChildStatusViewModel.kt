@@ -1,6 +1,7 @@
 package com.example.sheepfoldchild.viewmodel
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -11,12 +12,20 @@ import com.example.sheepfoldchild.data.ClientStatusData
 import com.example.sheepfoldchild.data.ClientStatusRepository
 import com.example.sheepfoldchild.notification.AccessEndingScheduler
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 
 sealed class ChildUiState {
     object Loading : ChildUiState()
     data class Success(val status: ClientStatusData) : ChildUiState()
     data class Error(val message: String) : ChildUiState()
     object NoRouter : ChildUiState()
+}
+
+sealed class ChildSetupState {
+    object Searching : ChildSetupState()
+    object ManualEntry : ChildSetupState()
 }
 
 class ChildStatusViewModel(
@@ -29,6 +38,11 @@ class ChildStatusViewModel(
 
     var routerBaseUrl: String? by mutableStateOf(null)
         private set
+
+    var setupState: ChildSetupState by mutableStateOf(ChildSetupState.Searching)
+        private set
+
+    private var discoveryJob: Job? = null
 
     var lastUpdated: String? by mutableStateOf(null)
         private set
@@ -43,7 +57,45 @@ class ChildStatusViewModel(
     init {
         viewModelScope.launch {
             routerBaseUrl = repository.getRouterBaseUrl()
-            if (!routerBaseUrl.isNullOrBlank()) refresh()
+            if (!routerBaseUrl.isNullOrBlank()) {
+                refresh()
+            } else {
+                searchForRouter()
+            }
+        }
+    }
+
+    fun searchForRouter() {
+        discoveryJob?.cancel()
+        setupState = ChildSetupState.Searching
+        uiState = ChildUiState.Loading
+        discoveryJob = viewModelScope.launch {
+            val deadline = SystemClock.elapsedRealtime() + 30_000L
+            while (SystemClock.elapsedRealtime() < deadline) {
+                val remaining = deadline - SystemClock.elapsedRealtime()
+                val found = withTimeoutOrNull(remaining.coerceAtLeast(1L)) {
+                    repository.discoverRouter()
+                }
+                if (found != null) {
+                    runCatching { repository.saveRouterBaseUrl(found.routerBaseUrl) }
+                        .onSuccess { normalizedUrl ->
+                            routerBaseUrl = normalizedUrl
+                            refresh()
+                        }
+                        .onFailure { error ->
+                            setupState = ChildSetupState.ManualEntry
+                            uiState = ChildUiState.Error(
+                                error.message
+                                    ?: context.getString(com.example.sheepfoldchild.R.string.error_generic)
+                            )
+                        }
+                    return@launch
+                }
+                val pause = (deadline - SystemClock.elapsedRealtime()).coerceIn(0L, 3_000L)
+                if (pause > 0) delay(pause)
+            }
+            setupState = ChildSetupState.ManualEntry
+            uiState = ChildUiState.NoRouter
         }
     }
 
@@ -55,6 +107,7 @@ class ChildStatusViewModel(
                     refresh()
                 }
                 .onFailure { error ->
+                    setupState = ChildSetupState.ManualEntry
                     uiState = ChildUiState.Error(
                         error.message ?: context.getString(com.example.sheepfoldchild.R.string.error_generic)
                     )

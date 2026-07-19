@@ -1,9 +1,11 @@
 # Country Profiles
 
+<!-- §country1 -->
+
 Sheepfold should use country profiles to adapt:
 
 - available AI assistant providers;
-- default emergency-useful site suggestions;
+- default emergency-useful sites;
 - domain descriptions;
 - safety warnings;
 - localization defaults.
@@ -19,12 +21,22 @@ Country profiles prevent hardcoding Russia-specific assumptions into the whole p
 - The user selects the router country during setup.
 - The user can change the country later.
 - Country selection should not remove manual entries.
-- Country selection may update suggested emergency-useful sites, but it must not enable them automatically without parent confirmation.
+- Country selection replaces only entries owned by the country profile; manual entries are preserved.
+- Editing a generated entry turns it into a family-owned manual entry.
+- Deleting a generated entry creates a persistent exclusion, so switching away and back does not restore it.
 - Country selection may change the list of visible AI providers.
 - Legal/provider availability must be treated as configuration, not hardcoded truth.
 - If provider status is unknown, show it as unavailable until explicitly configured.
 
-## Russia Profile Draft
+## Implemented Storage
+
+Profiles `ru`, `by`, and `cn` live in `root/usr/share/sheepfold/country-profiles/*.json`.
+The `sheepfold-country-profile` backend parses them with OpenWrt `jshn`, validates
+the schema, domains, field sizes, and duplicates, then replaces only UCI sections
+marked with `source=country_profile`. The country is selected during installation
+and under `Settings -> General`.
+
+## Russia Profile
 
 ### AI Providers
 
@@ -56,6 +68,10 @@ Russia starter list:
 | `dnevnik.ru` | School diary | Electronic diary and school communication. |
 | `ya.ru` | Yandex simple search | Minimal Yandex search entrypoint. |
 | `2gis.ru` | 2GIS maps | Maps, addresses, organizations, and routes. |
+| `mchs.gov.ru` | EMERCOM of Russia | Official emergency and safety information. |
+| `psi.mchs.gov.ru` | EMERCOM psychological aid | Crisis assistance information. |
+| `minzdrav.gov.ru` | Russian Ministry of Health | Official public health information. |
+| `rzd.ru` | Russian Railways | Train schedules and travel information. |
 
 Do not add broad `yandex.ru` to the Russia starter list. See `AGENTS.md` and `docs/domain-allowlist.md`.
 
@@ -84,6 +100,13 @@ taxovichkof.ru
 
 Do not add Yandex Go or Yandex Taxi to starter suggestions by default. This is too broad a super-app surface: taxi access may also expose marketplaces, food delivery, parcel delivery, carsharing, scooters, and other non-emergency workflows.
 
+## Belarus And China
+
+Belarus uses narrow official domains for emergency management, public health,
+government services, and the national railway. China uses official domains for
+emergency management, public health, government services, national education,
+and China Railway 12306.
+
 ## Future Country Profiles
 
 Each country profile should follow the same criteria as Russia:
@@ -96,10 +119,9 @@ Each country profile should follow the same criteria as Russia:
 - communication only when it does not turn restricted mode into normal internet access;
 - no entertainment, games, short-video, social feeds, streaming, app stores, or broad portals by default.
 
-Suggested initial profile files:
+Suggested next profile files:
 
 ```text
-country-profiles/ru.json
 country-profiles/us.json
 country-profiles/de.json
 country-profiles/fr.json

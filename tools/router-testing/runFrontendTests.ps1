@@ -16,6 +16,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'routerTestCommon.ps1')
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$workRoot = Get-SheepfoldWorkRoot -RepoRoot $repoRoot
 $config = Get-SheepfoldRouterConfig
 $credentialPath = Get-SheepfoldRouterCredentialPath
 if (-not (Test-Path -LiteralPath $credentialPath)) {
@@ -47,7 +48,7 @@ if (-not (Test-Path -LiteralPath $playwrightEntry)) {
 }
 
 $runId = (Get-Date -Format 'yyyyMMddHHmmss') + '-' + ([Guid]::NewGuid().ToString('N').Substring(0, 8))
-$reportDir = Join-Path $repoRoot ".build\live-router\$runId\frontend"
+$reportDir = Join-Path $workRoot "live-router\$runId\frontend"
 New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 # Failure-скриншот может захватить SSID или заполненное поле. Поэтому весь
 # browser-отчёт защищается так же строго, как конфигурационный backup роутера.
@@ -55,8 +56,7 @@ New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw 'Не удалось ограничить ACL каталога с browser-артефактами LuCI.'
 }
-$portSuffix = if ([int]$config.httpsPort -eq 443) { '' } else { ':' + [string]$config.httpsPort }
-$baseUrl = 'https://{0}{1}' -f $config.routerHost, $portSuffix
+$baseUrl = Get-SheepfoldLuciBaseUrl -Config $config
 
 $previousValues = @{}
 foreach ($name in @('SHEEPFOLD_PLAYWRIGHT_ROOT', 'SHEEPFOLD_BROWSER_PATH', 'SHEEPFOLD_LUCI_URL', 'SHEEPFOLD_LUCI_USER', 'SHEEPFOLD_LUCI_PASSWORD', 'SHEEPFOLD_FRONTEND_REPORT_DIR')) {

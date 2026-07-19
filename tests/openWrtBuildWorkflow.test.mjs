@@ -49,6 +49,17 @@ describe('OpenWrt GitHub Actions build §owrtci1', () => {
     assert.doesNotMatch(dependencyLine, /uhttpd-mod-tls/);
   });
 
+  it('declares flock instead of depending on optional BusyBox applets', () => {
+    const dependencyLine = packageMakefile.match(/^LUCI_DEPENDS:=.*$/m)?.[0] ?? '';
+    const runtimeHardening = readFileSync(
+      join(root, 'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-runtime-hardening'),
+      'utf8',
+    );
+
+    assert.match(dependencyLine, /\+flock(?:\s|$)/);
+    assert.match(runtimeHardening, /if \[ -z "\$ROOT" \]; then[\s\S]*command -v flock/);
+  });
+
   it('keeps the SDK-generated post-install script syntactically valid', () => {
     const postinst = packageMakefile.match(
       /define Package\/\$\(PKG_NAME\)\/postinst\n([\s\S]*?)\nendef/,

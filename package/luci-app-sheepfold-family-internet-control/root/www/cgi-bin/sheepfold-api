@@ -11,6 +11,8 @@ AI_HANDLER="/usr/libexec/sheepfold/sheepfold-ai-handler"
 RATE_LIMIT="/usr/libexec/sheepfold/sheepfold-api-rate-limit"
 ACCESS_REQUEST="/usr/libexec/sheepfold/sheepfold-access-request"
 ADMIN_NOTIFICATION="/usr/libexec/sheepfold/sheepfold-admin-notification"
+SIM_MONITOR="/usr/libexec/sheepfold/sheepfold-sim-monitor"
+CHILD_WIFI_MONITOR="/usr/libexec/sheepfold/sheepfold-child-wifi-monitor"
 method="${REQUEST_METHOD:-GET}"
 path_info="${PATH_INFO:-}"
 client_ip="${REMOTE_ADDR:-unknown}"
@@ -87,6 +89,13 @@ if [ "$method" = "OPTIONS" ]; then
 fi
 
 case "$path_info" in
+    /ping)
+        [ "$method" = "GET" ] || method_not_allowed
+        # Discovery имеет свой небольшой лимит. Иначе проверка APK попадает в
+        # общий api_write и может принять исчерпанный лимит команд за отсутствие роутера.
+        enforce_rate_limit discovery 30 60
+        run_legacy
+        ;;
     /pair)
         [ "$method" = "POST" ] || method_not_allowed
         enforce_rate_limit pair 12 60
@@ -115,6 +124,61 @@ case "$path_info" in
             printf '{"app":"sheepfold","ok":false,"error":"%s","message":"%s"}\n' "$error" "$message"
         fi
         ;;
+    /sim-report)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit sim_report 12 300
+        length="${CONTENT_LENGTH:-0}"
+        case "$length" in ''|*[!0-9]*) length=0 ;; esac
+        if [ "$length" -le 0 ] || [ "$length" -gt 2048 ]; then
+            header_json "413 Payload Too Large"
+            printf '{"app":"sheepfold","ok":false,"error":"invalid_sim_report"}\n'
+            exit 0
+        fi
+        body="$(dd bs=1 count="$length" 2>/dev/null || true)"
+        # MAC и Sheepfold ID не принимаются из тела: helper находит устройство
+        # только по адресу соединения в DHCP/ARP роутера. §simchg1
+        if output="$(printf '%s\n' "$body" | "$SIM_MONITOR" report "${REMOTE_ADDR:-}" 2>/dev/null)"; then
+            header_json "200 OK"
+            printf '%s\n' "$output"
+        else
+            result=$?
+            case "$result" in
+                2) status="404 Not Found"; error="device_not_registered" ;;
+                3) status="403 Forbidden"; error="administrator_device" ;;
+                4) status="400 Bad Request"; error="invalid_sim_report" ;;
+                *) status="500 Internal Server Error"; error="sim_report_failed" ;;
+            esac
+            header_json "$status"
+            printf '{"app":"sheepfold","ok":false,"error":"%s"}\n' "$error"
+        fi
+        ;;
+    /wifi-network-report)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit wifi_network_report 12 300
+        length="${CONTENT_LENGTH:-0}"
+        case "$length" in ''|*[!0-9]*) length=0 ;; esac
+        if [ "$length" -le 0 ] || [ "$length" -gt 1024 ]; then
+            header_json "413 Payload Too Large"
+            printf '{"app":"sheepfold","ok":false,"error":"invalid_wifi_network_report"}\n'
+            exit 0
+        fi
+        body="$(dd bs=1 count="$length" 2>/dev/null || true)"
+        # Ни MAC, ни Sheepfold ID не принимаются от детского APK. §childwifi1
+        if output="$(printf '%s\n' "$body" | "$CHILD_WIFI_MONITOR" report "${REMOTE_ADDR:-}" 2>/dev/null)"; then
+            header_json "200 OK"
+            printf '%s\n' "$output"
+        else
+            result=$?
+            case "$result" in
+                2) status="404 Not Found"; error="device_not_registered" ;;
+                3) status="403 Forbidden"; error="administrator_device" ;;
+                4) status="400 Bad Request"; error="invalid_wifi_network_report" ;;
+                *) status="500 Internal Server Error"; error="wifi_network_report_failed" ;;
+            esac
+            header_json "$status"
+            printf '{"app":"sheepfold","ok":false,"error":"%s"}\n' "$error"
+        fi
+        ;;
     /access-requests)
         [ "$method" = "GET" ] || method_not_allowed
         enforce_rate_limit admin_read 120 60
@@ -128,6 +192,19 @@ case "$path_info" in
         require_admin
         header_json "200 OK"
         "$ADMIN_NOTIFICATION" list
+        ;;
+    /child-wifi-networks)
+        case "$method" in
+            GET|DELETE) ;;
+            *) method_not_allowed ;;
+        esac
+        enforce_rate_limit admin_read 120 60
+        require_admin
+        header_json "200 OK"
+        case "$method" in
+            GET) "$CHILD_WIFI_MONITOR" list ;;
+            DELETE) "$CHILD_WIFI_MONITOR" clear ;;
+        esac
         ;;
     /router-info|/pair-status)
         [ "$method" = "GET" ] || method_not_allowed

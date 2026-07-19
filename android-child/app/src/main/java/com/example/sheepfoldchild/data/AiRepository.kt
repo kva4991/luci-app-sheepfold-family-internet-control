@@ -132,6 +132,9 @@ class AiRepository(private val context: Context) {
         val parsed = URL(withScheme)
         require(parsed.protocol == "https") { "Поддерживается только HTTPS" }
         require(parsed.host.isNotBlank()) { "Некорректный адрес роутера" }
+        require(ChildLocalRouterAddress.isLocalIpLiteral(parsed.host)) {
+            "Укажите локальный IP-адрес роутера Sheepfold"
+        }
         return parsed
     }
 

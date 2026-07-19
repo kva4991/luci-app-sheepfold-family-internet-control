@@ -89,6 +89,25 @@ function deviceSectionByMac(mac) {
 	return found;
 }
 
+function listValues(value) {
+	return Array.isArray(value) ? value : String(value || '').split(/\s+/).filter(Boolean);
+}
+
+function deviceIsBlocklisted(section, mac) {
+	var blocked = false;
+
+	if (section && /^(?:blocked|block)$/.test(String(section.status || '')))
+		return true;
+	uci.sections('sheepfold', 'list', function(list) {
+		if (list['.name'] !== 'blocklist')
+			return;
+		blocked = listValues(list.mac).concat(listValues(list.macs)).some(function(value) {
+			return normalizeMac(value) === normalizeMac(mac);
+		});
+	});
+	return blocked;
+}
+
 function evidenceLabel(value) {
 	var labels = {
 		'name': 'имя устройства',
@@ -96,6 +115,8 @@ function evidenceLabel(value) {
 		'dhcp': 'DHCP-отпечаток',
 		'oui': 'производитель MAC',
 		'mdns': 'mDNS/DNS-SD',
+		'upnp': 'SSDP/UPnP',
+		'wsd': 'WS-Discovery',
 		'ports': 'сетевые сервисы'
 	};
 
@@ -121,6 +142,21 @@ function commaList(value) {
 	return items.length ? items.join(', ') : 'нет данных';
 }
 
+function competingEvidenceText(value) {
+	var typeLabels = {
+		computer: 'компьютер', phone: 'телефон', tablet: 'планшет', printer: 'принтер',
+		camera: 'камера', server: 'сервер', network: 'сетевое устройство',
+		speaker: 'умная колонка', smart_home: 'умный дом'
+	};
+
+	return String(value || '').split(',').map(function(marker) {
+		var parts = marker.trim().split(':');
+		if (parts.length < 2)
+			return '';
+		return evidenceLabel(parts[0]) + ': ' + (typeLabels[parts[1]] || parts[1]);
+	}).filter(Boolean).join('; ') || 'нет противоречий';
+}
+
 function detectionLine(label, value) {
 	return E('div', { 'class': 'sf-device-detection-row' }, [
 		E('span', {}, label),
@@ -130,32 +166,31 @@ function detectionLine(label, value) {
 
 function detectionDetails(section) {
 	var confidence = parseInt(section && section.detection_confidence || '0', 10) || 0;
-	var score = parseInt(section && section.detection_auto_group_score || '0', 10) || 0;
-	var denied = section && section.detection_hard_deny === '1';
 	var manual = section && section.manual_device_type === '1';
 	var intro;
 
 	if (!section) {
 		intro = 'Данные автоопределения появятся после первого сканирования устройства.';
+	} else if (section.identity_quarantine_mode) {
+		intro = _('The current connection strongly differs from the trusted fingerprint. The device saved rights are preserved, while this connection is temporarily isolated.');
 	} else if (manual) {
 		intro = 'Тип устройства выбран вручную. Кнопка «Определить заново» снимет ручную фиксацию и снова запустит автоопределение.';
 	} else if (!section.detected_type && !section.detection_confidence && !section.detection_evidence) {
 		intro = 'Автоматическое определение ещё не выполнено.';
 	} else {
-		intro = 'Здесь показано, почему Sheepfold выбрал тип устройства и разрешил либо запретил автоматическое доверие.';
+		intro = 'Здесь показан результат определения. Положительные технические баллы скрыты; родителю показываются только противоречия, требующие внимания.';
 	}
 
 	return E('section', { 'class': 'sf-device-detection-modal' }, [
 		E('h4', {}, 'Данные автоопределения'),
 		E('p', { 'class': 'sf-device-detection-intro' }, intro),
 		E('div', { 'class': 'sf-device-detection-grid' }, [
+			detectionLine('IP-адрес', section && section.ip || 'нет данных'),
+			detectionLine('Определённый тип', section && (section.device_type || section.detected_type) || 'нет данных'),
 			detectionLine('Уверенность типа', confidence ? confidence + '%' : 'нет данных'),
-			detectionLine('Балл автодоверия', score + '/100'),
-			detectionLine('Источники доказательств', evidenceText(section)),
-			detectionLine('Жёсткий запрет', denied ? 'да' : 'нет'),
-			detectionLine('Производитель MAC', section && section.detection_oui_vendor || 'нет данных'),
-			detectionLine('Обнаруженные mDNS-сервисы', commaList(section && section.detection_mdns_services)),
-			detectionLine('Причина определения', section && section.detection_reason || 'нет данных')
+			detectionLine('Противоречащие признаки', competingEvidenceText(section && section.detection_competing_evidence)),
+			detectionLine(_('Connection identity check'), section && section.identity_quarantine_mode ?
+				(section.identity_quarantine_mode === 'block' ? _('Quarantine: blocked') : _('Quarantine: restricted')) : _('Matched or not enough stable evidence'))
 		])
 	]);
 }
@@ -197,7 +232,7 @@ function loadDevicePresence(force) {
 	if (presencePromise)
 		return presencePromise;
 
-	presencePromise = fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', ['device-presence', 'list']).then(function(result) {
+	presencePromise = fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', ['--luci', 'device-presence', 'list']).then(function(result) {
 		var code = Number(result && result.code || 0);
 
 		if (code !== 0)
@@ -307,7 +342,7 @@ function sortDeviceRowsByPresence(root) {
 	});
 }
 
-function reclassifyDevice(mac, button) {
+function reclassifyDevice(mac, button, trustCurrent) {
 	var spinner = E('span', { 'class': 'sf-spinner' });
 	var status = E('p', {}, 'Собираются актуальные признаки устройства…');
 	var output = E('pre', { 'class': 'sf-pre' }, 'Подготовка повторного определения.');
@@ -320,6 +355,9 @@ function reclassifyDevice(mac, button) {
 		}
 	}, 'Закрыть');
 
+	if (trustCurrent && !window.confirm(_('The current identifiers do not match the trusted fingerprint. Continue only if you recognize this device. The current fingerprint will become trusted and the quarantine will be removed.')))
+		return;
+
 	button.disabled = true;
 	ui.showModal('Повторное определение устройства', [
 		E('div', { 'class': 'sf-update-progress' }, [spinner, status]),
@@ -327,7 +365,7 @@ function reclassifyDevice(mac, button) {
 		E('div', { 'class': 'right sf-modal-actions' }, [closeButton])
 	]);
 
-	fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', ['device-reclassify', mac]).then(function(result) {
+	fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', ['--luci', 'device-reclassify', mac]).then(function(result) {
 		var code = Number(result && result.code || 0);
 		var text = String(result && (result.stdout || result.stderr) || '').trim();
 
@@ -361,6 +399,8 @@ function decorateDeviceSettingsModal(mac, attempt) {
 	var oldLeft;
 	var reclassifyButton;
 	var leftPanel;
+	var isBlocklisted;
+	var trustCurrent;
 
 	attempt = attempt || 0;
 	actionRows = document.querySelectorAll('.sf-modal-actions');
@@ -376,6 +416,8 @@ function decorateDeviceSettingsModal(mac, attempt) {
 
 	editor = modal.querySelector('.sf-device-editor');
 	section = deviceSectionByMac(mac);
+	isBlocklisted = deviceIsBlocklisted(section, mac);
+	trustCurrent = !!(section && section.identity_quarantine_mode);
 	oldDetails = modal.querySelector('.sf-device-detection-modal');
 	oldLeft = actions.querySelector('.sf-device-settings-left');
 
@@ -386,23 +428,24 @@ function decorateDeviceSettingsModal(mac, attempt) {
 	if (editor)
 		editor.appendChild(detectionDetails(section));
 
-	reclassifyButton = E('button', {
+	reclassifyButton = isBlocklisted ? null : E('button', {
 		'class': 'sf-action sf-action-neutral sf-device-reclassify',
 		'type': 'button',
 		'data-device-reclassify': mac,
 		'disabled': section ? null : 'disabled',
-		'title': section ?
-			'Снять ручную фиксацию, собрать признаки и определить тип заново' :
+		'title': section ? (trustCurrent ?
+			_('Trust this connection, remove quarantine, and detect the device type again') :
+			'Снять ручную фиксацию, собрать признаки и определить тип заново') :
 			'Сначала сохраните настройки устройства',
 		'click': function(event) {
 			event.preventDefault();
-			reclassifyDevice(mac, event.currentTarget);
+			reclassifyDevice(mac, event.currentTarget, trustCurrent);
 		}
-	}, 'Определить заново');
+	}, trustCurrent ? _('Trust current connection') : 'Определить заново');
 
 	leftPanel = E('div', { 'class': 'sf-device-settings-left' }, [
 		E('div', { 'class': 'sf-device-presence-modal-status' }, presenceStatusText(presenceForMac(mac))),
-		reclassifyButton
+		reclassifyButton || ''
 	]);
 	actions.classList.add('sf-device-settings-actions');
 	actions.insertBefore(leftPanel, actions.firstChild);

@@ -1,0 +1,61 @@
+#!/bin/sh
+# Общие хеши только для внутреннего состояния Sheepfold. Pairing и QR имеют
+# отдельный SHA-256-контракт и намеренно не используют этот файл. §dscqr01
+
+sheepfold_state_hash_stdin() (
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum | awk '{ print $1 }'
+	elif command -v md5sum >/dev/null 2>&1; then
+		# Для сравнения кэша криптографическая стойкость не требуется.
+		md5sum | awk '{ print $1 }'
+	else
+		printf 'No state hash implementation is available.\n' >&2
+		return 127
+	fi
+)
+
+sheepfold_state_hash_text() (
+	printf '%s' "${1:-}" | sheepfold_state_hash_stdin
+)
+
+sheepfold_state_hash_file() (
+	sheepfold_hash_path="${1:-}"
+	[ -r "$sheepfold_hash_path" ] || return 1
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$sheepfold_hash_path" | awk '{ print $1 }'
+	elif command -v md5sum >/dev/null 2>&1; then
+		md5sum "$sheepfold_hash_path" | awk '{ print $1 }'
+	else
+		printf 'No state hash implementation is available.\n' >&2
+		return 127
+	fi
+)
+
+sheepfold_secure_hash_text() (
+	# Секретный fallback не имеет права ослабляться до MD5. Если SHA-256
+	# недоступен, вызывающий код должен завершиться явной ошибкой.
+	if command -v sha256sum >/dev/null 2>&1; then
+		printf '%s' "${1:-}" | sha256sum | awk '{ print $1 }'
+	elif command -v openssl >/dev/null 2>&1; then
+		printf '%s' "${1:-}" | openssl dgst -sha256 | awk '{ print $NF }'
+	else
+		printf 'SHA-256 implementation is unavailable.\n' >&2
+		return 127
+	fi
+)
+
+sheepfold_hmac_sha256_text() (
+	# Identity-компоненты сравниваются длительное время, поэтому обычного hash
+	# недостаточно: локальный HMAC не позволяет сопоставлять одинаковые serial/UUID
+	# между разными роутерами по украденному UCI-конфигу. §devident1
+	sheepfold_hmac_secret="${1:-}"
+	sheepfold_hmac_text="${2:-}"
+	[ -n "$sheepfold_hmac_secret" ] || return 2
+	command -v openssl >/dev/null 2>&1 || {
+		printf 'OpenSSL is required for HMAC-SHA-256.\n' >&2
+		return 127
+	}
+	printf '%s' "$sheepfold_hmac_text" |
+		openssl dgst -sha256 -hmac "$sheepfold_hmac_secret" 2>/dev/null |
+		awk '{ print $NF }'
+)

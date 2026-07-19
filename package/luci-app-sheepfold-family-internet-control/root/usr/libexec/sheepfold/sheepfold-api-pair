@@ -1,7 +1,10 @@
 #!/bin/sh
 set -eu
 
+. /usr/libexec/sheepfold/sheepfold-pair-diagnostics
+
 RUNTIME_DIR="/tmp/sheepfold/pair-attempts"
+PAIR_LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
 mkdir -p "$RUNTIME_DIR"
 chmod 700 "$RUNTIME_DIR" 2>/dev/null || true
 
@@ -15,12 +18,23 @@ url_decode() {
 }
 
 form_get() {
-    key="$1"
-    body="$2"
-    printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
-        [ "$item_key" = "$key" ] || continue
-        url_decode "$item_value"
-        break
+    form_key="$1"
+    form_rest="$2"
+
+    # Не используем `tr | while read`: разные BusyBox ash по-разному выполняют цикл
+    # в конвейере, из-за чего реальное POST-тело могло превращаться в пустые login/code.
+    while [ -n "$form_rest" ]; do
+        form_item="${form_rest%%&*}"
+        if [ "$form_item" = "$form_rest" ]; then
+            form_rest=''
+        else
+            form_rest="${form_rest#*&}"
+        fi
+        form_item_key="${form_item%%=*}"
+        form_item_value="${form_item#*=}"
+        [ "$form_item_key" = "$form_key" ] || continue
+        url_decode "$form_item_value"
+        return 0
     done
 }
 
@@ -75,7 +89,8 @@ attempt_identity() {
     printf '%s' "${mac:-$ip}" | tr -cd 'A-Za-z0-9_.-'
 }
 
-consume_attempt() {
+pair_attempt_state() {
+    mode="$1"
     identity="$(attempt_identity)"
     [ -n "$identity" ] || identity=unknown
     max_attempts="$(uci -q get sheepfold.pairing_global.max_attempts 2>/dev/null || printf 10)"
@@ -114,12 +129,22 @@ consume_attempt() {
         trap - EXIT HUP INT TERM
         return 1
     fi
-    count=$((count + 1))
-    printf '%s %s\n' "$started" "$count" > "$file"
-    chmod 600 "$file" 2>/dev/null || true
+    if [ "$mode" = "record" ]; then
+        count=$((count + 1))
+        printf '%s %s\n' "$started" "$count" > "$file"
+        chmod 600 "$file" 2>/dev/null || true
+    fi
     rmdir "$lock" 2>/dev/null || true
     trap - EXIT HUP INT TERM
     return 0
+}
+
+attempt_limit_allows() {
+    pair_attempt_state check
+}
+
+record_failed_attempt() {
+    pair_attempt_state record
 }
 
 clear_attempts() {
@@ -127,12 +152,33 @@ clear_attempts() {
     [ -n "$identity" ] && rm -f "$RUNTIME_DIR/$identity" 2>/dev/null || true
 }
 
+log_pairing_failure() {
+    local failure_code failure_ip failure_text
+    failure_code="$1"
+    failure_ip="${REMOTE_ADDR:-не определён}"
+    case "$failure_code" in
+        device_not_resolved) failure_text="Роутер пока не определил устройство в локальной сети" ;;
+        device_blocklisted) failure_text="Устройство находится в чёрном списке устройств" ;;
+        token_generation_failed) failure_text="Не удалось создать или сохранить административный токен" ;;
+        *) failure_text="Одноразовый код отклонён" ;;
+    esac
+
+    # Код сопряжения и внутренний вывод намеренно не попадают в журнал. §pairrng1
+    if [ -x "$PAIR_LOG_HELPER" ]; then
+        "$PAIR_LOG_HELPER" "Не удалось привязать устройство администратора: $failure_text, IP $failure_ip" || true
+    else
+        logger -t sheepfold-router-pairing "Pairing failed: $failure_code, IP $failure_ip"
+    fi
+}
+
 if [ "${REQUEST_METHOD:-POST}" = "OPTIONS" ]; then
+    pair_diag_event api_options "remote_ip=${REMOTE_ADDR:-unknown}"
     header_json "204 No Content"
     exit 0
 fi
 
 if [ "${REQUEST_METHOD:-POST}" != "POST" ]; then
+    pair_diag_event api_rejected "reason=method_not_allowed" "method=${REQUEST_METHOD:-unknown}" "remote_ip=${REMOTE_ADDR:-unknown}"
     header_json "405 Method Not Allowed"
     printf '{"app":"sheepfold","ok":false,"paired":false,"error":"method_not_allowed"}\n'
     exit 0
@@ -140,50 +186,79 @@ fi
 
 if [ "${HTTP_X_SHEEPFOLD_CLIENT:-}" != "android-admin-v1" ] && \
    [ "${HTTP_USER_AGENT:-}" != "Sheepfold Android" ]; then
+    pair_diag_event api_rejected "reason=client_header_required" "remote_ip=${REMOTE_ADDR:-unknown}"
     header_json "403 Forbidden"
     printf '{"app":"sheepfold","ok":false,"paired":false,"error":"client_header_required"}\n'
     exit 0
 fi
 
-consume_attempt || {
-    header_json "429 Too Many Requests" "${retry_after:-600}"
-    printf '{"app":"sheepfold","ok":false,"paired":false,"error":"rate_limited","message":"Too many pairing attempts. Try again later."}\n'
-    exit 0
-}
-
+pair_diag_event api_received \
+    "remote_ip=${REMOTE_ADDR:-unknown}" \
+    "content_length=${CONTENT_LENGTH:-0}" \
+    "client_header=${HTTP_X_SHEEPFOLD_CLIENT:-missing}"
 body="$(read_body)"
 login="$(form_get login "$body")"
 code="$(form_get code "$body")"
+pair_diag_event api_form_parsed \
+    "remote_ip=${REMOTE_ADDR:-unknown}" \
+    "login_present=$([ -n "$login" ] && printf yes || printf no)" \
+    "code_length=${#code}"
 
 if [ -z "$login" ] || [ -z "$code" ]; then
+    pair_diag_event api_rejected "reason=login_and_code_required" "remote_ip=${REMOTE_ADDR:-unknown}"
     header_json "400 Bad Request"
     printf '{"app":"sheepfold","ok":false,"paired":false,"error":"login_and_code_required"}\n'
     exit 0
 fi
 
 case "$login" in *[!A-Za-z0-9_.@+-]*|'')
+    pair_diag_event api_rejected "reason=invalid_login" "remote_ip=${REMOTE_ADDR:-unknown}"
     header_json "400 Bad Request"
     printf '{"app":"sheepfold","ok":false,"paired":false,"error":"invalid_login"}\n'
     exit 0
     ;;
 esac
 if ! valid_pairing_code "$code" || [ ${#code} -lt 4 ] || [ ${#code} -gt 64 ]; then
+    pair_diag_event api_rejected "reason=invalid_code_format" "remote_ip=${REMOTE_ADDR:-unknown}" "code_length=${#code}"
     header_json "400 Bad Request"
     printf '{"app":"sheepfold","ok":false,"paired":false,"error":"invalid_code"}\n'
     exit 0
 fi
 
+attempt_limit_allows || {
+    pair_diag_event api_rejected "reason=rate_limited" "remote_ip=${REMOTE_ADDR:-unknown}" "retry_after=${retry_after:-600}"
+    header_json "429 Too Many Requests" "${retry_after:-600}"
+    printf '{"app":"sheepfold","ok":false,"paired":false,"error":"rate_limited","message":"Too many pairing attempts. Try again later."}\n'
+    exit 0
+}
+
 status=0
+pair_started_at="$(date +%s)"
+pair_diag_event backend_started "remote_ip=${REMOTE_ADDR:-unknown}"
 output="$(/usr/libexec/sheepfold/sheepfold-router-control pair-admin-device \
     "$login" "$code" "${REMOTE_ADDR:-}" "${HTTP_USER_AGENT:-Android Sheepfold}" 2>&1)" || status="$?"
+pair_finished_at="$(date +%s)"
+pair_diag_event backend_finished \
+    "remote_ip=${REMOTE_ADDR:-unknown}" \
+    "status=$status" \
+    "duration_seconds=$((pair_finished_at - pair_started_at))"
 
 if [ "$status" != "0" ]; then
     case "$status" in
         4) http_status="409 Conflict"; error_code="device_not_resolved" ;;
         5) http_status="403 Forbidden"; error_code="device_blocklisted" ;;
         6) http_status="500 Internal Server Error"; error_code="token_generation_failed" ;;
-        *) http_status="403 Forbidden"; error_code="pairing_rejected" ;;
+        7) http_status="409 Conflict"; error_code="pairing_busy" ;;
+        *)
+            # Считаем только проверенный запрос с неверным логином/одноразовым
+            # кодом. Ошибки DHCP, blocklist и внутренних сервисов не являются перебором.
+            record_failed_attempt || true
+            http_status="403 Forbidden"
+            error_code="pairing_rejected"
+            ;;
     esac
+    pair_diag_event api_response "remote_ip=${REMOTE_ADDR:-unknown}" "result=$error_code" "status=$status"
+    log_pairing_failure "$error_code"
     header_json "$http_status"
     printf '{"app":"sheepfold","ok":false,"paired":false,"error":"%s","message":"%s"}\n' \
         "$error_code" "$(json_escape "$output")"
@@ -191,6 +266,7 @@ if [ "$status" != "0" ]; then
 fi
 
 clear_attempts
+pair_diag_event api_response "remote_ip=${REMOTE_ADDR:-unknown}" "result=paired" "status=0"
 header_json "200 OK"
 printf '{"app":"sheepfold","ok":true,"paired":true,'
 printf '"routerName":"%s",' "$(json_escape "$(uci -q get system.@system[0].hostname 2>/dev/null || printf OpenWrt)")"

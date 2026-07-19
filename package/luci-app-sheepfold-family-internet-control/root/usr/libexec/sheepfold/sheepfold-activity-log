@@ -106,15 +106,26 @@ dir_size_kb() { du -sk "$1" 2>/dev/null | awk '{print $1}' || echo 0; }
 file_size_kb() { du -sk "$1" 2>/dev/null | awk '{print $1}' || echo 0; }
 
 device_id_for_mac() {
+    device_ids_for_mac "$1" | sed -n '1p'
+}
+
+device_ids_for_mac() {
+    local wanted section existing device_id legacy_id
     wanted="$(normalize_mac "$1")"
     for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
         existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
         [ "$(normalize_mac "$existing")" = "$wanted" ] || continue
         device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section" 2>/dev/null || true)"
-        printf '%s' "$device_id" | tr -cd '0-9'
+        printf '%s\n' "$device_id" | tr -cd '0-9\n'
+        # Старые файлы журнала сохраняют прежний ID в имени. Читаем и удаляем
+        # их вместе с текущими, чтобы миграция старого формата не прятала историю.
+        for legacy_id in $(uci -q get "sheepfold.$section.legacy_ids" 2>/dev/null || true); do
+            case "$legacy_id" in ''|*[!0-9]*|0|"$device_id") continue ;; esac
+            printf '%s\n' "$legacy_id"
+        done
         return 0
     done
-    printf '%s' "$wanted" | tr -d ':' | tr '[:upper:]' '[:lower:]'
+    printf '%s\n' "$wanted" | tr -d ':' | tr '[:upper:]' '[:lower:]'
 }
 
 current_log_file() {
@@ -250,10 +261,11 @@ cmd_clean() {
     MAC="${1:-}"
     valid_mac "$MAC" || { echo "Invalid MAC address for activity-log cleanup." >&2; return 2; }
     acquire_lock
-    DEVICE_ID="$(device_id_for_mac "$MAC")"
-    for file in "$PRIV_DIR"/*-"$DEVICE_ID"-sheepfold.log; do
-        [ -f "$file" ] || continue
-        rm -f -- "$file"
+    for DEVICE_ID in $(device_ids_for_mac "$MAC"); do
+        for file in "$PRIV_DIR"/*-"$DEVICE_ID"-sheepfold.log; do
+            [ -f "$file" ] || continue
+            rm -f -- "$file"
+        done
     done
     release_lock
 }
@@ -269,11 +281,14 @@ cmd_enrich() {
     valid_mac "$MAC" || { printf '{"error":"invalid_mac"}\n'; return 2; }
     MAC="$(normalize_mac "$MAC")"
     log_enabled || { printf '{"error":"private_logs_disabled"}\n'; return 0; }
-    DEVICE_ID="$(device_id_for_mac "$MAC")"
+    DEVICE_IDS="$(device_ids_for_mac "$MAC")"
+    DEVICE_ID="$(printf '%s\n' "$DEVICE_IDS" | sed -n '1p')"
     FILES=""
-    for file in "$PRIV_DIR"/*-"$DEVICE_ID"-sheepfold.log; do
-        [ -f "$file" ] || continue
-        FILES="$FILES $file"
+    for LOG_DEVICE_ID in $DEVICE_IDS; do
+        for file in "$PRIV_DIR"/*-"$LOG_DEVICE_ID"-sheepfold.log; do
+            [ -f "$file" ] || continue
+            FILES="$FILES $file"
+        done
     done
     if [ -z "$FILES" ]; then
         printf '{"mac":"%s","device_id":"%s","days_covered":0,"domains":[],"access_changes":[],"total_raw_lines":0}\n' "$MAC" "$DEVICE_ID"

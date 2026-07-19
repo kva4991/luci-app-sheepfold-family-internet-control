@@ -13,6 +13,8 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
 const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/view/sheepfold/overview.js');
 const maintenancePath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/router/maintenance.js');
+const logPanelPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/logs/panel.js');
+const notificationSettingsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/notifications/settings.js');
 const i18nModulePath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n.js');
 const ruJsonPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n/ru.json');
 const poPath = resolve(packageDir, 'po/ru/sheepfold.po');
@@ -54,7 +56,9 @@ function parsePoEntries(source) {
 
 describe('overview localization', () => {
   it('uses gettext _() instead of the legacy T() dictionary', () => {
-    const source = readFileSync(overviewPath, 'utf8') + readFileSync(maintenancePath, 'utf8');
+    const source = [overviewPath, maintenancePath, logPanelPath, notificationSettingsPath]
+      .map((path) => readFileSync(path, 'utf8'))
+      .join('\n');
 
     assert.doesNotMatch(source, /var translations\s*=/);
     assert.doesNotMatch(source, /function T\(/);
@@ -71,6 +75,8 @@ describe('overview localization', () => {
     assert.equal(entries.get('Settings'), 'Настройки');
     assert.equal(entries.get('checking'), 'проверяется');
     assert.equal(entries.get('current version'), 'текущая версия');
+    assert.equal(entries.get('Notifications'), 'Уведомления');
+    assert.equal(entries.get('Notify administrators about SIM card changes'), 'Уведомлять администраторов о смене SIM-карты');
   });
 
   it('includes overview.js in xgettext extraction list', () => {
@@ -109,6 +115,7 @@ describe('overview localization', () => {
       'Фильтр Sheepfold активен в AdGuard Home, но путь DNS-запросов пока не проверен.',
     );
     assert.equal(catalog['AdGuard Home protection is disabled.'], 'Защита AdGuard Home выключена.');
+    assert.equal(catalog.Notifications, 'Уведомления');
     assert.equal(
       catalog['Control rules confirmed: %s of %s.'],
       'Контрольные правила подтверждены: %s из %s.',

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
+import app.sheepfold.android.diagnostics.DiagnosticLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -53,10 +54,19 @@ object LocalRouterDiscovery {
 
     suspend fun discover(context: Context): LocalSheepfoldDiscovery? = withContext(Dispatchers.IO) {
         val state = networkState(context)
+        DiagnosticLog.info(
+            "discovery.started",
+            "transport" to state.transport.name,
+            "gateway" to state.gatewayHost.orEmpty()
+        )
         if (state.transport != ActiveTransport.WIFI && state.transport != ActiveTransport.ETHERNET) {
+            DiagnosticLog.warn("discovery.skipped", "reason" to "unsupported_transport")
             return@withContext null
         }
-        val host = state.gatewayHost ?: return@withContext null
+        val host = state.gatewayHost ?: run {
+            DiagnosticLog.warn("discovery.skipped", "reason" to "gateway_missing")
+            return@withContext null
+        }
 
         // Сначала читаем discovery через штатный HTTPS LuCI. Порт Sheepfold может быть
         // изменён, поэтому начинать поиск только с жёстко заданного :5201 нельзя. §dscqr01
@@ -65,6 +75,7 @@ object LocalRouterDiscovery {
             URL("https://$host:5201/.well-known/sheepfold.json")
         )
         for (url in discoveryUrls) {
+            DiagnosticLog.info("discovery.document.request", "url" to url.toString())
             val json = readSheepfoldJson(url) ?: continue
             val port = json.optString("httpsPort")
                 .ifBlank { json.optString("appPort") }
@@ -79,8 +90,12 @@ object LocalRouterDiscovery {
 
             // Наличие статического JSON ещё не означает, что отдельный API-uhttpd запущен.
             // Проверяем сам endpoint, иначе следующий экран обещает найденный сервер зря.
-            if (!isSheepfoldApi(URL(apiUrl))) continue
+            if (!isSheepfoldApi(URL("${apiUrl.trimEnd('/')}/ping"))) {
+                DiagnosticLog.warn("discovery.api.rejected", "api" to apiUrl)
+                continue
+            }
 
+            DiagnosticLog.info("discovery.succeeded", "api" to apiUrl)
             return@withContext LocalSheepfoldDiscovery(
                 gatewayHost = host,
                 apiUrl = apiUrl,
@@ -88,6 +103,7 @@ object LocalRouterDiscovery {
             )
         }
 
+        DiagnosticLog.warn("discovery.not_found", "gateway" to host)
         null
     }
 
@@ -103,6 +119,8 @@ object LocalRouterDiscovery {
         } finally {
             connection.disconnect()
         }
+    }.onFailure { error ->
+        DiagnosticLog.error("discovery.document.failed", error, "url" to url.toString())
     }.getOrNull()
 
     private fun isSheepfoldApi(url: URL): Boolean = runCatching {
@@ -118,5 +136,7 @@ object LocalRouterDiscovery {
         } finally {
             connection.disconnect()
         }
+    }.onFailure { error ->
+        DiagnosticLog.error("discovery.api.failed", error, "url" to url.toString())
     }.getOrDefault(false)
 }

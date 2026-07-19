@@ -50,6 +50,29 @@ case "${APP_LANGUAGE}" in
         ;;
 esac
 
+DEFAULT_COUNTRY="$(uci -q get sheepfold.global.country_profile 2>/dev/null || printf ru)"
+case "$DEFAULT_COUNTRY" in ru|by|cn) ;; *) DEFAULT_COUNTRY='ru' ;; esac
+echo ""
+echo "Choose router country / Выберите страну нахождения роутера:"
+echo "  Россия: ru"
+echo "  Беларусь: by"
+echo "  中国 / China: cn"
+printf "Country [%s]: " "$DEFAULT_COUNTRY"
+if ! read -r ROUTER_COUNTRY; then
+    ROUTER_COUNTRY=""
+fi
+
+case "${ROUTER_COUNTRY}" in
+    "") ROUTER_COUNTRY="$DEFAULT_COUNTRY" ;;
+    ru|RU|Ru) ROUTER_COUNTRY='ru' ;;
+    by|BY|By) ROUTER_COUNTRY='by' ;;
+    cn|CN|Cn) ROUTER_COUNTRY='cn' ;;
+    *)
+        echo "Unknown country profile. Installation cancelled / Неизвестный профиль страны." >&2
+        exit 1
+        ;;
+esac
+
 echo ""
 echo "Choose Sheepfold product / Выберите вариант Sheepfold:"
 echo "  1: Sheepfold (without AI / без ИИ)"
@@ -249,6 +272,7 @@ apply_selected_settings() {
 
     echo "Applying selected Sheepfold settings to existing config."
     uci -q set sheepfold.global.language="${APP_LANGUAGE}"
+    uci -q set sheepfold.global.country_profile="${ROUTER_COUNTRY}"
     uci -q set sheepfold.global.product_variant="${PRODUCT_VARIANT}"
     uci -q set sheepfold.global.luci_language_synced='1'
     # Тот же выбор применяем и к языку интерфейса LuCI, чтобы админка сразу
@@ -290,6 +314,9 @@ apply_selected_settings() {
     uci -q set sheepfold.podkop.enabled="${PODKOP_DETECTED}"
     uci -q commit sheepfold
     uci -q commit luci 2>/dev/null || true
+    if [ -x /usr/libexec/sheepfold/sheepfold-country-profile ]; then
+        /usr/libexec/sheepfold/sheepfold-country-profile apply "${ROUTER_COUNTRY}"
+    fi
     [ -x /usr/libexec/sheepfold/sheepfold-ipv6-control ] && \
         /usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || true
 }
@@ -297,10 +324,13 @@ apply_selected_settings() {
 if [ ! -r /etc/config/sheepfold ]; then
     mkdir -p /etc/sheepfold
     printf '%s\n' "${APP_LANGUAGE}" > /etc/sheepfold/install.language
+    printf '%s\n' "${ROUTER_COUNTRY}" > /etc/sheepfold/install.country
     chmod 600 /etc/sheepfold/install.language 2>/dev/null || true
+    chmod 600 /etc/sheepfold/install.country 2>/dev/null || true
     echo "Sheepfold config is not installed yet; selected values will be applied after package installation."
     echo "Automatic setup choice:"
     echo "  language=${APP_LANGUAGE}"
+    echo "  country_profile=${ROUTER_COUNTRY}"
     echo "  auto_configure=${AUTO_CONFIGURE}"
     echo "  detection_mode=${DETECTION_MODE}"
     echo "  no_restrictions_auto_assign=${NO_RESTRICTIONS_AUTO_ASSIGN}"

@@ -9,12 +9,15 @@ sanitize_client_id() {
 	printf '%s' "$1" | tr -c 'A-Za-z0-9._:-' '_'
 }
 
+sanitize_bucket() {
+	printf '%s' "$1" | tr -cd 'A-Za-z0-9_.-'
+}
+
 rate_limit_check() {
 	bucket="$1"
 	client_id="$2"
 	limit="$3"
 	window="$4"
-	now count window_start safe_id file line
 
 	case "$limit" in
 		''|*[!0-9]*) return 0 ;;
@@ -58,12 +61,26 @@ rate_limit_check() {
 	return 0
 }
 
+rate_limit_reset_bucket() {
+	bucket="$(sanitize_bucket "$1")"
+	[ -n "$bucket" ] || return 2
+	[ -d "$RATE_DIR" ] || return 0
+
+	# Сброс выполняется только доверенным backend-кодом при выпуске нового QR.
+	# Ограничиваем удаление одним проверенным префиксом внутри фиксированного /tmp.
+	for file in "$RATE_DIR/${bucket}_"*; do
+		[ -f "$file" ] || continue
+		rm -f "$file"
+	done
+}
+
 command_name="${1:-}"
 shift || true
 case "$command_name" in
 	check) rate_limit_check "$1" "$2" "$3" "$4" ;;
+	reset-bucket) rate_limit_reset_bucket "$1" ;;
 	*)
-		echo "Usage: sheepfold-api-rate-limit check <bucket> <client_id> <limit> <window_seconds>" >&2
+		echo "Usage: sheepfold-api-rate-limit check <bucket> <client_id> <limit> <window_seconds> | reset-bucket <bucket>" >&2
 		exit 1
 		;;
 esac

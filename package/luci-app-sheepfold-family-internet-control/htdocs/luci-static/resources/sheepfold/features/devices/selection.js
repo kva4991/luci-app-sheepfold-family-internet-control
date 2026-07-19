@@ -1,5 +1,15 @@
 'use strict';
 'require baseclass';
+'require sheepfold.shared.icons as sharedIcons';
+
+function identityIcon(device) {
+	var protectedIdentity = !!(device && device.identityProtected);
+	var title = protectedIdentity ?
+		_('Stable device identity is available') :
+		_('This device is protected mainly by its MAC address; MAC spoofing cannot be reliably detected yet');
+
+	return sharedIcons.deviceIdentity(protectedIdentity, title);
+}
 
 function matches(device, needle, displayId, formattedId) {
 	if (!needle)
@@ -49,7 +59,7 @@ function create(options) {
 			return E('div', { 'class': 'sf-binding-row' + (selected[device.id] ? ' is-selected' : '') }, [
 				E('div', { 'class': 'sf-device-index' }, options.formattedId(device)),
 				E('div', { 'class': 'sf-device-name' }, [
-					E('strong', {}, device.name),
+					E('strong', {}, [identityIcon(device), E('span', {}, device.name)]),
 					E('small', {}, options.groupName(device.group))
 				]),
 				E('div', {}, device.ip || '-'),

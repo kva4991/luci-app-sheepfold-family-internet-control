@@ -25,6 +25,7 @@
     "router:readOnly": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runRouterTests.ps1 -Profile readOnly",
     "router:install": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runRouterTests.ps1 -Profile install",
     "router:writeSafe": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runRouterTests.ps1 -Profile writeSafe",
+    "router:runtimeMatrix": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runCurrentRuntimeMatrix.ps1",
     "router:fullSafe": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runRouterTests.ps1 -Profile fullSafe",
     "router:frontend": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runFrontendTests.ps1",
     "router:allSafe": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runAllRouterTests.ps1"

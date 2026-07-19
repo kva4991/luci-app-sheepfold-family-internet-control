@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "country": "ru",
+  "displayName": {
+    "ru": "Россия",
+    "en": "Russia",
+    "zh_Hans": "俄罗斯"
+  },
+  "emergencySites": [
+    {
+      "id": "mchs",
+      "domain": "mchs.gov.ru",
+      "name": { "ru": "МЧС России", "en": "EMERCOM of Russia", "zh_Hans": "俄罗斯紧急情况部" },
+      "description": { "ru": "Официальная информация о чрезвычайных ситуациях и безопасности.", "en": "Official emergency and safety information.", "zh_Hans": "官方紧急情况与安全信息。" }
+    },
+    {
+      "id": "mchs_psychology",
+      "domain": "psi.mchs.gov.ru",
+      "name": { "ru": "Экстренная психологическая помощь МЧС", "en": "EMERCOM psychological aid", "zh_Hans": "俄罗斯紧急情况部心理援助" },
+      "description": { "ru": "Информация и контакты психологической помощи в кризисной ситуации.", "en": "Psychological aid information and contacts for a crisis.", "zh_Hans": "危机情况下的心理援助信息和联系方式。" }
+    },
+    {
+      "id": "gosuslugi",
+      "domain": "gosuslugi.ru",
+      "name": { "ru": "Госуслуги", "en": "Russian public services", "zh_Hans": "俄罗斯公共服务" },
+      "description": { "ru": "Государственные услуги и документы.", "en": "Government services and documents.", "zh_Hans": "政府服务与文件。" }
+    },
+    {
+      "id": "esia",
+      "domain": "esia.gosuslugi.ru",
+      "name": { "ru": "Вход через Госуслуги", "en": "Public services sign-in", "zh_Hans": "公共服务登录" },
+      "description": { "ru": "Единая государственная система авторизации.", "en": "Unified government sign-in service.", "zh_Hans": "统一政府身份认证服务。" }
+    },
+    {
+      "id": "minzdrav",
+      "domain": "minzdrav.gov.ru",
+      "name": { "ru": "Минздрав России", "en": "Russian Ministry of Health", "zh_Hans": "俄罗斯卫生部" },
+      "description": { "ru": "Официальная информация здравоохранения.", "en": "Official public health information.", "zh_Hans": "官方公共卫生信息。" }
+    },
+    {
+      "id": "dnevnik",
+      "domain": "dnevnik.ru",
+      "name": { "ru": "Дневник.ру", "en": "Dnevnik.ru school portal", "zh_Hans": "Dnevnik.ru 学校平台" },
+      "description": { "ru": "Электронный дневник и школьная коммуникация.", "en": "Electronic school diary and school communication.", "zh_Hans": "电子校务日志与学校沟通。" }
+    },
+    {
+      "id": "mos",
+      "domain": "mos.ru",
+      "name": { "ru": "Сервисы Москвы", "en": "Moscow city services", "zh_Hans": "莫斯科城市服务" },
+      "description": { "ru": "Городские услуги для жителей Москвы.", "en": "City services for Moscow residents.", "zh_Hans": "面向莫斯科居民的城市服务。" }
+    },
+    {
+      "id": "school_mos",
+      "domain": "school.mos.ru",
+      "name": { "ru": "Московская электронная школа", "en": "Moscow Electronic School", "zh_Hans": "莫斯科电子学校" },
+      "description": { "ru": "Школьные материалы и дневник для пользователей Москвы.", "en": "School materials and diary for Moscow users.", "zh_Hans": "面向莫斯科用户的学校资料与校务日志。" }
+    },
+    {
+      "id": "ya_search",
+      "domain": "ya.ru",
+      "name": { "ru": "Простой поиск Яндекса", "en": "Yandex simple search", "zh_Hans": "Yandex 简洁搜索" },
+      "description": { "ru": "Узкая страница поиска без разрешения широкого домена yandex.ru.", "en": "A narrow search page without allowing the broad yandex.ru domain.", "zh_Hans": "仅允许精简搜索页，不放行范围过大的 yandex.ru 域名。" }
+    },
+    {
+      "id": "2gis",
+      "domain": "2gis.ru",
+      "name": { "ru": "Карты 2ГИС", "en": "2GIS maps", "zh_Hans": "2GIS 地图" },
+      "description": { "ru": "Адреса, организации, карты и маршруты.", "en": "Addresses, organizations, maps, and routes.", "zh_Hans": "地址、机构、地图与路线。" }
+    },
+    {
+      "id": "rzd",
+      "domain": "rzd.ru",
+      "name": { "ru": "Российские железные дороги", "en": "Russian Railways", "zh_Hans": "俄罗斯铁路" },
+      "description": { "ru": "Расписание поездов и информация о железнодорожных поездках.", "en": "Train schedules and railway travel information.", "zh_Hans": "列车时刻与铁路出行信息。" }
+    }
+  ]
+}

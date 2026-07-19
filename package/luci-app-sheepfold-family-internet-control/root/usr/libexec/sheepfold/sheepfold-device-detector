@@ -1,6 +1,13 @@
 #!/bin/sh
 set -eu
 
+HASH_COMMON="${SHEEPFOLD_HASH_COMMON:-${0%/*}/sheepfold-hash-common}"
+[ -r "$HASH_COMMON" ] || HASH_COMMON=/usr/libexec/sheepfold/sheepfold-hash-common
+. "$HASH_COMMON"
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-${0%/*}/sheepfold-lock-common}"
+[ -r "$LOCK_COMMON" ] || LOCK_COMMON=/usr/libexec/sheepfold/sheepfold-lock-common
+. "$LOCK_COMMON"
+
 COMMAND="${1:-scan}"
 CACHE_DIR="/tmp/sheepfold"
 CACHE_FILE="$CACHE_DIR/device-detection.tsv"
@@ -8,14 +15,26 @@ RAW_FILE="$CACHE_DIR/device-detection.raw"
 STATE_DIR="$CACHE_DIR/device-state"
 SIGNAL_DIR="$CACHE_DIR/device-signals"
 MDNS_FILE="$CACHE_DIR/device-mdns.tsv"
+SSDP_FILE="$CACHE_DIR/device-ssdp.tsv"
+WSD_FILE="$CACHE_DIR/device-ws-discovery.tsv"
+WIFI_CAPABILITIES_FILE="$CACHE_DIR/device-wifi-capabilities.tsv"
+UPNP_DESCRIPTION_DIR="$CACHE_DIR/device-upnp"
 DIRTY_FLAG="$CACHE_DIR/device-detection.uci-dirty"
 LAST_SCAN_FILE="$CACHE_DIR/device-detection.last-scan"
+SCAN_LOCK="$CACHE_DIR/device-detection.flock"
 NEW_DEVICE_ALERT_FLAG="$CACHE_DIR/new-device-alert"
 LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
+ADMIN_NOTIFICATION="/usr/libexec/sheepfold/sheepfold-admin-notification"
 CLASSIFIER="/usr/libexec/sheepfold/sheepfold-device-classifier"
 MDNS_COLLECTOR="/usr/libexec/sheepfold/sheepfold-device-mdns"
+SSDP_COLLECTOR="/usr/libexec/sheepfold/sheepfold-device-ssdp"
+UPNP_DESCRIPTION_COLLECTOR="/usr/libexec/sheepfold/sheepfold-device-upnp-description"
+WSD_COLLECTOR="/usr/libexec/sheepfold/sheepfold-device-ws-discovery"
+IDENTITY_RECONCILER="/usr/libexec/sheepfold/sheepfold-device-identity"
+PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
+IDENTITY_SECRET_FILE="${SHEEPFOLD_IDENTITY_SECRET_FILE:-/etc/sheepfold/.device-identity-hmac}"
 DEFAULT_SCAN_PORTS="22,53,80,81,443,445,548,554,631,1883,3000,3001,5000,5001,5353,8000,8006,8080,8081,8123,8554,9000,9100,32400"
-POLICY_VERSION="3"
+POLICY_VERSION="9"
 NEW_DEVICE_BADGE_SECONDS=86400
 DEFAULT_GROUPS="/usr/libexec/sheepfold/sheepfold-default-groups"
 DEVICE_ID_HELPER="/usr/libexec/sheepfold/sheepfold-device-id"
@@ -37,7 +56,42 @@ personal_devices_group_name() {
 }
 
 global_get() {
-        uci -q get "sheepfold.global.$1" 2>/dev/null || printf '%s' "$2"
+        local option_name default_value
+        option_name="$1"
+        default_value="$2"
+        uci -q get "sheepfold.global.$option_name" 2>/dev/null || printf '%s' "$default_value"
+}
+
+identity_hash_secret() {
+	local secret_dir tmp secret
+	secret_dir="${IDENTITY_SECRET_FILE%/*}"
+	if [ -r "$IDENTITY_SECRET_FILE" ]; then
+		secret="$(sed -n '1p' "$IDENTITY_SECRET_FILE" 2>/dev/null || true)"
+		case "$secret" in
+			*[!0-9a-fA-F]*|'') ;;
+			*) [ "${#secret}" -eq 64 ] && { printf '%s\n' "$secret"; return 0; } ;;
+		esac
+	fi
+
+	# Детектор уже работает под общим lock, поэтому отдельный долгоживущий daemon
+	# для генерации секрета не нужен. Файл создаётся атомарно и только один раз.
+	mkdir -p "$secret_dir"
+	chmod 700 "$secret_dir" 2>/dev/null || true
+	tmp="$IDENTITY_SECRET_FILE.tmp.$$"
+	umask 077
+	if command -v openssl >/dev/null 2>&1; then
+		openssl rand -hex 32 > "$tmp" 2>/dev/null || true
+	elif command -v sha256sum >/dev/null 2>&1; then
+		dd if=/dev/urandom bs=32 count=1 2>/dev/null | sha256sum | awk '{ print $1 }' > "$tmp"
+	fi
+	secret="$(sed -n '1p' "$tmp" 2>/dev/null || true)"
+	case "$secret" in
+		*[!0-9a-fA-F]*|'') rm -f "$tmp"; return 1 ;;
+	esac
+	[ "${#secret}" -eq 64 ] || { rm -f "$tmp"; return 1; }
+	chmod 600 "$tmp" 2>/dev/null || true
+	mv -f "$tmp" "$IDENTITY_SECRET_FILE"
+	printf '%s\n' "$secret"
 }
 
 normalize_mac() {
@@ -48,12 +102,26 @@ valid_mac() {
         printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'
 }
 
+device_sections() {
+	uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'
+}
+
 log_event() {
         if [ -x "$LOG_HELPER" ]; then
                 "$LOG_HELPER" "$*"
         else
                 logger -t sheepfold "$*"
         fi
+}
+
+notify_admin() {
+        local type dedupe_key title message
+        type="$1"
+        dedupe_key="$2"
+        title="$3"
+        message="$4"
+        [ -x "$ADMIN_NOTIFICATION" ] || return 0
+        "$ADMIN_NOTIFICATION" enqueue "$type" "$dedupe_key" "$title" "$message" >/dev/null 2>&1 || true
 }
 
 mark_dirty() {
@@ -75,6 +143,7 @@ ensure_default_groups() {
 }
 
 uci_set_if_changed() {
+        local path value current
         path="$1"
         value="$2"
         current="$(uci -q get "$path" 2>/dev/null || true)"
@@ -84,6 +153,7 @@ uci_set_if_changed() {
 }
 
 uci_delete_if_present() {
+        local path
         path="$1"
         uci -q get "$path" >/dev/null 2>&1 || return 0
         uci -q delete "$path"
@@ -91,6 +161,7 @@ uci_delete_if_present() {
 }
 
 section_for_mac() {
+        local wanted section current
         wanted="$(normalize_mac "$1")"
         for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=device$/\1/p"); do
                 current="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
@@ -103,6 +174,7 @@ section_for_mac() {
 }
 
 ensure_device_section() {
+        local mac section
         mac="$(normalize_mac "$1")"
         if section="$(section_for_mac "$mac")"; then
                 "$DEVICE_ID_HELPER" ensure "$section" >/dev/null
@@ -122,6 +194,7 @@ ensure_device_section() {
 }
 
 mac_in_named_list() {
+        local list_name wanted section mac
         list_name="$1"
         wanted="$(normalize_mac "$2")"
 
@@ -135,6 +208,24 @@ mac_in_named_list() {
                 done
         done
 
+        return 1
+}
+
+device_is_blocklisted() {
+        local section mac status
+        section="$1"
+        mac="$2"
+        mac_in_named_list blocklist "$mac" && return 0
+        [ -n "$section" ] || return 1
+        status="$(uci -q get "sheepfold.$section.status" 2>/dev/null || true)"
+        case "$status" in blocked|block) return 0 ;; esac
+        return 1
+}
+
+sources_confirm_online() {
+        case ",${1:-}," in
+                *,arp,*|*,neighbor,*|*,wifi,*|*,dhcp_event,*) return 0 ;;
+        esac
         return 1
 }
 
@@ -173,6 +264,7 @@ fingerprint_signal_material() {
 }
 
 mdns_services_for_ip() {
+        local ip
         ip="$1"
         [ -n "$ip" ] || return 0
         [ -r "$MDNS_FILE" ] || return 0
@@ -184,13 +276,279 @@ mdns_services_for_ip() {
         ' "$MDNS_FILE"
 }
 
+mdns_profile_for_ip() {
+        local ip
+        ip="$1"
+        [ -n "$ip" ] || return 0
+        [ -r "$MDNS_FILE" ] || return 0
+	awk -F '\t' -v wanted="$ip" '
+		$1 == wanted {
+			# UUID, serial и device-id участвуют в сопоставлении только как хеши.
+			# В читаемом UCI-профиле оставляем лишь диагностические TXT-поля.
+			public_txt = ""
+			part_count = split($6, parts, ",")
+			for (part = 1; part <= part_count; part++) {
+				separator = index(parts[part], "=")
+				key = tolower(substr(parts[part], 1, separator - 1))
+				if (separator > 1 && key !~ /^(serial|serialnumber|device-id|deviceid|uuid|id)$/)
+					public_txt = public_txt (public_txt == "" ? "" : ",") parts[part]
+			}
+			record = $2 "|" $3 "|" $4 "|" $5 "|" public_txt
+                        if (!seen[record]++ && count < 8) {
+                                output = output (output == "" ? "" : ";") record
+                                count++
+                        }
+                }
+                END { print substr(output, 1, 1024) }
+        ' "$MDNS_FILE"
+}
+
+ssdp_profile_for_ip() {
+        local ip base description
+        ip="$1"
+        [ -n "$ip" ] || return 0
+        [ -r "$SSDP_FILE" ] || return 0
+	base="$(awk -F '\t' -v wanted="$ip" '
+		$1 == wanted {
+			# USN и LOCATION могут содержать устойчивый ID. Для UI и классификатора
+			# достаточно типа сервиса и строки SERVER; сырой ответ остаётся в RAM.
+			record = $2 "||" $4 "|"
+                        if (!seen[record]++ && count < 8) {
+                                output = output (output == "" ? "" : ";") record
+                                count++
+                        }
+                }
+                END { print substr(output, 1, 1024) }
+        ' "$SSDP_FILE")"
+	description="$(upnp_description_profile_for_ip "$ip" || true)"
+	if [ -n "$base" ] && [ -n "$description" ]; then
+		printf '%s;%s\n' "$base" "$description"
+	else
+		printf '%s%s\n' "$base" "$description"
+	fi
+}
+
+ssdp_location_for_ip() {
+	local ip
+	ip="$1"
+	[ -r "$SSDP_FILE" ] || return 0
+	awk -F '\t' -v wanted="$ip" '$1 == wanted && $5 != "" { print $5; exit }' "$SSDP_FILE"
+}
+
+upnp_description_file_for_ip() {
+	local ip
+	ip="$1"
+	printf '%s/%s.tsv\n' "$UPNP_DESCRIPTION_DIR" "$(printf '%s' "$ip" | tr '.' '_')"
+}
+
+upnp_description_profile_for_ip() {
+	local ip location location_hash file
+	ip="$1"
+	location="$(ssdp_location_for_ip "$ip" || true)"
+	[ -n "$location" ] || return 0
+	location_hash="$(sheepfold_state_hash_text "$location")"
+	file="$(upnp_description_file_for_ip "$ip")"
+	[ -r "$file" ] || return 0
+	awk -F '\t' -v wanted_ip="$ip" -v wanted_hash="$location_hash" '
+		$1 == wanted_ip && $2 == wanted_hash {
+			# serialNumber и UDN предназначены только для HMAC identity-компонентов.
+			# В читаемый профиль попадают модель и производитель без LOCATION. §devident1
+			print substr("upnp-description|" $4 "|" $5 "|" $6 "|" $7 "|" $8 "|" $9, 1, 1024)
+			exit
+		}
+	' "$file"
+}
+
+wsd_profile_for_ip() {
+	local ip
+	ip="$1"
+	[ -n "$ip" ] || return 0
+	[ -r "$WSD_FILE" ] || return 0
+	awk -F '\t' -v wanted="$ip" '
+		$1 == wanted {
+			# Endpoint UUID и XAddrs не нужны пользовательскому профилю и не
+			# должны становиться URL для последующих запросов.
+			record = $3 "|" $4
+			if (!seen[record]++ && count < 8) {
+				output = output (output == "" ? "" : ";") record
+				count++
+			}
+		}
+		END { print substr(output, 1, 1024) }
+	' "$WSD_FILE"
+}
+
+signal_value_from_file() {
+        local signal_file key
+        signal_file="$1"
+        key="$2"
+        [ -r "$signal_file" ] || return 0
+        awk -F '\t' -v wanted="$key" '$1 == wanted { print $2; exit }' "$signal_file" 2>/dev/null || true
+}
+
+normalize_identity_value() {
+        printf '%s' "$1" |
+                tr '[:upper:]' '[:lower:]' |
+                tr '\r\n\t' '   ' |
+                sed 's/[[:cntrl:]]//g; s/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//' |
+                cut -c1-256
+}
+
+emit_identity_key() {
+	local family value digest
+	family="$1"
+	value="$(normalize_identity_value "$2")"
+	[ -n "$value" ] || return 0
+	if [ "${IDENTITY_HASH_MODE:-secure}" = legacy ]; then
+		digest="$(printf '%s=%s\n' "$family" "$value" | sheepfold_state_hash_stdin | cut -c1-32)"
+		[ "${#digest}" -eq 32 ] || return 0
+	else
+		[ -n "${IDENTITY_HASH_SECRET:-}" ] || return 0
+		digest="$(sheepfold_hmac_sha256_text "$IDENTITY_HASH_SECRET" "$family=$value" | cut -c1-40)"
+		[ "${#digest}" -eq 40 ] || return 0
+	fi
+	printf '%s:%s\n' "$family" "$digest"
+}
+
+mdns_identity_material_for_ip() {
+        local ip
+        ip="$1"
+        [ -n "$ip" ] || return 0
+        [ -r "$MDNS_FILE" ] || return 0
+        awk -F '\t' -v wanted="$ip" '
+                $1 == wanted {
+                        host = tolower($3)
+                        if (host != "")
+                                print "mdns_host\t" host
+                        count = split($6, txt, ",")
+                        for (i = 1; i <= count; i++) {
+                                separator = index(txt[i], "=")
+                                if (separator <= 0)
+                                        continue
+                                key = tolower(substr(txt[i], 1, separator - 1))
+                                value = substr(txt[i], separator + 1)
+                                if (key ~ /^(serial|serialnumber|device-id|deviceid|uuid)$/ && length(value) >= 6)
+                                        print "mdns_serial\t" value
+                        }
+                }
+        ' "$MDNS_FILE"
+}
+
+ssdp_identity_material_for_ip() {
+        local ip
+        ip="$1"
+        [ -n "$ip" ] || return 0
+        [ -r "$SSDP_FILE" ] || return 0
+        awk -F '\t' -v wanted="$ip" '
+                $1 == wanted {
+                        value = tolower($3)
+                        start = index(value, "uuid:")
+                        if (!start)
+                                next
+                        value = substr(value, start + 5)
+                        sub(/::.*/, "", value)
+			if (length(value) >= 8 && value ~ /^[a-z0-9._-]+$/) {
+                                print "upnp_uuid\t" value
+				print "device_uuid\t" value
+			}
+                }
+        ' "$SSDP_FILE"
+}
+
+upnp_description_identity_material_for_ip() {
+	local ip location location_hash file
+	ip="$1"
+	location="$(ssdp_location_for_ip "$ip" || true)"
+	[ -n "$location" ] || return 0
+	location_hash="$(sheepfold_state_hash_text "$location")"
+	file="$(upnp_description_file_for_ip "$ip")"
+	[ -r "$file" ] || return 0
+	awk -F '\t' -v wanted_ip="$ip" -v wanted_hash="$location_hash" '
+		$1 == wanted_ip && $2 == wanted_hash {
+			if (length($10) >= 6)
+				print "upnp_serial\t" $10
+			value = tolower($11)
+			start = index(value, "uuid:")
+			if (start) {
+				value = substr(value, start + 5)
+				sub(/::.*/, "", value)
+				if (length(value) >= 8 && value ~ /^[a-z0-9._-]+$/) {
+					print "upnp_uuid\t" value
+					print "device_uuid\t" value
+				}
+			}
+		}
+	' "$file"
+}
+
+wsd_identity_material_for_ip() {
+	local ip
+	ip="$1"
+	[ -n "$ip" ] || return 0
+	[ -r "$WSD_FILE" ] || return 0
+	awk -F '\t' -v wanted="$ip" '
+		$1 == wanted && length($2) >= 8 && tolower($2) ~ /^[a-z0-9._:-]+$/ {
+			print "wsd_uuid\t" tolower($2)
+			print "device_uuid\t" tolower($2)
+		}
+	' "$WSD_FILE"
+}
+
+build_identity_keys() {
+	local mac signal_file ip client_id client_compact mac_compact mode
+	mac="$1"
+	signal_file="$2"
+	ip="$3"
+	mode="${4:-secure}"
+	IDENTITY_HASH_MODE="$mode"
+	IDENTITY_HASH_SECRET=""
+	if [ "$mode" != legacy ]; then
+		IDENTITY_HASH_SECRET="$(identity_hash_secret 2>/dev/null || true)"
+		[ -n "$IDENTITY_HASH_SECRET" ] || return 0
+	fi
+        client_id="$(signal_value_from_file "$signal_file" client_id)"
+        client_compact="$(printf '%s' "$client_id" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')"
+        mac_compact="$(printf '%s' "$mac" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+
+        {
+                # DHCP client-id, равный самому MAC или 01+MAC, не является вторым
+                # независимым идентификатором и не должен облегчать подмену. §devident1
+                case "$client_compact" in
+                        ""|"$mac_compact"|"01$mac_compact") ;;
+                        *) emit_identity_key dhcp_client "$client_id" ;;
+                esac
+                mdns_identity_material_for_ip "$ip" |
+                        while IFS="$(printf '\t')" read -r family value; do
+                                emit_identity_key "$family" "$value"
+                        done
+		ssdp_identity_material_for_ip "$ip" |
+			while IFS="$(printf '\t')" read -r family value; do
+				emit_identity_key "$family" "$value"
+			done
+		upnp_description_identity_material_for_ip "$ip" |
+			while IFS="$(printf '\t')" read -r family value; do
+				emit_identity_key "$family" "$value"
+			done
+		wsd_identity_material_for_ip "$ip" |
+			while IFS="$(printf '\t')" read -r family value; do
+				emit_identity_key "$family" "$value"
+			done
+        } | sort -u | awk 'NF && count < 16 { output = output (output == "" ? "" : " ") $0; count++ } END { print output }'
+}
+
 build_fingerprint() {
+        local mac name static_name signal_file ports mdns_services mdns_profile ssdp_profile wsd_profile identity_keys wifi_profile
         mac="$1"
         name="$2"
         static_name="$3"
         signal_file="$4"
         ports="$5"
         mdns_services="$6"
+        mdns_profile="${7:-}"
+        ssdp_profile="${8:-}"
+        wsd_profile="${9:-}"
+        identity_keys="${10:-}"
+        wifi_profile="${11:-}"
         {
                 printf 'policy=%s\n' "$POLICY_VERSION"
                 printf 'mac=%s\n' "$(normalize_mac "$mac")"
@@ -198,11 +556,102 @@ build_fingerprint() {
                 printf 'static_name=%s\n' "$static_name"
                 printf 'ports=%s\n' "$ports"
                 printf 'mdns=%s\n' "$mdns_services"
+                printf 'mdns_profile=%s\n' "$mdns_profile"
+                printf 'ssdp_profile=%s\n' "$ssdp_profile"
+		printf 'wsd_profile=%s\n' "$wsd_profile"
+                printf 'identity_keys=%s\n' "$identity_keys"
+                # Это классификационный fingerprint, а не доверенный HMAC-паспорт.
+                # В него входит только монотонный класс Wi-Fi, без BSSID и текущей скорости.
+                printf 'wifi_profile=%s\n' "$wifi_profile"
                 fingerprint_signal_material "$signal_file"
-        } | cksum | awk '{ print $1 "-" $2 }'
+	} | sheepfold_state_hash_stdin
+}
+
+collect_wifi_capabilities() {
+        local tmp
+        tmp="$WIFI_CAPABILITIES_FILE.tmp.$$"
+        : > "$tmp"
+        if [ -x "$PRESENCE" ]; then
+                "$PRESENCE" wifi-capabilities 2>/dev/null | awk -F '\t' '
+                        $1 ~ /^([0-9A-F][0-9A-F]:){5}[0-9A-F][0-9A-F]$/ &&
+                        $2 ~ /^(legacy|ht|vht|he)$/ && $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ {
+                                print $1 "\t" $2 "\t" $3 "\t" $4
+                        }' > "$tmp" || true
+        fi
+        chmod 600 "$tmp" 2>/dev/null || true
+        mv -f "$tmp" "$WIFI_CAPABILITIES_FILE"
+}
+
+wifi_generation_rank() {
+        case "$1" in
+                he) printf '4\n' ;; vht) printf '3\n' ;; ht) printf '2\n' ;;
+                legacy) printf '1\n' ;; *) printf '0\n' ;;
+        esac
+}
+
+wifi_speed_rank() {
+        case "$1" in
+                very_fast) printf '4\n' ;; fast) printf '3\n' ;; medium) printf '2\n' ;;
+                slow) printf '1\n' ;; *) printf '0\n' ;;
+        esac
+}
+
+wifi_speed_class() {
+        local rate
+        rate="${1:-0}"
+        case "$rate" in ''|*[!0-9]*) rate=0 ;; esac
+        if [ "$rate" -ge 600000 ]; then
+                printf 'very_fast\n'
+        elif [ "$rate" -ge 200000 ]; then
+                printf 'fast\n'
+        elif [ "$rate" -ge 72000 ]; then
+                printf 'medium\n'
+        else
+                printf 'slow\n'
+        fi
+}
+
+wifi_profile_for_device() {
+        local section mac record current_generation current_rx current_tx rest
+        local stored_generation stored_speed current_max current_speed merged_generation merged_speed
+        section="$1"
+        mac="$(normalize_mac "$2")"
+        record="$(awk -F '\t' -v wanted="$mac" 'toupper($1) == wanted { print $2 "|" $3 "|" $4; exit }' "$WIFI_CAPABILITIES_FILE" 2>/dev/null || true)"
+        current_generation="${record%%|*}"
+        rest="${record#*|}"
+        [ "$rest" != "$record" ] || rest='0|0'
+        current_rx="${rest%%|*}"
+        current_tx="${rest#*|}"
+        case "$current_rx" in ''|*[!0-9]*) current_rx=0 ;; esac
+        case "$current_tx" in ''|*[!0-9]*) current_tx=0 ;; esac
+        case "$current_generation" in legacy|ht|vht|he) ;; *) current_generation='' ;; esac
+
+        stored_generation="$(uci -q get "sheepfold.$section.detection_wifi_generation" 2>/dev/null || true)"
+        stored_speed="$(uci -q get "sheepfold.$section.detection_wifi_speed_class" 2>/dev/null || true)"
+        case "$stored_generation" in legacy|ht|vht|he) ;; *) stored_generation='' ;; esac
+        case "$stored_speed" in slow|medium|fast|very_fast) ;; *) stored_speed='' ;; esac
+        current_max="$current_rx"
+        [ "$current_tx" -le "$current_max" ] || current_max="$current_tx"
+        current_speed="$(wifi_speed_class "$current_max")"
+        merged_speed="$stored_speed"
+        if [ "$(wifi_speed_rank "$current_speed")" -gt "$(wifi_speed_rank "$stored_speed")" ]; then
+                merged_speed="$current_speed"
+        fi
+        merged_generation="$stored_generation"
+        if [ "$(wifi_generation_rank "$current_generation")" -gt "$(wifi_generation_rank "$stored_generation")" ]; then
+                merged_generation="$current_generation"
+        fi
+
+        [ -n "$merged_generation" ] || { printf '||\n'; return 0; }
+        [ -n "$merged_speed" ] || merged_speed=slow
+        # Текущие скорости остаются в /tmp: во flash сохраняются только два коротких
+        # класса, достаточных для слабой подсказки классификатору. §detlife1
+        printf 'generation=%s,speed=%s|%s|%s\n' \
+                "$merged_generation" "$merged_speed" "$merged_generation" "$merged_speed"
 }
 
 write_runtime_observation() {
+        local mac ip name sources now file tmp
         mac="$1"
         ip="$2"
         name="$3"
@@ -229,6 +678,59 @@ collect_mdns() {
         "$MDNS_COLLECTOR" >/dev/null 2>&1 || true
 }
 
+collect_ssdp() {
+        local mode force interval
+        mode="$1"
+	force="${2:-0}"
+        [ "$mode" = full ] || return 0
+        [ -x "$SSDP_COLLECTOR" ] || return 0
+        command -v ucode >/dev/null 2>&1 || return 0
+        interval="$(global_get detector_ssdp_rescan_seconds 3600)"
+	"$SSDP_COLLECTOR" "$interval" "$force" >/dev/null 2>&1 || true
+}
+
+collect_ws_discovery() {
+	local mode force interval
+	mode="$1"
+	force="${2:-0}"
+	[ "$mode" = full ] || return 0
+	[ -x "$WSD_COLLECTOR" ] || return 0
+	command -v ucode >/dev/null 2>&1 || return 0
+	interval="$(global_get detector_wsd_rescan_seconds 3600)"
+	"$WSD_COLLECTOR" "$interval" "$force" >/dev/null 2>&1 || true
+}
+
+should_collect_upnp_description() {
+	local section confidence min_confidence
+	section="$1"
+	min_confidence="$2"
+	[ "$(uci -q get "sheepfold.$section.manual_device_type" 2>/dev/null || true)" != 1 ] || return 1
+	[ -z "$(uci -q get "sheepfold.$section.detected_type" 2>/dev/null || true)" ] && return 0
+	confidence="$(uci -q get "sheepfold.$section.detection_confidence" 2>/dev/null || printf 0)"
+	case "$confidence" in ''|*[!0-9]*) confidence=0 ;; esac
+	[ "$confidence" -lt "$min_confidence" ] || needs_more_auto_group_evidence "$section"
+}
+
+collect_upnp_description() {
+	local mode section ip min_confidence max_fetches location
+	mode="$1"
+	section="$2"
+	ip="$3"
+	min_confidence="$4"
+	[ "$mode" = full ] || return 0
+	[ -x "$UPNP_DESCRIPTION_COLLECTOR" ] || return 0
+	should_collect_upnp_description "$section" "$min_confidence" || return 0
+	max_fetches="$(global_get detector_max_upnp_fetches_per_scan 4)"
+	case "$max_fetches" in ''|*[!0-9]*) max_fetches=4 ;; esac
+	[ "$max_fetches" -ge 1 ] || max_fetches=1
+	[ "$max_fetches" -le 8 ] || max_fetches=8
+	[ "$upnp_fetches" -lt "$max_fetches" ] || return 0
+	location="$(ssdp_location_for_ip "$ip" || true)"
+	[ -n "$location" ] || return 0
+	upnp_fetches=$((upnp_fetches + 1))
+	"$UPNP_DESCRIPTION_COLLECTOR" "$ip" "$location" 86400 >/dev/null 2>&1 || true
+}
+
 is_reserved_device_name() {
         case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
                 arp|dhcp|static) return 0 ;;
@@ -237,15 +739,20 @@ is_reserved_device_name() {
 }
 
 append_router_devices() {
+        local section ip name mac
         : > "$RAW_FILE"
 
         if [ -r /tmp/dhcp.leases ]; then
                 awk 'NF >= 4 { print $2 "\t" $3 "\t" $4 "\tdhcp" }' /tmp/dhcp.leases >> "$RAW_FILE"
         fi
 
-        if [ -r /proc/net/arp ]; then
-                # Имя оставляем "*": пустое поле между табами на busybox-awk
-                # может схлопнуться, и метка источника "arp" попадёт в имя устройства.
+        if [ -x "$PRESENCE" ]; then
+                # Общий helper исключает WAN и добавляет hostapd association. Так detector
+                # и LuCI одинаково понимают «устройство сейчас в домашней сети». §detlife1
+                "$PRESENCE" current 2>/dev/null |
+                        awk -F '\t' 'NF >= 1 { print $1 "\t" $2 "\t*\t" $3 }' >> "$RAW_FILE" || true
+        elif [ -r /proc/net/arp ]; then
+                # Fallback нужен только для повреждённой установки без presence-helper.
                 awk 'NR > 1 && $3 == "0x2" { print $4 "\t" $1 "\t*\tarp" }' /proc/net/arp >> "$RAW_FILE"
         fi
 
@@ -287,6 +794,7 @@ aggregate_router_devices() {
 }
 
 scan_ports() {
+        local ip mode max_seconds ports
         ip="$1"
         mode="$2"
         max_seconds="$(global_get detector_nmap_host_timeout_seconds 20)"
@@ -310,12 +818,48 @@ scan_ports() {
 }
 
 set_auto_group_status() {
-	section="$1"
-	status="$2"
+        local section status
+        section="$1"
+        status="$2"
 	uci_set_if_changed "sheepfold.$section.detection_auto_group_status" "$status"
 }
 
+remove_stale_auto_no_restrictions() {
+	local section mac ip name target_group current_group no_restrictions_group personal_devices_group
+	local device_id group_source
+	section="$1"
+	mac="$2"
+	ip="$3"
+	name="$4"
+	target_group="$5"
+	no_restrictions_group="$(no_restrictions_group_name)"
+	personal_devices_group="$(personal_devices_group_name)"
+	current_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+	group_source="$(uci -q get "sheepfold.$section.group_source" 2>/dev/null || true)"
+
+	[ "$current_group" = "$no_restrictions_group" ] || return 0
+	[ "$target_group" = "$personal_devices_group" ] || return 0
+	[ "$(uci -q get "sheepfold.$section.auto_group_assigned" 2>/dev/null || printf 0)" = 1 ] || return 0
+	[ "$group_source" != user ] || return 0
+
+	# Удаляется только прежнее автоматическое решение. Ручное помещение родителем
+	# в «Без ограничений» является более сильным источником и неприкосновенно.
+	uci_delete_if_present "sheepfold.$section.group"
+	uci_set_if_changed "sheepfold.$section.auto_group_assigned" 0
+	uci_delete_if_present "sheepfold.$section.auto_group_reason"
+	uci_delete_if_present "sheepfold.$section.group_source"
+	uci_delete_if_present "sheepfold.$section.group_observed_at"
+	device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
+	log_event "Автоматическая группа \"$no_restrictions_group\" снята с устройства #${device_id} ${name:-$mac}, IP ${ip:-неизвестен}: устройство теперь распознано как персональное"
+	notify_admin auto_group_changed "auto-group-$device_id-personal" \
+		"Sheepfold: изменился тип устройства" \
+		"Устройство #${device_id} ${name:-$mac} больше не считается домашней инфраструктурой. Автоматическая группа \"$no_restrictions_group\" снята; ручные назначения не изменялись."
+}
+
 assign_detected_group_if_allowed() {
+        local section mac ip name target_group reason auto_score evidence_count hard_deny confidence
+        local no_restrictions_group personal_devices_group min_score min_type_confidence auto_configure
+        local current_group enabled auto_excluded device_id assigned_group
         section="$1"
         mac="$2"
         ip="$3"
@@ -395,6 +939,16 @@ assign_detected_group_if_allowed() {
                 set_auto_group_status "$section" device_blocklisted
                 return 0
         fi
+        # Администраторские и явно белосписочные устройства уже имеют выбранную
+        # родителем политику. Автогруппа не должна возвращать им обычные правила. §detlock
+        if [ "$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)" = 1 ]; then
+                set_auto_group_status "$section" administrator_device
+                return 0
+        fi
+        if mac_in_named_list allowlist "$mac"; then
+                set_auto_group_status "$section" allowlisted_device
+                return 0
+        fi
 
         is_reserved_device_name "$name" && name=""
 
@@ -408,12 +962,15 @@ assign_detected_group_if_allowed() {
                 return 0
         fi
 
-        uci_set_if_changed "sheepfold.$section.group" "$target_group"
-        uci_set_if_changed "sheepfold.$section.auto_group_assigned" 1
-        uci_set_if_changed "sheepfold.$section.auto_group_reason" "$reason"
+	uci_set_if_changed "sheepfold.$section.group" "$target_group"
+	uci_set_if_changed "sheepfold.$section.auto_group_assigned" 1
+	uci_set_if_changed "sheepfold.$section.auto_group_reason" "$reason"
+	uci_set_if_changed "sheepfold.$section.group_source" detector
+	uci_set_if_changed "sheepfold.$section.group_observed_at" "$(date +%s)"
         set_auto_group_status "$section" assigned
 
-        device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section" 2>/dev/null || true)"
+        device_id="$("$DEVICE_ID_HELPER" ensure "$section" 2>/dev/null || true)"
+        [ -n "$device_id" ] || device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
         assigned_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
         [ "$assigned_group" = "$target_group" ] || {
                 log_event "Не удалось сохранить группу \"$target_group\" для устройства #${device_id} ${name:-$mac}: UCI вернул \"${assigned_group:-пусто}\""
@@ -421,9 +978,15 @@ assign_detected_group_if_allowed() {
         }
 
         log_event "Устройство #${device_id} ${name:-$mac}, IP ${ip:-неизвестен} автоматически добавлено в группу \"$target_group\": $reason; score=$auto_score; evidence=$evidence_count"
+        if [ "$target_group" = "$no_restrictions_group" ]; then
+                notify_admin auto_no_restrictions "auto-group-$device_id-no-restrictions" \
+                        "Sheepfold: устройство без ограничений" \
+                        "Устройство #${device_id} ${name:-$mac}, IP ${ip:-неизвестен}, автоматически добавлено в группу \"$target_group\"."
+        fi
 }
 
 needs_more_auto_group_evidence() {
+        local section target_group no_restrictions_group current_group auto_score evidence_count min_score
         section="$1"
         target_group="$(uci -q get "sheepfold.$section.detection_target_group" 2>/dev/null || true)"
         no_restrictions_group="$(no_restrictions_group_name)"
@@ -449,13 +1012,195 @@ needs_more_auto_group_evidence() {
         [ "$auto_score" -lt "$min_score" ] || [ "$evidence_count" -lt 2 ]
 }
 
+identity_key_strength() {
+        local keys
+        keys="$1"
+        [ -x "$IDENTITY_RECONCILER" ] || {
+                printf 'insufficient\n'
+                return 0
+        }
+        "$IDENTITY_RECONCILER" strength "$keys" 2>/dev/null || printf 'insufficient\n'
+}
+
+clear_identity_quarantine() {
+        local section mac name device_id had_quarantine
+        section="$1"
+        mac="$2"
+        name="$3"
+        had_quarantine="$(uci -q get "sheepfold.$section.identity_quarantine_mode" 2>/dev/null || true)"
+        [ -n "$had_quarantine" ] || return 0
+
+	for option in \
+		identity_quarantine_mode \
+		identity_quarantine_reason \
+		identity_quarantine_at \
+		identity_quarantine_keys \
+		identity_quarantine_keys_version \
+		identity_quarantine_notified_at; do
+                uci_delete_if_present "sheepfold.$section.$option"
+        done
+        device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
+        log_event "Настоящее подключение устройства #${device_id} ${name:-$mac} снова распознано по доверенному отпечатку; временный карантин снят"
+}
+
+apply_identity_quarantine() {
+	local section mac ip name current_keys reason now response_mode quarantine_mode old_mode
+	local device_id message last_notified reminder_seconds day_bucket
+        section="$1"
+        mac="$2"
+        ip="$3"
+        name="$4"
+        current_keys="$5"
+        reason="$6"
+        now="$7"
+        response_mode="$(global_get device_monitoring_mode automatic)"
+        case "$response_mode" in automatic) quarantine_mode=block ;; *) quarantine_mode=restrict ;; esac
+        old_mode="$(uci -q get "sheepfold.$section.identity_quarantine_mode" 2>/dev/null || true)"
+
+        uci_set_if_changed "sheepfold.$section.identity_quarantine_mode" "$quarantine_mode"
+	uci_set_if_changed "sheepfold.$section.identity_quarantine_reason" "$reason"
+	uci_set_if_changed "sheepfold.$section.identity_quarantine_keys" "$current_keys"
+	uci_set_if_changed "sheepfold.$section.identity_quarantine_keys_version" 2
+	[ -n "$old_mode" ] || uci_set_if_changed "sheepfold.$section.identity_quarantine_at" "$now"
+
+	# Нерешённая тревога напоминает о себе не чаще раза в сутки. Карантин при этом
+	# не ослабляется и ждёт явного решения родителя бессрочно. §detlife1
+	last_notified="$(uci -q get "sheepfold.$section.identity_quarantine_notified_at" 2>/dev/null || printf 0)"
+	reminder_seconds="$(global_get identity_quarantine_reminder_seconds 86400)"
+	case "$last_notified" in ''|*[!0-9]*) last_notified=0 ;; esac
+	case "$reminder_seconds" in ''|*[!0-9]*) reminder_seconds=86400 ;; esac
+	[ "$reminder_seconds" -ge 86400 ] || reminder_seconds=86400
+	if [ -n "$old_mode" ] && [ "$old_mode" = "$quarantine_mode" ] && \
+	   [ $((now - last_notified)) -lt "$reminder_seconds" ]; then
+		return 0
+	fi
+	uci_set_if_changed "sheepfold.$section.identity_quarantine_notified_at" "$now"
+	device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
+	if [ "$quarantine_mode" = block ]; then
+		message="Подключение устройства #${device_id} ${name:-$mac}, IP ${ip:-неизвестен}, не совпало с доверенным отпечатком. Включён бессрочный временный карантин с сетевыми ограничениями чёрного списка устройств, но запись в постоянный чёрный список устройств не создаётся. Права настоящего устройства сохранены."
+	else
+		message="Подключение устройства #${device_id} ${name:-$mac}, IP ${ip:-неизвестен}, не совпало с доверенным отпечатком. Оно ограничено до решения родителя; привилегии белого списка устройств и группы \"Без ограничений\" приостановлены."
+	fi
+	case "$reason" in
+		duplicate_uuid_online_with_device_\#*)
+			# Родителю нужен понятный конфликт и IP нового подключения, а не внутреннее
+			# имя причины или перечень положительных баллов классификатора. §devident1
+			message="$message Тот же устойчивый UUID сейчас объявляет устройство #${reason##*#}."
+			;;
+	esac
+	log_event "$message Причина: $reason"
+	day_bucket=$((now / reminder_seconds))
+	notify_admin identity_change "identity-change-$device_id-$day_bucket" "Sheepfold: подозрительное устройство" "$message"
+}
+
+evaluate_identity_state() {
+	local section mac ip name current_keys stored_keys legacy_current_keys trusted_keys baseline strength assessment now
+	local trusted_version legacy_assessment
+        section="$1"
+        mac="$2"
+        ip="$3"
+        name="$4"
+        current_keys="$5"
+	stored_keys="$6"
+	legacy_current_keys="$7"
+	now="$8"
+	IDENTITY_DECISION=continue
+	trusted_keys="$(uci -q get "sheepfold.$section.trusted_identity_keys" 2>/dev/null || true)"
+	trusted_version="$(uci -q get "sheepfold.$section.trusted_identity_version" 2>/dev/null || true)"
+
+	if [ -z "$trusted_keys" ]; then
+		baseline="$current_keys"
+		strength="$(identity_key_strength "$baseline")"
+		case "$strength" in
+			strong|multifactor)
+                                # Доверенный baseline создаётся один раз. Обычная переклассификация
+                                # не переписывает его вслед за потенциальным подменившимся клиентом.
+				uci_set_if_changed "sheepfold.$section.trusted_identity_keys" "$baseline"
+				uci_set_if_changed "sheepfold.$section.trusted_identity_version" 2
+				;;
+		esac
+		return 0
+	fi
+
+	# Старые записи были SHA-256/MD5 cache-hash без локального секрета. Сначала
+	# сравниваем их прежним способом и только после положительного совпадения
+	# атомарно переносим baseline на HMAC v2. Так обновление пакета не помещает
+	# все домашние устройства в карантин одновременно. §devident1
+	if [ "$trusted_version" != 2 ]; then
+		if [ -n "$legacy_current_keys" ] && [ -x "$IDENTITY_RECONCILER" ]; then
+			legacy_assessment="$("$IDENTITY_RECONCILER" assess "$trusted_keys" "$legacy_current_keys" 2>/dev/null || printf insufficient)"
+		else
+			legacy_assessment=insufficient
+		fi
+		case "$legacy_assessment" in
+			match_strong|match_multifactor)
+				if [ -n "$current_keys" ]; then
+					uci_set_if_changed "sheepfold.$section.trusted_identity_keys" "$current_keys"
+					uci_set_if_changed "sheepfold.$section.trusted_identity_version" 2
+					clear_identity_quarantine "$section" "$mac" "$name"
+				fi
+				;;
+			suspicious_strong|suspicious_multifactor)
+				apply_identity_quarantine "$section" "$mac" "$ip" "$name" "$current_keys" "$legacy_assessment" "$now"
+				IDENTITY_DECISION=quarantine
+				;;
+		esac
+		return 0
+	fi
+
+        if [ -n "$current_keys" ] && [ -x "$IDENTITY_RECONCILER" ]; then
+                assessment="$("$IDENTITY_RECONCILER" assess "$trusted_keys" "$current_keys" 2>/dev/null || printf insufficient)"
+        else
+                assessment=insufficient
+        fi
+        case "$assessment" in
+                match_strong|match_multifactor)
+                        clear_identity_quarantine "$section" "$mac" "$name"
+                        ;;
+                suspicious_strong|suspicious_multifactor)
+                        apply_identity_quarantine "$section" "$mac" "$ip" "$name" "$current_keys" "$assessment" "$now"
+                        IDENTITY_DECISION=quarantine
+                        ;;
+                *)
+                        # Исчезновение одного объявления ещё не доказывает подмену. Но уже
+                        # включённый карантин снимается только положительным совпадением.
+                        if [ -n "$(uci -q get "sheepfold.$section.identity_quarantine_mode" 2>/dev/null || true)" ]; then
+                                IDENTITY_DECISION=quarantine
+                        fi
+                        ;;
+        esac
+}
+
+apply_pending_identity_collisions() {
+	local section pending mac ip name current_keys collision_with now
+	now="$1"
+	for section in $(device_sections); do
+		pending="$(uci -q get "sheepfold.$section.identity_uuid_collision_pending" 2>/dev/null || true)"
+		[ "$pending" = 1 ] || continue
+		mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+		if device_is_blocklisted "$section" "$mac"; then
+			uci_delete_if_present "sheepfold.$section.identity_uuid_collision_pending"
+			continue
+		fi
+		ip="$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)"
+		name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+		current_keys="$(uci -q get "sheepfold.$section.detection_identity_keys" 2>/dev/null || true)"
+		collision_with="$(uci -q get "sheepfold.$section.identity_uuid_collision_with_id" 2>/dev/null || true)"
+		apply_identity_quarantine "$section" "$mac" "$ip" "$name" "$current_keys" \
+			"duplicate_uuid_online_with_device_#${collision_with:-unknown}" "$now"
+		uci_delete_if_present "sheepfold.$section.identity_uuid_collision_pending"
+	done
+}
+
 write_common_observation() {
+        local section mac ip name sources now stored_name device_id
         section="$1"
         mac="$2"
         ip="$3"
         name="$4"
         sources="$5"
         now="$6"
+	NEW_DEVICE_NOTICE_PENDING=0
 
         write_runtime_observation "$mac" "$ip" "$name" "$sources" "$now"
         [ -n "$ip" ] && uci_set_if_changed "sheepfold.$section.ip" "$ip"
@@ -466,17 +1211,110 @@ write_common_observation() {
                         uci_delete_if_present "sheepfold.$section.name"
                         stored_name=""
                 fi
-                [ -z "$stored_name" ] && uci_set_if_changed "sheepfold.$section.name" "$name"
+		if [ -z "$stored_name" ]; then
+			uci_set_if_changed "sheepfold.$section.name" "$name"
+			uci_set_if_changed "sheepfold.$section.name_source" router
+		fi
         fi
 
         if [ "$(uci -q get "sheepfold.$section.just_detected" 2>/dev/null || true)" = "1" ]; then
                 device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
                 log_event "Обнаружено новое устройство: #${device_id}, $mac, IP ${ip:-неизвестен}${name:+, имя $name}"
+		NEW_DEVICE_NOTICE_PENDING=1
                 uci_delete_if_present "sheepfold.$section.just_detected"
         fi
 }
 
+notify_new_device_if_pending() {
+	local section mac ip name competing competing_text device_id message
+	section="$1"
+	mac="$2"
+	ip="$3"
+	name="$4"
+	competing="${5:-}"
+	[ "${NEW_DEVICE_NOTICE_PENDING:-0}" = 1 ] || return 0
+	device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
+	message="Обнаружено новое устройство #${device_id}: ${name:-без имени}, MAC $mac, IP ${ip:-неизвестен}."
+	# В обычном уведомлении не перечисляем внутренние положительные баллы. Если
+	# источники спорят, родителю важен именно конфликт и IP нового клиента.
+	competing_text="$(printf '%s' "$competing" | awk -F ',' '
+		function source_label(value) {
+			if (value == "name") return "имя устройства"
+			if (value == "owner_configured") return "постоянная DHCP-запись"
+			if (value == "dhcp") return "DHCP-признаки"
+			if (value == "oui") return "производитель MAC"
+			if (value == "mdns") return "mDNS"
+			if (value == "upnp") return "UPnP"
+			if (value == "wsd") return "WS-Discovery"
+			if (value == "ports") return "сетевые сервисы"
+			return value
+		}
+		function type_label(value) {
+			if (value == "computer") return "компьютер"
+			if (value == "phone") return "телефон"
+			if (value == "tablet") return "планшет"
+			if (value == "printer") return "принтер"
+			if (value == "camera") return "камера"
+			if (value == "server") return "сервер"
+			if (value == "network") return "сетевое устройство"
+			if (value == "speaker") return "умная колонка"
+			if (value == "smart_home") return "умный дом"
+			return value
+		}
+		{
+			for (i = 1; i <= NF; i++) {
+				split($i, parts, ":")
+				if (parts[1] == "" || parts[2] == "") continue
+				text = source_label(parts[1]) " указывают на тип «" type_label(parts[2]) "»"
+				output = output (output == "" ? "" : "; ") text
+			}
+		}
+		END { print output }
+	')"
+	[ -z "$competing_text" ] || message="$message Противоречащие признаки: $competing_text."
+	notify_admin new_device "new-device-$device_id" "Sheepfold: новое устройство" "$message"
+	NEW_DEVICE_NOTICE_PENDING=0
+}
+
+write_blocklisted_device_observation() {
+        local mac ip name sources now section device_type confidence
+        mac="$1"
+        ip="$2"
+        name="$3"
+        sources="$4"
+        now="$5"
+        section="$(ensure_device_section "$mac")"
+        device_type="$(uci -q get "sheepfold.$section.device_type" 2>/dev/null || \
+                uci -q get "sheepfold.$section.detected_type" 2>/dev/null || printf unknown)"
+        confidence="$(uci -q get "sheepfold.$section.detection_confidence" 2>/dev/null || true)"
+        write_common_observation "$section" "$mac" "$ip" "$name" "$sources" "$now"
+	notify_new_device_if_pending "$section" "$mac" "$ip" "$name" \
+		"$(uci -q get "sheepfold.$section.detection_competing_evidence" 2>/dev/null || true)"
+        printf '%s\t%s\t%s\t%s\t%s\t\t%s\t\t\t\n' \
+                "$mac" "$ip" "$name" "$device_type" "$confidence" "device blocklist: detection skipped" >> "$CACHE_FILE"
+}
+
+write_quarantined_device_observation() {
+        local mac ip name sources now section device_type confidence reason
+        mac="$1"
+        ip="$2"
+        name="$3"
+        sources="$4"
+        now="$5"
+        section="$6"
+        device_type="$(uci -q get "sheepfold.$section.device_type" 2>/dev/null || \
+                uci -q get "sheepfold.$section.detected_type" 2>/dev/null || printf unknown)"
+        confidence="$(uci -q get "sheepfold.$section.detection_confidence" 2>/dev/null || true)"
+        reason="$(uci -q get "sheepfold.$section.identity_quarantine_reason" 2>/dev/null || printf identity_mismatch)"
+        write_common_observation "$section" "$mac" "$ip" "$name" "$sources" "$now"
+	notify_new_device_if_pending "$section" "$mac" "$ip" "$name" \
+		"$(uci -q get "sheepfold.$section.detection_competing_evidence" 2>/dev/null || true)"
+        printf '%s\t%s\t%s\t%s\t%s\t\t%s\t\t\t\n' \
+                "$mac" "$ip" "$name" "$device_type" "$confidence" "identity quarantine: $reason" >> "$CACHE_FILE"
+}
+
 write_manual_device_observation() {
+        local mac ip name sources now section device_type
         mac="$1"
         ip="$2"
         name="$3"
@@ -486,11 +1324,15 @@ write_manual_device_observation() {
         device_type="$(uci -q get "sheepfold.$section.device_type" 2>/dev/null || printf unknown)"
 
         write_common_observation "$section" "$mac" "$ip" "$name" "$sources" "$now"
+	notify_new_device_if_pending "$section" "$mac" "$ip" "$name" \
+		"$(uci -q get "sheepfold.$section.detection_competing_evidence" 2>/dev/null || true)"
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
                 "$mac" "$ip" "$name" "$device_type" "" "" "manual device type" "" >> "$CACHE_FILE"
 }
 
 write_locked_device_observation() {
+        local mac ip name sources now section device_type confidence target_group reason
+        local auto_score evidence evidence_count hard_deny
         mac="$1"
         ip="$2"
         name="$3"
@@ -509,24 +1351,104 @@ write_locked_device_observation() {
         write_common_observation "$section" "$mac" "$ip" "$name" "$sources" "$now"
         assign_detected_group_if_allowed "$section" "$mac" "$ip" "$name" "$target_group" \
                 "$reason" "$auto_score" "$evidence_count" "$hard_deny" "$confidence"
+	notify_new_device_if_pending "$section" "$mac" "$ip" "$name" \
+		"$(uci -q get "sheepfold.$section.detection_competing_evidence" 2>/dev/null || true)"
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
                 "$mac" "$ip" "$name" "$device_type" "$confidence" "$target_group" \
                 "$reason" "" "$auto_score" "$evidence" >> "$CACHE_FILE"
 }
 
+snapshot_field() {
+	# Снимок хранит только категории доказательств, а не UUID, serial, имена или
+	# сетевые адреса. Ограничение длины защищает UCI от разросшегося профиля. §detlife1
+	printf '%s' "${1:-}" | tr '\r\n|' '   ' | cut -c1-160
+}
+
+append_detection_snapshot() {
+	local section timestamp fingerprint device_type confidence evidence competing wifi_profile snapshot current current_fingerprint first second fingerprint_short
+	section="$1"
+	timestamp="$2"
+	fingerprint="$3"
+	device_type="$4"
+	confidence="$5"
+	evidence="$6"
+	competing="$7"
+	wifi_profile="${8:-}"
+	fingerprint_short="$(printf '%s' "$fingerprint" | cut -c1-16)"
+	snapshot="$(snapshot_field "$timestamp")|$fingerprint_short|$(snapshot_field "$device_type")|$(snapshot_field "$confidence")|$(snapshot_field "$evidence")|$(snapshot_field "$competing")|$(snapshot_field "$wifi_profile")"
+	current="$(uci -q get "sheepfold.$section.detection_snapshot_1" 2>/dev/null || true)"
+	current_fingerprint="$(printf '%s' "$current" | awk -F '|' '{ print $2 }')"
+	# Дата не является изменением паспорта. Даже если вызывающий код ошибочно
+	# повторит запись позже, одинаковый fingerprint не вытеснит историю. §detlife1
+	[ "$current_fingerprint" != "$fingerprint_short" ] || return 0
+	first="$current"
+	second="$(uci -q get "sheepfold.$section.detection_snapshot_2" 2>/dev/null || true)"
+	[ -z "$second" ] || uci_set_if_changed "sheepfold.$section.detection_snapshot_3" "$second"
+	[ -z "$first" ] || uci_set_if_changed "sheepfold.$section.detection_snapshot_2" "$first"
+	uci_set_if_changed "sheepfold.$section.detection_snapshot_1" "$snapshot"
+}
+
+remember_detection_history() {
+	local section now old_fingerprint new_fingerprint device_type confidence evidence competing wifi_profile
+	local old_time old_type old_confidence old_evidence old_competing old_wifi_profile first
+	section="$1"
+	now="$2"
+	old_fingerprint="$3"
+	new_fingerprint="$4"
+	device_type="$5"
+	confidence="$6"
+	evidence="$7"
+	competing="$8"
+	wifi_profile="${9:-}"
+	first="$(uci -q get "sheepfold.$section.detection_snapshot_1" 2>/dev/null || true)"
+
+	# При переходе со старой версии сначала сохраняем предыдущий уже известный
+	# результат. Иначе первое изменение даст только новое состояние без сравнения.
+	if [ -z "$first" ] && [ -n "$old_fingerprint" ]; then
+		old_time="$(uci -q get "sheepfold.$section.detection_updated_at" 2>/dev/null || printf '%s' "$now")"
+		old_type="$(uci -q get "sheepfold.$section.detected_type" 2>/dev/null || printf unknown)"
+		old_confidence="$(uci -q get "sheepfold.$section.detection_confidence" 2>/dev/null || printf 0)"
+		old_evidence="$(uci -q get "sheepfold.$section.detection_evidence" 2>/dev/null || true)"
+		old_competing="$(uci -q get "sheepfold.$section.detection_competing_evidence" 2>/dev/null || true)"
+		old_wifi_profile="$(uci -q get "sheepfold.$section.detection_wifi_profile" 2>/dev/null || true)"
+		append_detection_snapshot "$section" "$old_time" "$old_fingerprint" "$old_type" \
+			"$old_confidence" "$old_evidence" "$old_competing" "$old_wifi_profile"
+	fi
+
+	if [ -z "$old_fingerprint" ] || [ "$old_fingerprint" != "$new_fingerprint" ]; then
+		append_detection_snapshot "$section" "$now" "$new_fingerprint" "$device_type" \
+			"$confidence" "$evidence" "$competing" "$wifi_profile"
+	fi
+}
+
 write_detection() {
+        local mac ip name sources ports mdns_services mdns_profile ssdp_profile wsd_profile identity_keys wifi_record wifi_profile now
+        local wifi_rest wifi_generation wifi_speed
+        local section static_name signal_file fingerprint result device_type confidence target_group
+	local reason auto_score evidence evidence_count hard_deny policy_version oui_vendor old_fingerprint competing_evidence
         mac="$1"
         ip="$2"
         name="$3"
         sources="$4"
         ports="$5"
         mdns_services="$6"
-        now="$7"
+        mdns_profile="${7:-}"
+        ssdp_profile="${8:-}"
+	wsd_profile="${9:-}"
+	identity_keys="${10:-}"
+	wifi_record="${11:-}"
+        now="${12}"
+	wifi_profile="${wifi_record%%|*}"
+	wifi_rest="${wifi_record#*|}"
+	wifi_generation="${wifi_rest%%|*}"
+	wifi_speed="${wifi_rest#*|}"
         section="$(ensure_device_section "$mac")"
         static_name="$(static_name_for_mac "$mac" || true)"
         signal_file="$(signal_file_for_mac "$mac" || true)"
-        fingerprint="$(build_fingerprint "$mac" "$name" "$static_name" "$signal_file" "$ports" "$mdns_services")"
-        result="$("$CLASSIFIER" "$name" "$ports" "$static_name" "$signal_file" "$mac" "$mdns_services")"
+	fingerprint="$(build_fingerprint "$mac" "$name" "$static_name" "$signal_file" "$ports" \
+		"$mdns_services" "$mdns_profile" "$ssdp_profile" "$wsd_profile" "$identity_keys" "$wifi_profile")"
+        result="$("$CLASSIFIER" "$name" "$ports" "$static_name" "$signal_file" "$mac" \
+		"$mdns_services" "$mdns_profile" "$ssdp_profile" "$wsd_profile" "$wifi_profile")"
         device_type="$(printf '%s' "$result" | awk -F '\t' '{ print $1 }')"
         confidence="$(printf '%s' "$result" | awk -F '\t' '{ print $2 }')"
         target_group="$(printf '%s' "$result" | awk -F '\t' '{ print $3 }')"
@@ -536,37 +1458,82 @@ write_detection() {
         evidence_count="$(printf '%s' "$result" | awk -F '\t' '{ print $7 }')"
         hard_deny="$(printf '%s' "$result" | awk -F '\t' '{ print $8 }')"
         policy_version="$(printf '%s' "$result" | awk -F '\t' '{ print $9 }')"
-        oui_vendor="$(printf '%s' "$result" | awk -F '\t' '{ print $10 }')"
+	oui_vendor="$(printf '%s' "$result" | awk -F '\t' '{ print $10 }')"
+	competing_evidence="$(printf '%s' "$result" | awk -F '\t' '{ print $11 }')"
         old_fingerprint="$(uci -q get "sheepfold.$section.detection_fingerprint" 2>/dev/null || true)"
 
         write_common_observation "$section" "$mac" "$ip" "$name" "$sources" "$now"
+	remember_detection_history "$section" "$now" "$old_fingerprint" "$fingerprint" \
+		"$device_type" "$confidence" "$evidence" "$competing_evidence" "$wifi_profile"
         uci_set_if_changed "sheepfold.$section.detected_type" "$device_type"
         uci_set_if_changed "sheepfold.$section.detection_confidence" "$confidence"
-        uci_set_if_changed "sheepfold.$section.detection_reason" "$reason"
+	uci_set_if_changed "sheepfold.$section.detection_reason" "$reason"
+	uci_set_if_changed "sheepfold.$section.device_type_source" detector
+	uci_set_if_changed "sheepfold.$section.device_type_observed_at" "$now"
         uci_set_if_changed "sheepfold.$section.detection_target_group" "$target_group"
         uci_set_if_changed "sheepfold.$section.detection_auto_group_score" "$auto_score"
         uci_set_if_changed "sheepfold.$section.detection_evidence" "$evidence"
-        uci_set_if_changed "sheepfold.$section.detection_evidence_count" "$evidence_count"
+	uci_set_if_changed "sheepfold.$section.detection_evidence_count" "$evidence_count"
+	if [ -n "$competing_evidence" ]; then
+		uci_set_if_changed "sheepfold.$section.detection_competing_evidence" "$competing_evidence"
+	else
+		uci_delete_if_present "sheepfold.$section.detection_competing_evidence"
+	fi
         uci_set_if_changed "sheepfold.$section.detection_hard_deny" "$hard_deny"
         uci_set_if_changed "sheepfold.$section.detection_policy_version" "$policy_version"
-        uci_set_if_changed "sheepfold.$section.detection_fingerprint" "$fingerprint"
+	uci_set_if_changed "sheepfold.$section.detection_fingerprint" "$fingerprint"
+	if [ -n "$wifi_profile" ]; then
+		uci_set_if_changed "sheepfold.$section.detection_wifi_profile" "$wifi_profile"
+		uci_set_if_changed "sheepfold.$section.detection_wifi_generation" "$wifi_generation"
+		uci_set_if_changed "sheepfold.$section.detection_wifi_speed_class" "$wifi_speed"
+	fi
+	# Ранние тестовые сборки сохраняли точные rate. Они нестабильны и не нужны
+	# после перехода на компактные классы, поэтому удаляем их один раз даже у
+	# устройства, которое сейчас подключено проводом. §detlife1
+	uci_delete_if_present "sheepfold.$section.detection_wifi_max_rate_kbps"
+	uci_delete_if_present "sheepfold.$section.detection_wifi_last_rx_rate_kbps"
+	uci_delete_if_present "sheepfold.$section.detection_wifi_last_tx_rate_kbps"
         uci_set_if_changed "sheepfold.$section.detection_ports" "$ports"
         if [ -n "$mdns_services" ]; then
                 uci_set_if_changed "sheepfold.$section.detection_mdns_services" "$mdns_services"
         else
                 uci_delete_if_present "sheepfold.$section.detection_mdns_services"
         fi
+        if [ -n "$mdns_profile" ]; then
+                uci_set_if_changed "sheepfold.$section.detection_mdns_profile" "$mdns_profile"
+        else
+                uci_delete_if_present "sheepfold.$section.detection_mdns_profile"
+        fi
+        if [ -n "$ssdp_profile" ]; then
+                uci_set_if_changed "sheepfold.$section.detection_ssdp_profile" "$ssdp_profile"
+        else
+                uci_delete_if_present "sheepfold.$section.detection_ssdp_profile"
+        fi
+	if [ -n "$wsd_profile" ]; then
+		uci_set_if_changed "sheepfold.$section.detection_wsd_profile" "$wsd_profile"
+	else
+		uci_delete_if_present "sheepfold.$section.detection_wsd_profile"
+	fi
+        # Ключи сохраняются только как ограниченные хеши. Они объединяют сетевые
+        # интерфейсы для диагностики, но никогда не переносят права доступа. §devident1
+	if [ -n "$identity_keys" ]; then
+		uci_set_if_changed "sheepfold.$section.detection_identity_keys" "$identity_keys"
+		uci_set_if_changed "sheepfold.$section.detection_identity_version" 2
+	fi
         if [ -n "$oui_vendor" ]; then
                 uci_set_if_changed "sheepfold.$section.detection_oui_vendor" "$oui_vendor"
         else
                 uci_delete_if_present "sheepfold.$section.detection_oui_vendor"
         fi
-        if [ "$old_fingerprint" != "$fingerprint" ]; then
+	if [ "$old_fingerprint" != "$fingerprint" ]; then
                 uci_set_if_changed "sheepfold.$section.detection_updated_at" "$now"
-        fi
+	fi
+	uci_set_if_changed "sheepfold.$section.detection_last_analysis_at" "$now"
 
-        assign_detected_group_if_allowed "$section" "$mac" "$ip" "$name" "$target_group" \
+	remove_stale_auto_no_restrictions "$section" "$mac" "$ip" "$name" "$target_group"
+	assign_detected_group_if_allowed "$section" "$mac" "$ip" "$name" "$target_group" \
                 "$reason" "$auto_score" "$evidence_count" "$hard_deny" "$confidence"
+	notify_new_device_if_pending "$section" "$mac" "$ip" "$name" "$competing_evidence"
 
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
                 "$mac" "$ip" "$name" "$device_type" "$confidence" "$target_group" \
@@ -574,6 +1541,7 @@ write_detection() {
 }
 
 backfill_first_seen_at() {
+        local section now first_seen
         section="$1"
         now="$2"
         first_seen="$(uci -q get "sheepfold.$section.first_seen_at" 2>/dev/null || true)"
@@ -586,6 +1554,11 @@ backfill_first_seen_at() {
 }
 
 process_detected_device() {
+        local mac ip name sources now effective_mode min_confidence max_hosts section
+	local static_name signal_file mdns_services mdns_profile ssdp_profile wsd_profile current_identity_keys current_legacy_identity_keys stored_identity_keys identity_keys trusted_identity_version
+        local stored_ports ports_scanned_at full_rescan_seconds low_confidence_retry current_fingerprint
+        local existing_confidence existing_type existing_fingerprint existing_policy ports ports_scan_due ports_scan_attempted
+	local last_analysis_at wifi_record wifi_profile
         mac="$1"
         ip="$2"
         name="$3"
@@ -601,43 +1574,75 @@ process_detected_device() {
         fi
         is_reserved_device_name "$name" && name=""
 
-        if [ -n "$section" ]; then
-                backfill_first_seen_at "$section" "$now"
-        fi
+        [ -n "$section" ] || section="$(ensure_device_section "$mac")"
+        backfill_first_seen_at "$section" "$now"
 
-        if [ -n "$section" ] && [ "$(uci -q get "sheepfold.$section.manual_device_type" 2>/dev/null || true)" = "1" ]; then
-                write_manual_device_observation "$mac" "$ip" "$name" "$sources" "$now"
+        # Чёрный список устройств уже задаёт окончательную политику. Для него остаются
+        # только online/offline и журнал попыток доступа; активное распознавание лишнее. §detlife1
+        if device_is_blocklisted "$section" "$mac"; then
+                write_blocklisted_device_observation "$mac" "$ip" "$name" "$sources" "$now"
                 return 0
         fi
 
         static_name="$(static_name_for_mac "$mac" || true)"
         signal_file="$(signal_file_for_mac "$mac" || true)"
+	collect_upnp_description "$effective_mode" "$section" "$ip" "$min_confidence"
         mdns_services="$(mdns_services_for_ip "$ip" || true)"
-        stored_ports=""
-        [ -z "$section" ] || stored_ports="$(uci -q get "sheepfold.$section.detection_ports" 2>/dev/null || true)"
-        ports_scanned_at=""
-        [ -z "$section" ] || ports_scanned_at="$(uci -q get "sheepfold.$section.detection_ports_scanned_at" 2>/dev/null || true)"
-        full_rescan_seconds="$(global_get detector_full_rescan_seconds 21600)"
+        mdns_profile="$(mdns_profile_for_ip "$ip" || true)"
+        ssdp_profile="$(ssdp_profile_for_ip "$ip" || true)"
+	wsd_profile="$(wsd_profile_for_ip "$ip" || true)"
+	current_identity_keys="$(build_identity_keys "$mac" "$signal_file" "$ip" || true)"
+	trusted_identity_version="$(uci -q get "sheepfold.$section.trusted_identity_version" 2>/dev/null || true)"
+	current_legacy_identity_keys=""
+	if [ -n "$(uci -q get "sheepfold.$section.trusted_identity_keys" 2>/dev/null || true)" ] && \
+	   [ "$trusted_identity_version" != 2 ]; then
+		current_legacy_identity_keys="$(build_identity_keys "$mac" "$signal_file" "$ip" legacy || true)"
+	fi
+	stored_identity_keys="$(uci -q get "sheepfold.$section.detection_identity_keys" 2>/dev/null || true)"
+	evaluate_identity_state "$section" "$mac" "$ip" "$name" "$current_identity_keys" "$stored_identity_keys" "$current_legacy_identity_keys" "$now"
+        if [ "$IDENTITY_DECISION" = quarantine ]; then
+                write_quarantined_device_observation "$mac" "$ip" "$name" "$sources" "$now" "$section"
+                return 0
+        fi
+
+        if [ "$(uci -q get "sheepfold.$section.manual_device_type" 2>/dev/null || true)" = "1" ]; then
+                write_manual_device_observation "$mac" "$ip" "$name" "$sources" "$now"
+                return 0
+        fi
+
+	identity_keys="$current_identity_keys"
+	[ -n "$identity_keys" ] || identity_keys="$stored_identity_keys"
+	wifi_record="$(wifi_profile_for_device "$section" "$mac")"
+	wifi_profile="${wifi_record%%|*}"
+        stored_ports="$(uci -q get "sheepfold.$section.detection_ports" 2>/dev/null || true)"
+        ports_scanned_at="$(uci -q get "sheepfold.$section.detection_ports_scanned_at" 2>/dev/null || true)"
+        full_rescan_seconds="$(global_get detector_full_rescan_seconds 86400)"
+        low_confidence_retry="$(global_get detector_low_confidence_retry_seconds 86400)"
         case "$ports_scanned_at" in ''|*[!0-9]*) ports_scanned_at=0 ;; esac
-        case "$full_rescan_seconds" in ''|*[!0-9]*) full_rescan_seconds=21600 ;; esac
-        [ "$full_rescan_seconds" -ge 900 ] || full_rescan_seconds=900
+        case "$full_rescan_seconds" in ''|*[!0-9]*) full_rescan_seconds=86400 ;; esac
+        case "$low_confidence_retry" in ''|*[!0-9]*) low_confidence_retry=86400 ;; esac
+        [ "$full_rescan_seconds" -ge 3600 ] || full_rescan_seconds=3600
+        [ "$low_confidence_retry" -ge 3600 ] || low_confidence_retry=3600
         # После ручной правки часов будущая метка не должна навсегда отключать сканирование.
         [ "$ports_scanned_at" -le "$now" ] || ports_scanned_at=0
-        current_fingerprint="$(build_fingerprint "$mac" "$name" "$static_name" "$signal_file" "$stored_ports" "$mdns_services")"
+	current_fingerprint="$(build_fingerprint "$mac" "$name" "$static_name" "$signal_file" "$stored_ports" \
+		"$mdns_services" "$mdns_profile" "$ssdp_profile" "$wsd_profile" "$identity_keys" "$wifi_profile")"
 
-        if [ -n "$section" ]; then
-                existing_confidence="$(uci -q get "sheepfold.$section.detection_confidence" 2>/dev/null || true)"
-                existing_type="$(uci -q get "sheepfold.$section.detected_type" 2>/dev/null || true)"
-                existing_fingerprint="$(uci -q get "sheepfold.$section.detection_fingerprint" 2>/dev/null || true)"
-                existing_policy="$(uci -q get "sheepfold.$section.detection_policy_version" 2>/dev/null || true)"
-                case "$existing_confidence" in ''|*[!0-9]*) existing_confidence=0 ;; esac
+        existing_confidence="$(uci -q get "sheepfold.$section.detection_confidence" 2>/dev/null || true)"
+        existing_type="$(uci -q get "sheepfold.$section.detected_type" 2>/dev/null || true)"
+        existing_fingerprint="$(uci -q get "sheepfold.$section.detection_fingerprint" 2>/dev/null || true)"
+        existing_policy="$(uci -q get "sheepfold.$section.detection_policy_version" 2>/dev/null || true)"
+        last_analysis_at="$(uci -q get "sheepfold.$section.detection_last_analysis_at" 2>/dev/null || true)"
+        case "$existing_confidence" in ''|*[!0-9]*) existing_confidence=0 ;; esac
+        case "$last_analysis_at" in ''|*[!0-9]*) last_analysis_at=0 ;; esac
+        [ "$last_analysis_at" -le "$now" ] || last_analysis_at=0
 
-                # Уверенный тип можно закрепить, но инфраструктурную автогруппу нельзя
-                # навечно оставить без второго признака. Полный контрольный проход должен
-                # продолжать собирать порты/mDNS/OUI, пока доказательств недостаточно.
-                if [ -n "$existing_type" ] && [ "$existing_confidence" -ge "$min_confidence" ] && \
-                   [ "$existing_fingerprint" = "$current_fingerprint" ] && [ "$existing_policy" = "$POLICY_VERSION" ] && \
-                   ! needs_more_auto_group_evidence "$section"; then
+        # Неизменившийся уверенный тип не анализируется повторно. Низкая уверенность
+        # получает новую попытку при подключении/суточной сверке, но не чаще раза в сутки.
+        if [ -n "$existing_type" ] && [ "$existing_fingerprint" = "$current_fingerprint" ] && \
+           [ "$existing_policy" = "$POLICY_VERSION" ]; then
+                if { [ "$existing_confidence" -ge "$min_confidence" ] && ! needs_more_auto_group_evidence "$section"; } || \
+                   { [ "$existing_confidence" -lt "$min_confidence" ] && [ $((now - last_analysis_at)) -lt "$low_confidence_retry" ]; }; then
                         write_locked_device_observation "$mac" "$ip" "$name" "$sources" "$now"
                         return 0
                 fi
@@ -654,7 +1659,8 @@ process_detected_device() {
         else
                 ports_scan_attempted=0
         fi
-        write_detection "$mac" "$ip" "$name" "$sources" "$ports" "$mdns_services" "$now"
+        write_detection "$mac" "$ip" "$name" "$sources" "$ports" "$mdns_services" \
+		"$mdns_profile" "$ssdp_profile" "$wsd_profile" "$identity_keys" "$wifi_record" "$now"
         if [ "$ports_scan_attempted" = 1 ]; then
                 section="$(section_for_mac "$mac" 2>/dev/null || true)"
                 [ -z "$section" ] || uci_set_if_changed "sheepfold.$section.detection_ports_scanned_at" "$now"
@@ -662,6 +1668,8 @@ process_detected_device() {
 }
 
 scan_devices() {
+        local scan_scope priority_mac mode effective_mode max_hosts min_confidence now device_list
+	local priority_list mac ip name sources priority_section discovery_force
         scan_scope="${1:-full}"
         priority_mac="$(normalize_mac "${2:-}")"
         mode="$(global_get detection_mode full)"
@@ -670,10 +1678,12 @@ scan_devices() {
         min_confidence="$(global_get detector_min_device_type_confidence 70)"
         now="$(date +%s)"
         scanned_hosts=0
+	upnp_fetches=0
         device_list="$CACHE_DIR/device-detection.queue"
 
-        # DHCP-события должны быть быстрыми: обновляем аренды, ARP, DHCP/mDNS-сигналы.
-        # Порт-сканирование выполняется полным проходом, но не чаще кэш-интервала устройства.
+        # Старый changed-scope остаётся совместимым с ручными вызовами старых пакетов.
+        # Новые подключения используют event после короткой задержки и могут выполнить
+        # ограниченный полный анализ только выбранного MAC. §detlife1
         [ "$scan_scope" = "changed" ] && effective_mode="reduced"
 
         case "$max_hosts" in ''|*[!0-9]*) max_hosts=16 ;; esac
@@ -686,6 +1696,17 @@ scan_devices() {
         ensure_default_groups
         rm -f "$DIRTY_FLAG"
         collect_mdns
+	collect_wifi_capabilities
+	discovery_force=0
+	if [ "$scan_scope" = event ] && valid_mac "$priority_mac"; then
+		priority_section="$(section_for_mac "$priority_mac" 2>/dev/null || true)"
+		if [ -z "$priority_section" ] || \
+		   [ "$(uci -q get "sheepfold.$priority_section.just_detected" 2>/dev/null || true)" = 1 ]; then
+			discovery_force=1
+		fi
+	fi
+	collect_ssdp "$effective_mode" "$discovery_force"
+	collect_ws_discovery "$effective_mode" "$discovery_force"
         append_router_devices
         : > "$CACHE_FILE"
         aggregate_router_devices > "$device_list"
@@ -701,10 +1722,19 @@ scan_devices() {
         fi
 
         while IFS="$(printf '\t')" read -r mac ip name sources; do
+                sources_confirm_online "$sources" || continue
+                if valid_mac "$priority_mac" && [ "$(normalize_mac "$mac")" != "$priority_mac" ]; then
+                        continue
+                fi
                 process_detected_device "$mac" "$ip" "$name" "$sources" "$now" \
                         "$effective_mode" "$min_confidence" "$max_hosts"
         done < "$device_list"
         rm -f "$device_list"
+
+        if [ -x "$IDENTITY_RECONCILER" ]; then
+                SHEEPFOLD_UCI_DIRTY_FLAG="$DIRTY_FLAG" "$IDENTITY_RECONCILER" reconcile-staged
+		apply_pending_identity_collisions "$now"
+        fi
 
         printf '%s\n' "$now" > "$LAST_SCAN_FILE"
         chmod 600 "$LAST_SCAN_FILE" 2>/dev/null || true
@@ -716,18 +1746,29 @@ scan_devices() {
         fi
 }
 
+run_scan_locked() (
+        if [ "${SHEEPFOLD_DEVICE_LOCK_HELD:-0}" != 1 ]; then
+                sheepfold_lock_acquire "$SCAN_LOCK" 30 || {
+                        echo "detector_busy" >&2
+                        return 1
+                }
+                trap 'sheepfold_lock_release' EXIT HUP INT TERM
+        fi
+        scan_devices "$@"
+)
+
 case "$COMMAND" in
         scan|run|once)
-                scan_devices "${2:-full}" "${3:-}"
+                run_scan_locked "${2:-full}" "${3:-}"
                 ;;
         status)
                 [ -r "$CACHE_FILE" ] && cat "$CACHE_FILE"
                 ;;
-        classify)
-                exec "$CLASSIFIER" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}"
+	classify)
+		exec "$CLASSIFIER" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}" "${8:-}" "${9:-}" "${10:-}" "${11:-}"
                 ;;
         *)
-                echo "Usage: sheepfold-device-detector [scan|status|classify <name> [ports] [static-name] [signal-file] [mac] [mdns-services]]" >&2
+		echo "Usage: sheepfold-device-detector [scan|status|classify <name> [ports] [static-name] [signal-file] [mac] [mdns-services] [mdns-profile] [ssdp-profile] [wsd-profile] [wifi-profile]]" >&2
                 exit 1
                 ;;
 esac

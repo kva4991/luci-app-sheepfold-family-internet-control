@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+HASH_COMMON="${SHEEPFOLD_HASH_COMMON:-${0%/*}/sheepfold-hash-common}"
+[ -r "$HASH_COMMON" ] || HASH_COMMON=/usr/libexec/sheepfold/sheepfold-hash-common
+. "$HASH_COMMON"
+
 COMMAND="${1:-status}"
 RUNTIME_DIR="${SHEEPFOLD_SITE_LIST_RUNTIME_DIR:-/tmp/sheepfold/site-lists}"
 RAW_DIR="$RUNTIME_DIR/raw"
@@ -95,7 +99,54 @@ source_record() {
 }
 
 source_key() {
-	printf '%s' "$1|$2" | cksum | awk -v kind="$1" '{print kind "-" $1}'
+	source_hash="$(sheepfold_state_hash_text "$1|$2")" || return 1
+	printf '%s-%s\n' "$1" "$(printf '%s' "$source_hash" | cut -c1-16)"
+}
+
+legacy_key_for_url() {
+	lk_kind="$1"
+	lk_url="$2"
+	lk_new_key="$3"
+	lk_dir="$4"
+	lk_suffix="$5"
+	lk_match=''
+
+	# Старый metadata-формат хранил URL максимум в 500 символах и заменял '='.
+	# Для неоднозначного значения миграцию не угадываем: итоговый aggregate всё
+	# равно остаётся рабочим, а источник получит новое имя после успешной загрузки.
+	[ "${#lk_url}" -le 500 ] || return 1
+	case "$lk_url" in *'='*) return 1 ;; esac
+
+	for lk_file in "$lk_dir/$lk_kind-"*"$lk_suffix"; do
+		[ -f "$lk_file" ] || continue
+		lk_key="$(basename "$lk_file" "$lk_suffix")"
+		[ "$lk_key" != "$lk_new_key" ] || continue
+		[ "$(value_from_file url "$lk_file")" = "$lk_url" ] || continue
+		[ -z "$lk_match" ] || return 1
+		lk_match="$lk_key"
+	done
+
+	[ -n "$lk_match" ] || return 1
+	printf '%s\n' "$lk_match"
+}
+
+migrate_legacy_source_files() {
+	ml_kind="$1"
+	ml_url="$2"
+	ml_new_key="$3"
+	ml_old_key=''
+
+	if [ ! -e "$SOURCE_CACHE_DIR/$ml_new_key.domains" ] && \
+	   ml_old_key="$(legacy_key_for_url "$ml_kind" "$ml_url" "$ml_new_key" "$SOURCE_CACHE_DIR" .meta 2>/dev/null)"; then
+		[ ! -e "$SOURCE_CACHE_DIR/$ml_old_key.domains" ] || \
+			mv -f "$SOURCE_CACHE_DIR/$ml_old_key.domains" "$SOURCE_CACHE_DIR/$ml_new_key.domains"
+		mv -f "$SOURCE_CACHE_DIR/$ml_old_key.meta" "$SOURCE_CACHE_DIR/$ml_new_key.meta"
+	fi
+
+	if [ ! -e "$STATE_DIR/$ml_new_key.state" ] && \
+	   ml_old_key="$(legacy_key_for_url "$ml_kind" "$ml_url" "$ml_new_key" "$STATE_DIR" .state 2>/dev/null)"; then
+		mv -f "$STATE_DIR/$ml_old_key.state" "$STATE_DIR/$ml_new_key.state"
+	fi
 }
 
 state_file_for() {
@@ -446,6 +497,9 @@ process_source() {
 	ps_label="$2"
 	ps_url="$3"
 	ps_key="$(source_key "$ps_kind" "$ps_url")"
+	# r200 заменил недоступную на OpenWrt 25.12 старую контрольную сумму на SHA-256. До первой
+	# успешной загрузки сохраняем last-known-good source cache старой версии.
+	migrate_legacy_source_files "$ps_kind" "$ps_url" "$ps_key"
 	ps_cache="$SOURCE_CACHE_DIR/$ps_key.domains"
 	ps_download="$RAW_DIR/$ps_key.download"
 	ps_payload="$RAW_DIR/$ps_key.payload"

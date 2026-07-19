@@ -208,8 +208,15 @@ class RouterAdminClient(
     ): JSONObject {
         val url = URL("${apiBase.trimEnd('/')}$path")
         val tlsPin = connection.tlsPinSha256
-            ?: throw IllegalStateException("Отпечаток TLS роутера не сохранён. Выполните сопряжение заново.")
-        val (http, _) = RouterHttps.open(url, tlsPin, allowTrustOnFirstUse = false)
+        val tlsSpki = connection.tlsSpkiSha256
+        if (tlsPin.isNullOrBlank() && tlsSpki.isNullOrBlank())
+            throw IllegalStateException("Отпечаток TLS роутера не сохранён. Выполните сопряжение заново.")
+        val (http, _) = RouterHttps.open(
+            url,
+            tlsPin,
+            allowTrustOnFirstUse = false,
+            tlsSpkiSha256 = tlsSpki
+        )
         try {
             http.connectTimeout = 5000
             http.readTimeout = 15000

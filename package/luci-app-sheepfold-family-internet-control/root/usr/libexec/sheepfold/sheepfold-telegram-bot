@@ -2,7 +2,7 @@
 set -u
 
 COMMAND="${1:-run}"
-RUNTIME_DIR="/tmp/sheepfold"
+RUNTIME_DIR="${SHEEPFOLD_RUNTIME_DIR:-/tmp/sheepfold}"
 OFFSET_FILE="$RUNTIME_DIR/telegram-update-offset"
 LOG_LINE_FILE="$RUNTIME_DIR/telegram-log-line"
 LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
@@ -15,6 +15,7 @@ case "$TELEGRAM_HTTP_TIMEOUT_SECONDS" in ''|*[!0-9]*) TELEGRAM_HTTP_TIMEOUT_SECO
 [ "$TELEGRAM_HTTP_TIMEOUT_SECONDS" -ge 30 ] || TELEGRAM_HTTP_TIMEOUT_SECONDS=30
 
 mkdir -p "$RUNTIME_DIR"
+chmod 700 "$RUNTIME_DIR" 2>/dev/null || true
 
 log() {
         logger -t sheepfold-telegram "$*"
@@ -463,11 +464,11 @@ help_text() {
 /wifi_on — включить Wi-Fi
 /wifi_off — выключить Wi-Fi
 /support — поддержка
-/grant_time #3 30 — дать устройству время
-/block_device #3 — заблокировать устройство
-/unblock_device #3 — убрать ручную блокировку
-/allowlist_add #3 — добавить в белый список
-/blocklist_add #3 — добавить в чёрный список
+/grant_time #3 30 — дать устройству время с подтверждением
+/block_device #3 — заблокировать устройство с подтверждением
+/unblock_device #3 — убрать ручную блокировку с подтверждением
+/allowlist_add #3 — добавить в белый список устройств с подтверждением
+/blocklist_add #3 — добавить в чёрный список устройств с подтверждением
 /logs — показать журнал
 /clear_logs — очистить журнал с подтверждением
 /update — обновить Sheepfold с подтверждением
@@ -513,32 +514,68 @@ support_text() {
 }
 
 confirmation_file() {
-        chat_id="$(printf '%s' "$1" | tr -cd '0-9-')"
+        chat_id="$1"
+        case "$chat_id" in
+                -*) chat_digits="${chat_id#-}" ;;
+                *) chat_digits="$chat_id" ;;
+        esac
+        case "$chat_digits" in ''|*[!0-9]*) return 1 ;; esac
         printf '%s/telegram-confirm-%s' "$RUNTIME_DIR" "$chat_id"
 }
 
 confirmation_code() {
-        if command -v od >/dev/null 2>&1; then
-                raw="$(od -An -N2 -tu2 /dev/urandom 2>/dev/null | tr -d ' ' || true)"
-        else
-                raw=""
-        fi
-        case "$raw" in
-                ''|*[!0-9]*) raw="$(date +%s)" ;;
-        esac
-        printf '%04d' "$((raw % 9000 + 1000))"
+        # Подтверждение защищает от случайного запуска команды из уже разрешённого
+        # чата. Предсказуемый fallback по времени здесь всё равно недопустим. §tgconfirm
+        attempt=0
+        while [ "$attempt" -lt 16 ]; do
+                attempt=$((attempt + 1))
+                if command -v sha256sum >/dev/null 2>&1; then
+                        raw_hex="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | sha256sum | awk '{ print substr($1, 1, 6) }')"
+                elif command -v openssl >/dev/null 2>&1; then
+                        raw_hex="$(openssl rand -hex 16 2>/dev/null | cut -c1-6)"
+                else
+                        return 1
+                fi
+                case "$raw_hex" in ''|*[!0-9a-fA-F]*) return 1 ;; esac
+                [ "${#raw_hex}" -eq 6 ] || return 1
+                raw_value=$((0x$raw_hex))
+
+                # 16 200 000 делится на 900 000 без остатка. Отбрасывание
+                # верхнего хвоста убирает modulo bias и укладывается в 32 бита.
+                [ "$raw_value" -lt 16200000 ] || continue
+                printf '%06d' "$((raw_value % 900000 + 100000))"
+                return 0
+        done
+        return 1
 }
 
 request_confirmation() {
         chat_id="$1"
         action="$2"
         title="$3"
-        file="$(confirmation_file "$chat_id")"
-        code="$(confirmation_code)"
+        action_arg1="${4:--}"
+        action_arg2="${5:--}"
+        file="$(confirmation_file "$chat_id")" || return 1
+        if ! code="$(confirmation_code)"; then
+                log "Telegram confirmation code generation failed"
+                send_message_to "$chat_id" "Не удалось безопасно создать код подтверждения. Повторите позже."
+                return 1
+        fi
         expires="$(($(date +%s) + 300))"
 
-        printf '%s\t%s\t%s\n' "$action" "$code" "$expires" > "$file"
-        chmod 600 "$file" 2>/dev/null || true
+        umask 077
+        pending_file="${file}.tmp.$$"
+        # Аргументы сохраняются отдельными полями, а не частью команды shell.
+        # Поэтому ID устройства и минуты нельзя превратить в произвольный запуск. §tgconfirm
+        if ! printf '%s\t%s\t%s\t%s\t%s\n' \
+                "$action" "$action_arg1" "$action_arg2" "$code" "$expires" > "$pending_file"; then
+                rm -f "$pending_file"
+                return 1
+        fi
+        mv -f "$pending_file" "$file" || {
+                rm -f "$pending_file"
+                return 1
+        }
         send_message_to "$chat_id" "Нужно подтверждение: ${title}.
 
 Для подтверждения напишите:
@@ -550,6 +587,8 @@ request_confirmation() {
 run_confirmed_action() {
         chat_id="$1"
         action="$2"
+        action_arg1="${3:--}"
+        action_arg2="${4:--}"
 
         case "$action" in
                 clear_logs)
@@ -569,6 +608,37 @@ run_confirmed_action() {
                         send_message_to "$chat_id" "Перезагрузка роутера запущена."
                         (sleep 2; reboot) >/dev/null 2>&1 &
                         ;;
+                internet_off)
+                        if [ -x "$ROUTER_CONTROL" ] && "$ROUTER_CONTROL" internet-disable >/dev/null 2>&1; then
+                                send_message_to "$chat_id" "Интернет отключен."
+                                log_event "Telegram: администратор подтвердил отключение интернета"
+                        else
+                                send_message_to "$chat_id" "Не удалось отключить интернет."
+                        fi
+                        ;;
+                wifi_off)
+                        if [ -x "$ROUTER_CONTROL" ] && "$ROUTER_CONTROL" wifi-disable >/dev/null 2>&1; then
+                                send_message_to "$chat_id" "Wi-Fi выключен."
+                                log_event "Telegram: администратор подтвердил выключение Wi-Fi"
+                        else
+                                send_message_to "$chat_id" "Не удалось выключить Wi-Fi."
+                        fi
+                        ;;
+                grant_time)
+                        send_message_to "$chat_id" "$(grant_time_by_query "#$action_arg1" "$action_arg2")"
+                        ;;
+                device_block)
+                        send_message_to "$chat_id" "$(set_device_status_by_query "#$action_arg1" blocked "заблокировал устройство")"
+                        ;;
+                device_unblock)
+                        send_message_to "$chat_id" "$(set_device_status_by_query "#$action_arg1" new "убрал ручную блокировку устройства")"
+                        ;;
+                allowlist_add)
+                        send_message_to "$chat_id" "$(set_device_status_by_query "#$action_arg1" allow "добавил устройство в белый список")"
+                        ;;
+                blocklist_add)
+                        send_message_to "$chat_id" "$(set_device_status_by_query "#$action_arg1" blocked "добавил устройство в чёрный список")"
+                        ;;
                 *)
                         send_message_to "$chat_id" "Неизвестное подтверждаемое действие."
                         return 1
@@ -579,8 +649,8 @@ run_confirmed_action() {
 handle_confirmation() {
         chat_id="$1"
         text="$2"
-        file="$(confirmation_file "$chat_id")"
-        code="$(printf '%s' "$text" | sed -n 's/^\(подтверждаю\|Подтверждаю\|confirm\|Confirm\)[[:space:]]\+\([0-9][0-9][0-9][0-9]\)$/\2/p')"
+        file="$(confirmation_file "$chat_id")" || return 1
+        code="$(printf '%s' "$text" | sed -n 's/^\(подтверждаю\|Подтверждаю\|confirm\|Confirm\)[[:space:]]\+\([0-9][0-9][0-9][0-9][0-9][0-9]\)$/\2/p')"
 
         [ -n "$code" ] || return 1
         [ -r "$file" ] || {
@@ -588,7 +658,7 @@ handle_confirmation() {
                 return 0
         }
 
-        IFS="$(printf '\t')" read -r action expected expires < "$file" || true
+        IFS="$(printf '\t')" read -r action action_arg1 action_arg2 expected expires < "$file" || true
         now="$(date +%s)"
         rm -f "$file"
 
@@ -602,8 +672,38 @@ handle_confirmation() {
                 return 0
         fi
 
-        run_confirmed_action "$chat_id" "$action"
+        run_confirmed_action "$chat_id" "$action" "$action_arg1" "$action_arg2"
         return 0
+}
+
+request_device_confirmation() {
+        chat_id="$1"
+        action="$2"
+        query="$3"
+        title="$4"
+        minutes="${5:--}"
+        section="$(device_section_by_query "$query")" || {
+                send_message_to "$chat_id" "Не нашёл устройство. Используйте номер из списка, например #3, или MAC-адрес."
+                return 1
+        }
+        device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section" 2>/dev/null || true)"
+        case "$device_id" in ''|*[!0-9]*)
+                send_message_to "$chat_id" "Не удалось определить ID устройства. Обновите список устройств и повторите команду."
+                return 1
+                ;;
+        esac
+
+        if [ "$action" = grant_time ]; then
+                case "$minutes" in ''|*[!0-9]*) minutes=30 ;; esac
+                [ "$minutes" -gt 0 ] || minutes=30
+                [ "$minutes" -le 720 ] || minutes=720
+                title="дать +${minutes} минут устройству $(device_label "$section")"
+        else
+                title="${title} $(device_label "$section")"
+                minutes="-"
+        fi
+
+        request_confirmation "$chat_id" "$action" "$title" "$device_id" "$minutes"
 }
 
 handle_command() {
@@ -647,12 +747,7 @@ handle_command() {
                         fi
                         ;;
                 /internet_off*|internet\ off|Internet\ off|интернет\ отключен|Интернет\ отключен|ИНТЕРНЕТ\ ОТКЛЮЧЕН|отключить\ интернет|Отключить\ интернет|ОТКЛЮЧИТЬ\ ИНТЕРНЕТ|выключить\ интернет|Выключить\ интернет|ВЫКЛЮЧИТЬ\ ИНТЕРНЕТ)
-                        if [ -x "$ROUTER_CONTROL" ] && "$ROUTER_CONTROL" internet-disable >/dev/null 2>&1; then
-                                send_message_to "$chat_id" "Интернет отключен."
-                                log_event "Telegram: администратор отключил интернет"
-                        else
-                                send_message_to "$chat_id" "Не удалось отключить интернет."
-                        fi
+                        request_confirmation "$chat_id" internet_off "отключить интернет для домашних устройств"
                         ;;
                 /wifi_status*|wifi\ status|Wi-Fi\ status|WiFi\ status|статус\ wifi|статус\ wi-fi|статус\ вайфай)
                         send_message_to "$chat_id" "$(wifi_status_text)"
@@ -666,12 +761,7 @@ handle_command() {
                         fi
                         ;;
                 /wifi_off*|wifi\ off|Wi-Fi\ off|WiFi\ off|выключить\ wifi|выключить\ wi-fi|выключить\ вайфай)
-                        if [ -x "$ROUTER_CONTROL" ] && "$ROUTER_CONTROL" wifi-disable >/dev/null 2>&1; then
-                                send_message_to "$chat_id" "Wi-Fi выключен."
-                                log_event "Telegram: администратор выключил Wi-Fi"
-                        else
-                                send_message_to "$chat_id" "Не удалось выключить Wi-Fi."
-                        fi
+                        request_confirmation "$chat_id" wifi_off "выключить все Wi-Fi-сети роутера"
                         ;;
                 /support*|support|Support|SUPPORT|саппорт|Саппорт|САППОРТ|сапорт|Сапорт|САПОРТ|поддержка|Поддержка|ПОДДЕРЖКА)
                         send_message_to "$chat_id" "$(support_text)"
@@ -694,23 +784,23 @@ handle_command() {
                 /grant_time*|+*|дать\ *|Дать\ *)
                         device_query="$(extract_device_query "$text")"
                         minutes="$(extract_minutes "$text")"
-                        send_message_to "$chat_id" "$(grant_time_by_query "$device_query" "$minutes")"
+                        request_device_confirmation "$chat_id" grant_time "$device_query" "" "$minutes"
                         ;;
                 /block_device*|заблокировать\ *|Заблокировать\ *|отключить\ устройство\ *|Отключить\ устройство\ *)
                         device_query="$(extract_device_query "$text")"
-                        send_message_to "$chat_id" "$(set_device_status_by_query "$device_query" blocked "заблокировал устройство")"
+                        request_device_confirmation "$chat_id" device_block "$device_query" "заблокировать устройство"
                         ;;
                 /unblock_device*|разблокировать\ *|Разблокировать\ *|вернуть\ интернет\ *|Вернуть\ интернет\ *)
                         device_query="$(extract_device_query "$text")"
-                        send_message_to "$chat_id" "$(set_device_status_by_query "$device_query" new "убрал ручную блокировку устройства")"
+                        request_device_confirmation "$chat_id" device_unblock "$device_query" "убрать ручную блокировку устройства"
                         ;;
                 /allowlist_add*|добавить\ *\ в\ белый\ список|Добавить\ *\ в\ белый\ список)
                         device_query="$(extract_device_query "$text")"
-                        send_message_to "$chat_id" "$(set_device_status_by_query "$device_query" allow "добавил устройство в белый список")"
+                        request_device_confirmation "$chat_id" allowlist_add "$device_query" "добавить устройство в белый список устройств"
                         ;;
                 /blocklist_add*|добавить\ *\ в\ чёрный\ список|Добавить\ *\ в\ чёрный\ список|добавить\ *\ в\ черный\ список|Добавить\ *\ в\ черный\ список)
                         device_query="$(extract_device_query "$text")"
-                        send_message_to "$chat_id" "$(set_device_status_by_query "$device_query" blocked "добавил устройство в чёрный список")"
+                        request_device_confirmation "$chat_id" blocklist_add "$device_query" "добавить устройство в чёрный список устройств"
                         ;;
                 *)
                         send_message_to "$chat_id" "Не понял команду. Напишите «помощь», чтобы увидеть доступные команды."

@@ -1,6 +1,7 @@
 package app.sheepfold.android.router
 
 import android.content.Context
+import app.sheepfold.android.diagnostics.DiagnosticLog
 import java.security.MessageDigest
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
@@ -10,7 +11,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-/** SHA-256 pin локального TLS-сертификата роутера (TOFU при сопряжении, затем строгая проверка). */
+/** Проверяет старый pin сертификата или предпочтительный SPKI pin из QR v2. §tlspinv2 */
 object RouterTlsPin {
     private const val PREFS = "sheepfold-app"
     private const val KEY = "routerTlsPinSha256"
@@ -38,20 +39,29 @@ object RouterTlsPin {
             .apply()
     }
 
-    fun sha256Hex(certificate: X509Certificate): String {
+    private fun sha256Hex(bytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        return digest.digest(certificate.encoded)
+        return digest.digest(bytes)
             .joinToString("") { byte -> "%02x".format(byte) }
     }
+
+    fun certificateSha256(certificate: X509Certificate): String = sha256Hex(certificate.encoded)
+
+    fun spkiSha256(certificate: X509Certificate): String = sha256Hex(certificate.publicKey.encoded)
+
+    /** Оставлено для совместимости с сохранёнными отпечатками старых версий. */
+    fun sha256Hex(certificate: X509Certificate): String = certificateSha256(certificate)
 
     fun configure(
         connection: HttpsURLConnection,
         expectedPin: String?,
-        allowTrustOnFirstUse: Boolean
+        allowTrustOnFirstUse: Boolean,
+        expectedSpki: String? = null
     ): CapturedPin? {
         val normalizedExpected = expectedPin?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+        val normalizedSpki = expectedSpki?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
         // Handshake происходит после configure(), поэтому возвращаем изменяемый holder заранее.
-        val captured = if (normalizedExpected == null && allowTrustOnFirstUse) CapturedPin() else null
+        val captured = if (normalizedExpected == null && normalizedSpki == null && allowTrustOnFirstUse) CapturedPin() else null
         val trustManager = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
 
@@ -60,14 +70,29 @@ object RouterTlsPin {
             override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String) {
                 val leaf = chain.firstOrNull()
                     ?: throw CertificateException("Пустая цепочка сертификата роутера")
-                val pin = sha256Hex(leaf)
+                val certificatePin = certificateSha256(leaf)
+                val spkiPin = spkiSha256(leaf)
                 when {
-                    normalizedExpected != null && pin != normalizedExpected ->
+                    // SPKI имеет приоритет: перевыпуск сертификата с тем же ключом
+                    // не должен разрывать уже защищённое подключение.
+                    normalizedSpki != null && spkiPin != normalizedSpki -> {
+                        DiagnosticLog.warn("tls.pin.rejected", "mode" to "spki")
+                        throw CertificateException("Публичный ключ роутера не совпадает с отпечатком из QR-кода")
+                    }
+                    normalizedSpki != null -> DiagnosticLog.info("tls.pin.accepted", "mode" to "spki")
+                    normalizedExpected != null && certificatePin != normalizedExpected -> {
+                        DiagnosticLog.warn("tls.pin.rejected", "mode" to "certificate")
                         throw CertificateException("Сертификат роутера не совпадает с сохранённым отпечатком")
-                    normalizedExpected == null && !allowTrustOnFirstUse ->
+                    }
+                    normalizedExpected != null -> DiagnosticLog.info("tls.pin.accepted", "mode" to "certificate")
+                    !allowTrustOnFirstUse -> {
+                        DiagnosticLog.warn("tls.pin.rejected", "mode" to "missing")
                         throw CertificateException("Для HTTPS нужен сохранённый отпечаток сертификата роутера")
-                    normalizedExpected == null && allowTrustOnFirstUse ->
-                        captured?.value = pin
+                    }
+                    else -> {
+                        captured?.value = certificatePin
+                        DiagnosticLog.info("tls.pin.accepted", "mode" to "tofu")
+                    }
                 }
             }
         }

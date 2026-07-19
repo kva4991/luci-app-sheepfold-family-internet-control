@@ -11,6 +11,7 @@
 - [`docs/android-config.ru.md`](./android-config.ru.md) — конфигурация Android-клиентов: тема по умолчанию (`ThemeMode.SYSTEM`), локальное хранилище, архитектурные слои родительского APK, особенности детского APK.
 - [`docs/backend-design.ru.md`](./backend-design.ru.md) — backend-контракт: endpoint'ы Sheepfold Product API, формат JSON, логика определения MAC по IP, нормализованная модель Device, расчёт статусов и временных окон, аутентификация.
 - [`docs/testing-cases.ru.md`](./testing-cases.ru.md) — обязательные тест-кейсы для backend, родительского APK, детского APK и интеграционных сценариев.
+- [`docs/sim-change-notifications.ru.md`](./sim-change-notifications.ru.md) — best-effort определение смены SIM, разрешения Android, приватность и endpoint `/sim-report` (§simchg1).
 
 ## Ключевые архитектурные правила
 
@@ -21,3 +22,4 @@
 5. **LuCI и Android-приложения используют одно backend-ядро** — бизнес-логика не дублируется.
 6. **Формат ответов единый** для всех endpoint'ов: конверт `{ok, apiVersion, serverTime, data, error}`.
 7. **Уведомление детского APK** планируется за 5 минут до `accessEndsAt` только если до конца > 5 минут; при каждом обновлении статуса предыдущее уведомление отменяется.
+8. **SIM-отчёт не передаёт MAC или ID устройства.** `/sim-report` определяет телефон по `REMOTE_ADDR` и данным роутера; Android-отпечаток подписки является только уведомительным сигналом (§simchg1).

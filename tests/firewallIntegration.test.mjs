@@ -1,3 +1,8 @@
+/*
+ * Проверяет порядок и границы Sheepfold-owned nftables интеграции статически.
+ * Тест ловит опасное изменение приоритетов и вмешательство в Podkop, но реальное
+ * прохождение пакетов подтверждается только безопасным стендом на OpenWrt.
+ */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +26,7 @@ const makefile = read('package/luci-app-sheepfold-family-internet-control/Makefi
 describe('fw4 access enforcement and integration profiles', () => {
   it('uses package-author fw4 hooks and only Sheepfold-owned sets and chains', () => {
     assert.match(tableSnippet, /set sheepfold_block_macs/);
+    assert.match(tableSnippet, /set sheepfold_management_block_macs/);
     assert.match(tableSnippet, /set sheepfold_restricted_macs/);
     assert.match(tableSnippet, /set sheepfold_exempt_macs/);
     assert.match(tableSnippet, /set sheepfold_global_ifaces/);
@@ -36,6 +42,7 @@ describe('fw4 access enforcement and integration profiles', () => {
     assert.ok(blockRule >= 0 && blockRule < restrictedRule);
     assert.ok(restrictedRule < exemptionRule && exemptionRule < globalDrop);
     assert.doesNotMatch(inputSnippet, /sheepfold_restricted_macs/);
+    assert.match(tableSnippet, /chain sheepfold_input_guard[\s\S]*@sheepfold_management_block_macs/);
   });
 
   it('does not touch Podkop routing, packet marks, or foreign nftables state', () => {
@@ -64,7 +71,22 @@ describe('fw4 access enforcement and integration profiles', () => {
     assert.match(firewall, /restricted\|scheduled/);
     assert.match(firewall, /schedule_status" = block[\s\S]*restricted_file/);
     assert.doesNotMatch(inputSnippet, /internet restrictions/i);
-    assert.match(service, /run_detector scan "\$SCAN_SCOPE"[\s\S]*"\$FIREWALL_HELPER" sync/);
+    assert.match(service, /run_detector scan event "\$mac"/);
+    assert.match(service, /run_detection_followups[\s\S]*"\$FIREWALL_HELPER" sync/);
+  });
+
+  it('applies identity quarantine before administrator, group, and allowlist exemptions', () => {
+    const quarantine = firewall.indexOf('identity_quarantine_mode');
+    const administrator = firewall.indexOf('if [ "$admin_device" = 1 ]');
+    const noRestrictions = firewall.indexOf('if [ -n "$group" ] && [ "$group" = "$no_restrictions_name" ]');
+    const allowlist = firewall.indexOf('list_has_mac allowlist');
+
+    assert.ok(quarantine >= 0 && quarantine < administrator);
+    assert.ok(quarantine < noRestrictions);
+    assert.ok(quarantine < allowlist);
+    assert.match(firewall, /identity_quarantine_mode" = block[\s\S]*"\$block_file"/);
+    assert.match(firewall, /identity_quarantine_mode" = restrict[\s\S]*"\$restricted_file"/);
+    assert.match(firewall, /identity_quarantine_mode" = restrict[\s\S]*"\$management_block_file"/);
   });
 
   it('keeps global block above temporary access but below explicit exemptions', () => {
@@ -73,9 +95,9 @@ describe('fw4 access enforcement and integration profiles', () => {
     const noRestrictions = clientStatus.indexOf('reason=no_restrictions_group');
     const globalBlock = clientStatus.indexOf('reason=global_block');
     const temporary = clientStatus.indexOf('reason=temporary_access');
-    assert.ok(admin >= 0 && admin < globalBlock);
-    assert.ok(allowlist >= 0 && allowlist < globalBlock);
-    assert.ok(noRestrictions >= 0 && noRestrictions < globalBlock);
+    assert.ok(admin >= 0 && admin < noRestrictions);
+    assert.ok(noRestrictions < allowlist);
+    assert.ok(allowlist < globalBlock);
     assert.ok(globalBlock < temporary);
     assert.match(firewall, /! status_is_temporary "\$status" && list_has_mac allowlist "\$mac"/);
     assert.match(firewall, /temp_access\|temp-access\|temporary\|blocked\|block\) continue/);

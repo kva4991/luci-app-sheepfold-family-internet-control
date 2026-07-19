@@ -12,9 +12,12 @@ function readProjectFile(relativePath) {
 }
 
 describe('Allowlist and administrator UI guards', () => {
-  it('persists allowlist membership through UCI with list mac reset', () => {
+  it('persists allowlist membership through backend without reloading LuCI', () => {
     const overview = readProjectFile('htdocs/luci-static/resources/view/sheepfold/overview.js');
     const accessLists = readProjectFile('htdocs/luci-static/resources/sheepfold/features/devices/access-lists.js');
+    const membershipBody = overview.match(
+      /function persistDeviceListMembership[\s\S]*?\n}\n\nfunction showManualListDeviceModal/,
+    )?.[0] || '';
 
     assert.match(overview, /function persistDeviceListMembership/);
     assert.match(overview, /function updateMacList/);
@@ -32,6 +35,18 @@ describe('Allowlist and administrator UI guards', () => {
     );
     assert.match(overview, /showManualListDeviceModal[\s\S]*?modalActions\(\)[\s\S]*?selector\.node[\s\S]*?modalActions\(\)/);
     assert.match(overview, /persistDeviceListMembership\(selectedDevices, targetStatus\)/);
+    assert.match(membershipBody, /setDeviceBackendStatus\(item, targetStatus\)/);
+    assert.match(membershipBody, /site-lists-apply/);
+    assert.match(membershipBody, /reloadSheepfoldDeviceInventory/);
+    assert.doesNotMatch(membershipBody, /saveSheepfoldAccessChanges/);
+    assert.doesNotMatch(membershipBody, /ui\.changes\.apply|uci\.apply|window\.location\.reload/);
+    assert.match(overview, /uci\.unload\('sheepfold'\)/);
+    const manualDeviceBody = overview.match(
+      /function showManualDeviceModal[\s\S]*?\n}\n\nfunction manualListDeviceButton/,
+    )?.[0] || '';
+    assert.match(manualDeviceBody, /reloadSheepfoldDeviceInventory/);
+    assert.match(manualDeviceBody, /refreshUserListsWithoutPageReload/);
+    assert.doesNotMatch(manualDeviceBody, /window\.location\.reload/);
   });
 
   it('keeps administrator bind-devices action in secure overview', () => {

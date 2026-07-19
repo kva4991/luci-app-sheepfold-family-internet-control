@@ -7,28 +7,113 @@ login="${1:-}"
 code="${2:-}"
 remote_ip="${3:-}"
 user_agent="${4:-Android Sheepfold}"
+pair_started_at="$(date +%s)"
+PAIR_DIAG_STAGE="validate_input"
+pair_diag_event device_started "remote_ip=${remote_ip:-unknown}"
 
-pair_validate_login_code "$login" "$code"
+pair_validate_login_code "$login" "$code" || {
+    status="$?"
+    pair_diag_event device_finished "stage=$PAIR_DIAG_STAGE" "status=$status" "remote_ip=${remote_ip:-unknown}"
+    exit "$status"
+}
+PAIR_DIAG_STAGE="find_administrator"
 admin_section="$(pair_admin_section_for_login "$login")" || {
+    pair_diag_event device_finished "stage=$PAIR_DIAG_STAGE" "status=2" "reason=administrator_not_found" "remote_ip=${remote_ip:-unknown}"
     echo "Administrator login was not found. Create the account in LuCI first." >&2
     exit 2
 }
-pair_acquire_admin_lock "$admin_section"
+PAIR_DIAG_STAGE="acquire_admin_lock"
+pair_acquire_admin_lock "$admin_section" || {
+    pair_diag_event device_finished "stage=$PAIR_DIAG_STAGE" "status=7" "reason=pairing_busy" "remote_ip=${remote_ip:-unknown}"
+    exit 7
+}
+PAIR_DIAG_STAGE="validate_active_code"
+
+PAIR_TRANSACTION_ROOT="/tmp/sheepfold/pairing-transactions"
+PAIR_TRANSACTION_DIR=""
+PAIR_UCI_SAVEDIR=""
+PAIR_CONFIG_SNAPSHOT=""
+PAIR_TRANSACTION_ACTIVE=0
+PAIR_RESTORE_SNAPSHOT=0
+
+pair_restore_snapshot() {
+    restore_file="/etc/config/.sheepfold.pairing-restore.$$"
+    [ -r "${PAIR_CONFIG_SNAPSHOT:-}" ] || return 1
+    cp -p "$PAIR_CONFIG_SNAPSHOT" "$restore_file" || return 1
+    mv -f "$restore_file" /etc/config/sheepfold || {
+        rm -f "$restore_file" 2>/dev/null || true
+        return 1
+    }
+}
+
+pair_transaction_cleanup() {
+    cleanup_status="${1:-1}"
+    trap - EXIT HUP INT TERM
+
+    if [ "${PAIR_TRANSACTION_ACTIVE:-0}" = 1 ]; then
+        [ -z "${PAIR_TOKEN_HASH:-}" ] || rm -f "$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH" 2>/dev/null || true
+        if [ "${PAIR_RESTORE_SNAPSHOT:-0}" = 1 ] && ! pair_restore_snapshot; then
+            logger -t sheepfold-router-pairing \
+                "Pairing commit failed and the UCI snapshot could not be restored: ${PAIR_CONFIG_SNAPSHOT:-missing}"
+        fi
+    fi
+
+    finished_at="$(date +%s)"
+    diagnostic_started_at="${pair_started_at:-$finished_at}"
+    # Cleanup используется и fault-injection тестами отдельно от полного helper.
+    # Отсутствие необязательной диагностики не должно менять код отката транзакции.
+    if command -v pair_diag_event >/dev/null 2>&1; then
+        pair_diag_event device_finished \
+            "stage=${PAIR_DIAG_STAGE:-unknown}" \
+            "status=$cleanup_status" \
+            "remote_ip=${remote_ip:-unknown}" \
+            "duration_seconds=$((finished_at - diagnostic_started_at))"
+    fi
+
+    # Каталог всегда создан внутри фиксированного runtime-root и содержит только
+    # изолированные UCI-delta и снимок этой pairing-транзакции. §pairtx1
+    [ -z "${PAIR_TRANSACTION_DIR:-}" ] || rm -rf "$PAIR_TRANSACTION_DIR" 2>/dev/null || true
+    rmdir "${PAIR_LOCK:-}" 2>/dev/null || true
+    exit "$cleanup_status"
+}
+
+pair_begin_transaction() {
+    safe_admin_section="$(printf '%s' "$admin_section" | tr -cd 'A-Za-z0-9_.-')"
+    [ -n "$safe_admin_section" ] || return 1
+    mkdir -p "$PAIR_TRANSACTION_ROOT"
+    chmod 700 "$PAIR_TRANSACTION_ROOT" 2>/dev/null || true
+    PAIR_TRANSACTION_DIR="$PAIR_TRANSACTION_ROOT/${safe_admin_section}.$$"
+    PAIR_UCI_SAVEDIR="$PAIR_TRANSACTION_DIR/uci"
+    PAIR_CONFIG_SNAPSHOT="$PAIR_TRANSACTION_DIR/sheepfold.before"
+    (umask 077; mkdir "$PAIR_TRANSACTION_DIR" && mkdir "$PAIR_UCI_SAVEDIR")
+    cp -p /etc/config/sheepfold "$PAIR_CONFIG_SNAPSHOT"
+    PAIR_TRANSACTION_ACTIVE=1
+}
+
+# pair_acquire_admin_lock установил простой cleanup trap. Здесь заменяем его на
+# транзакционный: любой неожиданный set -e выход удалит токен и UCI-delta.
+trap 'pair_transaction_cleanup $?' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 expected_code="$(uci -q get "sheepfold.$admin_section.pairing_code" 2>/dev/null || true)"
 expires_at="$(uci -q get "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || printf 0)"
 now="$(date +%s)"
 
 [ -n "$expected_code" ] || {
+    PAIR_DIAG_STAGE="code_not_active"
     echo "Pairing code is not active. Open LuCI and generate a new code." >&2
     exit 3
 }
 [ "$code" = "$expected_code" ] || {
+    PAIR_DIAG_STAGE="code_mismatch"
     echo "Pairing code is invalid." >&2
     exit 3
 }
 case "$expires_at" in ''|*[!0-9]*) expires_at=0 ;; esac
 if [ "$expires_at" -le 0 ] || [ "$now" -gt "$expires_at" ]; then
+    PAIR_DIAG_STAGE="code_expired"
     uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
     uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
     uci -q commit sheepfold
@@ -36,12 +121,14 @@ if [ "$expires_at" -le 0 ] || [ "$now" -gt "$expires_at" ]; then
     exit 3
 fi
 
+PAIR_DIAG_STAGE="resolve_device"
 device_mac="$(pair_normalize_mac "$(pair_mac_for_ip "$remote_ip" | sed -n '1p')")"
 pair_valid_mac "$device_mac" || {
     echo "Could not determine phone MAC from DHCP leases or ARP table." >&2
     exit 4
 }
 pair_list_has_mac blocklist "$device_mac" && {
+    PAIR_DIAG_STAGE="device_blocklisted"
     echo "Blocklisted device cannot become an administrator device." >&2
     exit 5
 }
@@ -52,21 +139,35 @@ device_name="$(pair_name_for_ip "$remote_ip" | sed -n '1p')"
 [ -n "$device_name" ] && [ "$device_name" != "*" ] || device_name="Телефон администратора"
 device_section="$(pair_device_section_for_mac "$device_mac")" || exit 6
 
+PAIR_DIAG_STAGE="prepare_token"
 pair_prepare_token "$login" || {
     echo "Could not generate administrator token." >&2
     exit 6
 }
 
+PAIR_DIAG_STAGE="begin_transaction"
+pair_begin_transaction || {
+    echo "Could not prepare an isolated pairing transaction." >&2
+    exit 6
+}
+
+# Все следующие UCI-вызовы работают только в delta-каталоге этой операции.
+# Поэтому чужие неприменённые изменения LuCI не коммитятся вместе с pairing.
+uci() { command uci -P "$PAIR_UCI_SAVEDIR" "$@"; }
+
 [ "$(uci -q get "sheepfold.$device_section" 2>/dev/null || true)" = device ] || \
     uci -q set "sheepfold.$device_section=device"
 uci -q set "sheepfold.$device_section.mac=$device_mac"
-device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$device_section")"
+PAIR_DIAG_STAGE="assign_device_id"
+device_id="$(SHEEPFOLD_UCI_SAVEDIR="$PAIR_UCI_SAVEDIR" \
+    /usr/libexec/sheepfold/sheepfold-device-id ensure-staged "$device_section")"
 
 PAIR_TOKEN_LOGIN="$login"
 PAIR_TOKEN_DEVICE_ID="$device_id"
 PAIR_TOKEN_MAC="$device_mac"
 PAIR_TOKEN_ISSUED_AT="$now"
 
+PAIR_DIAG_STAGE="store_token"
 if ! pair_store_token; then
     echo "Could not store administrator token hash. Pairing code was not consumed." >&2
     exit 6
@@ -76,7 +177,7 @@ fi
 # Если родитель успел заблокировать устройство во время pairing, временный токен
 # удаляется и ни белый список, ни администраторский флаг не изменяются.
 if pair_list_has_mac blocklist "$device_mac"; then
-    rm -f "$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH" 2>/dev/null || true
+    PAIR_DIAG_STAGE="device_blocklisted_recheck"
     echo "Blocklisted device cannot become an administrator device." >&2
     exit 5
 fi
@@ -100,25 +201,29 @@ uci -q set "sheepfold.$device_section.pairing_user_agent=$user_agent"
 pair_add_allowlist "$device_mac"
 uci -q delete "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
 uci -q delete "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
+PAIR_RESTORE_SNAPSHOT=1
+PAIR_DIAG_STAGE="commit_uci"
 if ! uci -q commit sheepfold; then
-    rm -f "$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH" 2>/dev/null || true
-    uci -q revert "sheepfold.$device_section" 2>/dev/null || true
-    uci -q revert sheepfold.allowlist 2>/dev/null || true
-    uci -q revert "sheepfold.$admin_section.pairing_code" 2>/dev/null || true
-    uci -q revert "sheepfold.$admin_section.pairing_code_expires" 2>/dev/null || true
     echo "Could not save pairing. Token was revoked and administrator rights were not granted." >&2
     exit 6
 fi
+PAIR_RESTORE_SNAPSHOT=0
+PAIR_TRANSACTION_ACTIVE=0
+PAIR_DIAG_STAGE="schedule_firewall"
 
-# Сопряжение уже успешно и одноразовый код сожжён. Firewall синхронизируем сразу,
-# а при внешнем reload состояние безопасно восстановит фоновый сервис. §v7x2k9p
+# Сопряжение уже успешно и одноразовый код сожжён. Не задерживаем выдачу токена
+# ожиданием общего firewall lock: на слабом роутере это превышало таймаут APK,
+# хотя сама привязка уже сохранялась. Периодический sync остаётся страховкой. §pairlat1 §v7x2k9p
 if [ -x /usr/libexec/sheepfold/sheepfold-firewall ]; then
-    /usr/libexec/sheepfold/sheepfold-firewall sync >/dev/null 2>&1 || \
-        logger -t sheepfold "Administrator pairing firewall sync will be retried"
+    (
+        /usr/libexec/sheepfold/sheepfold-firewall sync >/dev/null 2>&1 || \
+            logger -t sheepfold "Administrator pairing firewall sync will be retried"
+    ) </dev/null >/dev/null 2>&1 &
 fi
 
 pair_log_event "Android-приложение привязало телефон администратора: #${device_id} $device_name, $device_mac, IP ${remote_ip:-?}, администратор $admin_name" || true
 
+PAIR_DIAG_STAGE="write_response"
 pair_print_kv paired 1
 pair_print_kv admin_name "$admin_name"
 pair_print_kv admin_login "$login"

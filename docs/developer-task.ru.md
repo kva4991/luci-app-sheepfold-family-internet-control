@@ -32,11 +32,12 @@ Sheepfold — OpenWRT-пакет для семейного управления 
 15. [`docs/localization.ru.md`](localization.ru.md) — LuCI gettext, `.lmo`, два параметра языка.
 16. [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента, сопряжение, детский APK.
 17. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
-18. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
-19. [`docs/test-strategy.ru.md`](test-strategy.ru.md) — категории автоматических тестов, быстрые команды и условия обязательного полного прогона. (§testcat)
-20. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
-21. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (§22 — куда писать мелочи).
-22. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
+18. [`docs/child-wifi-network-notifications.ru.md`](child-wifi-network-notifications.ru.md) — уведомления о новых Wi-Fi-сетях детского устройства, геолокация, приватность и границы доверия (§childwifi1).
+19. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
+20. [`docs/test-strategy.ru.md`](test-strategy.ru.md) — категории автоматических тестов, быстрые команды и условия обязательного полного прогона. (§testcat)
+21. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
+22. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (раздел 22 объясняет, куда писать мелочи).
+23. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
 
 ---
 

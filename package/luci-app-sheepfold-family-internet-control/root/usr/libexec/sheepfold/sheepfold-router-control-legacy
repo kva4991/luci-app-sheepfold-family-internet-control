@@ -49,10 +49,13 @@ log() {
 }
 
 log_event() {
+	local message
+	message="$*"
+	[ -z "${SHEEPFOLD_ACTION_ACTOR:-}" ] || message="${SHEEPFOLD_ACTION_ACTOR}: $message"
         if [ -x "$LOG_HELPER" ]; then
-                "$LOG_HELPER" "$*"
+		"$LOG_HELPER" "$message"
         else
-                log "$*"
+		log "$message"
         fi
 }
 
@@ -963,14 +966,14 @@ set_device_status() {
 
         if [ "$device_status" = "allow" ]; then
                 add_mac_to_list allowlist "$device_mac"
-                log_event "Устройство #${device_id} добавлено в белый список: $device_mac, IP ${device_ip:-неизвестен}"
+		log_event "Устройство #${device_id} добавлено в белый список: $device_mac, IP ${device_ip:-неизвестен}"
         elif [ "$device_status" = "blocked" ]; then
                 add_mac_to_list blocklist "$device_mac"
-                log_event "Устройство #${device_id} добавлено в чёрный список: $device_mac, IP ${device_ip:-неизвестен}"
+		log_event "Устройство #${device_id} добавлено в чёрный список: $device_mac, IP ${device_ip:-неизвестен}"
         else
                 remove_mac_from_list allowlist "$device_mac"
                 remove_mac_from_list blocklist "$device_mac"
-                log_event "Устройство #${device_id} добавлено вручную: $device_mac, IP ${device_ip:-неизвестен}"
+		log_event "Устройство #${device_id} добавлено вручную: $device_mac, IP ${device_ip:-неизвестен}"
         fi
 
         uci -q commit sheepfold
@@ -1630,8 +1633,15 @@ blocked_page_apply() {
 
 settings_import_applied() {
         local refresh_failed=0
+        local device_section
 
         repair_sheepfold_uci_sections
+        # just_detected описывает событие текущего запуска, а не настройку пользователя.
+        # Возврат этого флага из бэкапа повторно объявлял старые устройства новыми.
+        for device_section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+                uci -q delete "sheepfold.$device_section.just_detected" 2>/dev/null || true
+        done
+        uci -q commit sheepfold 2>/dev/null || true
         sync_firewall || refresh_failed=1
         /usr/libexec/sheepfold/sheepfold-emergency-sites apply >/dev/null 2>&1 || refresh_failed=1
         /usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || refresh_failed=1
@@ -1690,20 +1700,18 @@ led_all() {
 }
 
 led_restore_defaults() {
-        if [ -r "$LED_DEFAULTS_FILE" ]; then
-                while IFS="$(printf '\t')" read -r name trigger brightness; do
-                        local led="/sys/class/leds/$name"
-                        [ -d "$led" ] || continue
-                        [ -n "$trigger" ]    && [ -w "$led/trigger" ]    && printf '%s' "$trigger"    > "$led/trigger"    2>/dev/null || true
-                        [ -n "$brightness" ] && [ -w "$led/brightness" ] && printf '%s' "$brightness" > "$led/brightness" 2>/dev/null || true
-                done < "$LED_DEFAULTS_FILE"
-                rm -f "$LED_DEFAULTS_FILE"
-        else
-                for led in /sys/class/leds/*; do
-                        [ -d "$led" ] || continue
-                        [ -w "$led/trigger" ] && printf default-on > "$led/trigger" 2>/dev/null || true
-                done
-        fi
+        # В режиме router_default Sheepfold не должен угадывать штатные триггеры:
+        # default-on превращает индикатор Internet в постоянно горящую лампу.
+        # Восстанавливаем только снимок, который сами сделали перед LED-эффектом.
+        [ -r "$LED_DEFAULTS_FILE" ] || return 0
+
+        while IFS="$(printf '\t')" read -r name trigger brightness; do
+                local led="/sys/class/leds/$name"
+                [ -d "$led" ] || continue
+                [ -n "$trigger" ]    && [ -w "$led/trigger" ]    && printf '%s' "$trigger"    > "$led/trigger"    2>/dev/null || true
+                [ -n "$brightness" ] && [ -w "$led/brightness" ] && printf '%s' "$brightness" > "$led/brightness" 2>/dev/null || true
+        done < "$LED_DEFAULTS_FILE"
+        rm -f "$LED_DEFAULTS_FILE"
 }
 
 led_off_forever() {
@@ -2028,6 +2036,12 @@ case "$COMMAND" in
                 ;;
         emergency-sites-status)
                 /usr/libexec/sheepfold/sheepfold-emergency-sites status
+                ;;
+        country-profile-apply)
+                /usr/libexec/sheepfold/sheepfold-country-profile apply "${2:-}"
+                ;;
+        country-profile-status)
+                /usr/libexec/sheepfold/sheepfold-country-profile status
                 ;;
 
         # --- Диагностика -----------------------------------------------------

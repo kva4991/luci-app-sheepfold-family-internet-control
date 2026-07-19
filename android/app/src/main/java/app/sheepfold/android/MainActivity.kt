@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import app.sheepfold.android.diagnostics.DiagnosticLog
 import app.sheepfold.android.notifications.SheepfoldNotifications
 import app.sheepfold.android.notifications.AccessRequestWorker
 import app.sheepfold.android.router.SheepfoldConnectionStore
@@ -33,6 +34,7 @@ import app.sheepfold.android.ui.theme.ThemePreferenceStore
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DiagnosticLog.initialize(this)
         SheepfoldNotifications.ensureChannels(this)
         AccessRequestWorker.schedule(this)
         setContent { SheepfoldRoot() }
@@ -50,7 +52,8 @@ private fun SheepfoldRoot() {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
-        // Отказ от уведомлений не мешает управлению роутером.
+        // После выдачи legacy-доступа Android 9 журнал сможет создать файл в Downloads.
+        DiagnosticLog.initialize(context)
     }
     LaunchedEffect(Unit) {
         val missing = buildList {
@@ -59,6 +62,12 @@ private fun SheepfoldRoot() {
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
             ) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (
+                Build.VERSION.SDK_INT == Build.VERSION_CODES.P &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+            ) {
+                add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
         }
         if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray())

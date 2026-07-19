@@ -93,6 +93,7 @@ status="$(kv_get status "$output")"
 reason="$(kv_get reason "$output")"
 schedule_conflict="$(kv_get schedule_conflict "$output")"
 access_ends_at="$(kv_get next_change_at "$output")"
+next_access_change_time="$(kv_get next_change_time "$output")"
 [ -n "$status" ] || status=unknown
 [ "$schedule_conflict" = 1 ] || schedule_conflict=0
 
@@ -106,6 +107,9 @@ case "$status" in
         elif [ "$reason" = schedule_allow ]; then
             access_mode=scheduled
             message="Интернет разрешён действующим расписанием."
+        elif [ "$reason" = new_device_policy_allow ]; then
+            access_mode=default
+            message="Интернет разрешён настройкой для новых устройств."
         else
             message="Интернет доступен."
         fi
@@ -147,7 +151,7 @@ case "$status" in
         case "$reason" in
             mac_not_found) message="Роутер пока не определил это устройство." ;;
             device_not_registered) message="Устройство ещё не зарегистрировано в Sheepfold." ;;
-            device_not_configured) message="Для устройства ещё не выбраны правила доступа." ;;
+            device_not_configured) message="Правила доступа для устройства не определены." ;;
             *) message="Статус доступа пока неизвестен." ;;
         esac
         ;;
@@ -160,6 +164,8 @@ device_name=""
 is_administrator=0
 client_role=child
 can_request_access_extension=0
+wifi_network_reporting=0
+wifi_location_reporting=0
 # SHEEPFOLD_AI_BEGIN
 personal_group_name=""
 # SHEEPFOLD_AI_END
@@ -174,6 +180,11 @@ if [ -n "$device_section" ]; then
         client_role=parent
     else
         is_administrator=0
+        wifi_report_mode="$(uci -q get sheepfold.global.child_wifi_network_notifications 2>/dev/null || printf off)"
+        case "$wifi_report_mode" in
+            with_location) wifi_network_reporting=1; wifi_location_reporting=1 ;;
+            network_only) wifi_network_reporting=1 ;;
+        esac
         if [ -x /usr/libexec/sheepfold/sheepfold-access-request ] &&
            [ "$(/usr/libexec/sheepfold/sheepfold-access-request enabled 2>/dev/null || printf 0)" = 1 ]; then
             can_request_access_extension=1
@@ -225,6 +236,8 @@ printf '"deviceName":"%s",' "$(json_escape "$device_name")"
 printf '"isAdministrator":%s,' "$([ "$is_administrator" = 1 ] && printf true || printf false)"
 printf '"clientRole":"%s",' "$(json_escape "$client_role")"
 printf '"canRequestAccessExtension":%s,' "$([ "$can_request_access_extension" = 1 ] && printf true || printf false)"
+printf '"wifiNetworkReporting":%s,' "$([ "$wifi_network_reporting" = 1 ] && printf true || printf false)"
+printf '"wifiLocationReporting":%s,' "$([ "$wifi_location_reporting" = 1 ] && printf true || printf false)"
 # SHEEPFOLD_AI_BEGIN
 printf '"aiAssistantAvailable":%s,' "$([ "$ai_assistant_available" = 1 ] && printf true || printf false)"
 printf '"childAiAvailable":%s,' "$([ "$child_ai_available" = 1 ] && printf true || printf false)"
@@ -241,4 +254,9 @@ else
     printf '"accessEndsAt":null,'
 fi
 printf '"minutesRemaining":%s,' "$minutes_remaining"
+if [ -n "$next_access_change_time" ]; then
+    printf '"nextAccessChangeTime":"%s",' "$(json_escape "$next_access_change_time")"
+else
+    printf '"nextAccessChangeTime":null,'
+fi
 printf '"message":"%s"},"error":null}\n' "$(json_escape "$message")"

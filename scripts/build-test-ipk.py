@@ -48,6 +48,20 @@ def read_make_value(name: str) -> str:
     raise RuntimeError(f"Cannot find {name} in package Makefile.")
 
 
+def read_luci_dependencies() -> str:
+    """Переносит зависимости из Makefile без второго расходящегося списка."""
+    dependencies = []
+    for token in read_make_value("LUCI_DEPENDS").split():
+        dependency = token.removeprefix("+")
+        if ":" in dependency:
+            dependency = dependency.split(":", 1)[1]
+        if dependency and not dependency.startswith("@"):
+            dependencies.append(dependency)
+    if not dependencies:
+        raise RuntimeError("LUCI_DEPENDS does not contain package dependencies.")
+    return ", ".join(dependencies)
+
+
 def add_bytes(tar: tarfile.TarFile, name: str, data: bytes, mode: int = 0o644) -> None:
     info = tarfile.TarInfo(name)
     info.size = len(data)
@@ -134,6 +148,7 @@ def open_gzip_tar(path: Path) -> tarfile.TarFile:
 
 def write_control_tar(path: Path, version: str, release: str, variant: str) -> None:
     current_package = package_name(variant)
+    dependencies = read_luci_dependencies()
     ai_postinst_defaults = ""
     ai_cron_jobs = ""
     if variant == "sheepfoldAi":
@@ -164,7 +179,7 @@ ensure_global_option grok_api_key ''
 Version: {version}-{release}
 Architecture: all
 Maintainer: kva4991
-Depends: luci-base, firewall4, rpcd, uci, uclient-fetch, ca-bundle, uhttpd, luci-ssl, curl, jshn
+Depends: {dependencies}
 Conflicts: luci-app-sheepfold-ai-support
 Replaces: luci-app-sheepfold-ai-support
 Provides: sheepfold-family-internet-control
@@ -259,13 +274,19 @@ ensure_global_option block_on_boot '0'
 ensure_global_option new_device_policy 'allow'
 ensure_global_option auto_configure '1'
 ensure_global_option detection_mode 'full'
+ensure_global_option device_monitoring_mode 'automatic'
 ensure_global_option no_restrictions_auto_assign '1'
+ensure_global_option personal_devices_auto_assign '1'
 ensure_global_option detector_watch_interval_seconds '10'
-ensure_global_option detector_interval_seconds '900'
+ensure_global_option detector_interval_seconds '86400'
+ensure_global_option detector_connection_delay_seconds '20'
+ensure_global_option detector_max_event_scans_per_tick '4'
 ensure_global_option detector_max_hosts_per_scan '16'
 ensure_global_option detector_min_device_type_confidence '70'
 ensure_global_option detector_min_no_restrictions_confidence '80'
 ensure_global_option detector_nmap_host_timeout_seconds '20'
+ensure_global_option detector_full_rescan_seconds '86400'
+ensure_global_option detector_low_confidence_retry_seconds '86400'
 ensure_global_option update_check_install_mode 'weekly'
 ensure_global_option active_messenger 'none'
 {ai_postinst_defaults}ensure_global_option vk_access_token ''
@@ -550,6 +571,12 @@ def main() -> None:
     for variant in selected_variants:
         build_dir = Path(tempfile.mkdtemp(prefix=f"sheepfold-{variant}-ipk-", dir=build_root))
         ipk = out_dir / f"{artifact_name(variant)}_{version}-{release}_all.ipk"
+        if out_dir.name.casefold() == "pesochnica":
+            # Пользовательский каталог содержит только актуальную сборку каждого
+            # варианта; артефакты других вариантов и посторонние файлы не трогаем.
+            for previous in out_dir.glob(f"{artifact_name(variant)}_*_all.ipk"):
+                if previous != ipk:
+                    previous.unlink(missing_ok=True)
         try:
             debian_binary = build_dir / "debian-binary"
             data_tar = build_dir / "data.tar.gz"

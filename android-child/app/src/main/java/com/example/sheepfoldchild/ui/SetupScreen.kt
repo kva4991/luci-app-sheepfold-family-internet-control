@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,7 +29,9 @@ import com.example.sheepfoldchild.R
 
 @Composable
 fun SetupScreen(
+    isSearching: Boolean,
     errorMessage: String? = null,
+    onRetry: () -> Unit,
     onSave: (String) -> Unit
 ) {
     var url by remember { mutableStateOf("") }
@@ -48,26 +52,42 @@ fun SetupScreen(
                 textAlign = TextAlign.Center
             )
             Text(
-                text = stringResource(R.string.setup_transport_hint),
+                text = stringResource(R.string.setup_server_search),
                 textAlign = TextAlign.Center
             )
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                label = { Text(stringResource(R.string.setup_hint)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                modifier = Modifier.fillMaxWidth()
-            )
-            errorMessage?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-            }
-            Button(
-                onClick = { if (url.isNotBlank()) onSave(url.trim()) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = url.isNotBlank()
-            ) {
-                Text(stringResource(R.string.setup_save))
+            if (isSearching) {
+                CircularProgressIndicator()
+                Text(
+                    text = stringResource(R.string.setup_searching_hint),
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.setup_not_found_manual),
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.error
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text(stringResource(R.string.setup_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                errorMessage?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+                Button(
+                    onClick = { if (url.isNotBlank()) onSave(url.trim()) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = url.isNotBlank()
+                ) {
+                    Text(stringResource(R.string.setup_save))
+                }
+                OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.setup_retry))
+                }
             }
         }
     }

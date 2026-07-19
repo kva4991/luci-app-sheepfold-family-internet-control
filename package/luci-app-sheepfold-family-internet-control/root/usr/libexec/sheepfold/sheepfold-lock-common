@@ -1,0 +1,33 @@
+#!/bin/sh
+
+# Общий flock-контракт нужен, чтобы фоновые и ручные операции не расходились
+# в тайм-аутах и не оставляли mkdir-каталог после аварийного завершения. §detlock §fwlock1
+sheepfold_lock_acquire() {
+	lock_path="$1"
+	wait_seconds="${2:-30}"
+	waited_seconds=0
+
+	case "$wait_seconds" in ''|*[!0-9]*) wait_seconds=30 ;; esac
+	[ "$wait_seconds" -le 300 ] || wait_seconds=300
+	command -v flock >/dev/null 2>&1 || return 127
+
+	lock_parent="${lock_path%/*}"
+	[ "$lock_parent" = "$lock_path" ] || mkdir -p "$lock_parent"
+	: > "$lock_path"
+	# В одном процессе Sheepfold одновременно удерживает не больше одного общего
+	# lock. Фиксированный FD избегает eval и инъекций через путь к lock-файлу.
+	exec 9>"$lock_path"
+	while ! flock -n 9; do
+		[ "$waited_seconds" -lt "$wait_seconds" ] || {
+			exec 9>&-
+			return 1
+		}
+		waited_seconds=$((waited_seconds + 1))
+		sleep 1
+	done
+}
+
+sheepfold_lock_release() {
+	flock -u 9 2>/dev/null || true
+	exec 9>&-
+}

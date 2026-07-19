@@ -120,6 +120,7 @@ See:
 - [Access schedules](docs/schedules.md)
 - [Country profiles](docs/country-profiles.md)
 - [Emergency-useful sites planning](docs/domain-allowlist.md)
+- [Device passport, monitoring, and control, Russian](docs/device-passport-and-control.ru.md)
 - [Device auto-detection notes, Russian](docs/device-detection.ru.md)
 - [Integrations](docs/integrations.md)
 - [Localization](docs/localization.md)

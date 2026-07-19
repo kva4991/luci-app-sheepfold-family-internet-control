@@ -98,4 +98,17 @@ describe('Windows repository toolchain', () => {
     assert.match(workflow, /\.\/\$\{\{ matrix\.project \}\}\/gradlew/);
     assert.doesNotMatch(workflow, /gradle-version:\s*['"]8\.9/);
   });
+
+  it('exports Android artifacts without tracking the shared Windows directory', () => {
+    for (const buildFile of ['android/app/build.gradle.kts', 'android-child/app/build.gradle.kts']) {
+      const source = read(buildFile);
+
+      assert.match(source, /SHEEPFOLD_APK_OUTPUT_DIR/);
+      assert.match(source, /Documents\/pesochnica/);
+      assert.match(source, /doNotTrackState/);
+      assert.match(source, /listFiles[\s\S]*startsWith\("sheepfold-(?:parent|child)-v"\)[\s\S]*File::delete/);
+      assert.doesNotMatch(source, /\/Downloads/);
+      assert.doesNotMatch(source, /copy(?:Child)?DebugApkToDownloads/);
+    }
+  });
 });

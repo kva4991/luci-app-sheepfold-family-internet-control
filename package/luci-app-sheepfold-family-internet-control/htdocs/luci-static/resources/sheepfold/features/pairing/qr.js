@@ -76,11 +76,67 @@ function utf8Bytes(text) {
 	});
 }
 
+function qrSpecForPayload(byteLength) {
+	if (byteLength <= 106) {
+		return {
+			version: 5,
+			dataCodewords: 108,
+			blockDataCodewords: [108],
+			errorCorrectionCodewords: 26,
+			alignmentCenters: [6, 30]
+		};
+	}
+
+	if (byteLength <= 134) {
+		return {
+			version: 6,
+			dataCodewords: 136,
+			blockDataCodewords: [68, 68],
+			errorCorrectionCodewords: 18,
+			alignmentCenters: [6, 34]
+		};
+	}
+
+	throw new Error('QR payload is too long');
+}
+
+function interleaveQrCodewords(data, spec) {
+	var blocks = [];
+	var offset = 0;
+
+	spec.blockDataCodewords.forEach(function (length) {
+		var blockData = data.slice(offset, offset + length);
+
+		blocks.push({
+			data: blockData,
+			error: reedSolomonRemainder(blockData, spec.errorCorrectionCodewords)
+		});
+		offset += length;
+	});
+
+	var result = [];
+	var longestDataBlock = Math.max.apply(null, spec.blockDataCodewords);
+
+	for (var i = 0; i < longestDataBlock; i++) {
+		blocks.forEach(function (block) {
+			if (i < block.data.length)
+				result.push(block.data[i]);
+		});
+	}
+
+	for (i = 0; i < spec.errorCorrectionCodewords; i++) {
+		blocks.forEach(function (block) {
+			result.push(block.error[i]);
+		});
+	}
+
+	return result;
+}
+
 function makeQrCodewords(text) {
-	var dataCodewords = 108;
-	var errorCorrectionCodewords = 26;
 	var bits = [];
 	var bytes = utf8Bytes(text);
+	var spec = qrSpecForPayload(bytes.length);
 	var codewords = [];
 
 	appendBits(bits, 0x4, 4);
@@ -90,10 +146,10 @@ function makeQrCodewords(text) {
 		appendBits(bits, value, 8);
 	});
 
-	if (bits.length > dataCodewords * 8)
+	if (bits.length > spec.dataCodewords * 8)
 		throw new Error('QR payload is too long');
 
-	appendBits(bits, 0, Math.min(4, dataCodewords * 8 - bits.length));
+	appendBits(bits, 0, Math.min(4, spec.dataCodewords * 8 - bits.length));
 
 	while (bits.length % 8 !== 0)
 		bits.push(0);
@@ -107,14 +163,19 @@ function makeQrCodewords(text) {
 		codewords.push(value);
 	}
 
-	for (var pad = 0; codewords.length < dataCodewords; pad++)
+	for (var pad = 0; codewords.length < spec.dataCodewords; pad++)
 		codewords.push(pad % 2 === 0 ? 0xec : 0x11);
 
-	return codewords.concat(reedSolomonRemainder(codewords, errorCorrectionCodewords));
+	return {
+		codewords: interleaveQrCodewords(codewords, spec),
+		spec: spec
+	};
 }
 
 function createQrMatrix(text) {
-	var version = 5;
+	var encoded = makeQrCodewords(text);
+	var spec = encoded.spec;
+	var version = spec.version;
 	var size = version * 4 + 17;
 	var matrix = Array.from({ length: size }, function () { return Array(size).fill(false); });
 	var reserved = Array.from({ length: size }, function () { return Array(size).fill(false); });
@@ -154,7 +215,12 @@ function createQrMatrix(text) {
 	addFinder(0, 0);
 	addFinder(size - 7, 0);
 	addFinder(0, size - 7);
-	addAlignment(30, 30);
+	spec.alignmentCenters.forEach(function (cy) {
+		spec.alignmentCenters.forEach(function (cx) {
+			if (!reserved[cy][cx])
+				addAlignment(cx, cy);
+		});
+	});
 
 	for (var i = 0; i < size; i++) {
 		if (!reserved[6][i])
@@ -178,7 +244,7 @@ function createQrMatrix(text) {
 	for (i = 8; i < 15; i++)
 		setModule(8, size - 15 + i, ((formatBits >>> i) & 1) !== 0, true);
 
-	var codewords = makeQrCodewords(text);
+	var codewords = encoded.codewords;
 	var bitIndex = 0;
 	var upward = true;
 

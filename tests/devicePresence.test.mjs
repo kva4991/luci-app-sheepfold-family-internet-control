@@ -1,3 +1,8 @@
+/*
+ * Проверяет, какие router-side сигналы считаются фактическим присутствием,
+ * и что дешёвые Wi-Fi capabilities не превращаются в идентификатор личности.
+ * Реальные ubus/hostapd ответы конкретной модели проверяются на OpenWrt-стенде.
+ */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,9 +36,30 @@ describe('Статус присутствия устройств', () => {
     const source = readFileSync(presencePath, 'utf8');
 
     assert.match(source, /case ",\$sources," in/);
-    assert.match(source, /\*,arp,\*\)/);
+    assert.match(source, /\*,arp,\*\|\*,neighbor,\*\)/);
     assert.match(source, /refresh_from_dhcp_signals/);
-    assert.match(source, /refresh_from_arp/);
+    assert.match(source, /current_from_neighbor/);
+    assert.match(source, /current_from_arp/);
+    assert.match(source, /current_from_wifi/);
+    assert.match(source, /current_from_recent_dhcp/);
+    assert.match(source, /collect_wan_interfaces/);
+    assert.match(source, /REACHABLE\|STALE\|DELAY\|PROBE\|PERMANENT/);
+    assert.doesNotMatch(source, /current_from_static/);
+  });
+
+  it('собирает возможности Wi-Fi одним штатным hostapd-снимком', () => {
+    const source = readFileSync(presencePath, 'utf8');
+
+    assert.match(source, /wifi-capabilities/);
+    assert.match(source, /ubus -S call "\$object" get_clients/);
+    assert.match(source, /json_get_var ht ht/);
+    assert.match(source, /json_get_var vht vht/);
+    assert.match(source, /json_get_var he he/);
+    assert.match(source, /json_get_var he he 2>\/dev\/null \|\| he=0/);
+    assert.match(source, /json_get_var rx_rate rx 2>\/dev\/null \|\| rx_rate=0/);
+    assert.match(source, /json_select rate/);
+    assert.match(source, /generation=legacy/);
+    assert.match(source, /wifi_capabilities_snapshot/);
   });
 
   it('доступен через существующий защищённый router-control', () => {

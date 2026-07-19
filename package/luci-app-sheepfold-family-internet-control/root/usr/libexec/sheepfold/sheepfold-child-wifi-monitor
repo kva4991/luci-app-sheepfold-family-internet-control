@@ -1,0 +1,282 @@
+#!/bin/sh
+set -eu
+umask 077
+
+# Детский APK сообщает только отпечаток текущей сети, её отображаемое имя и,
+# когда это разрешено родителем, последнее доступное местоположение телефона.
+# Принадлежность запроса устройству всегда определяет сам роутер. §childwifi1
+DHCP_LEASES="${SHEEPFOLD_DHCP_LEASES:-/tmp/dhcp.leases}"
+ARP_TABLE="${SHEEPFOLD_ARP_TABLE:-/proc/net/arp}"
+DEVICE_ID_HELPER="${SHEEPFOLD_DEVICE_ID_HELPER:-/usr/libexec/sheepfold/sheepfold-device-id}"
+LOG_HELPER="${SHEEPFOLD_LOG_HELPER:-/usr/libexec/sheepfold/sheepfold-log}"
+NOTIFY_HELPER="${SHEEPFOLD_NOTIFICATION_HELPER:-/usr/libexec/sheepfold/sheepfold-admin-notification}"
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-${0%/*}/sheepfold-lock-common}"
+[ -r "$LOCK_COMMON" ] || LOCK_COMMON=/usr/libexec/sheepfold/sheepfold-lock-common
+. "$LOCK_COMMON"
+
+STATE_DIR="${SHEEPFOLD_CHILD_WIFI_STATE_DIR:-/etc/sheepfold/child-wifi-networks}"
+MAX_NETWORKS_PER_DEVICE=100
+HISTORY_RETENTION_SECONDS="${SHEEPFOLD_CHILD_WIFI_RETENTION_SECONDS:-7776000}"
+
+normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+
+mac_for_ip() {
+	local client_ip mac
+	client_ip="$1"
+	mac=""
+	[ ! -r "$DHCP_LEASES" ] || mac="$(awk -v ip="$client_ip" '$3 == ip { print toupper($2); exit }' "$DHCP_LEASES")"
+	[ -n "$mac" ] || [ ! -r "$ARP_TABLE" ] || mac="$(awk -v ip="$client_ip" '$1 == ip { print toupper($4); exit }' "$ARP_TABLE")"
+	normalize_mac "$mac"
+}
+
+device_section_for_mac() {
+	local wanted section existing
+	wanted="$(normalize_mac "$1")"
+	for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+		existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+		[ "$(normalize_mac "$existing")" = "$wanted" ] || continue
+		printf '%s\n' "$section"
+		return 0
+	done
+	return 1
+}
+
+clean_ssid() {
+	# Строка хранится в TSV и попадает в уведомление: управляющие разделители
+	# заменяем, но обычные русские и другие Unicode-имена сохраняем.
+	printf '%s' "$1" | tr '\r\n\t|' '    ' | cut -c1-96
+}
+
+valid_coordinate() {
+	local value maximum
+	value="$1"
+	maximum="$2"
+	printf '%s' "$value" | grep -Eq '^-?[0-9]{1,3}(\.[0-9]{1,6})?$' || return 1
+	awk -v value="$value" -v maximum="$maximum" 'BEGIN { exit !(value >= -maximum && value <= maximum) }'
+}
+
+location_is_recent() {
+	local reported_at router_now
+	reported_at="$1"
+	router_now="$2"
+	# Клиентские часы могут немного спешить. Более старые координаты не выдаём
+	# родителю за положение телефона в момент подключения.
+	awk -v reported_at="$reported_at" -v router_now="$router_now" 'BEGIN {
+		exit !(reported_at >= router_now - 3600 && reported_at <= router_now + 300)
+	}'
+}
+
+parse_payload() {
+	local line value rest
+	version_seen=0
+	fingerprint=""
+	ssid=""
+	observed_at=""
+	latitude=""
+	longitude=""
+	accuracy=""
+	location_at=""
+	location_seen=0
+
+	while IFS= read -r line || [ -n "$line" ]; do
+		case "$line" in
+			version=1)
+				[ "$version_seen" = 0 ] || return 1
+				version_seen=1
+				;;
+			fingerprint=*)
+				[ -z "$fingerprint" ] || return 1
+				fingerprint="${line#fingerprint=}"
+				;;
+			ssid=*)
+				[ -z "$ssid" ] || return 1
+				ssid="$(clean_ssid "${line#ssid=}")"
+				;;
+			observed_at=*)
+				[ -z "$observed_at" ] || return 1
+				observed_at="${line#observed_at=}"
+				;;
+			location=*)
+				[ "$location_seen" = 0 ] || return 1
+				location_seen=1
+				value="${line#location=}"
+				latitude="${value%%|*}"; rest="${value#*|}"
+				[ "$rest" != "$value" ] || return 1
+				longitude="${rest%%|*}"; rest="${rest#*|}"
+				accuracy="${rest%%|*}"; location_at="${rest#*|}"
+				[ "$location_at" != "$rest" ] || return 1
+				;;
+			'') ;;
+			*) return 1 ;;
+		esac
+	done
+
+	[ "$version_seen" = 1 ] || return 1
+	printf '%s' "$fingerprint" | grep -Eq '^[0-9a-f]{64}$' || return 1
+	[ -n "$ssid" ] && [ "${#ssid}" -le 96 ] || return 1
+	case "$observed_at" in ''|*[!0-9]*) return 1 ;; esac
+	if [ "$location_seen" = 1 ]; then
+		valid_coordinate "$latitude" 90 || return 1
+		valid_coordinate "$longitude" 180 || return 1
+		case "$accuracy" in ''|*[!0-9]*) return 1 ;; esac
+		case "$location_at" in ''|*[!0-9]*) return 1 ;; esac
+		[ "$accuracy" -le 10000 ] || return 1
+	fi
+}
+
+network_already_known() {
+	local history_file wanted
+	history_file="$1"
+	wanted="$2"
+	[ -r "$history_file" ] || return 1
+	awk -F '\t' -v wanted="$wanted" '$1 == wanted { found=1; exit } END { exit !found }' "$history_file"
+}
+
+prune_history() {
+	local history_file now cutoff temporary_file
+	history_file="$1"
+	now="$2"
+	[ -r "$history_file" ] || return 0
+	cutoff=$((now - HISTORY_RETENTION_SECONDS))
+	temporary_file="$history_file.prune.$$"
+	# Координаты лежат в той же строке, поэтому удаляются одновременно с сетью.
+	# Повреждённая отдельная строка не должна ломать чтение всей истории. §childwifi1
+	awk -F '\t' -v cutoff="$cutoff" '
+		$2 ~ /^[0-9]+$/ && $2 >= cutoff && NF >= 3 { print }
+	' "$history_file" | tail -n "$MAX_NETWORKS_PER_DEVICE" > "$temporary_file"
+	chmod 600 "$temporary_file" 2>/dev/null || true
+	mv -f "$temporary_file" "$history_file"
+}
+
+append_network() {
+	local history_file temporary_file now
+	history_file="$1"
+	now="$2"
+	temporary_file="$history_file.tmp.$$"
+	{
+		[ ! -r "$history_file" ] || cat "$history_file"
+		printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$fingerprint" "$now" "$ssid" "$latitude" "$longitude" "$accuracy"
+	} | tail -n "$MAX_NETWORKS_PER_DEVICE" > "$temporary_file"
+	chmod 600 "$temporary_file" 2>/dev/null || true
+	mv -f "$temporary_file" "$history_file"
+}
+
+report_network() {
+	local remote_ip mode mac section device_id device_name history_file lock_file now message location_text notified
+	remote_ip="$1"
+	mode="$(uci -q get sheepfold.global.child_wifi_network_notifications 2>/dev/null || printf off)"
+	case "$mode" in
+		with_location|network_only) ;;
+		*) printf '{"app":"sheepfold","ok":true,"enabled":false,"changed":false}\n'; return 0 ;;
+	esac
+
+	mac="$(mac_for_ip "$remote_ip")"
+	[ -n "$mac" ] || return 2
+	section="$(device_section_for_mac "$mac" 2>/dev/null || true)"
+	[ -n "$section" ] || return 2
+	[ "$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)" != 1 ] || return 3
+
+	parse_payload || return 4
+	now="$(date +%s)"
+	if [ "$mode" != with_location ]; then
+		latitude=""; longitude=""; accuracy=""; location_at=""; location_seen=0
+	elif [ "$location_seen" = 1 ] && ! location_is_recent "$location_at" "$now"; then
+		latitude=""; longitude=""; accuracy=""; location_at=""; location_seen=0
+	fi
+
+	device_id="$($DEVICE_ID_HELPER ensure "$section" 2>/dev/null || true)"
+	case "$device_id" in ''|*[!0-9]*) return 5 ;; esac
+	device_name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+	[ -n "$device_name" ] || device_name="$mac"
+	device_name="$(clean_ssid "$device_name")"
+
+	mkdir -p "$STATE_DIR"
+	chmod 700 "$STATE_DIR" 2>/dev/null || true
+	history_file="$STATE_DIR/device-$device_id.networks"
+	lock_file="$STATE_DIR/device-$device_id.lock"
+	sheepfold_lock_acquire "$lock_file" 5 || return 5
+	trap 'sheepfold_lock_release' EXIT HUP INT TERM
+	prune_history "$history_file" "$now"
+
+	if network_already_known "$history_file" "$fingerprint"; then
+		sheepfold_lock_release
+		trap - EXIT HUP INT TERM
+		printf '{"app":"sheepfold","ok":true,"enabled":true,"changed":false}\n'
+		return 0
+	fi
+
+	append_network "$history_file" "$now"
+	sheepfold_lock_release
+	trap - EXIT HUP INT TERM
+
+	message="Устройство #$device_id $device_name подключилось к новой Wi-Fi сети «$ssid»."
+	if [ "$mode" = with_location ]; then
+		if [ "$location_seen" = 1 ]; then
+			location_text=" Последнее доступное местоположение телефона при подключении: $latitude, $longitude; точность около $accuracy м."
+		else
+			location_text=" Местоположение телефона при подключении определить не удалось."
+		fi
+		message="$message$location_text"
+	fi
+
+	[ ! -x "$LOG_HELPER" ] || "$LOG_HELPER" "$message"
+	notified=false
+	if [ -x "$NOTIFY_HELPER" ]; then
+		"$NOTIFY_HELPER" enqueue child_wifi_network "wifi-$device_id-$fingerprint" \
+			"Новая Wi-Fi сеть детского устройства" "$message" >/dev/null 2>&1 || true
+		notified=true
+	fi
+	printf '{"app":"sheepfold","ok":true,"enabled":true,"changed":true,"notified":%s}\n' "$notified"
+}
+
+json_escape() {
+	printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+list_networks() {
+	local file device_id first fingerprint seen_at saved_ssid saved_lat saved_lon saved_accuracy now lock_file
+	mkdir -p "$STATE_DIR"
+	chmod 700 "$STATE_DIR" 2>/dev/null || true
+	now="$(date +%s)"
+	printf '{"app":"sheepfold","ok":true,"networks":['
+	first=1
+	for file in "$STATE_DIR"/device-*.networks; do
+		[ -r "$file" ] || continue
+		device_id="${file##*/device-}"; device_id="${device_id%.networks}"
+		lock_file="$STATE_DIR/device-$device_id.lock"
+		if sheepfold_lock_acquire "$lock_file" 5; then
+			prune_history "$file" "$now"
+			sheepfold_lock_release
+		fi
+		while IFS="$(printf '\t')" read -r fingerprint seen_at saved_ssid saved_lat saved_lon saved_accuracy; do
+			[ -n "$fingerprint" ] || continue
+			[ "$first" = 1 ] || printf ','
+			first=0
+			printf '{"deviceId":"%s","ssid":"%s","firstSeenAt":%s,' \
+				"$(json_escape "$device_id")" "$(json_escape "$saved_ssid")" "$seen_at"
+			if [ -n "$saved_lat" ] && [ -n "$saved_lon" ]; then
+				printf '"latitude":"%s","longitude":"%s","accuracyMeters":%s}' \
+					"$saved_lat" "$saved_lon" "${saved_accuracy:-0}"
+			else
+				printf '"latitude":null,"longitude":null,"accuracyMeters":null}'
+			fi
+		done < "$file"
+	done
+	printf ']}\n'
+}
+
+clear_networks() {
+	local actor
+	mkdir -p "$STATE_DIR"
+	rm -f "$STATE_DIR"/device-*.networks 2>/dev/null || true
+	actor="${SHEEPFOLD_ACTION_ACTOR:-Администратор}"
+	[ ! -x "$LOG_HELPER" ] || "$LOG_HELPER" "$actor: очищена история новых Wi-Fi сетей детских устройств"
+	printf '{"app":"sheepfold","ok":true,"cleared":true}\n'
+}
+
+case "${1:-}" in
+	report) report_network "${2:-}" ;;
+	list) list_networks ;;
+	clear) clear_networks ;;
+	*) echo "Usage: sheepfold-child-wifi-monitor [report REMOTE_IP|list|clear]" >&2; exit 2 ;;
+esac

@@ -635,6 +635,12 @@ msgstr ""
 msgid "Could not save group."
 msgstr ""
 
+msgid "The group was saved, but internet access rules could not be applied."
+msgstr ""
+
+msgid "Check the router journal."
+msgstr ""
+
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
 msgid "Could not save LED setting."
 msgstr ""
@@ -3013,6 +3019,12 @@ msgstr ""
 msgid "A device from the device blocklist is never assigned automatically."
 msgstr ""
 
+msgid "An administrator device keeps the access policy selected by the parent and is not assigned automatically."
+msgstr ""
+
+msgid "A device from the device allowlist keeps the access policy selected by the parent and is not assigned automatically."
+msgstr ""
+
 msgid "The device is already in another group; automatic setup does not replace a parent choice."
 msgstr ""
 
@@ -3638,4 +3650,194 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
 msgid "Administrator devices must remain in the allowlist and outside ordinary groups."
+msgstr ""
+msgid "Preparing secure pairing..."
+msgstr ""
+
+msgid "Could not prepare the pairing code. Please reopen administrator settings."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Notifications"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/notifications/settings.js
+msgid "The child Android app can notice a change of active SIM subscriptions and report it to this router. Android does not always provide the phone number, so a notification may say that the number is unavailable."
+msgstr ""
+
+msgid "Notify administrators about SIM card changes"
+msgstr ""
+
+msgid "Yes, about every change"
+msgstr ""
+
+msgid "Only when changed to a new SIM card (default)"
+msgstr ""
+
+msgid "No"
+msgstr ""
+
+msgid "The first SIM found after child-app installation is also written to the journal and notified in the first two modes. Returning to a previously known SIM creates a phone notification only in the first mode."
+msgstr ""
+
+msgid "The child app needs Android phone-state permission. Sheepfold does not read calls, SMS messages, ICCID, IMSI, or IMEI."
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/notifications/settings.js
+msgid "The child Android app can report the first connection to each new Wi-Fi network. The router stores a bounded local list and sends an administrator notification."
+msgstr ""
+
+msgid "Notify administrators about new Wi-Fi networks of a child device"
+msgstr ""
+
+msgid "Yes, with the phone location at connection time"
+msgstr ""
+
+msgid "Yes, without location"
+msgstr ""
+
+msgid "No (default)"
+msgstr ""
+
+msgid "Location is the last available phone position, not a verified address of the Wi-Fi access point. If Android cannot provide a recent position, the notification contains only the network name."
+msgstr ""
+
+msgid "SSID is stored locally, while BSSID is converted to a one-way fingerprint on the phone and is not sent to the router. Android location and nearby-Wi-Fi permissions are required."
+msgstr ""
+
+msgid "When the home router is unavailable, the child app keeps up to 100 prepared reports on the phone and sends them after returning home. Android background limits mean that very short connections may be missed."
+msgstr ""
+
+msgid "Clear saved Wi-Fi network history"
+msgstr ""
+
+msgid "Delete the saved list of child-device Wi-Fi networks and their locations?"
+msgstr ""
+
+msgid "Saved Wi-Fi network history cleared."
+msgstr ""
+
+msgid "Could not clear saved Wi-Fi network history."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not read the router TLS public-key fingerprint."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The router returned an invalid TLS public-key fingerprint."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not prepare secure pairing. Check the TLS configuration and reopen this window."
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/wifi/cards.js
+msgid "Turn this Wi-Fi network on or off."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "One or more Wi-Fi networks will be turned off. The current wireless connection may be lost. Continue?"
+msgstr ""
+
+msgid "Manufacturer"
+msgstr ""
+
+msgid "mDNS services"
+msgstr ""
+
+msgid "UPnP / SSDP services"
+msgstr ""
+
+msgid "Other interfaces of this device"
+msgstr ""
+
+msgid "Device monitoring and setup"
+msgstr ""
+
+msgid "Automatic (recommended)"
+msgstr ""
+
+msgid "When a known MAC appears with strongly different trusted DHCP, mDNS, or UPnP identifiers, automatic mode temporarily blocks that connection at device-blocklist level. Manual mode restricts it until a parent decides. The saved rights of the original device are not changed."
+msgstr ""
+
+msgid "Identity quarantine: blocked"
+msgstr ""
+
+msgid "Identity quarantine: restricted"
+msgstr ""
+
+msgid "The current connection does not match this device trusted fingerprint. Its saved rights are preserved until the original device returns or a parent trusts the current connection."
+msgstr ""
+
+msgid "Identity quarantine"
+msgstr ""
+
+msgid "The current connection strongly differs from the trusted fingerprint. The device saved rights are preserved, while this connection is temporarily isolated."
+msgstr ""
+
+msgid "Connection identity check"
+msgstr ""
+
+msgid "Quarantine: blocked"
+msgstr ""
+
+msgid "Quarantine: restricted"
+msgstr ""
+
+msgid "Matched or not enough stable evidence"
+msgstr ""
+
+msgid "The current identifiers do not match the trusted fingerprint. Continue only if you recognize this device. The current fingerprint will become trusted and the quarantine will be removed."
+msgstr ""
+
+msgid "Trust this connection, remove quarantine, and detect the device type again"
+msgstr ""
+
+msgid "Trust current connection"
+msgstr ""
+
+msgid "Stable device identity is available"
+msgstr ""
+
+msgid "This device is protected mainly by its MAC address; MAC spoofing cannot be reliably detected yet"
+msgstr ""
+
+msgid "This connection may belong to device %s. Sheepfold will not link it or copy access rights without a parent decision."
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/devices/inventory.js
+msgid "DHCP fingerprint"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/devices/inventory.js
+msgid "MAC manufacturer"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/devices/inventory.js
+msgid "Network services"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/devices/inventory.js
+msgid "Contradictory device signals"
+msgstr ""
+msgid "Router country"
+msgstr ""
+
+msgid "Russia"
+msgstr ""
+
+msgid "Belarus"
+msgstr ""
+
+msgid "China"
+msgstr ""
+
+msgid "Selects the country-specific emergency-useful sites. Manually added or edited sites are preserved."
+msgstr ""
+
+msgid "Could not apply the router country profile."
+msgstr ""
+
+msgid "This backup was created on another router or by an older Sheepfold version. Device numbers, groups, schedules and lists will be kept, but device fingerprints and administrator phone bindings will be rebuilt. Pair administrator phones again after import."
 msgstr ""

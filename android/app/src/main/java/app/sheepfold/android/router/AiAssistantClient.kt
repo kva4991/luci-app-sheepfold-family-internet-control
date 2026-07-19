@@ -45,8 +45,15 @@ object AiAssistantClient {
         }
         val url = URL(apiUrl)
         val tlsPin = request.connection.tlsPinSha256
-            ?: throw IllegalStateException("Отпечаток TLS роутера не сохранён. Выполните сопряжение заново.")
-        val (connection, _) = RouterHttps.open(url, tlsPin, allowTrustOnFirstUse = false)
+        val tlsSpki = request.connection.tlsSpkiSha256
+        if (tlsPin.isNullOrBlank() && tlsSpki.isNullOrBlank())
+            throw IllegalStateException("Отпечаток TLS роутера не сохранён. Выполните сопряжение заново.")
+        val (connection, _) = RouterHttps.open(
+            url,
+            tlsPin,
+            allowTrustOnFirstUse = false,
+            tlsSpkiSha256 = tlsSpki
+        )
 
         try {
             connection.connectTimeout = 5000

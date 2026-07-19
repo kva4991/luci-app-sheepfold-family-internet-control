@@ -48,6 +48,8 @@ $env:SHEEPFOLD_ROUTER_HARDWARE_TESTS="1"
 
 Эти тесты можно запускать чаще всего. Они ничего не меняют на роутере.
 
+Если установлен helper QR v2, профиль сверяет `sheepfold-router-control tls-public-key-fingerprint` с независимым SHA-256 DER SubjectPublicKeyInfo из `/etc/uhttpd.crt`. Проверка пишет только временные файлы публичного ключа в `/tmp` и удаляет их; приватный ключ не копируется и не выводится (§tlspinv2).
+
 Исполняемая команда:
 
 ```powershell

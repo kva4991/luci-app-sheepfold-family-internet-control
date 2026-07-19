@@ -165,13 +165,13 @@ Sheepfold поднимает отдельный uhttpd listener:
 - HTTPS: единый порт приложения `5201` (Android parent/child и локальный Sheepfold API);
 - Cleartext HTTP для Android API не используется.
 
-Android admin (0.1.0-155+):
+Android admin:
 
 1. только HTTPS, `cleartextTrafficPermitted="false"`;
-2. TLS pin (TOFU при первом успешном `/pair`, хранится в приложении);
+2. новые `SF2` QR содержат SHA-256 SPKI активного ключа роутера; Android сверяет его во время TLS handshake до отправки логина и одноразового кода. Старый certificate pin/`SF1` читается только для совместимости и не является fallback для нового `SF2` (§tlspinv2);
 3. Bearer-запросы с заголовками привязки устройства (см. инварианты 13–14).
 
-Android child: только HTTPS, без admin Bearer.
+Android child: только HTTPS и только локальный буквальный IP, без admin Bearer. Поскольку детский APK не получает административный QR, он закрепляет сертификат после первого корректного ответа Sheepfold и затем отклоняет неожиданную замену.
 
 API не должен открываться на WAN.
 

@@ -1,3 +1,8 @@
+/*
+ * Проверяет содержимое атомарного nft batch для списков сайтов и устройств.
+ * Стенд не проверяет конкуренцию: отдельный mock flock разрешает вход, а реальный
+ * kernel lock покрывают lockCommon и live-router матрица §fwlock1.
+ */
 import {
   chmodSync,
   existsSync,
@@ -99,6 +104,14 @@ case "$1" in
   list) exit 0 ;;
   -f) cat "$2" > "$NFT_LOG"; exit 0 ;;
   flush) printf '%s\n' "$*" >> "$NFT_LOG"; exit 0 ;;
+  *) exit 2 ;;
+esac
+`);
+  executable(join(bin, 'flock'), `
+#!/bin/sh
+# В этом стенде важен состав batch, а не соревнование процессов.
+case "$1" in
+  -n|-u) exit 0 ;;
   *) exit 2 ;;
 esac
 `);

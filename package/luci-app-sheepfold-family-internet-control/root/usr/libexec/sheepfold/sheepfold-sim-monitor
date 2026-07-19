@@ -1,0 +1,270 @@
+#!/bin/sh
+set -eu
+
+# SIM-снимок приходит от детского APK, но принадлежность запроса устройству
+# устанавливает только роутер по REMOTE_ADDR -> DHCP/ARP. Данные приложения
+# используются как уведомительный сигнал и не дают никаких прав. §simchg1
+HASH_COMMON="${SHEEPFOLD_HASH_COMMON:-${0%/*}/sheepfold-hash-common}"
+[ -r "$HASH_COMMON" ] || HASH_COMMON=/usr/libexec/sheepfold/sheepfold-hash-common
+. "$HASH_COMMON"
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-${0%/*}/sheepfold-lock-common}"
+[ -r "$LOCK_COMMON" ] || LOCK_COMMON=/usr/libexec/sheepfold/sheepfold-lock-common
+. "$LOCK_COMMON"
+
+DHCP_LEASES="${SHEEPFOLD_DHCP_LEASES:-/tmp/dhcp.leases}"
+ARP_TABLE="${SHEEPFOLD_ARP_TABLE:-/proc/net/arp}"
+DEVICE_ID_HELPER="${SHEEPFOLD_DEVICE_ID_HELPER:-/usr/libexec/sheepfold/sheepfold-device-id}"
+LOG_HELPER="${SHEEPFOLD_LOG_HELPER:-/usr/libexec/sheepfold/sheepfold-log}"
+NOTIFY_HELPER="${SHEEPFOLD_NOTIFICATION_HELPER:-/usr/libexec/sheepfold/sheepfold-admin-notification}"
+STATE_DIR="${SHEEPFOLD_SIM_STATE_DIR:-/tmp/sheepfold/sim-monitor}"
+MAX_SIM_COUNT=4
+MAX_KNOWN_FINGERPRINTS=16
+MAX_PHONE_HISTORY=16
+
+normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+
+mac_for_ip() {
+	client_ip="$1"
+	mac=""
+	[ ! -r "$DHCP_LEASES" ] || mac="$(awk -v ip="$client_ip" '$3 == ip { print toupper($2); exit }' "$DHCP_LEASES")"
+	[ -n "$mac" ] || [ ! -r "$ARP_TABLE" ] || mac="$(awk -v ip="$client_ip" '$1 == ip { print toupper($4); exit }' "$ARP_TABLE")"
+	normalize_mac "$mac"
+}
+
+device_section_for_mac() {
+	wanted="$(normalize_mac "$1")"
+	for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+		existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+		[ "$(normalize_mac "$existing")" = "$wanted" ] || continue
+		printf '%s\n' "$section"
+		return 0
+	done
+	return 1
+}
+
+valid_phone() {
+	[ -z "$1" ] || printf '%s' "$1" | grep -Eq '^\+?[0-9]{3,20}$'
+}
+
+valid_operator_part() {
+	[ -z "$1" ] || printf '%s' "$1" | grep -Eq '^[0-9]{2,3}$'
+}
+
+parse_payload() {
+	payload_file="$1"
+	normalized_file="$2"
+	version_seen=0
+	sim_count=0
+	: > "$normalized_file"
+
+	while IFS= read -r line || [ -n "$line" ]; do
+		case "$line" in
+			version=1)
+				[ "$version_seen" = 0 ] || return 1
+				version_seen=1
+				;;
+			sim=*)
+				[ "$version_seen" = 1 ] || return 1
+				value="${line#sim=}"
+				slot="${value%%|*}"; rest="${value#*|}"
+				[ "$rest" != "$value" ] || return 1
+				fingerprint="${rest%%|*}"; rest="${rest#*|}"
+				phone="${rest%%|*}"; rest="${rest#*|}"
+				mcc="${rest%%|*}"; mnc="${rest#*|}"
+				[ "$mnc" != "$rest" ] || return 1
+				printf '%s' "$slot" | grep -Eq '^[0-3]$' || return 1
+				printf '%s' "$fingerprint" | grep -Eq '^[0-9a-fA-F]{64}$' || return 1
+				valid_phone "$phone" || return 1
+				valid_operator_part "$mcc" || return 1
+				valid_operator_part "$mnc" || return 1
+				grep -q "^${slot}|" "$normalized_file" 2>/dev/null && return 1
+				sim_count=$((sim_count + 1))
+				[ "$sim_count" -le "$MAX_SIM_COUNT" ] || return 1
+				printf '%s|%s|%s|%s|%s\n' "$slot" "$(printf '%s' "$fingerprint" | tr '[:upper:]' '[:lower:]')" "$phone" "$mcc" "$mnc" >> "$normalized_file"
+				;;
+			'') ;;
+			*) return 1 ;;
+		esac
+	done < "$payload_file"
+
+	[ "$version_seen" = 1 ]
+}
+
+fingerprints_from_file() {
+	awk -F '|' '{ print $2 }' "$1" | sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+}
+
+summary_from_file() {
+	file="$1"
+	if [ ! -s "$file" ]; then
+		printf 'SIM-карты не обнаружены'
+		return 0
+	fi
+
+	first=1
+	while IFS='|' read -r slot fingerprint phone mcc mnc; do
+		[ "$first" = 1 ] || printf '; '
+		first=0
+		printf 'SIM %s: ' "$((slot + 1))"
+		if [ -n "$phone" ]; then
+			printf '%s' "$phone"
+		else
+			printf 'номер недоступен'
+		fi
+		if [ -n "$mcc" ] || [ -n "$mnc" ]; then
+			printf ' (оператор %s/%s)' "${mcc:-?}" "${mnc:-?}"
+		fi
+	done < "$file"
+}
+
+known_contains() {
+	case " $1 " in *" $2 "*) return 0 ;; *) return 1 ;; esac
+}
+
+merge_known() {
+	known="$1"
+	current="$2"
+	# История ограничена, чтобы повреждённый клиент не раздувал UCI бесконечно.
+	for fingerprint in $current; do
+		known_contains "$known" "$fingerprint" || known="${known:+$known }$fingerprint"
+	done
+	printf '%s\n' $known | awk 'NF && !seen[$0]++' | tail -n "$MAX_KNOWN_FINGERPRINTS" | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+}
+
+merge_phone_history() {
+	known="$1"
+	current_file="$2"
+	now="$3"
+	{
+		printf '%s\n' "$known" | tr ';' '\n'
+		awk -F '|' -v now="$now" '$3 != "" { print $2 "|" $3 "|" $4 "|" $5 "|" now }' "$current_file"
+	} | awk -F '|' '
+		NF == 5 && length($1) == 64 && $1 ~ /^[0-9a-f]+$/ && $2 ~ /^\+?[0-9]{3,20}$/ {
+			key = $1 "|" $2
+			if (!seen[key]++) print
+		}
+	' | tail -n "$MAX_PHONE_HISTORY" | awk 'BEGIN { first=1 } {
+		if (!first) printf ";"
+		printf "%s", $0
+		first=0
+	} END { if (!first) printf "\n" }'
+}
+
+report_snapshot() {
+	remote_ip="$1"
+	mac="$(mac_for_ip "$remote_ip")"
+	[ -n "$mac" ] || return 2
+	section="$(device_section_for_mac "$mac" 2>/dev/null || true)"
+	[ -n "$section" ] || return 2
+	[ "$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)" != 1 ] || return 3
+
+	mkdir -p "$STATE_DIR"
+	chmod 700 "$STATE_DIR" 2>/dev/null || true
+	umask 077
+	payload_file="$STATE_DIR/payload.$$"
+	normalized_file="$STATE_DIR/normalized.$$"
+	lock_held=0
+	cleanup_snapshot() {
+		rm -f "$payload_file" "$normalized_file"
+		[ "$lock_held" != 1 ] || sheepfold_lock_release
+	}
+	trap 'cleanup_snapshot' EXIT HUP INT TERM
+	cat > "$payload_file"
+	[ "$(wc -c < "$payload_file")" -le 2048 ] || return 4
+	parse_payload "$payload_file" "$normalized_file" || return 4
+	# Два почти одновременных отчёта одного телефона не должны потерять историю
+	# номера или создать два события смены одной SIM. §simchg1
+	sheepfold_lock_acquire "$STATE_DIR/$section.lock" 5 || return 5
+	lock_held=1
+
+	current_fingerprints="$(fingerprints_from_file "$normalized_file")"
+	now="$(date +%s)"
+	snapshot_hash="$(sheepfold_state_hash_text "${current_fingerprints:-none}")" || return 5
+	previous_hash="$(uci -q get "sheepfold.$section.sim_snapshot_hash" 2>/dev/null || true)"
+	known_fingerprints="$(uci -q get "sheepfold.$section.sim_known_fingerprints" 2>/dev/null || true)"
+	phone_history="$(uci -q get "sheepfold.$section.sim_phone_history" 2>/dev/null || true)"
+	initialized="$(uci -q get "sheepfold.$section.sim_monitor_initialized" 2>/dev/null || printf 0)"
+	updated_known="$(merge_known "$known_fingerprints" "$current_fingerprints")"
+	updated_phone_history="$(merge_phone_history "$phone_history" "$normalized_file" "$now")"
+	first_observation=0
+
+	if [ "$initialized" != 1 ]; then
+		first_observation=1
+		uci -q set "sheepfold.$section.sim_monitor_initialized=1"
+		uci -q set "sheepfold.$section.sim_snapshot_hash=$snapshot_hash"
+		uci -q set "sheepfold.$section.sim_current_fingerprints=$current_fingerprints"
+		uci -q set "sheepfold.$section.sim_known_fingerprints=$updated_known"
+		[ "$updated_phone_history" = "$phone_history" ] || \
+			uci -q set "sheepfold.$section.sim_phone_history=$updated_phone_history"
+		# Пустой первый снимок нужен как исходная точка, но сообщать в нём не о чем.
+		# Если SIM уже установлена, первый снимок является настоящим событием: иначе
+		# родитель никогда не узнает, какая карта была в телефоне при установке APK.
+		if [ -z "$current_fingerprints" ]; then
+			uci -q commit sheepfold
+			printf '{"app":"sheepfold","ok":true,"changed":false,"baselineCreated":true}\n'
+			return 0
+		fi
+		uci -q set "sheepfold.$section.sim_last_changed_at=$now"
+		uci -q commit sheepfold
+	fi
+
+	if [ "$first_observation" = 0 ] && [ "$snapshot_hash" = "$previous_hash" ]; then
+		# Android иногда сообщает номер не сразу. Сохраняем его один раз, но не
+		# изображаем позднее появление номера как замену SIM-карты. §simchg1
+		if [ "$updated_phone_history" != "$phone_history" ]; then
+			uci -q set "sheepfold.$section.sim_phone_history=$updated_phone_history"
+			uci -q commit sheepfold
+		fi
+		printf '{"app":"sheepfold","ok":true,"changed":false,"baselineCreated":false}\n'
+		return 0
+	fi
+
+	if [ "$first_observation" = 1 ]; then
+		has_new=1
+	else
+		has_new=0
+		for fingerprint in $current_fingerprints; do
+			known_contains "$known_fingerprints" "$fingerprint" || has_new=1
+		done
+
+		uci -q set "sheepfold.$section.sim_snapshot_hash=$snapshot_hash"
+		uci -q set "sheepfold.$section.sim_current_fingerprints=$current_fingerprints"
+		uci -q set "sheepfold.$section.sim_known_fingerprints=$updated_known"
+		[ "$updated_phone_history" = "$phone_history" ] || \
+			uci -q set "sheepfold.$section.sim_phone_history=$updated_phone_history"
+		uci -q set "sheepfold.$section.sim_last_changed_at=$now"
+		uci -q commit sheepfold
+	fi
+
+	device_id="$($DEVICE_ID_HELPER ensure "$section" 2>/dev/null || true)"
+	device_name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
+	[ -n "$device_name" ] || device_name="$mac"
+	summary="$(summary_from_file "$normalized_file")"
+	if [ "$first_observation" = 1 ]; then
+		message="Устройство #${device_id:-?} $device_name использует SIM-карту: $summary (обнаружена в телефоне при установке приложения)"
+		notification_title="SIM-карта обнаружена"
+	else
+		message="Устройство #${device_id:-?} $device_name сменило SIM-карту: $summary"
+		notification_title="Смена SIM-карты"
+	fi
+	[ ! -x "$LOG_HELPER" ] || "$LOG_HELPER" "$message"
+
+	mode="$(uci -q get sheepfold.global.sim_change_notifications 2>/dev/null || printf new_only)"
+	notified=false
+	if [ "$mode" = all ] || { [ "$mode" = new_only ] && [ "$has_new" = 1 ]; }; then
+		if [ -x "$NOTIFY_HELPER" ]; then
+			now="$(date +%s)"
+			"$NOTIFY_HELPER" enqueue sim_change "sim-${device_id:-unknown}-$now-$snapshot_hash" "$notification_title" "$message" >/dev/null 2>&1 || true
+			notified=true
+		fi
+	fi
+
+	printf '{"app":"sheepfold","ok":true,"changed":true,"baselineCreated":%s,"newSim":%s,"notified":%s}\n' \
+		"$([ "$first_observation" = 1 ] && printf true || printf false)" \
+		"$([ "$has_new" = 1 ] && printf true || printf false)" "$notified"
+}
+
+case "${1:-}" in
+	report) report_snapshot "${2:-}" ;;
+	*) echo "Usage: sheepfold-sim-monitor report REMOTE_IP" >&2; exit 2 ;;
+esac

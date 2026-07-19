@@ -3,7 +3,9 @@
 'require fs';
 
 function run(args) {
-	return fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', args);
+	// Маркер источника идёт отдельным служебным аргументом: backend не должен
+	// угадывать LuCI по названию команды, общей с Android или ботом. §logaudit
+	return fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', ['--luci'].concat(args || []));
 }
 
 function ensureOk(result, fallback) {

@@ -1,0 +1,319 @@
+#!/bin/sh
+set -eu
+
+# Применяет только принадлежащие Sheepfold записи профиля страны. Ручные сайты
+# не удаляются и не переписываются; удалённый профильный сайт сохраняется как
+# выключенная UCI-секция, чтобы он не вернулся после смены страны. §country1
+
+UCI_HELPER="${SHEEPFOLD_COUNTRY_UCI_HELPER:-uci}"
+PROFILE_DIR="${SHEEPFOLD_COUNTRY_PROFILE_DIR:-/usr/share/sheepfold/country-profiles}"
+JSHN_LIB="${SHEEPFOLD_COUNTRY_JSHN_LIB:-/usr/share/libubox/jshn.sh}"
+EMERGENCY_HELPER="${SHEEPFOLD_COUNTRY_EMERGENCY_HELPER:-/usr/libexec/sheepfold/sheepfold-emergency-sites}"
+LOCK_FILE="${SHEEPFOLD_COUNTRY_LOCK_FILE:-/var/lock/sheepfold-country-profile.lock}"
+TMP_ROOT="${SHEEPFOLD_COUNTRY_TMP_ROOT:-/tmp/sheepfold}"
+records_file=''
+
+cleanup() {
+	[ -z "$records_file" ] || rm -f "$records_file" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+valid_country() {
+	case "${1:-}" in
+		ru|by|cn) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+valid_profile_id() {
+	printf '%s' "${1:-}" | grep -Eq '^[a-z0-9_]{1,40}$'
+}
+
+valid_domain() {
+	value="${1:-}"
+	old_ifs="$IFS"
+	[ -n "$value" ] && [ "${#value}" -le 253 ] || return 1
+	[ "$value" = "$(printf '%s' "$value" | tr 'A-Z' 'a-z')" ] || return 1
+	printf '%s' "$value" | grep -Eq '^[0-9]+(\.[0-9]+){3}$' && return 1
+	IFS='.'
+	set -- $value
+	IFS="$old_ifs"
+	[ "$#" -ge 2 ] || return 1
+	for label in "$@"; do
+		[ "${#label}" -le 63 ] || return 1
+		printf '%s' "$label" |
+			grep -Eq '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$' || return 1
+	done
+	return 0
+}
+
+valid_text() {
+	value="${1:-}"
+	max_length="${2:-0}"
+	[ -n "$value" ] && [ "${#value}" -le "$max_length" ] || return 1
+	! LC_ALL=C printf '%s' "$value" | grep -q '[[:cntrl:]]'
+}
+
+load_json_library() {
+	[ -r "$JSHN_LIB" ] || return 1
+	# shellcheck source=/usr/share/libubox/jshn.sh
+	. "$JSHN_LIB"
+}
+
+localized_value=''
+read_localized_value() {
+	object_name="$1"
+	language="$2"
+	localized_value=''
+	json_select "$object_name" 2>/dev/null || return 1
+	json_get_var localized_value "$language"
+	[ -n "$localized_value" ] || json_get_var localized_value ru
+	[ -n "$localized_value" ] || json_get_var localized_value en
+	json_select ..
+	[ -n "$localized_value" ]
+}
+
+profile_record_exists() {
+	wanted_id="$1"
+	wanted_domain="$2"
+	[ -s "$records_file" ] || return 1
+	awk -F '\t' -v wanted_id="$wanted_id" -v wanted_domain="$wanted_domain" '
+		$1 == wanted_id || $2 == wanted_domain { found=1 }
+		END { exit found ? 0 : 1 }
+	' "$records_file"
+}
+
+parse_profile() {
+	country="$1"
+	language="$2"
+	profile_file="$PROFILE_DIR/$country.json"
+	profile_schema=''
+	profile_country=''
+	sites_type=''
+	site_keys=''
+
+	[ -r "$profile_file" ] || { echo "Country profile is missing: $country" >&2; return 1; }
+	load_json_library || { echo "jshn is unavailable" >&2; return 1; }
+	json_init
+	json_load_file "$profile_file" 2>/dev/null || { echo "Country profile JSON is invalid: $country" >&2; return 1; }
+	json_get_var profile_schema schemaVersion
+	json_get_var profile_country country
+	[ "$profile_schema" = 1 ] && [ "$profile_country" = "$country" ] || {
+		echo "Country profile schema is invalid: $country" >&2
+		return 1
+	}
+	json_get_type sites_type emergencySites 2>/dev/null || return 1
+	[ "$sites_type" = array ] || return 1
+	json_select emergencySites
+	json_get_keys site_keys
+	[ -n "$site_keys" ] || { json_select ..; return 1; }
+
+	for site_key in $site_keys; do
+		entry_type=''
+		profile_id=''
+		domain=''
+		name=''
+		description=''
+		json_get_type entry_type "$site_key" 2>/dev/null || return 1
+		[ "$entry_type" = object ] || return 1
+		json_select "$site_key"
+		json_get_var profile_id id
+		json_get_var domain domain
+		read_localized_value name "$language" || { json_select ..; return 1; }
+		name="$localized_value"
+		read_localized_value description "$language" || { json_select ..; return 1; }
+		description="$localized_value"
+		json_select ..
+
+		valid_profile_id "$profile_id" && valid_domain "$domain" &&
+			valid_text "$name" 120 && valid_text "$description" 1000 || return 1
+		profile_record_exists "$profile_id" "$domain" && return 1
+		printf '%s\t%s\t%s\t%s\n' "$profile_id" "$domain" "$name" "$description" >> "$records_file"
+	done
+	json_select ..
+}
+
+mark_legacy_profile_site() {
+	section="$1"
+	domain="$2"
+	name="$3"
+	description="$4"
+	profile_id="$5"
+
+	[ "$($UCI_HELPER -q get "sheepfold.$section" 2>/dev/null || true)" = emergency_site ] || return 0
+	[ -z "$($UCI_HELPER -q get "sheepfold.$section.source" 2>/dev/null || true)" ] || return 0
+	[ "$($UCI_HELPER -q get "sheepfold.$section.domain" 2>/dev/null || true)" = "$domain" ] || return 0
+	[ "$($UCI_HELPER -q get "sheepfold.$section.name" 2>/dev/null || true)" = "$name" ] || return 0
+	[ "$($UCI_HELPER -q get "sheepfold.$section.description" 2>/dev/null || true)" = "$description" ] || return 0
+	$UCI_HELPER -q set "sheepfold.$section.source=country_profile"
+	$UCI_HELPER -q set "sheepfold.$section.profile_country=ru"
+	$UCI_HELPER -q set "sheepfold.$section.profile_id=$profile_id"
+}
+
+migrate_legacy_profile_sites() {
+	[ "$($UCI_HELPER -q get sheepfold.global.country_profile_migrated 2>/dev/null || printf 0)" = 1 ] && return 0
+	# Только точное совпадение старой заводской карточки признаётся профильным.
+	# Любая изменённая пользователем запись навсегда остаётся ручной.
+	mark_legacy_profile_site emergency_gosuslugi_ru gosuslugi.ru 'Госуслуги' 'Государственные услуги' gosuslugi
+	mark_legacy_profile_site emergency_esia_gosuslugi_ru esia.gosuslugi.ru 'ЕСИА' 'Вход в государственную учётную запись' esia
+	mark_legacy_profile_site emergency_mos_ru mos.ru 'Услуги Москвы' 'Городские сервисы' mos
+	mark_legacy_profile_site emergency_school_mos_ru school.mos.ru 'Московская школа' 'Доступ к школе' school_mos
+	mark_legacy_profile_site emergency_dnevnik_ru dnevnik.ru 'Дневник.ру' 'Школьный дневник' dnevnik
+	mark_legacy_profile_site emergency_ya_ru ya.ru 'Поиск Яндекса' 'Узкая точка входа в поиск' ya_search
+	mark_legacy_profile_site emergency_2gis_ru 2gis.ru '2ГИС' 'Карты и организации' 2gis
+	$UCI_HELPER -q set sheepfold.global.country_profile_migrated='1'
+}
+
+emergency_sections() {
+	$UCI_HELPER -q show sheepfold 2>/dev/null |
+		sed -n 's/^sheepfold\.\([^.=]*\)=emergency_site$/\1/p'
+}
+
+profile_site_excluded() {
+	wanted_country="$1"
+	wanted_id="$2"
+	for section in $(emergency_sections); do
+		[ "$($UCI_HELPER -q get "sheepfold.$section.source" 2>/dev/null || true)" = country_profile ] || continue
+		[ "$($UCI_HELPER -q get "sheepfold.$section.enabled" 2>/dev/null || printf 1)" = 0 ] || continue
+		[ "$($UCI_HELPER -q get "sheepfold.$section.profile_country" 2>/dev/null || true)" = "$wanted_country" ] || continue
+		[ "$($UCI_HELPER -q get "sheepfold.$section.profile_id" 2>/dev/null || true)" = "$wanted_id" ] || continue
+		return 0
+	done
+	return 1
+}
+
+active_domain_exists() {
+	wanted_domain="$1"
+	for section in $(emergency_sections); do
+		[ "$($UCI_HELPER -q get "sheepfold.$section.enabled" 2>/dev/null || printf 1)" != 0 ] || continue
+		[ "$($UCI_HELPER -q get "sheepfold.$section.domain" 2>/dev/null || true)" = "$wanted_domain" ] || continue
+		return 0
+	done
+	return 1
+}
+
+next_profile_section() {
+	base="emergency_profile_${1}_${2}"
+	section="$base"
+	suffix=2
+	while $UCI_HELPER -q get "sheepfold.$section" >/dev/null 2>&1; do
+		section="${base}_$suffix"
+		suffix=$((suffix + 1))
+	done
+	printf '%s\n' "$section"
+}
+
+remove_active_profile_sites() {
+	for section in $(emergency_sections); do
+		[ "$($UCI_HELPER -q get "sheepfold.$section.source" 2>/dev/null || true)" = country_profile ] || continue
+		# Выключенные секции являются пользовательскими исключениями и переживают
+		# смену страны; активные профильные карточки можно безопасно пересоздать.
+		[ "$($UCI_HELPER -q get "sheepfold.$section.enabled" 2>/dev/null || printf 1)" != 0 ] || continue
+		$UCI_HELPER -q delete "sheepfold.$section"
+	done
+}
+
+largest_manual_order() {
+	max_order=0
+	for section in $(emergency_sections); do
+		[ "$($UCI_HELPER -q get "sheepfold.$section.enabled" 2>/dev/null || printf 1)" != 0 ] || continue
+		order="$($UCI_HELPER -q get "sheepfold.$section.order" 2>/dev/null || printf 0)"
+		case "$order" in ''|*[!0-9]*) order=0 ;; esac
+		[ "$order" -le "$max_order" ] || max_order="$order"
+	done
+	printf '%s\n' "$max_order"
+}
+
+apply_profile() {
+	country="$1"
+	language="$($UCI_HELPER -q get sheepfold.global.language 2>/dev/null || printf ru)"
+	case "$language" in ru|en|zh_Hans) ;; *) language=ru ;; esac
+
+	mkdir -p "$TMP_ROOT"
+	records_file="$TMP_ROOT/country-profile.$$.tsv"
+	: > "$records_file"
+	chmod 600 "$records_file" 2>/dev/null || true
+	parse_profile "$country" "$language" || {
+		echo "Country profile did not pass validation: $country" >&2
+		return 1
+	}
+
+	$UCI_HELPER -q get sheepfold.global >/dev/null 2>&1 || $UCI_HELPER -q set sheepfold.global='sheepfold'
+	migrate_legacy_profile_sites
+	remove_active_profile_sites
+	order="$(largest_manual_order)"
+	applied=0
+	skipped=0
+	while IFS="$(printf '\t')" read -r profile_id domain name description; do
+		[ -n "$profile_id" ] || continue
+		if profile_site_excluded "$country" "$profile_id" || active_domain_exists "$domain"; then
+			skipped=$((skipped + 1))
+			continue
+		fi
+		section="$(next_profile_section "$country" "$profile_id")"
+		order=$((order + 1))
+		$UCI_HELPER -q set "sheepfold.$section=emergency_site"
+		$UCI_HELPER -q set "sheepfold.$section.domain=$domain"
+		$UCI_HELPER -q set "sheepfold.$section.name=$name"
+		$UCI_HELPER -q set "sheepfold.$section.description=$description"
+		$UCI_HELPER -q set "sheepfold.$section.enabled=1"
+		$UCI_HELPER -q set "sheepfold.$section.order=$order"
+		$UCI_HELPER -q set "sheepfold.$section.source=country_profile"
+		$UCI_HELPER -q set "sheepfold.$section.profile_country=$country"
+		$UCI_HELPER -q set "sheepfold.$section.profile_id=$profile_id"
+		applied=$((applied + 1))
+	done < "$records_file"
+
+	$UCI_HELPER -q set "sheepfold.global.country_profile=$country"
+	$UCI_HELPER -q set sheepfold.global.country_profile_schema='1'
+	$UCI_HELPER -q set sheepfold.global.emergency_sites_initialized='1'
+	$UCI_HELPER -q commit sheepfold
+	if [ -x "$EMERGENCY_HELPER" ]; then
+		"$EMERGENCY_HELPER" apply
+	fi
+	printf 'country=%s\napplied=%s\nskipped=%s\n' "$country" "$applied" "$skipped"
+}
+
+status_profile() {
+	country="$($UCI_HELPER -q get sheepfold.global.country_profile 2>/dev/null || printf ru)"
+	managed=0
+	excluded=0
+	manual=0
+	for section in $(emergency_sections); do
+		source="$($UCI_HELPER -q get "sheepfold.$section.source" 2>/dev/null || true)"
+		enabled="$($UCI_HELPER -q get "sheepfold.$section.enabled" 2>/dev/null || printf 1)"
+		if [ "$source" = country_profile ]; then
+			if [ "$enabled" = 0 ]; then excluded=$((excluded + 1)); else managed=$((managed + 1)); fi
+		elif [ "$enabled" != 0 ]; then
+			manual=$((manual + 1))
+		fi
+	done
+	printf 'country=%s\nmanaged=%s\nmanual=%s\nexcluded=%s\n' "$country" "$managed" "$manual" "$excluded"
+}
+
+command="${1:-status}"
+country="${2:-$($UCI_HELPER -q get sheepfold.global.country_profile 2>/dev/null || printf ru)}"
+
+case "$command" in
+	apply)
+		valid_country "$country" || { echo "Unsupported country profile: $country" >&2; exit 2; }
+		mkdir -p "$(dirname "$LOCK_FILE")"
+		exec 9> "$LOCK_FILE"
+		flock -x 9
+		apply_profile "$country"
+		;;
+	migrate)
+		exec 9> "$LOCK_FILE"
+		flock -x 9
+		$UCI_HELPER -q get sheepfold.global >/dev/null 2>&1 || $UCI_HELPER -q set sheepfold.global='sheepfold'
+		migrate_legacy_profile_sites
+		$UCI_HELPER -q commit sheepfold
+		;;
+	status)
+		status_profile
+		;;
+	*)
+		echo "Usage: sheepfold-country-profile <apply [ru|by|cn]|migrate|status>" >&2
+		exit 2
+		;;
+esac

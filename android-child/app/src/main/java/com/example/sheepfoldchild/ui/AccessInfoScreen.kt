@@ -75,6 +75,7 @@ fun AccessInfoScreen(status: ClientStatusData?) {
                     "scheduled"  -> stringResource(R.string.access_mode_scheduled)
                     "temporary"  -> stringResource(R.string.access_mode_temporary)
                     "restricted" -> stringResource(R.string.access_mode_restricted)
+                    "default"    -> stringResource(R.string.access_mode_default)
                     else         -> stringResource(R.string.access_mode_unknown)
                 }
                 InfoCard(
@@ -84,12 +85,13 @@ fun AccessInfoScreen(status: ClientStatusData?) {
             }
         }
 
-        // Таймер
-        if (status.minutesRemaining != null) {
+        // Показываем только время по часам роутера: ребёнку не нужен технический
+        // тип границы расписания или лишнее обещание, включится ли интернет.
+        if (status.nextAccessChangeTime != null) {
             item {
                 InfoCard(
-                    label = stringResource(R.string.access_time_label),
-                    value = stringResource(R.string.time_remaining, status.minutesRemaining)
+                    label = stringResource(R.string.access_next_change_label),
+                    value = status.nextAccessChangeTime
                 )
             }
         }

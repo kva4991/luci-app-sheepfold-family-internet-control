@@ -777,6 +777,32 @@
         stroke-linejoin: round;
 }
 
+.sf-device-identity-icon {
+	display: inline-flex;
+	width: 19px;
+	height: 19px;
+	vertical-align: middle;
+	flex: 0 0 auto;
+}
+
+.sf-device-identity-icon.is-trusted {
+	color: #16834f;
+}
+
+.sf-device-identity-icon.is-mac-only {
+	color: #c62828;
+}
+
+.sf-device-identity-icon svg {
+	width: 19px;
+	height: 19px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.7;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
 .sf-device-type-cell {
         display: inline-flex;
         align-items: center;
@@ -1071,13 +1097,15 @@
         color: var(--sf-green);
 }
 
-.sf-badge-blocked {
+.sf-badge-blocked,
+.sf-badge-identity_blocked {
         background: #fff0ee;
         color: var(--sf-red);
 }
 
 .sf-badge-scheduled,
-.sf-badge-restricted {
+.sf-badge-restricted,
+.sf-badge-identity_restricted {
         background: #fff6db;
         color: var(--sf-yellow);
 }
@@ -1711,6 +1739,70 @@
         color: #000;
 }
 
+.sf-wifi-power {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 30px;
+        cursor: pointer;
+        user-select: none;
+}
+
+.sf-wifi-power input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+}
+
+.sf-wifi-power-track {
+        display: inline-flex;
+        align-items: center;
+        width: 46px;
+        height: 26px;
+        padding: 3px;
+        border: 1px solid #64748b;
+        border-radius: 999px;
+        background: #94a3b8;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sf-wifi-power-knob {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
+        transform: translateX(0);
+        transition: transform 0.15s ease;
+}
+
+.sf-wifi-power input:checked + .sf-wifi-power-track {
+        border-color: #16834f;
+        background: #20a464;
+}
+
+.sf-wifi-power input:checked + .sf-wifi-power-track .sf-wifi-power-knob {
+        transform: translateX(20px);
+}
+
+.sf-wifi-power input:focus-visible + .sf-wifi-power-track {
+        outline: 3px solid rgba(37, 99, 235, 0.35);
+        outline-offset: 2px;
+}
+
+.sf-wifi-power-state {
+        min-width: 30px;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 800;
+}
+
+.sf-wifi-network.is-disabled .sf-wifi-fields,
+.sf-wifi-network.is-disabled .sf-wifi-qr {
+        opacity: 0.62;
+}
+
 .sf-wifi-band {
         display: inline-flex;
         align-items: center;
@@ -1938,7 +2030,14 @@
         display: flex;
         align-items: flex-start;
         gap: 10px;
-        margin-bottom: 14px;
+        margin-bottom: 0;
+}
+
+.sf-settings-tabs-separator {
+        width: 100%;
+        height: 4px;
+        margin-top: 12px;
+        background: #94a3b8;
 }
 
 .sf-settings-save-bar {
@@ -1950,9 +2049,9 @@
 }
 
 .sf-settings-save-bar-top {
-        margin-top: 0;
-        margin-bottom: 0;
-        flex: 0 0 auto;
+        width: 100%;
+        margin-top: 10px;
+        margin-bottom: 14px;
 }
 
 .sf-settings-dirty-note {

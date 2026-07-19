@@ -38,6 +38,8 @@ describe('Default Sheepfold groups', () => {
     assert.match(helper, /'First child'/);
     assert.match(helper, /'第一个孩子'/);
     assert.match(helper, /migrate_device_group_aliases/);
+    assert.match(helper, /repair_auto_group_list_corruption/);
+    assert.match(helper, /group auto_group_assigned auto_group_reason detection_auto_group_status/);
     assert.match(helper, /'No restrictions'\|'Без ограничений'/);
     assert.match(helper, /'Не настроено'\)[\s\S]*Not configured/);
   });

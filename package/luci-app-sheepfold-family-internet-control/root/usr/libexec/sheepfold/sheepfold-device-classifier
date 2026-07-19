@@ -7,9 +7,13 @@ STATIC_NAME="${3:-}"
 SIGNAL_FILE="${4:-}"
 MAC="${5:-}"
 MDNS_SERVICES="${6:-}"
+MDNS_PROFILE="${7:-}"
+SSDP_PROFILE="${8:-}"
+WSD_PROFILE="${9:-}"
+WIFI_PROFILE="${10:-}"
 NO_RESTRICTIONS_GROUP="$(uci -q get sheepfold.no_restrictions.name 2>/dev/null || printf 'Без ограничений')"
 PERSONAL_DEVICES_GROUP="$(uci -q get sheepfold.personal_devices.name 2>/dev/null || printf 'Персональные устройства')"
-POLICY_VERSION="3"
+POLICY_VERSION="9"
 NETWORK_NAME_PATTERN='(^|[^a-z0-9])(openwrt|router|gateway|repeater|extender|access[ _-]?point|wireless[ _-]?ap|wi-?fi[ _-]?ap|mesh)([^a-z0-9]|$)|(^|[^a-z0-9])ap[-_][a-z0-9]'
 SMART_HOME_GATEWAY_PATTERN='thread border router|matter bridge|homekit bridge|zigbee gateway|zigbee bridge|z-wave gateway|zwave gateway|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|tradfri gateway|ikea dirigera|dirigera|hue bridge|sonoff zigbee bridge'
 
@@ -22,6 +26,8 @@ EVIDENCE_COUNT=0
 HARD_DENY=0
 NETWORK_DENY=0
 OUI_VENDOR=""
+COMPETING_EVIDENCE=""
+COMPETING_SCORE=0
 
 text_has() {
         printf '%s' "$1" | grep -Eiq "$2"
@@ -45,6 +51,16 @@ signal_value() {
                 "$SIGNAL_FILE" 2>/dev/null || true
 }
 
+wifi_profile_value() {
+        local key part
+        key="$1"
+        for part in $(printf '%s' "$WIFI_PROFILE" | tr ',' ' '); do
+                case "$part" in
+                        "$key"=*) printf '%s\n' "${part#*=}"; return 0 ;;
+                esac
+        done
+}
+
 port_open() {
         printf '%s' "$PORTS" | grep -Eq "(^|,)${1}(,|$)"
 }
@@ -58,6 +74,7 @@ network_port_profile() {
 }
 
 add_evidence() {
+        local family points
         family="$1"
         points="$2"
 
@@ -71,9 +88,27 @@ add_evidence() {
         [ "$AUTO_SCORE" -le 100 ] || AUTO_SCORE=100
 }
 
+add_competing_evidence() {
+	local family candidate_type points marker
+	family="$1"
+	candidate_type="$2"
+	points="$3"
+	marker="$family:$candidate_type"
+
+	case ",$COMPETING_EVIDENCE," in
+		*,$marker,*) return 0 ;;
+	esac
+
+	COMPETING_EVIDENCE="${COMPETING_EVIDENCE:+$COMPETING_EVIDENCE,}$marker"
+	[ "$points" -le "$COMPETING_SCORE" ] || COMPETING_SCORE="$points"
+}
+
 eligible_type() {
         case "$1" in
-                server|engineering|camera|smart_home|vacuum|speaker|printer) return 0 ;;
+                # Умная колонка остаётся распознанным типом, но это персональный
+                # голосовой интерфейс, а не домашняя инфраструктура. Автоматически
+                # обходить семейные ограничения ей нельзя. §devpas1
+                server|engineering|camera|smart_home|vacuum|printer) return 0 ;;
                 *) return 1 ;;
         esac
 }
@@ -93,6 +128,7 @@ personal_device_type() {
 }
 
 classify_text() {
+        local text lower detected_type detected_confidence detected_reason
         text="$1"
         lower="$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')"
         detected_type="smart"
@@ -175,6 +211,7 @@ classify_text() {
 }
 
 mac_is_locally_administered() {
+        local normalized first_octet
         normalized="$(printf '%s' "$MAC" | tr '[:lower:]' '[:upper:]')"
         printf '%s' "$normalized" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' || return 0
         first_octet="${normalized%%:*}"
@@ -182,6 +219,7 @@ mac_is_locally_administered() {
 }
 
 lookup_oui_vendor() {
+        local prefix database
         mac_is_locally_administered && return 0
         prefix="$(printf '%s' "$MAC" | tr -d ':' | tr '[:lower:]' '[:upper:]' | cut -c1-6)"
         [ "${#prefix}" -eq 6 ] || return 0
@@ -194,6 +232,7 @@ lookup_oui_vendor() {
 }
 
 oui_type() {
+        local vendor
         vendor="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
 
         if text_has "$vendor" 'synology|qnap|ixsystems|truenas'; then
@@ -214,6 +253,7 @@ oui_type() {
 }
 
 apply_text_result() {
+        local result family points candidate_type candidate_confidence candidate_reason
         result="$1"
         family="$2"
         points="$3"
@@ -236,6 +276,9 @@ apply_text_result() {
         if { [ "$family" = "dhcp" ] || [ "$family" = "owner_configured" ]; } && interactive_type "$candidate_type"; then
                 HARD_DENY=1
                 add_evidence "$family" 0
+		if [ "$TYPE" != smart ] && [ "$TYPE" != "$candidate_type" ]; then
+			add_competing_evidence "$family" "$candidate_type" "$points"
+		fi
                 if [ "$family" = "owner_configured" ] || [ "$TYPE" = "smart" ]; then
                         TYPE="$candidate_type"
                         TYPE_CONFIDENCE="$candidate_confidence"
@@ -257,7 +300,12 @@ apply_text_result() {
                 [ "$candidate_confidence" -le "$TYPE_CONFIDENCE" ] || TYPE_CONFIDENCE="$candidate_confidence"
                 TYPE_CONFIDENCE=$((TYPE_CONFIDENCE + 4))
                 [ "$TYPE_CONFIDENCE" -le 99 ] || TYPE_CONFIDENCE=99
+		return 0
         fi
+
+	# Fingerbank-подобный принцип: независимый сильный признак другого типа нельзя
+	# молча отбросить. Он уменьшит итоговую уверенность и автодоверие победителя.
+	add_competing_evidence "$family" "$candidate_type" "$points"
 }
 
 name_result="$(classify_text "$NAME")"
@@ -277,6 +325,72 @@ dhcp_text="$vendor_class $user_class $mud_url $supplied_hostname"
 if [ -n "$(printf '%s' "$dhcp_text" | tr -d ' ')" ]; then
         dhcp_result="$(classify_text "$dhcp_text")"
         apply_text_result "$dhcp_result" dhcp 35
+fi
+
+if [ -n "$MDNS_PROFILE" ]; then
+        mdns_profile_result="$(classify_text "$MDNS_PROFILE")"
+        apply_text_result "$mdns_profile_result" mdns 35
+fi
+
+if [ -n "$SSDP_PROFILE" ]; then
+        if text_has "$SSDP_PROFILE" 'internetgatewaydevice|wandevice|wanconnectiondevice|urn:schemas-upnp-org:device:router'; then
+                TYPE="network"
+                TYPE_CONFIDENCE=96
+                REASON="UPnP network infrastructure service"
+                HARD_DENY=1
+                NETWORK_DENY=1
+                add_evidence upnp 0
+        elif text_has "$SSDP_PROFILE" 'printerdevice|printbasic|scannerdevice'; then
+                TYPE="printer"
+                [ "$TYPE_CONFIDENCE" -ge 90 ] || TYPE_CONFIDENCE=90
+                REASON="printer UPnP service"
+                add_evidence upnp 40
+        elif text_has "$SSDP_PROFILE" 'digitalsecuritycamera|networkcamera|surveillance|nvr|dvr'; then
+                TYPE="camera"
+                [ "$TYPE_CONFIDENCE" -ge 88 ] || TYPE_CONFIDENCE=88
+                REASON="camera or surveillance UPnP service"
+                add_evidence upnp 40
+        elif text_has "$SSDP_PROFILE" 'mediarenderer'; then
+                if [ "$TYPE" = "speaker" ]; then
+                        add_evidence upnp 35
+                        TYPE_CONFIDENCE=$((TYPE_CONFIDENCE + 4))
+                        [ "$TYPE_CONFIDENCE" -le 99 ] || TYPE_CONFIDENCE=99
+                else
+                        TYPE="media_player"
+                        TYPE_CONFIDENCE=82
+                        REASON="media renderer UPnP service"
+                        HARD_DENY=1
+                        add_evidence upnp 0
+                fi
+        elif text_has "$SSDP_PROFILE" 'mediaserver'; then
+                TYPE="server"
+                [ "$TYPE_CONFIDENCE" -ge 78 ] || TYPE_CONFIDENCE=78
+                REASON="media server UPnP service"
+                # DLNA MediaServer часто запущен на обычном ПК, поэтому один UPnP
+                # ответ не должен выдавать привилегированную группу. §devident1
+                HARD_DENY=1
+                add_evidence upnp 0
+        else
+                ssdp_result="$(classify_text "$SSDP_PROFILE")"
+                apply_text_result "$ssdp_result" upnp 35
+        fi
+fi
+
+if [ -n "$WSD_PROFILE" ]; then
+	if text_has "$WSD_PROFILE" 'networkvideotransmitter|network video transmitter|onvif.*video'; then
+		TYPE="camera"
+		[ "$TYPE_CONFIDENCE" -ge 90 ] || TYPE_CONFIDENCE=90
+		REASON="network camera WS-Discovery type"
+		add_evidence wsd 45
+	elif text_has "$WSD_PROFILE" 'printdevicetype|print device|scandevicetype'; then
+		TYPE="printer"
+		[ "$TYPE_CONFIDENCE" -ge 90 ] || TYPE_CONFIDENCE=90
+		REASON="printer WS-Discovery type"
+		add_evidence wsd 45
+	else
+		wsd_result="$(classify_text "$WSD_PROFILE")"
+		apply_text_result "$wsd_result" wsd 35
+	fi
 fi
 
 OUI_VENDOR="$(lookup_oui_vendor || true)"
@@ -300,6 +414,8 @@ if [ -n "$OUI_VENDOR" ]; then
                 TYPE_CONFIDENCE=65
                 REASON="device manufacturer marker"
                 add_evidence oui 30
+	elif [ "$candidate_oui_type" != "unknown" ] && [ "$candidate_oui_type" != "$TYPE" ]; then
+		add_competing_evidence oui "$candidate_oui_type" 30
         fi
 fi
 
@@ -362,6 +478,32 @@ elif port_open 9100 || port_open 631; then
         add_evidence ports 45
 fi
 
+wifi_generation="$(wifi_profile_value generation)"
+wifi_speed_class="$(wifi_profile_value speed)"
+if personal_device_type "$TYPE"; then
+        case "$wifi_generation:$wifi_speed_class" in
+                he:*|vht:very_fast|vht:fast)
+                        # Современный Wi-Fi слегка подтверждает уже найденный личный тип.
+                        # Он не становится самостоятельным evidence и потому никогда не
+                        # выдаёт привилегированную группу «Без ограничений». §devpas1
+                        TYPE_CONFIDENCE=$((TYPE_CONFIDENCE + 3))
+                        [ "$TYPE_CONFIDENCE" -le 99 ] || TYPE_CONFIDENCE=99
+                        ;;
+        esac
+elif [ "$TYPE" = smart_home ] || [ "$TYPE" = engineering ] || [ "$TYPE" = vacuum ]; then
+        case "$wifi_generation:$wifi_speed_class" in
+                he:very_fast)
+                        # Это лишь противоречие гипотезе «простой IoT»: современные
+                        # модули встречаются и в бытовой технике, поэтому тип не меняется.
+                        add_competing_evidence wifi_capabilities personal 10
+                        ;;
+                legacy:slow|ht:slow)
+                        TYPE_CONFIDENCE=$((TYPE_CONFIDENCE + 2))
+                        [ "$TYPE_CONFIDENCE" -le 99 ] || TYPE_CONFIDENCE=99
+                        ;;
+        esac
+fi
+
 if name_is_network_infrastructure "$NAME"; then
         NETWORK_DENY=1
 fi
@@ -377,6 +519,18 @@ if interactive_type "$TYPE"; then
         HARD_DENY=1
 fi
 
+if [ "$COMPETING_SCORE" -gt 0 ]; then
+	# Fingerbank снижает score максимум примерно на 27% из-за лучшего конкурента.
+	# Здесь используется та же ограниченная идея без внешней базы и сетевого API.
+	conflict_penalty=$((COMPETING_SCORE * 27 / 50))
+	[ "$conflict_penalty" -le 27 ] || conflict_penalty=27
+	TYPE_CONFIDENCE=$((TYPE_CONFIDENCE - conflict_penalty))
+	[ "$TYPE_CONFIDENCE" -ge 30 ] || TYPE_CONFIDENCE=30
+	AUTO_SCORE=$((AUTO_SCORE - conflict_penalty))
+	[ "$AUTO_SCORE" -ge 0 ] || AUTO_SCORE=0
+	REASON="$REASON; competing evidence: $COMPETING_EVIDENCE"
+fi
+
 TARGET_GROUP=""
 if eligible_type "$TYPE"; then
 	TARGET_GROUP="$NO_RESTRICTIONS_GROUP"
@@ -390,7 +544,7 @@ else
 	AUTO_SCORE=0
 fi
 
-printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$TYPE" "$TYPE_CONFIDENCE" "$TARGET_GROUP" "$REASON" \
         "$AUTO_SCORE" "$EVIDENCE" "$EVIDENCE_COUNT" "$HARD_DENY" \
-        "$POLICY_VERSION" "$OUI_VENDOR"
+	"$POLICY_VERSION" "$OUI_VENDOR" "$COMPETING_EVIDENCE"

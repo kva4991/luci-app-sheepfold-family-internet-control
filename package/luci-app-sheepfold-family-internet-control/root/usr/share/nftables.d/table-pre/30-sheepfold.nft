@@ -2,6 +2,10 @@ set sheepfold_block_macs {
 	type ether_addr
 }
 
+set sheepfold_management_block_macs {
+	type ether_addr
+}
+
 set sheepfold_restricted_macs {
 	type ether_addr
 }
@@ -98,7 +102,7 @@ chain sheepfold_forward_guard {
 }
 
 chain sheepfold_input_guard {
-	ether saddr @sheepfold_block_macs udp dport { 53, 67, 547 } counter return comment "Sheepfold essential DNS and DHCP"
-	ether saddr @sheepfold_block_macs tcp dport 53 counter return comment "Sheepfold essential DNS TCP"
-	ether saddr @sheepfold_block_macs counter drop comment "Sheepfold router access block"
+	ether saddr @sheepfold_management_block_macs udp dport { 53, 67, 547 } counter return comment "Sheepfold essential DNS and DHCP"
+	ether saddr @sheepfold_management_block_macs tcp dport 53 counter return comment "Sheepfold essential DNS TCP"
+	ether saddr @sheepfold_management_block_macs counter drop comment "Sheepfold router access block"
 }

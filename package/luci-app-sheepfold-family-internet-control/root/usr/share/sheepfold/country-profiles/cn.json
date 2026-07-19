@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "country": "cn",
+  "displayName": {
+    "ru": "Китай",
+    "en": "China",
+    "zh_Hans": "中国"
+  },
+  "emergencySites": [
+    {
+      "id": "emergency_management",
+      "domain": "mem.gov.cn",
+      "name": { "ru": "Министерство по чрезвычайным ситуациям Китая", "en": "China Ministry of Emergency Management", "zh_Hans": "中华人民共和国应急管理部" },
+      "description": { "ru": "Официальная информация о чрезвычайных ситуациях и безопасности.", "en": "Official emergency and safety information.", "zh_Hans": "官方紧急情况与安全信息。" }
+    },
+    {
+      "id": "health",
+      "domain": "nhc.gov.cn",
+      "name": { "ru": "Государственная комиссия здравоохранения Китая", "en": "National Health Commission of China", "zh_Hans": "中华人民共和国国家卫生健康委员会" },
+      "description": { "ru": "Официальная информация здравоохранения.", "en": "Official public health information.", "zh_Hans": "官方公共卫生信息。" }
+    },
+    {
+      "id": "government_services",
+      "domain": "gjzwfw.www.gov.cn",
+      "name": { "ru": "Государственные услуги Китая", "en": "China national government services", "zh_Hans": "国家政务服务平台" },
+      "description": { "ru": "Национальная платформа государственных услуг.", "en": "National government services platform.", "zh_Hans": "国家政务服务平台。" }
+    },
+    {
+      "id": "education",
+      "domain": "smartedu.cn",
+      "name": { "ru": "Национальная платформа образования Китая", "en": "Smart Education of China", "zh_Hans": "国家智慧教育公共服务平台" },
+      "description": { "ru": "Национальные образовательные материалы и сервисы.", "en": "National educational resources and services.", "zh_Hans": "国家教育资源与服务。" }
+    },
+    {
+      "id": "railway",
+      "domain": "12306.cn",
+      "name": { "ru": "Железные дороги Китая 12306", "en": "China Railway 12306", "zh_Hans": "中国铁路12306" },
+      "description": { "ru": "Расписание поездов и информация о железнодорожных поездках.", "en": "Train schedules and railway travel information.", "zh_Hans": "列车时刻与铁路出行信息。" }
+    }
+  ]
+}

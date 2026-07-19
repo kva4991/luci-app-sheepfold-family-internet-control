@@ -26,7 +26,7 @@ const publicClientStatus = readFileSync('package/luci-app-sheepfold-family-inter
 const legacyOrder = 'emergency_sites no_restrictions blocklist allowlist global_block temp_access device_schedule group_schedule default_access';
 const defaultOrder = 'blocklist admin_devices no_restrictions allowlist global_block temp_access device_schedule group_schedule default_access';
 
-function runEvaluator(values, weekday = 'mon', minutes = '600') {
+function runEvaluator(values, weekday = 'mon', minutes = '600', fallbackStatus = 'none') {
   mkdirSync(resolve('.build'), { recursive: true });
   const temp = mkdtempSync(join(resolve('.build'), 'sheepfold-schedule-'));
   const binDir = join(temp, 'bin');
@@ -46,7 +46,11 @@ esac
 `);
   chmodSync(fakeUci, 0o755);
 
-  const result = spawnSync('bash', [resolve('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-schedule-evaluator'), 'device_1'], {
+  const result = spawnSync('bash', [
+    resolve('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-schedule-evaluator'),
+    'device_1',
+    fallbackStatus,
+  ], {
     encoding: 'utf8',
     env: {
       ...process.env,
@@ -160,7 +164,9 @@ describe('Schedule editor and access priority UI', () => {
   it('applies access-affecting LuCI changes immediately after save', () => {
     assert.match(overview, /hasOwn\(options, 'new_device_policy'\)[\s\S]*routerControl\(\['schedule-sync'\]\)/);
     assert.match(overview, /saveUciChanges\(configs\.filter[\s\S]*Could not apply internet access rules/);
-    assert.match(overview, /saveSheepfoldAccessChanges\(\)\.then\(function \(\) \{[\s\S]*Group saved/);
+    assert.match(overview, /saveUciChanges\(\['sheepfold'\]\)\.then\(function \(\) \{[\s\S]*applySheepfoldAccessRuntime\(\)\.then/);
+    assert.match(overview, /applySheepfoldAccessRuntime\(\)\.then\(function \(\) \{[\s\S]*Group saved/);
+    assert.match(overview, /The group was saved, but internet access rules could not be applied/);
   });
 
   it('resolves real evaluator fixtures for off, on, specificity, and overnight windows', () => {
@@ -193,6 +199,24 @@ describe('Schedule editor and access priority UI', () => {
     const overnightResult = runEvaluator(overnight, 'tue', '60');
     assert.equal(overnightResult.status, 'block');
     assert.equal(overnightResult.scope, 'group');
+  });
+
+  it('returns the next boundary that really changes effective access', () => {
+    const values = scheduleFixture('off');
+
+    assert.equal(runEvaluator(values, 'mon', '480', 'block').next_change_time, '09:00');
+    assert.equal(runEvaluator(values, 'mon', '480', 'allow').next_change_time, '09:30');
+    assert.equal(runEvaluator(values, 'mon', '600', 'allow').next_change_time, '10:30');
+
+    delete values['sheepfold.allow_rule'];
+    for (const key of Object.keys(values)) {
+      if (key.startsWith('sheepfold.allow_rule.')) delete values[key];
+    }
+    values['sheepfold.block_rule.target_type'] = 'group';
+    values['sheepfold.block_rule.targets'] = 'child_1';
+    values['sheepfold.block_rule.weekdays'] = 'mon';
+    values['sheepfold.block_rule.time_ranges'] = '22:00-07:00';
+    assert.equal(runEvaluator(values, 'tue', '60', 'allow').next_change_time, '07:00');
   });
 
   it('documents the visually-correct but runtime-broken failure class', () => {

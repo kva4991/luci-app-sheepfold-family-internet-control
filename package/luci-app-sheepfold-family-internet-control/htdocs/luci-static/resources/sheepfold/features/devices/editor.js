@@ -8,6 +8,16 @@
  */
 function open(deps, device) {
 	var knownGroupValues = deps.groups.map(function (item) { return item[0]; });
+	var linkedInterfaces = (device.logicalDeviceMembers || []).filter(function (member) {
+		return member.mac !== device.mac;
+	}).map(function (member) {
+		return '#' + member.id + ' ' + member.name + ' (' + member.mac + ')';
+	}).join(', ');
+	var ssdpServices = (device.detectionSsdpProfile || '').split(';').filter(Boolean).map(function (record) {
+		var fields = record.split('|');
+		return fields[0] + (fields[2] ? ' (' + fields[2] + ')' : '');
+	}).join(', ');
+	var deviceInfoLines;
 	var initialGroup = device.adminDevice ? deps.notConfiguredGroup : device.group;
 	var groupIsCustom = initialGroup && knownGroupValues.indexOf(initialGroup) === -1;
 	var nameField = deps.inputControl(_('Device name'), device.name);
@@ -78,15 +88,32 @@ function open(deps, device) {
 		statusField.input.disabled = true;
 	}
 	updateCustomGroupVisibility();
+	deviceInfoLines = [
+		deps.settingLine(_('ID'), deps.displayId(device)),
+		deps.settingLine(_('MAC address'), device.mac),
+		deps.settingLine(_('Hostname'), device.hostname || '-'),
+		deps.settingLine(_('Detection source'), device.sourceLabel || '-')
+	];
+	if (device.identityQuarantineMode)
+		deviceInfoLines.push(deps.settingLine(
+			_('Identity quarantine'),
+			device.identityQuarantineMode === 'block' ? _('Blocked') : _('Restricted')
+		));
+	if (device.detectionOuiVendor)
+		deviceInfoLines.push(deps.settingLine(_('Manufacturer'), device.detectionOuiVendor));
+	if (device.detectionMdnsServices)
+		deviceInfoLines.push(deps.settingLine(_('mDNS services'), device.detectionMdnsServices));
+	if (ssdpServices)
+		deviceInfoLines.push(deps.settingLine(_('UPnP / SSDP services'), ssdpServices));
+	if (linkedInterfaces)
+		deviceInfoLines.push(deps.settingLine(
+			_('Other interfaces of this device'),
+			linkedInterfaces
+		));
 
 	ui.showModal(_('Device settings'), [
 		E('div', { 'class': 'sf-device-editor' }, [
-			E('div', { 'class': 'sf-device-info-lines' }, [
-				deps.settingLine(_('ID'), deps.displayId(device)),
-				deps.settingLine(_('MAC address'), device.mac),
-				deps.settingLine(_('Hostname'), device.hostname || '-'),
-				deps.settingLine(_('Detection source'), device.sourceLabel || '-')
-			]),
+			E('div', { 'class': 'sf-device-info-lines' }, deviceInfoLines),
 			errorNode,
 			E('div', { 'class': 'sf-grid two' }, [
 				nameField.node,

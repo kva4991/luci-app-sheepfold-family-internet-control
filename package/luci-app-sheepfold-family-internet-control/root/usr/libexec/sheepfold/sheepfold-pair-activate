@@ -3,6 +3,19 @@ set -eu
 
 . /usr/libexec/sheepfold/sheepfold-pair-common
 
+PAIR_ATTEMPT_DIR="/tmp/sheepfold/pair-attempts"
+RATE_LIMIT_HELPER="/usr/libexec/sheepfold/sheepfold-api-rate-limit"
+
+reset_old_pairing_attempts() {
+    if [ -d "$PAIR_ATTEMPT_DIR" ]; then
+        for attempt_file in "$PAIR_ATTEMPT_DIR"/*; do
+            [ -f "$attempt_file" ] || continue
+            rm -f "$attempt_file"
+        done
+    fi
+    [ ! -x "$RATE_LIMIT_HELPER" ] || "$RATE_LIMIT_HELPER" reset-bucket pair >/dev/null 2>&1 || true
+}
+
 login="${1:-}"
 code="${2:-}"
 lifetime="${4:-600}"
@@ -22,6 +35,10 @@ expires_at=$(( $(date +%s) + lifetime ))
 uci -q set "sheepfold.$admin_section.pairing_code=$code"
 uci -q set "sheepfold.$admin_section.pairing_code_expires=$expires_at"
 uci -q commit sheepfold
+
+# Новый QR выпущен из авторизованного LuCI-сеанса, поэтому старый счётчик не
+# должен превращать первую попытку с новым кодом в «слишком много попыток».
+reset_old_pairing_attempts
 
 pair_print_kv activated 1
 pair_print_kv admin_section "$admin_section"

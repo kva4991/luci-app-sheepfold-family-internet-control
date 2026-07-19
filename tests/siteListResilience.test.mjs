@@ -5,6 +5,7 @@
  */
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -14,6 +15,7 @@ import {
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,6 +37,8 @@ const shellPath = process.platform === 'win32'
 const posix = (path) => path
   .replaceAll('\\', '/')
   .replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`);
+const sourceKey = (kind, url) =>
+  `${kind}-${createHash('sha256').update(`${kind}|${url}`).digest('hex').slice(0, 16)}`;
 
 function executable(path, body) {
   writeFileSync(path, body.replace(/^\n/, ''), 'utf8');
@@ -169,14 +173,25 @@ printf '%s\n' "$*" >> "$NOTIFY_LOG"
       SHEEPFOLD_SITE_LIST_DOWNLOAD_RETRY_DELAY: '0',
       NOTIFY_LOG: posix(relative(repoRoot, notifyLog)),
     };
+    const allowKey = sourceKey('allowlist', 'https://lists.test/allow');
+    const blockAKey = sourceKey('blocklist', 'https://lists.test/block-a');
+    const blockBKey = sourceKey('blocklist', 'https://lists.test/block-b');
+    const legacyBlockBKey = 'blocklist-520170720';
     mkdirSync(join(runtime, 'sources'), { recursive: true });
     mkdirSync(state, { recursive: true });
-    writeFileSync(join(runtime, 'sources', 'allowlist-3702190265.domains'), 'school.example\n');
-    writeFileSync(join(runtime, 'sources', 'blocklist-1844081459.domains'), 'ads-old.example\n');
-    writeFileSync(join(runtime, 'sources', 'blocklist-520170720.domains'), 'malware.example\n');
+    writeFileSync(join(runtime, 'sources', `${allowKey}.domains`), 'school.example\n');
+    writeFileSync(join(runtime, 'sources', `${blockAKey}.domains`), 'ads-old.example\n');
+    writeFileSync(join(runtime, 'sources', `${legacyBlockBKey}.domains`), 'malware.example\n');
+    writeFileSync(join(runtime, 'sources', `${legacyBlockBKey}.meta`), [
+      'label=Block B',
+      'url=https://lists.test/block-b',
+      'count=1',
+      'updated_at=1000',
+      '',
+    ].join('\n'));
     writeFileSync(join(runtime, 'allowlist.domains'), 'school.example\n');
     writeFileSync(join(runtime, 'blocklist.domains'), 'ads-old.example\nmalware.example\n');
-    const oldFailure = (kind, label, reason) => [
+    const oldFailure = (kind, label, url, reason) => [
       'count=2',
       'first_failed_at=1000',
       'last_failed_at=1000',
@@ -184,16 +199,17 @@ printf '%s\n' "$*" >> "$NOTIFY_LOG"
       'notified=0',
       `kind=${kind}`,
       `label=${label}`,
+      `url=${url}`,
       `reason=${reason}`,
       '',
     ].join('\n');
     writeFileSync(
-      join(state, 'allowlist-3702190265.state'),
-      oldFailure('allowlist', 'Allow source', 'html_document'),
+      join(state, `${allowKey}.state`),
+      oldFailure('allowlist', 'Allow source', 'https://lists.test/allow', 'html_document'),
     );
     writeFileSync(
-      join(state, 'blocklist-520170720.state'),
-      oldFailure('blocklist', 'Block B', 'download_failed'),
+      join(state, `${legacyBlockBKey}.state`),
+      oldFailure('blocklist', 'Block B', 'https://lists.test/block-b', 'download_failed'),
     );
 
     const failedEnv = {
@@ -219,7 +235,12 @@ printf '%s\n' "$*" >> "$NOTIFY_LOG"
     assert.match(notifications, /Block B/);
     assert.match(notifications, /три раза подряд/);
     assert.equal(readdirSync(state).filter((name) => name.endsWith('.state')).length, 3);
-    assert.match(readFileSync(join(state, 'allowlist-3702190265.state'), 'utf8'), /^count=3$/m);
+    assert.match(readFileSync(join(state, `${allowKey}.state`), 'utf8'), /^count=3$/m);
+    assert.equal(existsSync(join(runtime, 'sources', `${legacyBlockBKey}.domains`)), false);
+    assert.equal(existsSync(join(runtime, 'sources', `${legacyBlockBKey}.meta`)), false);
+    assert.equal(existsSync(join(state, `${legacyBlockBKey}.state`)), false);
+    assert.equal(readFileSync(join(runtime, 'sources', `${blockBKey}.domains`), 'utf8'), 'malware.example\n');
+    assert.match(readFileSync(join(state, `${blockBKey}.state`), 'utf8'), /^count=3$/m);
 
     const recovered = runUpdater('update', {
       ...commonEnv,

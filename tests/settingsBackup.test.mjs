@@ -19,6 +19,14 @@ const routerControl = readFileSync(join(
   root,
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-router-control-legacy'
 ), 'utf8');
+const makefile = readFileSync(join(
+  root,
+  'package/luci-app-sheepfold-family-internet-control/Makefile',
+), 'utf8');
+const defaultConfig = readFileSync(join(
+  root,
+  'package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/sheepfold.uci.defaults',
+), 'utf8');
 
 function loadBackupModel() {
   const source = readFileSync(backupPath, 'utf8').replace(/^'require .*?';\r?\n/gm, '');
@@ -44,14 +52,26 @@ function loadBackupModel() {
   return context.module.exports;
 }
 
-function sourceSections(secret = 'telegram-secret') {
+function sourceSections(secret = 'telegram-secret', routerId = 'a'.repeat(32)) {
   return {
     sheepfold: [
-      { '.name': 'global', '.type': 'sheepfold', language: 'ru', telegram_bot_token: secret },
+      {
+        '.name': 'global',
+        '.type': 'sheepfold',
+        language: 'ru',
+        router_install_id: routerId,
+        telegram_bot_token: secret,
+      },
       { '.name': 'allowlist', '.type': 'list', mac: ['00:11:22:33:44:55'] },
       { '.name': 'blocklist', '.type': 'list', mac: ['AA:BB:CC:DD:EE:FF'] },
       { '.name': 'messenger_global', '.type': 'messenger', active: 'telegram' },
-      { '.name': 'device_phone', '.type': 'device', id: '1', mac: '00:11:22:33:44:55' }
+      {
+        '.name': 'device_phone',
+        '.type': 'device',
+        id: '1',
+        mac: '00:11:22:33:44:55',
+        sim_phone_history: `${'a'.repeat(64)}|+79991234567|250|01|1784332800`
+      }
     ],
     dhcp: [{ '.name': 'phone', '.type': 'host', mac: '00:11:22:33:44:55', ip: '192.168.1.20' }],
     wireless: [
@@ -67,11 +87,13 @@ describe('settings backup and restore', () => {
     const payload = backup.build(sourceSections(), false, '2026-07-16T00:00:00Z');
     const global = payload.configs.sheepfold.find((section) => section.name === 'global');
     const wifi = payload.configs.wireless.find((section) => section.type === 'wifi-iface');
+    const phone = payload.configs.sheepfold.find((section) => section.name === 'device_phone');
 
     assert.equal(payload.format, 'sheepfold-settings-export-v2');
     assert.ok(payload.configs.sheepfold.some((section) => section.type === 'messenger'));
     assert.equal(global.options.telegram_bot_token, '[secret]');
     assert.equal(wifi.options.key, '[secret]');
+    assert.equal(phone.options.sim_phone_history, '[secret]');
     assert.equal(backup.validate(payload).configs.dhcp.length, 1);
   });
 
@@ -106,17 +128,106 @@ describe('settings backup and restore', () => {
     await assert.rejects(backup.decrypt(envelope, 'wrong password'), /OperationError|decrypt/i);
   });
 
+  it('never exports a live one-time pairing code', () => {
+    const backup = loadBackupModel();
+    const sections = sourceSections();
+    sections.sheepfold.push({
+      '.name': 'owner',
+      '.type': 'administrator',
+      login: 'SuperParent',
+      pairing_code: 'Temporary1+',
+      pairing_code_expires: '1784333400',
+    });
+
+    const readable = backup.build(sections, false);
+    const encrypted = backup.build(sections, true);
+    const readableAdmin = readable.configs.sheepfold.find((section) => section.name === 'owner');
+    const encryptedAdmin = encrypted.configs.sheepfold.find((section) => section.name === 'owner');
+
+    assert.equal(readableAdmin.options.pairing_code, undefined);
+    assert.equal(readableAdmin.options.pairing_code_expires, undefined);
+    assert.equal(encryptedAdmin.options.pairing_code, undefined);
+    assert.equal(encryptedAdmin.options.pairing_code_expires, undefined);
+  });
+
+  it('keeps trusted identity state when restoring onto the same router', () => {
+    const backup = loadBackupModel();
+    const source = sourceSections();
+    const phone = source.sheepfold.find((section) => section['.type'] === 'device');
+    phone.admin_device = '1';
+    phone.trusted_identity_keys = ['uuid:trusted'];
+    phone.detection_fingerprint = 'stable-classification';
+
+    const payload = backup.build(source, true);
+    const prepared = backup.prepareRestore(payload, backup.build(source, true));
+    const restoredPhone = prepared.payload.configs.sheepfold.find((section) => section.type === 'device');
+
+    assert.equal(prepared.routerTransfer, false);
+    assert.equal(restoredPhone.options.admin_device, '1');
+    assert.deepEqual(Array.from(restoredPhone.options.trusted_identity_keys), ['uuid:trusted']);
+    assert.equal(restoredPhone.options.detection_fingerprint, 'stable-classification');
+  });
+
+  it('preserves rules but resets router-bound identity and pairing on a new router', () => {
+    const backup = loadBackupModel();
+    const importedSections = sourceSections('old-secret', 'a'.repeat(32));
+    const currentSections = sourceSections('new-secret', 'b'.repeat(32));
+    const phone = importedSections.sheepfold.find((section) => section['.type'] === 'device');
+    phone.group = 'Первый ребёнок';
+    phone.status = 'allow';
+    phone.admin_device = '1';
+    phone.admin_login = 'SuperParent';
+    phone.paired_from = 'android';
+    phone.trusted_identity_keys = ['uuid:old-hmac'];
+    phone.trusted_identity_version = '2';
+    phone.detection_identity_keys = ['uuid:old-hmac'];
+    phone.detection_fingerprint = 'old-router-cache';
+    phone.detection_snapshot_1 = '1784332800|phone|90|uuid|none|0123456789abcdef';
+    phone.identity_quarantine_mode = 'block';
+
+    const imported = backup.build(importedSections, true);
+    const prepared = backup.prepareRestore(imported, backup.build(currentSections, true));
+    const global = prepared.payload.configs.sheepfold.find((section) => section.name === 'global');
+    const restoredPhone = prepared.payload.configs.sheepfold.find((section) => section.type === 'device');
+
+    assert.equal(prepared.routerTransfer, true);
+    assert.equal(global.options.router_install_id, 'b'.repeat(32));
+    assert.equal(restoredPhone.options.id, '1');
+    assert.equal(restoredPhone.options.group, 'Первый ребёнок');
+    assert.equal(restoredPhone.options.status, 'allow');
+    assert.equal(restoredPhone.options.detection_snapshot_1, phone.detection_snapshot_1);
+    assert.equal(restoredPhone.options.admin_device, undefined);
+    assert.equal(restoredPhone.options.admin_login, undefined);
+    assert.equal(restoredPhone.options.trusted_identity_keys, undefined);
+    assert.equal(restoredPhone.options.detection_identity_keys, undefined);
+    assert.equal(restoredPhone.options.detection_fingerprint, undefined);
+    assert.equal(restoredPhone.options.identity_quarantine_mode, undefined);
+    assert.deepEqual(Array.from(
+      imported.configs.sheepfold.find((section) => section.type === 'device').options.trusted_identity_keys,
+    ), ['uuid:old-hmac']);
+  });
+
   it('applies managed UCI configs, preserves placeholders and refreshes router services', () => {
     assert.match(overview, /require sheepfold\.features\.settings\.backup as settingsBackupModel/);
     assert.match(overview, /function stageImportedConfig\(config, importedSections, currentSections, managedTypes\)/);
     assert.match(overview, /value === settingsBackupModel\.secretPlaceholder/);
     assert.match(overview, /payload\.containsSecrets[\s\S]*unencrypted_secrets_forbidden/);
+    assert.match(overview, /settingsBackupModel\.prepareRestore\(payload, previous\)/);
     assert.match(overview, /saveUciChanges\(\['sheepfold', 'dhcp', 'wireless'\]\)/);
     assert.match(overview, /routerControl\(\['settings-import-applied'\]\)/);
     assert.doesNotMatch(overview, /Applying imported settings will be added after backend/);
     assert.match(routerControl, /settings_import_applied\(\)/);
     assert.match(routerControl, /settings-import-applied\)/);
     assert.match(routerControl, /settings_import_applied\(\)[\s\S]*sheepfold-ipv6-control apply/);
+    assert.match(routerControl, /settings_import_applied\(\)[\s\S]*delete "sheepfold\.\$device_section\.just_detected"/);
     assert.match(routerControl, /sleep 3[\s\S]*dnsmasq reload[\s\S]*wifi reload/);
+  });
+
+  it('creates one persistent non-secret router installation id during package setup', () => {
+    assert.match(defaultConfig, /option router_install_id ''/);
+    assert.match(makefile, /ensure_router_install_id\(\)/);
+    assert.match(makefile, /openssl rand -hex 16/);
+    assert.match(makefile, /uci -q set sheepfold\.global\.router_install_id/);
+    assert.match(makefile, /§cfgbak1/);
   });
 });

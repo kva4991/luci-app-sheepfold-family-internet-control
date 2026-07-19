@@ -13,7 +13,9 @@ param(
     [string]$RouterHost = '',
     [string]$RouterUser = 'root',
     [int]$SshPort = 22,
-    [int]$HttpsPort = 443,
+    [ValidateSet('http', 'https')]
+    [string]$LuciScheme = 'http',
+    [int]$LuciPort = 80,
     [int]$AppPort = 5201,
     [string]$IdentityFile = (Join-Path $HOME '.ssh\sheepfold_test_router_ed25519'),
     [switch]$InstallPublicKey,
@@ -30,6 +32,9 @@ if (-not $RouterHost -or -not (Test-SheepfoldPrivateIpv4 -Address $RouterHost)) 
 }
 if ($RouterUser -notmatch '^[a-zA-Z0-9_.-]+$') {
     throw 'Имя SSH-пользователя содержит недопустимые символы.'
+}
+if ($LuciPort -lt 1 -or $LuciPort -gt 65535) {
+    throw 'Порт LuCI должен быть в диапазоне 1..65535.'
 }
 
 $configPath = Get-SheepfoldRouterConfigPath
@@ -62,7 +67,8 @@ $profile = [ordered]@{
     routerHost = $RouterHost
     routerUser = $RouterUser
     sshPort = $SshPort
-    httpsPort = $HttpsPort
+    luciScheme = $LuciScheme
+    luciPort = $LuciPort
     appPort = $AppPort
     identityFile = [System.IO.Path]::GetFullPath($IdentityFile)
     luciPath = '/cgi-bin/luci/admin/services/sheepfold'

@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+HASH_COMMON="${SHEEPFOLD_HASH_COMMON:-${0%/*}/sheepfold-hash-common}"
+[ -r "$HASH_COMMON" ] || HASH_COMMON=/usr/libexec/sheepfold/sheepfold-hash-common
+. "$HASH_COMMON"
+
 COMMAND="${1:-status}"
 SITE_LIST_DIR="${SHEEPFOLD_SITE_LIST_RUNTIME_DIR:-/tmp/sheepfold/site-lists}"
 RUNTIME_DIR="${SHEEPFOLD_ADGUARD_RUNTIME_DIR:-/tmp/sheepfold/adguard}"
@@ -237,7 +241,10 @@ ensure_feed_token() {
 	umask 077
 	token="$(dd if=/dev/urandom bs=24 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')"
 	case "$token" in
-		''|*[!0-9a-f]*) token="$(printf '%s' "$$:$(date +%s)" | cksum | awk '{ printf "%08x%08x%08x%08x", $1, $2, $1, $2 }')" ;;
+		''|*[!0-9a-f]*)
+			token="$(sheepfold_secure_hash_text "$$:$(date +%s)")" || return 1
+			token="$(printf '%s' "$token" | cut -c1-48)"
+			;;
 	esac
 	printf '%s\n' "$token" > "$TOKEN_FILE"
 	chmod 600 "$TOKEN_FILE" 2>/dev/null || true

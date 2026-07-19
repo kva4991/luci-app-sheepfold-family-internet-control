@@ -127,6 +127,79 @@ describe('test IPK executable permissions', () => {
     assert.equal(mode, '0o755');
   });
 
+  it('ships the centralized state-hash helper as executable in data.tar.gz', () => {
+    const ipkPath = buildTestIpk();
+    const mode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-hash-common',
+    );
+
+    assert.equal(mode, '0o755');
+  });
+
+  it('ships the shared device-detection lock helper in data.tar.gz', () => {
+    const ipkPath = buildTestIpk();
+    const mode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-lock-common',
+    );
+
+    assert.equal(mode, '0o755');
+  });
+
+  it('ships logical-device discovery helpers and their socket dependency', () => {
+    const ipkPath = buildTestIpk();
+    const ssdpMode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-device-ssdp',
+    );
+    const upnpMode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-device-upnp-description',
+    );
+    const wsdMode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-device-ws-discovery',
+    );
+    const identityMode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-device-identity',
+    );
+    const ssdpSource = dataText(
+      ipkPath,
+      './usr/share/sheepfold/device-ssdp.uc',
+    );
+    const wsdSource = dataText(
+      ipkPath,
+      './usr/share/sheepfold/device-ws-discovery.uc',
+    );
+    const control = controlText(ipkPath, './control');
+
+    assert.equal(ssdpMode, '0o755');
+    assert.equal(upnpMode, '0o755');
+    assert.equal(wsdMode, '0o755');
+    assert.equal(identityMode, '0o755');
+    assert.match(ssdpSource, /SO_BINDTODEVICE/);
+    assert.match(wsdSource, /SO_BINDTODEVICE/);
+    assert.match(wsdSource, /IP_ADD_MEMBERSHIP/);
+    assert.match(control, /^Depends:.*(?:^|, )ucode-mod-socket(?:,|$)/m);
+  });
+
+  it('ships the pairing diagnostic helper as executable in data.tar.gz', () => {
+    const mode = tarMode(
+      buildTestIpk(),
+      './usr/libexec/sheepfold/sheepfold-pair-diagnostics',
+    );
+
+    assert.equal(mode, '0o755');
+  });
+
+  it('declares flock for the shared device-detection lock contract', () => {
+    const control = controlText(buildTestIpk(), './control');
+
+    assert.match(control, /^Depends:.*(?:^|, )flock(?:,|$)/m);
+  });
+
   it('ships the emergency-site synchronizer as executable in data.tar.gz', () => {
     const ipkPath = buildTestIpk();
     const mode = tarMode(
@@ -135,6 +208,14 @@ describe('test IPK executable permissions', () => {
     );
 
     assert.equal(mode, '0o755');
+  });
+
+  it('ships the country-profile synchronizer and profile data', () => {
+    const ipkPath = buildTestIpk();
+
+    assert.equal(tarMode(ipkPath, './usr/libexec/sheepfold/sheepfold-country-profile'), '0o755');
+    for (const country of ['ru', 'by', 'cn'])
+      assert.equal(tarMode(ipkPath, `./usr/share/sheepfold/country-profiles/${country}.json`), '0o644');
   });
 
   it('ships the site-list runtime policy as executable in data.tar.gz', () => {
@@ -185,6 +266,16 @@ describe('test IPK executable permissions', () => {
     assert.equal(mode, '0o755');
   });
 
+  it('ships the API rate-limit helper as executable in data.tar.gz', () => {
+    const ipkPath = buildTestIpk();
+    const mode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-api-rate-limit',
+    );
+
+    assert.equal(mode, '0o755');
+  });
+
   it('ships the feedback helper as executable in data.tar.gz', () => {
     const ipkPath = buildTestIpk();
     const mode = tarMode(
@@ -205,6 +296,26 @@ describe('test IPK executable permissions', () => {
     assert.equal(mode, '0o755');
   });
 
+  it('ships the child SIM monitor as executable in data.tar.gz', () => {
+    const ipkPath = buildTestIpk();
+    const mode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-sim-monitor',
+    );
+
+    assert.equal(mode, '0o755');
+  });
+
+  it('ships the child Wi-Fi monitor as executable in data.tar.gz', () => {
+    const ipkPath = buildTestIpk();
+    const mode = tarMode(
+      ipkPath,
+      './usr/libexec/sheepfold/sheepfold-child-wifi-monitor',
+    );
+
+    assert.equal(mode, '0o755');
+  });
+
   it('requires the administrator notification helper in Standard runtime hardening', () => {
     const ipkPath = buildTestIpk();
     const hardening = dataText(
@@ -213,6 +324,10 @@ describe('test IPK executable permissions', () => {
     );
 
     assert.match(hardening, /sheepfold-admin-notification/);
+    assert.match(hardening, /sheepfold-sim-monitor/);
+    assert.match(hardening, /sheepfold-child-wifi-monitor/);
+    assert.match(hardening, /sheepfold-hash-common/);
+    assert.match(hardening, /sheepfold-lock-common/);
     assert.match(hardening, /sheepfold-ipv6-control/);
     assert.match(hardening, /sheepfold-domain-policy/);
     assert.match(hardening, /sheepfold-adguard/);

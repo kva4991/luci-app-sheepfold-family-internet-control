@@ -21,6 +21,54 @@ function Get-SheepfoldRouterCredentialPath {
     return Join-Path $configDir 'routerTestCredential.xml'
 }
 
+function Get-SheepfoldLuciBaseUrl {
+    param([Parameter(Mandatory = $true)]$Config)
+
+    # LuCI и API приложения могут использовать разные протоколы и порты. На
+    # тестовом роутере LuCI открыт по HTTP:80, а Sheepfold API — по HTTPS:5201.
+    # Старые профили не содержат luciScheme/luciPort, поэтому безопасный локальный
+    # fallback для них тоже HTTP:80, а не прежнее ошибочное HTTPS:443.
+    $propertyNames = @($Config.PSObject.Properties.Name)
+    $scheme = if ($propertyNames -contains 'luciScheme' -and $Config.luciScheme) {
+        [string]$Config.luciScheme
+    } else {
+        'http'
+    }
+    if ($scheme -notin @('http', 'https')) {
+        throw "Протокол LuCI должен быть http или https, получено: $scheme"
+    }
+
+    $defaultPort = if ($scheme -eq 'https') { 443 } else { 80 }
+    $port = if ($propertyNames -contains 'luciPort' -and $Config.luciPort) {
+        [int]$Config.luciPort
+    } else {
+        $defaultPort
+    }
+    if ($port -lt 1 -or $port -gt 65535) {
+        throw 'Порт LuCI должен быть в диапазоне 1..65535.'
+    }
+
+    $portSuffix = if ($port -eq $defaultPort) { '' } else { ':' + [string]$port }
+    return '{0}://{1}{2}' -f $scheme, $Config.routerHost, $portSuffix
+}
+
+function Get-SheepfoldWorkRoot {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $scratchRoot = [Environment]::GetEnvironmentVariable('SHEEPFOLD_SCRIPT_SCRATCH_ROOT', 'Process')
+    if ([string]::IsNullOrWhiteSpace($scratchRoot)) {
+        return Join-Path $RepoRoot '.build'
+    }
+
+    if (-not [System.IO.Path]::IsPathRooted($scratchRoot)) {
+        throw 'SHEEPFOLD_SCRIPT_SCRATCH_ROOT должен быть абсолютным локальным путём.'
+    }
+
+    # Все временные файлы Sheepfold остаются в собственном подкаталоге: корень,
+    # выбранный пользователем для других программ, сценарий никогда не очищает.
+    return Join-Path ([System.IO.Path]::GetFullPath($scratchRoot)) 'sheepfold-temp'
+}
+
 function Test-SheepfoldPrivateIpv4 {
     param([Parameter(Mandatory = $true)][string]$Address)
 

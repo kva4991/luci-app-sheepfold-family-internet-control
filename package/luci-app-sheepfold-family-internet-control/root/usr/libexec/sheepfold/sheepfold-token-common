@@ -44,7 +44,7 @@ token_write_bound_file() {
 token_device_is_admin_paired() {
 	wanted_id="$1"
 	wanted_mac="$(token_normalize_mac "$2")"
-	section device_id mac admin
+	section device_id legacy_ids mac admin
 
 	token_valid_mac "$wanted_mac" || return 1
 	[ -n "$wanted_id" ] || return 1
@@ -53,8 +53,14 @@ token_device_is_admin_paired() {
 		mac="$(token_normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
 		admin="$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)"
 		[ "$admin" = 1 ] || continue
-		[ "$device_id" = "$wanted_id" ] || continue
 		[ "$mac" = "$wanted_mac" ] || continue
+		legacy_ids="$(uci -q get "sheepfold.$section.legacy_ids" 2>/dev/null || true)"
+		# После миграции старого формата номера старый APK продолжает работать только
+		# с прежним ID из своего токена и с тем же проверенным MAC. §deviceid2
+		case " $device_id $legacy_ids " in
+			*" $wanted_id "*) ;;
+			*) continue ;;
+		esac
 		return 0
 	done
 	return 1

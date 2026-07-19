@@ -12,6 +12,15 @@ android-child\gradlew.bat -p android-child :app:assembleDebug --stacktrace
 
 ## Контракты роутера
 
+Автоматическое обнаружение:
+
+```text
+GET /.well-known/sheepfold.json
+GET /cgi-bin/sheepfold-api/ping
+```
+
+Приложение берёт только шлюз активной Wi-Fi/Ethernet-сети, ищет до 30 секунд и лишь после неудачи раскрывает ручной ввод адреса.
+
 Статус устройства:
 
 ```text

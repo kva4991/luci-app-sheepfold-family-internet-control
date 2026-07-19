@@ -19,11 +19,14 @@ data class ClientStatusData(
     val isAdministrator: Boolean,
     val clientRole: String,
     val canRequestAccessExtension: Boolean,
+    val wifiNetworkReporting: Boolean,
+    val wifiLocationReporting: Boolean,
     val productStatus: ProductStatus,
     val internetState: String,
     val accessMode: String?,
     val accessEndsAt: String?,
     val minutesRemaining: Int?,
+    val nextAccessChangeTime: String?,
     val message: String?
 )
 

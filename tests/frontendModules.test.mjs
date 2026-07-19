@@ -32,7 +32,7 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.match(overview, /require sheepfold\.features\.groups\.model as groupModel/);
     assert.match(overview, /require sheepfold\.features\.groups\.view as groupView/);
     assert.match(overview, /require sheepfold\.features\.groups\.editor as groupEditor/);
-    assert.match(overview, /require sheepfold\.features\.logs\.model as logModel/);
+    assert.match(overview, /require sheepfold\.features\.logs\.panel as logPanelModel/);
     assert.match(overview, /require sheepfold\.features\.messenger\.settings as messengerSettings/);
     assert.match(overview, /require sheepfold\.features\.pairing\.qr as pairingQr/);
     assert.match(overview, /require sheepfold\.features\.router\.info as routerInfo/);
@@ -58,6 +58,8 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.doesNotMatch(overview, /function parseDhcpLeases/);
     assert.doesNotMatch(overview, /function parseArpTable/);
     assert.doesNotMatch(overview, /function addRouterDevice/);
+    assert.doesNotMatch(overview, /function renderLogRows/);
+    assert.doesNotMatch(overview, /function createLogFilterUi/);
     assert.doesNotMatch(overview, /Math\.random\(\)/);
   });
 
@@ -68,6 +70,7 @@ describe('LuCI frontend modules §frontmod', () => {
     const deviceEditor = moduleSource('sheepfold/features/devices/editor.js');
     const inventory = moduleSource('sheepfold/features/devices/inventory.js');
     const logs = moduleSource('sheepfold/features/logs/model.js');
+    const logPanel = moduleSource('sheepfold/features/logs/panel.js');
     const random = moduleSource('sheepfold/core/security/random.js');
     const router = moduleSource('sheepfold/core/backend/router.js');
     const routerInfo = moduleSource('sheepfold/features/router/info.js');
@@ -107,6 +110,11 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.match(overview, /function deviceTypeByValue\(value\)[\s\S]*deviceTypes\.byValue\(value\)/);
     assert.match(logs, /function filterView/);
     assert.match(logs, /function maskedExport/);
+    assert.match(logPanel, /function renderRows/);
+    assert.match(logPanel, /function showExportModal/);
+    assert.match(logPanel, /deps\.clear\(\)/);
+    assert.match(logPanel, /deps\.download\(/);
+    assert.doesNotMatch(logPanel, /\bfs\.|\buci\.|routerBackend|routerControl/);
     assert.match(random, /crypto\.getRandomValues/);
     assert.doesNotMatch(random, /Math\.random/);
     assert.match(router, /function parseKeyValues/);

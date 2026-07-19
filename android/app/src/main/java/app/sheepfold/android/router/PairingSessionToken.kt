@@ -8,7 +8,8 @@ private data class PairingSessionData(
     var bearerToken: String? = null,
     var deviceId: String? = null,
     var deviceMac: String? = null,
-    var tlsPinSha256: String? = null
+    var tlsPinSha256: String? = null,
+    var tlsSpkiSha256: String? = null
 )
 
 private val pairingSessions = Collections.synchronizedMap(
@@ -55,5 +56,16 @@ var RouterConnectionRequest.tlsPinSha256: String?
             pairingSessions[this]?.tlsPinSha256 = null
         } else {
             session(this).tlsPinSha256 = value
+        }
+    }
+
+/** SHA-256 от DER SubjectPublicKeyInfo, полученный из защищённого QR v2. */
+var RouterConnectionRequest.tlsSpkiSha256: String?
+    get() = pairingSessions[this]?.tlsSpkiSha256
+    set(value) {
+        if (value.isNullOrBlank()) {
+            pairingSessions[this]?.tlsSpkiSha256 = null
+        } else {
+            session(this).tlsSpkiSha256 = value
         }
     }

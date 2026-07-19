@@ -29,9 +29,12 @@ describe('Group editor module §frontmod', () => {
     assert.match(persist, /groupModel\.membershipChanges/);
     assert.match(persist, /markNoRestrictionsAutoExcluded/);
     assert.match(persist, /markPersonalDevicesAutoExcluded/);
-    assert.match(persist, /saveSheepfoldAccessChanges\(\)\.then/);
+    assert.match(persist, /saveUciChanges\(\['sheepfold'\]\)\.then/);
+    assert.match(persist, /applySheepfoldAccessRuntime\(\)\.then/);
+    assert.match(persist, /The group was saved, but internet access rules could not be applied/);
+    assert.match(persist, /commandErrorText\(error/);
     assert.match(persist, /change\.device\.group = change\.nextGroup/);
-    assert.ok(persist.indexOf('saveSheepfoldAccessChanges().then') < persist.indexOf('change.device.group = change.nextGroup'));
+    assert.match(persist, /saveUciChanges\(\['sheepfold'\]\)\.then[\s\S]*finishSavedGroup\(\)/);
   });
 
   it('creates groups without a page reload and preserves product-variant markers', () => {

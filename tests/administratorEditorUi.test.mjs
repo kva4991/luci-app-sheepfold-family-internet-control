@@ -48,6 +48,8 @@ describe('Administrator editor module §frontmod §pairsec', () => {
     assert.match(settings, /var temporaryPassword = generatePairingCode\(\)/);
     assert.doesNotMatch(settings, /admin\.temporaryPassword/);
     assert.match(settings, /activateAdministratorPairingCode\(admin, temporaryPassword\)/);
+    assert.match(settings, /loadTlsPublicKeyFingerprint\(\)\.then\(function \(tlsSpkiSha256\) \{[\s\S]*activateAdministratorPairingCode\(admin, temporaryPassword\)\.then\(function \(\) \{[\s\S]*openActivatedSettings\(tlsSpkiSha256\)/);
+    assert.match(settings, /Preparing secure pairing/);
   });
 
   it('updates administrator and device views after commit without reloading LuCI', () => {

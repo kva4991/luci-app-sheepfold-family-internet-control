@@ -12,8 +12,18 @@ DEVICE_PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
 LED_CONTROL="/usr/libexec/sheepfold/sheepfold-led-control"
 FEEDBACK="/usr/libexec/sheepfold/sheepfold-feedback"
 IPV6_CONTROL="/usr/libexec/sheepfold/sheepfold-ipv6-control"
+CHILD_WIFI_MONITOR="/usr/libexec/sheepfold/sheepfold-child-wifi-monitor"
+TLS_FINGERPRINT="/usr/libexec/sheepfold/sheepfold-tls-fingerprint"
 TOKEN_STATE_DIR="/etc/sheepfold/tokens"
 TOKEN_RUNTIME_LINK="/tmp/sheepfold/tokens"
+
+if [ "${1:-}" = "--luci" ]; then
+    # Доверяем маркеру только внутри rpcd ACL: публичный Sheepfold API не
+    # прокидывает его и ведёт собственную аутентификацию/атрибуцию. §logaudit
+    SHEEPFOLD_ACTION_ACTOR='LuCI (Изменено на роутере)'
+    export SHEEPFOLD_ACTION_ACTOR
+    shift
+fi
 command="${1:-status}"
 
 root_password_status() {
@@ -209,6 +219,12 @@ case "$command" in
         ;;
     ipv6-release)
         exec "$IPV6_CONTROL" release
+        ;;
+    child-wifi-history-clear)
+        exec "$CHILD_WIFI_MONITOR" clear
+        ;;
+    tls-public-key-fingerprint)
+        exec "$TLS_FINGERPRINT"
         ;;
     *)
         exec "$LEGACY" "$@"

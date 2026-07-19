@@ -1,0 +1,43 @@
+#!/bin/sh
+set -eu
+
+# Возвращает отпечаток SubjectPublicKeyInfo активного TLS-ключа Sheepfold.
+# В QR попадает только этот публичный SHA-256, приватный ключ не читается. §tlspinv2
+CERTIFICATE="/etc/uhttpd.crt"
+WORK_DIR="/tmp/sheepfold/tls-fingerprint.$$"
+PUBLIC_KEY_PEM="$WORK_DIR/public-key.pem"
+PUBLIC_KEY_DER="$WORK_DIR/public-key.der"
+
+fail() {
+    printf '%s\n' "$1" >&2
+    exit 1
+}
+
+cleanup() {
+    rm -rf "$WORK_DIR"
+}
+
+trap cleanup EXIT HUP INT TERM
+umask 077
+
+[ -s "$CERTIFICATE" ] || fail "TLS certificate is unavailable."
+command -v openssl >/dev/null 2>&1 || fail "OpenSSL is unavailable."
+
+mkdir -p "$WORK_DIR"
+openssl x509 -in "$CERTIFICATE" -pubkey -noout > "$PUBLIC_KEY_PEM" 2>/dev/null ||
+    fail "Could not read the TLS public key."
+openssl pkey -pubin -in "$PUBLIC_KEY_PEM" -outform DER -out "$PUBLIC_KEY_DER" 2>/dev/null ||
+    fail "Could not encode the TLS public key."
+
+digest_output="$(openssl dgst -sha256 "$PUBLIC_KEY_DER" 2>/dev/null)" ||
+    fail "Could not calculate the TLS public-key fingerprint."
+fingerprint="${digest_output##* }"
+fingerprint="$(printf '%s' "$fingerprint" | tr 'A-F' 'a-f')"
+
+case "$fingerprint" in
+    *[!0-9a-f]*|'') fail "OpenSSL returned an invalid TLS public-key fingerprint." ;;
+esac
+[ "${#fingerprint}" -eq 64 ] || fail "OpenSSL returned an invalid TLS public-key fingerprint."
+
+printf 'algorithm=sha256-spki\n'
+printf 'fingerprint=%s\n' "$fingerprint"

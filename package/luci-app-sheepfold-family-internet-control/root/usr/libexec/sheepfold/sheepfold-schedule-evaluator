@@ -25,6 +25,38 @@ weekday_key() {
 	esac
 }
 
+weekday_number() {
+	case "$1" in
+		mon) printf 1 ;; tue) printf 2 ;; wed) printf 3 ;; thu) printf 4 ;;
+		fri) printf 5 ;; sat) printf 6 ;; sun) printf 7 ;; *) printf 1 ;;
+	esac
+}
+
+previous_weekday() {
+	case "$1" in
+		mon) printf sun ;; tue) printf mon ;; wed) printf tue ;; thu) printf wed ;;
+		fri) printf thu ;; sat) printf fri ;; sun) printf sat ;; *) printf sun ;;
+	esac
+}
+
+current_weekday() {
+	printf '%s' "${SHEEPFOLD_NOW_WEEKDAY:-$(weekday_key "$(date +%u)")}"
+}
+
+current_minutes() {
+	local hours minutes
+	if [ -n "${SHEEPFOLD_NOW_MINUTES:-}" ]; then
+		printf '%s\n' "$SHEEPFOLD_NOW_MINUTES"
+		return 0
+	fi
+	hours="$(date +%H)"
+	minutes="$(date +%M)"
+	hours="${hours#0}"; minutes="${minutes#0}"
+	[ -n "$hours" ] || hours=0
+	[ -n "$minutes" ] || minutes=0
+	printf '%s\n' "$((hours * 60 + minutes))"
+}
+
 list_has_word() {
 	local wanted="$1" value
 	shift
@@ -54,24 +86,12 @@ schedule_is_active() {
 	local section="$1" range start_text end_text start end
 	local today yesterday now_minutes weekdays
 
-	today="${SHEEPFOLD_NOW_WEEKDAY:-$(weekday_key "$(date +%u)")}"
-	yesterday="${SHEEPFOLD_PREVIOUS_WEEKDAY:-}"
-	if [ -z "$yesterday" ]; then
-		case "$today" in
-			mon) yesterday=sun ;; tue) yesterday=mon ;; wed) yesterday=tue ;;
-			thu) yesterday=wed ;; fri) yesterday=thu ;; sat) yesterday=fri ;; sun) yesterday=sat ;;
-		esac
-	fi
-	if [ -n "${SHEEPFOLD_NOW_MINUTES:-}" ]; then
-		now_minutes="$SHEEPFOLD_NOW_MINUTES"
+	today="${2:-$(current_weekday)}"
+	now_minutes="${3:-$(current_minutes)}"
+	if [ -z "${2:-}" ] && [ -n "${SHEEPFOLD_PREVIOUS_WEEKDAY:-}" ]; then
+		yesterday="$SHEEPFOLD_PREVIOUS_WEEKDAY"
 	else
-		now_hours="$(date +%H)"
-		now_mins="$(date +%M)"
-		now_hours="${now_hours#0}"
-		now_mins="${now_mins#0}"
-		[ -n "$now_hours" ] || now_hours=0
-		[ -n "$now_mins" ] || now_mins=0
-		now_minutes="$((now_hours * 60 + now_mins))"
+		yesterday="$(previous_weekday "$today")"
 	fi
 	weekdays="$(uci_get "sheepfold.$section.weekdays")"
 
@@ -123,7 +143,8 @@ schedule_targets_device() {
 }
 
 evaluate_scope() {
-	local wanted_scope="$1" device_section="$2" section target_type action
+	local wanted_scope="$1" device_section="$2" check_day="${3:-}" check_minutes="${4:-}"
+	local section target_type action
 	local allow_count=0 block_count=0 active_sections=""
 
 	for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=schedule$/\1/p'); do
@@ -132,7 +153,7 @@ evaluate_scope() {
 		[ -n "$target_type" ] || target_type=group
 		[ "$target_type" = "$wanted_scope" ] || continue
 		schedule_targets_device "$section" "$device_section" || continue
-		schedule_is_active "$section" || continue
+		schedule_is_active "$section" "$check_day" "$check_minutes" || continue
 
 		action="$(uci_get "sheepfold.$section.action")"
 		case "$action" in
@@ -144,6 +165,102 @@ evaluate_scope() {
 	done
 
 	printf '%s|%s|%s\n' "$allow_count" "$block_count" "$active_sections"
+}
+
+status_from_counts() {
+	local allow_count="$1" block_count="$2"
+	if [ "$allow_count" -gt 0 ] && [ "$block_count" -gt 0 ]; then
+		case "$(uci_get sheepfold.global.schedule_conflict_internet)" in
+			on) printf allow ;;
+			*) printf block ;;
+		esac
+	elif [ "$block_count" -gt 0 ]; then
+		printf block
+	elif [ "$allow_count" -gt 0 ]; then
+		printf allow
+	else
+		printf none
+	fi
+}
+
+effective_schedule_status_at() {
+	local device_section="$1" check_day="$2" check_minutes="$3"
+	local result allow_count rest block_count
+	result="$(evaluate_scope device "$device_section" "$check_day" "$check_minutes")"
+	allow_count="${result%%|*}"; rest="${result#*|}"
+	block_count="${rest%%|*}"
+	if [ "$allow_count" -eq 0 ] && [ "$block_count" -eq 0 ]; then
+		result="$(evaluate_scope group "$device_section" "$check_day" "$check_minutes")"
+		allow_count="${result%%|*}"; rest="${result#*|}"
+		block_count="${rest%%|*}"
+	fi
+	status_from_counts "$allow_count" "$block_count"
+}
+
+schedule_boundaries() {
+	local device_section="$1" today now_minutes today_number
+	local section weekday weekday_number_value range start_text end_text start end end_day
+	local target_delta offset
+	today="$(current_weekday)"
+	now_minutes="$(current_minutes)"
+	today_number="$(weekday_number "$today")"
+
+	for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=schedule$/\1/p'); do
+		[ "$(uci_get "sheepfold.$section.enabled")" != 0 ] || continue
+		schedule_targets_device "$section" "$device_section" || continue
+		for weekday in $(uci_get "sheepfold.$section.weekdays"); do
+			weekday_number_value="$(weekday_number "$weekday")"
+			for range in $(uci_get "sheepfold.$section.time_ranges"); do
+				start_text="${range%%-*}"; end_text="${range#*-}"
+				start="$(time_minutes "$start_text" 2>/dev/null || printf '%s' -1)"
+				end="$(time_minutes "$end_text" 2>/dev/null || printf '%s' -1)"
+				[ "$start" -ge 0 ] && [ "$end" -ge 0 ] && [ "$start" -ne "$end" ] || continue
+
+				target_delta=$(( (weekday_number_value - today_number + 7) % 7 ))
+				offset=$((target_delta * 1440 + start - now_minutes))
+				[ "$offset" -gt 0 ] || offset=$((offset + 10080))
+				printf '%s\n' "$offset"
+
+				end_day="$weekday_number_value"
+				[ "$end" -gt "$start" ] || end_day=$((weekday_number_value % 7 + 1))
+				target_delta=$(( (end_day - today_number + 7) % 7 ))
+				offset=$((target_delta * 1440 + end - now_minutes))
+				[ "$offset" -gt 0 ] || offset=$((offset + 10080))
+				printf '%s\n' "$offset"
+			done
+		done
+	done | sort -n -u
+}
+
+next_access_change_time() {
+	local device_section="$1" fallback_status="$2" current_schedule_status="$3"
+	local current_effective today_number now_minutes offset absolute_minutes day_number minute
+	local candidate_day candidate_schedule_status candidate_effective
+	case "$fallback_status" in allow|block) ;; *) return 0 ;; esac
+	case "$current_schedule_status" in
+		allow|block) current_effective="$current_schedule_status" ;;
+		*) current_effective="$fallback_status" ;;
+	esac
+	today_number="$(weekday_number "$(current_weekday)")"
+	now_minutes="$(current_minutes)"
+
+	# Проверяются только реальные границы правил, а не все 10 080 минут недели.
+	# Это сохраняет точность перекрывающихся расписаний и почти не грузит роутер.
+	for offset in $(schedule_boundaries "$device_section"); do
+		absolute_minutes=$((now_minutes + offset))
+		day_number=$(( (today_number - 1 + absolute_minutes / 1440) % 7 + 1 ))
+		minute=$((absolute_minutes % 1440))
+		candidate_day="$(weekday_key "$day_number")"
+		candidate_schedule_status="$(effective_schedule_status_at "$device_section" "$candidate_day" "$minute")"
+		case "$candidate_schedule_status" in
+			allow|block) candidate_effective="$candidate_schedule_status" ;;
+			*) candidate_effective="$fallback_status" ;;
+		esac
+		[ "$candidate_effective" = "$current_effective" ] || {
+			printf '%02d:%02d\n' "$((minute / 60))" "$((minute % 60))"
+			return 0
+		}
+	done
 }
 
 record_conflict() {
@@ -167,6 +284,7 @@ record_conflict() {
 }
 
 device_section="${1:-}"
+fallback_status="${2:-none}"
 [ -n "$device_section" ] || {
 	echo "Usage: sheepfold-schedule-evaluator <device-section>" >&2
 	exit 2
@@ -207,6 +325,7 @@ fi
 
 active_schedule="${active_sections%% *}"
 [ -z "$active_schedule" ] || active_schedule="$(uci_get "sheepfold.$active_schedule.name")"
+next_change_time="$(next_access_change_time "$device_section" "$fallback_status" "$status")"
 record_conflict "$device_section" "$conflict" "$status" "$active_sections"
 
 print_kv status "$status"
@@ -215,3 +334,4 @@ print_kv conflict "$conflict"
 print_kv scope "$scope"
 print_kv active_schedule "$active_schedule"
 print_kv active_schedule_sections "$active_sections"
+print_kv next_change_time "$next_change_time"

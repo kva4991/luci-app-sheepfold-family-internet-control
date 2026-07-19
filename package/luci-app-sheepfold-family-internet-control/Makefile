@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=199
+PKG_RELEASE:=230
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -12,7 +12,8 @@ LUCI_TITLE:=Sheepfold Family Internet Control
 LUCI_DESCRIPTION:=Family internet access control for OpenWRT with LuCI, Android, and bot support.
 # luci-ssl остаётся общим HTTPS-метапакетом для OpenWrt 24.10 и 25.12.
 # Отдельного uhttpd-mod-tls в feed 25.12 уже нет, поэтому он ломает установку APK.
-LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +jshn +uclient-fetch +ca-bundle +uhttpd +luci-ssl +curl
+# QR v2 вычисляет SPKI SHA-256 штатным openssl и не доверяет сети до проверки ключа.
+LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +jshn +uclient-fetch +ca-bundle +uhttpd +luci-ssl +curl +flock +openssl-util +ucode-mod-socket
 
 # Supported LuCI languages (gettext)
 LUCI_LANGUAGES:=en ru zh_Hans
@@ -108,6 +109,13 @@ ensure_global_option() {
 }
 ensure_global_option enabled '0'
 ensure_global_option language 'ru'
+install_country='ru'
+if [ -r /etc/sheepfold/install.country ]; then
+	install_country="$$(sed -n '1p' /etc/sheepfold/install.country | tr -d '\r\n')"
+	case "$$install_country" in ru|by|cn) ;; *) install_country='ru' ;; esac
+fi
+ensure_global_option country_profile "$$install_country"
+ensure_global_option country_profile_schema '1'
 ensure_global_option block_on_boot '0'
 legacy_access_priority='emergency_sites no_restrictions blocklist allowlist global_block temp_access device_schedule group_schedule default_access'
 safe_access_priority='blocklist admin_devices no_restrictions allowlist global_block temp_access device_schedule group_schedule default_access'
@@ -129,14 +137,27 @@ ensure_global_option adguard_health_interval_seconds '300'
 ensure_global_option new_device_policy 'allow'
 ensure_global_option auto_configure '1'
 ensure_global_option detection_mode 'full'
+ensure_global_option device_monitoring_mode 'automatic'
 ensure_global_option no_restrictions_auto_assign '1'
 ensure_global_option personal_devices_auto_assign '1'
 ensure_global_option detector_watch_interval_seconds '10'
-ensure_global_option detector_interval_seconds '900'
+current_detector_interval="$$(uci -q get sheepfold.global.detector_interval_seconds 2>/dev/null || true)"
+[ "$$current_detector_interval" != '900' ] || uci -q set sheepfold.global.detector_interval_seconds='86400'
+ensure_global_option detector_interval_seconds '86400'
+ensure_global_option detector_connection_delay_seconds '20'
+ensure_global_option detector_offline_grace_seconds '90'
+ensure_global_option detector_max_event_scans_per_tick '4'
 ensure_global_option detector_min_device_type_confidence '70'
 ensure_global_option detector_min_no_restrictions_confidence '80'
 ensure_global_option detector_nmap_host_timeout_seconds '20'
-ensure_global_option detector_full_rescan_seconds '21600'
+current_full_rescan="$$(uci -q get sheepfold.global.detector_full_rescan_seconds 2>/dev/null || true)"
+[ "$$current_full_rescan" != '21600' ] || uci -q set sheepfold.global.detector_full_rescan_seconds='86400'
+ensure_global_option detector_full_rescan_seconds '86400'
+ensure_global_option detector_low_confidence_retry_seconds '86400'
+ensure_global_option detector_ssdp_rescan_seconds '3600'
+ensure_global_option detector_wsd_rescan_seconds '3600'
+ensure_global_option detector_max_upnp_fetches_per_scan '4'
+ensure_global_option identity_quarantine_reminder_seconds '86400'
 ensure_global_option service_control_interval_seconds '30'
 ensure_global_option update_check_install_mode 'weekly'
 ensure_global_option active_messenger 'none'
@@ -197,6 +218,8 @@ if [ -z "$$current_site_blocklist_sources" ] || [ "$$current_site_blocklist_sour
 	uci -q set sheepfold.global.site_blocklist_sources="$$default_site_blocklist_sources"
 fi
 ensure_global_option site_lists_update_interval 'weekly'
+ensure_global_option sim_change_notifications 'new_only'
+ensure_global_option child_wifi_network_notifications 'off'
 ensure_global_option activity_log_enabled '0'
 ensure_global_option private_logs '0'
 ensure_global_option log_days '7'
@@ -209,8 +232,27 @@ fi
 ensure_global_option log_retention '3d'
 ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
+ensure_global_option pairing_diagnostics '0'
 ensure_global_option feedback_endpoint ''
 ensure_global_option feedback_install_id ''
+ensure_router_install_id() {
+	install_id="$$(uci -q get sheepfold.global.router_install_id 2>/dev/null || true)"
+	if printf '%s\n' "$$install_id" | grep -Eq '^[a-f0-9]{32,64}$$'; then
+		return 0
+	fi
+	install_id="$$(openssl rand -hex 16 2>/dev/null || true)"
+	if ! printf '%s\n' "$$install_id" | grep -Eq '^[a-f0-9]{32}$$'; then
+		install_id="$$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | sha256sum 2>/dev/null | awk '{ print $$1 }')"
+	fi
+	printf '%s\n' "$$install_id" | grep -Eq '^[a-f0-9]{32,64}$$' || return 1
+	uci -q set sheepfold.global.router_install_id="$$install_id"
+}
+# ID не является паролем: он позволяет отличить восстановление на этом же
+# роутере от переноса, где старые HMAC-отпечатки использовать нельзя. §cfgbak1
+ensure_router_install_id || {
+	echo 'Could not create Sheepfold router installation id.' >&2
+	exit 1
+}
 uci -q delete sheepfold.global.app_https_port 2>/dev/null || true
 ensure_global_option log_storage 'ram'
 ensure_global_option log_cache_path '/tmp/sheepfold/events.log'
@@ -236,12 +278,20 @@ add_emergency_site() {
 	name="$$3"
 	description="$$4"
 	order="$$5"
+	source="$${6:-}"
+	profile_country="$${7:-}"
+	profile_id="$${8:-}"
 	uci -q set "sheepfold.$$section=emergency_site"
 	uci -q set "sheepfold.$$section.domain=$$domain"
 	uci -q set "sheepfold.$$section.name=$$name"
 	uci -q set "sheepfold.$$section.description=$$description"
 	uci -q set "sheepfold.$$section.enabled=1"
 	uci -q set "sheepfold.$$section.order=$$order"
+	if [ "$$source" = country_profile ]; then
+		uci -q set "sheepfold.$$section.source=$$source"
+		uci -q set "sheepfold.$$section.profile_country=$$profile_country"
+		uci -q set "sheepfold.$$section.profile_id=$$profile_id"
+	fi
 }
 if [ "$$(uci -q get sheepfold.global.emergency_sites_initialized 2>/dev/null || printf 0)" != 1 ] && \
 		! uci -q show sheepfold 2>/dev/null | grep -q '=emergency_site$$'; then
@@ -254,13 +304,17 @@ if [ "$$(uci -q get sheepfold.global.emergency_sites_initialized 2>/dev/null || 
 	if [ "$$legacy_order" = 0 ]; then
 		# Стартовый набор создаём только при отсутствии пользовательских записей.
 		# Обновление пакета не должно возвращать удалённые родителем домены. §emerg1
-		add_emergency_site emergency_gosuslugi_ru gosuslugi.ru 'Госуслуги' 'Государственные услуги' 1
-		add_emergency_site emergency_esia_gosuslugi_ru esia.gosuslugi.ru 'ЕСИА' 'Вход в государственную учётную запись' 2
-		add_emergency_site emergency_mos_ru mos.ru 'Услуги Москвы' 'Городские сервисы' 3
-		add_emergency_site emergency_school_mos_ru school.mos.ru 'Московская школа' 'Доступ к школе' 4
-		add_emergency_site emergency_dnevnik_ru dnevnik.ru 'Дневник.ру' 'Школьный дневник' 5
-		add_emergency_site emergency_ya_ru ya.ru 'Поиск Яндекса' 'Узкая точка входа в поиск' 6
-		add_emergency_site emergency_2gis_ru 2gis.ru '2ГИС' 'Карты и организации' 7
+		add_emergency_site emergency_gosuslugi_ru gosuslugi.ru 'Госуслуги' 'Государственные услуги' 1 country_profile ru gosuslugi
+		add_emergency_site emergency_esia_gosuslugi_ru esia.gosuslugi.ru 'ЕСИА' 'Вход в государственную учётную запись' 2 country_profile ru esia
+		add_emergency_site emergency_mos_ru mos.ru 'Услуги Москвы' 'Городские сервисы' 3 country_profile ru mos
+		add_emergency_site emergency_school_mos_ru school.mos.ru 'Московская школа' 'Доступ к школе' 4 country_profile ru school_mos
+		add_emergency_site emergency_dnevnik_ru dnevnik.ru 'Дневник.ру' 'Школьный дневник' 5 country_profile ru dnevnik
+		add_emergency_site emergency_ya_ru ya.ru 'Поиск Яндекса' 'Узкая точка входа в поиск' 6 country_profile ru ya_search
+		add_emergency_site emergency_2gis_ru 2gis.ru '2ГИС' 'Карты и организации' 7 country_profile ru 2gis
+		add_emergency_site emergency_mchs_ru mchs.gov.ru 'МЧС России' 'Официальная информация о чрезвычайных ситуациях и безопасности.' 8 country_profile ru mchs
+		add_emergency_site emergency_mchs_psychology_ru psi.mchs.gov.ru 'Экстренная психологическая помощь МЧС' 'Информация и контакты психологической помощи в кризисной ситуации.' 9 country_profile ru mchs_psychology
+		add_emergency_site emergency_minzdrav_ru minzdrav.gov.ru 'Минздрав России' 'Официальная информация здравоохранения.' 10 country_profile ru minzdrav
+		add_emergency_site emergency_rzd_ru rzd.ru 'Российские железные дороги' 'Расписание поездов и информация о железнодорожных поездках.' 11 country_profile ru rzd
 	fi
 fi
 uci -q set sheepfold.global.emergency_sites_initialized='1'
@@ -329,7 +383,7 @@ for section in $$(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^
 	[ "$$next_admin_id" -gt "$$current" ] || next_admin_id=$$((current + 1))
 done
 [ -x /usr/libexec/sheepfold/sheepfold-default-groups ] && /usr/libexec/sheepfold/sheepfold-default-groups apply
-[ -x /usr/libexec/sheepfold/sheepfold-device-id ] && /usr/libexec/sheepfold/sheepfold-device-id ensure-all
+[ -x /usr/libexec/sheepfold/sheepfold-device-id ] && /usr/libexec/sheepfold/sheepfold-device-id migrate
 if [ "$$(uci -q get sheepfold.global.luci_language_synced 2>/dev/null)" != "1" ]; then
 	lang="$$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
 	case "$$lang" in
@@ -402,6 +456,8 @@ esac
 uci -q set sheepfold.global.product_variant='$(SHEEPFOLD_PRODUCT_VARIANT)'
 uci -q set sheepfold.global.ui_asset_version='$(SHEEPFOLD_UI_ASSET_VERSION)'
 uci -q commit sheepfold
+[ -x /usr/libexec/sheepfold/sheepfold-country-profile ] && \
+	/usr/libexec/sheepfold/sheepfold-country-profile migrate >/dev/null 2>&1 || true
 find /usr/libexec/sheepfold -type f -exec chmod 0755 {} + 2>/dev/null || true
 [ -x /usr/libexec/sheepfold/sheepfold-ipv6-control ] && \
 	/usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || true

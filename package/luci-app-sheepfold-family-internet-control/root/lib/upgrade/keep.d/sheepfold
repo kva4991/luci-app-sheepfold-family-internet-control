@@ -1,0 +1,3 @@
+/etc/config/sheepfold
+/etc/sheepfold/.device-identity-hmac
+/etc/sheepfold/child-wifi-networks

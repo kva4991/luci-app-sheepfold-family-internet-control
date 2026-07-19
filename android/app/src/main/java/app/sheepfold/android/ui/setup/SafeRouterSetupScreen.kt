@@ -21,13 +21,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -64,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
@@ -343,12 +344,20 @@ private fun QrStep(busy: Boolean, onPayload: (String) -> Unit) {
         OutlinedButton(onClick = { gallery.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.setup_qr_from_file))
         }
-        Box(
-            Modifier.fillMaxWidth().aspectRatio(1f).border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-        ) {
-            LiveQrScanner(enabled = !busy, onPayload = onPayload)
-            if (busy) Box(Modifier.fillMaxSize().background(Color(0x66000000)), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // В вертикально прокручиваемой Column aspectRatio иногда получает
+            // неудобные ограничения. Размер от фактической ширины гарантирует квадрат.
+            val scannerSize = maxWidth
+            Box(
+                Modifier
+                    .size(scannerSize)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+            ) {
+                LiveQrScanner(enabled = !busy, onPayload = onPayload)
+                if (busy) Box(Modifier.fillMaxSize().background(Color(0x66000000)), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
             }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -423,7 +432,14 @@ private fun LiveQrScanner(enabled: Boolean, onPayload: (String) -> Unit) {
     DisposableEffect(Unit) { onDispose { executor.shutdown() } }
     AndroidView(
         modifier = Modifier.fillMaxSize(),
-        factory = { PreviewView(it).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } },
+        factory = {
+            PreviewView(it).apply {
+                // TextureView в COMPATIBLE-режиме подчиняется квадратным границам
+                // Compose; SurfaceView на части прошивок визуально выходил за них.
+                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                scaleType = PreviewView.ScaleType.FILL_CENTER
+            }
+        },
         update = { previewView ->
             if (!enabled || delivered.get()) return@AndroidView
             val providerFuture = ProcessCameraProvider.getInstance(context)

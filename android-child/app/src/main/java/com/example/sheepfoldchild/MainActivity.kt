@@ -23,6 +23,7 @@ import com.example.sheepfoldchild.ui.MainNavigation
 import com.example.sheepfoldchild.ui.SetupScreen
 import com.example.sheepfoldchild.viewmodel.ChildStatusViewModel
 import com.example.sheepfoldchild.viewmodel.ChildUiState
+import com.example.sheepfoldchild.viewmodel.ChildSetupState
 
 class MainActivity : ComponentActivity() {
 
@@ -47,6 +48,36 @@ class MainActivity : ComponentActivity() {
                     ) {
                         add(Manifest.permission.POST_NOTIFICATIONS)
                     }
+                    if (ContextCompat.checkSelfPermission(
+                            this@MainActivity,
+                            Manifest.permission.READ_PHONE_STATE
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        add(Manifest.permission.READ_PHONE_STATE)
+                    }
+                    if (ContextCompat.checkSelfPermission(
+                            this@MainActivity,
+                            Manifest.permission.READ_PHONE_NUMBERS
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        add(Manifest.permission.READ_PHONE_NUMBERS)
+                    }
+                    if (ContextCompat.checkSelfPermission(
+                            this@MainActivity,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    }
+                    if (
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(
+                            this@MainActivity,
+                            Manifest.permission.NEARBY_WIFI_DEVICES
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                    }
                 }
                 if (missingPermissions.isNotEmpty()) {
                     permissionLauncher.launch(missingPermissions.toTypedArray())
@@ -65,7 +96,9 @@ class MainActivity : ComponentActivity() {
                 }
                 if (viewModel.routerBaseUrl.isNullOrBlank()) {
                     SetupScreen(
+                        isSearching = viewModel.setupState is ChildSetupState.Searching,
                         errorMessage = (viewModel.uiState as? ChildUiState.Error)?.message,
+                        onRetry = viewModel::searchForRouter,
                         onSave = { url -> viewModel.saveRouterUrl(url) }
                     )
                 } else {

@@ -1,0 +1,70 @@
+[
+  {
+    "caseId": "smartSpeakerNoPrivilege",
+    "input": {
+      "name": "Yandex Station",
+      "mdnsServices": "_googlecast._tcp,_raop._tcp"
+    },
+    "expected": {
+      "type": "speaker",
+      "targetGroup": "",
+      "hardDeny": false,
+      "minEvidenceCount": 2,
+      "maxAutoScore": 0
+    }
+  },
+  {
+    "caseId": "gatewayNeverTrusted",
+    "input": {
+      "name": "home server",
+      "ports": "8123",
+      "ssdpProfile": "urn:schemas-upnp-org:device:InternetGatewayDevice:1|uuid:synthetic-gateway|OpenWrt UPnP|http://192.168.1.1/root.xml"
+    },
+    "expected": {
+      "type": "network",
+      "targetGroup": "",
+      "hardDeny": true
+    }
+  },
+  {
+    "caseId": "printerInfrastructure",
+    "input": {
+      "name": "Office printer",
+      "ports": "631,9100",
+      "mdnsServices": "_ipp._tcp,_printer._tcp"
+    },
+    "expected": {
+      "type": "printer",
+      "targetGroup": "Без ограничений",
+      "hardDeny": false,
+      "minEvidenceCount": 2,
+      "minAutoScore": 80
+    }
+  },
+  {
+    "caseId": "onvifCameraSingleSignal",
+    "input": {
+      "name": "unknown-device",
+      "wsdProfile": "dn:NetworkVideoTransmitter|onvif://www.onvif.org/type/video_encoder"
+    },
+    "expected": {
+      "type": "camera",
+      "hardDeny": false,
+      "maxAutoScore": 79
+    }
+  },
+  {
+    "caseId": "ownerConfirmedSmartHome",
+    "input": {
+      "name": "Yeelight lamp",
+      "staticName": "Yeelight kitchen lamp"
+    },
+    "expected": {
+      "type": "smart_home",
+      "targetGroup": "Без ограничений",
+      "hardDeny": false,
+      "minEvidenceCount": 2,
+      "minAutoScore": 80
+    }
+  }
+]

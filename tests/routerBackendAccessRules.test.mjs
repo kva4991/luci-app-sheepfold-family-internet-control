@@ -10,6 +10,14 @@ const routerControlPath = resolve(
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-router-control-legacy',
 );
 const routerControl = readFileSync(routerControlPath, 'utf8');
+const routerFacade = readFileSync(resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-router-control',
+), 'utf8');
+const routerFrontend = readFileSync(resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/core/backend/router.js',
+), 'utf8');
 const clientStatus = readFileSync(
   resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-client-status-effective'),
   'utf8',
@@ -23,6 +31,13 @@ function shellFunction(name, nextName) {
 }
 
 describe('Router backend access rules', () => {
+  it('attributes LuCI writes explicitly without relabeling API commands', () => {
+    assert.match(routerFrontend, /\['--luci'\]\.concat/);
+    assert.match(routerFacade, /SHEEPFOLD_ACTION_ACTOR='LuCI \(Изменено на роутере\)'/);
+    assert.match(routerControl, /message="\${SHEEPFOLD_ACTION_ACTOR}: \$message"/);
+    assert.doesNotMatch(routerControl, /log_event "LuCI \(Изменено на роутере\):/);
+  });
+
   it('does not let temporary access override blocklist state', () => {
     assert.match(routerControl, /device_temp_access\(\)/);
     assert.match(routerControl, /list_has_mac blocklist "\$device_mac"/);
@@ -77,5 +92,6 @@ describe('Router backend access rules', () => {
   it('reports the configured policy for newly detected devices', () => {
     assert.match(clientStatus, /new_device_policy/);
     assert.match(clientStatus, /new_device_policy" = restrict[\s\S]*status=restricted[\s\S]*reason=new_device_policy/);
+    assert.match(clientStatus, /status=allow[\s\S]*reason=new_device_policy_allow/);
   });
 });

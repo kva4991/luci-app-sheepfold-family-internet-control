@@ -47,6 +47,24 @@ function staticLease(title) {
 	return wrapped('sf-static-lease-icon', title, ['M7 11V8a5 5 0 0 1 10 0v3', 'M6 11h12v10H6z', 'M12 15v2']);
 }
 
+function deviceIdentity(protectedIdentity, title) {
+	var paths = [
+		'M9.5 11a4 4 0 1 1 5 0',
+		'M4 21a8 8 0 0 1 12.2-6.8',
+		'M18 12.5v1.1l1 .6-1 1.8-1.1-.4-.9.5-.2 1.2h-2l-.2-1.2-.9-.5-1.1.4-1-1.8 1-.6v-1.1l-1-.6 1-1.8 1.1.4.9-.5.2-1.2h2l.2 1.2.9.5 1.1-.4 1 1.8z',
+		'M15 11.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2z'
+	];
+
+	if (!protectedIdentity)
+		paths.push('M3 3l18 18');
+
+	return wrapped(
+		'sf-device-identity-icon ' + (protectedIdentity ? 'is-trusted' : 'is-mac-only'),
+		title,
+		paths
+	);
+}
+
 function named(name) {
 	return svg(namedPaths[name] || namedPaths.gear);
 }
@@ -68,6 +86,7 @@ return baseclass.extend({
 	adminDevice: adminDevice,
 	adminCrown: adminCrown,
 	staticLease: staticLease,
+	deviceIdentity: deviceIdentity,
 	named: named,
 	button: button
 });

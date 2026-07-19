@@ -25,16 +25,29 @@ function normalizeSite(site) {
 	var name = String(site && site[1] || '').trim();
 	var description = String(site && site[2] || '').trim();
 	var section = String(site && site[3] || '').trim();
+	var source = String(site && site[4] || '').trim();
+	var profileCountry = String(site && site[5] || '').trim();
+	var profileId = String(site && site[6] || '').trim();
 
 	if (!domain)
 		throw new Error('invalid_domain');
 	if (name.length > 120 || description.length > 1000)
 		throw new Error('text_too_long');
-	return [domain, name, description, section];
+
+	// Метаданные принадлежат только встроенному country profile. Любая ручная
+	// карточка остаётся самостоятельной и не должна исчезнуть при смене страны.
+	if (source !== 'country_profile' || !/^(?:ru|by|cn)$/.test(profileCountry) ||
+			!/^[a-z0-9_]{1,40}$/.test(profileId)) {
+		source = '';
+		profileCountry = '';
+		profileId = '';
+	}
+
+	return [domain, name, description, section, source, profileCountry, profileId];
 }
 
 function clone(sites) {
-	return (sites || []).map(function (site) { return site.slice(0, 4); });
+	return (sites || []).map(function (site) { return site.slice(0, 7); });
 }
 
 function fromSections(sections) {
@@ -50,7 +63,10 @@ function fromSections(sections) {
 			normalizeDomain(section.domain),
 			String(section.name || ''),
 			String(section.description || ''),
-			String(section['.name'] || '')
+			String(section['.name'] || ''),
+			String(section.source || ''),
+			String(section.profile_country || ''),
+			String(section.profile_id || '')
 		];
 	}).filter(function (site) {
 		return !!site[0];
@@ -89,11 +105,28 @@ function stage(uci, config, sites) {
 	var used = Object.create(null);
 	var domains = Object.create(null);
 	var sections = uci.sections(config, sectionType) || [];
+	var selectedSections = Object.create(null);
+	var tombstones = [];
 
 	normalized.forEach(function (site) {
 		if (domains[site[0]])
 			throw new Error('duplicate_domain');
 		domains[site[0]] = true;
+		if (safeSectionName(site[3]))
+			selectedSections[site[3]] = true;
+	});
+	sections.forEach(function (section) {
+		var generated = section.source === 'country_profile' &&
+			/^(?:ru|by|cn)$/.test(section.profile_country || '') &&
+			/^[a-z0-9_]{1,40}$/.test(section.profile_id || '');
+
+		if (!generated)
+			return;
+
+		// Удаление профильной карточки запоминается выключенной секцией. Иначе
+		// смена страны туда-обратно незаметно вернула бы сайт, удалённый родителем.
+		if (section.enabled === '0' || !selectedSections[section['.name']])
+			tombstones.push(section);
 	});
 	sections.forEach(function (section) { uci.remove(config, section['.name']); });
 	normalized.forEach(function (site, index) {
@@ -110,6 +143,31 @@ function stage(uci, config, sites) {
 		uci.set(config, section, 'description', site[2]);
 		uci.set(config, section, 'enabled', '1');
 		uci.set(config, section, 'order', String(index + 1));
+		if (site[4] === 'country_profile') {
+			uci.set(config, section, 'source', site[4]);
+			uci.set(config, section, 'profile_country', site[5]);
+			uci.set(config, section, 'profile_id', site[6]);
+		}
+	});
+	tombstones.forEach(function (saved) {
+		var section = safeSectionName(saved['.name']);
+		var domain = normalizeDomain(saved.domain);
+		var actual;
+
+		if (!section || !domain || used[section])
+			return;
+		actual = uci.add(config, sectionType, section) || section;
+		if (actual !== section)
+			throw new Error('named_section_not_supported');
+		used[section] = true;
+		uci.set(config, section, 'domain', domain);
+		uci.set(config, section, 'name', String(saved.name || ''));
+		uci.set(config, section, 'description', String(saved.description || ''));
+		uci.set(config, section, 'enabled', '0');
+		uci.set(config, section, 'order', String(parseInt(saved.order, 10) || 0));
+		uci.set(config, section, 'source', 'country_profile');
+		uci.set(config, section, 'profile_country', String(saved.profile_country));
+		uci.set(config, section, 'profile_id', String(saved.profile_id));
 	});
 
 	// Возвращаем нормализованный снимок, чтобы после сохранения интерфейс сравнивал

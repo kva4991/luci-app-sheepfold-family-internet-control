@@ -27,9 +27,10 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'routerTestCommon.ps1')
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$workRoot = Get-SheepfoldWorkRoot -RepoRoot $repoRoot
 $config = Get-SheepfoldRouterConfig
 $runId = (Get-Date -Format 'yyyyMMddHHmmss') + '-' + ([Guid]::NewGuid().ToString('N').Substring(0, 8))
-$reportDir = Join-Path $repoRoot ".build\live-router\$runId"
+$reportDir = Join-Path $workRoot "live-router\$runId"
 $privateDir = Join-Path $reportDir 'private'
 $remoteDir = "/tmp/sheepfold-live-test-$runId"
 $packageManager = ''
@@ -131,7 +132,7 @@ function Resolve-TestPackage {
             return (Resolve-Path -LiteralPath $IpkPath).Path
         }
 
-        $buildDir = Join-Path $repoRoot '.build\live-router-ipk'
+        $buildDir = Join-Path $workRoot 'live-router-ipk'
         New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
         Write-TestLog "Собирается вариант $Variant в $buildDir"
         & python (Join-Path $repoRoot 'scripts\build-test-ipk.py') --variant $Variant --out-dir $buildDir

@@ -2,7 +2,12 @@
 set -eu
 
 DETECTOR="/usr/libexec/sheepfold/sheepfold-device-detector"
-SCAN_LOCK="/tmp/sheepfold/device-detection.lock"
+PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
+FIREWALL_HELPER="/usr/libexec/sheepfold/sheepfold-firewall"
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-${0%/*}/sheepfold-lock-common}"
+[ -r "$LOCK_COMMON" ] || LOCK_COMMON=/usr/libexec/sheepfold/sheepfold-lock-common
+. "$LOCK_COMMON"
+SCAN_LOCK="/tmp/sheepfold/device-detection.flock"
 mac="$(printf '%s' "${1:-}" | tr '[:lower:]' '[:upper:]')"
 
 printf '%s' "$mac" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' || {
@@ -24,32 +29,58 @@ done
         exit 3
 }
 
-acquire_lock() {
-        mkdir -p /tmp/sheepfold
-        attempts=0
-        while ! mkdir "$SCAN_LOCK" 2>/dev/null; do
-                attempts=$((attempts + 1))
-                [ "$attempts" -lt 30 ] || {
-                        echo "detector_busy" >&2
-                        return 1
-                }
-                sleep 1
-        done
-        trap 'rmdir "$SCAN_LOCK" 2>/dev/null || true' EXIT HUP INT TERM
-}
+for blocked_mac in $(uci -q get sheepfold.blocklist.mac 2>/dev/null || true); do
+        [ "$(printf '%s' "$blocked_mac" | tr '[:lower:]' '[:upper:]')" = "$mac" ] || continue
+        echo "device_blocklisted" >&2
+        exit 4
+done
+case "$(uci -q get "sheepfold.$section.status" 2>/dev/null || true)" in
+        blocked|block)
+                echo "device_blocklisted" >&2
+                exit 4
+                ;;
+esac
 
-release_lock() {
-        rmdir "$SCAN_LOCK" 2>/dev/null || true
-        trap - EXIT HUP INT TERM
-}
+# Постоянная аренда не доказывает присутствие клиента. Ручной полный анализ
+# разрешён только для ARP/Wi-Fi/recent-DHCP клиента, который сейчас online. §detlife1
+if [ ! -x "$PRESENCE" ] || ! "$PRESENCE" current 2>/dev/null |
+        awk -F '\t' -v wanted="$mac" 'toupper($1) == wanted { found=1 } END { exit !found }'; then
+        echo "device_offline" >&2
+        exit 7
+fi
 
-acquire_lock || exit 5
+# Очистка сохранённой классификации и новый полный проход образуют одну операцию:
+# фоновый детектор не должен вклиниться между ними. §detlock
+sheepfold_lock_acquire "$SCAN_LOCK" 30 || {
+        echo "detector_busy" >&2
+        exit 5
+}
+trap 'sheepfold_lock_release' EXIT HUP INT TERM
 
 # manual_device_type_locked: обычный авто-детектор не трогает тип, выбранный
 # владельцем вручную. Нажатие «Определить заново» — отдельное явное решение
 # владельца снова доверить тип автоматическому детектору.
 uci -q set "sheepfold.$section.manual_device_type=0"
 uci -q delete "sheepfold.$section.device_type" 2>/dev/null || true
+
+# Для карантина это отдельное осознанное решение владельца: текущие хешированные
+# ключи становятся новым baseline, а прежние группа/списки/расписания не меняются.
+quarantine_keys="$(uci -q get "sheepfold.$section.identity_quarantine_keys" 2>/dev/null || true)"
+collision_with="$(uci -q get "sheepfold.$section.identity_uuid_collision_with_id" 2>/dev/null || true)"
+if [ -n "$(uci -q get "sheepfold.$section.identity_quarantine_mode" 2>/dev/null || true)" ] && \
+        [ -n "$quarantine_keys" ]; then
+        uci -q set "sheepfold.$section.trusted_identity_keys=$quarantine_keys"
+	uci -q set "sheepfold.$section.trusted_identity_version=2"
+	# «Доверять текущему подключению» является решением родителя и для
+	# одновременной UUID-коллизии. Принятие ограничено конкретным прежним #ID.
+	[ -z "$collision_with" ] || uci -q set "sheepfold.$section.identity_uuid_collision_accepted_with_id=$collision_with"
+fi
+for option in identity_quarantine_mode identity_quarantine_reason identity_quarantine_at identity_quarantine_keys identity_quarantine_keys_version identity_quarantine_notified_at; do
+        uci -q delete "sheepfold.$section.$option" 2>/dev/null || true
+done
+for option in identity_uuid_collision_with_id identity_uuid_collision_reason identity_uuid_collision_pending; do
+	uci -q delete "sheepfold.$section.$option" 2>/dev/null || true
+done
 
 for option in \
         detected_type \
@@ -59,6 +90,7 @@ for option in \
         detection_auto_group_score \
         detection_evidence \
         detection_evidence_count \
+	detection_competing_evidence \
         detection_hard_deny \
         detection_policy_version \
         detection_fingerprint \
@@ -66,19 +98,29 @@ for option in \
         detection_ports_scanned_at \
         detection_oui_vendor \
         detection_mdns_services \
+        detection_mdns_profile \
+        detection_ssdp_profile \
+	detection_wsd_profile \
+        detection_identity_keys \
+	detection_identity_version \
+        detection_last_analysis_at \
         detection_updated_at; do
         uci -q delete "sheepfold.$section.$option" 2>/dev/null || true
 done
 
 uci -q commit sheepfold
 
-if [ -x "$DETECTOR" ] && ! "$DETECTOR" scan full "$mac" >/dev/null 2>&1; then
-        release_lock
+if [ -x "$DETECTOR" ] && ! SHEEPFOLD_DEVICE_LOCK_HELD=1 "$DETECTOR" scan full "$mac" >/dev/null 2>&1; then
+        sheepfold_lock_release
+        trap - EXIT HUP INT TERM
         echo "reclassification_scan_failed" >&2
         exit 6
 fi
 
-release_lock
+[ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
+
+sheepfold_lock_release
+trap - EXIT HUP INT TERM
 printf 'status=reclassified\n'
 printf 'section=%s\n' "$section"
 printf 'mac=%s\n' "$mac"

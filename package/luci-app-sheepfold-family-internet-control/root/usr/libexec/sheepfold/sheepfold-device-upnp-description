@@ -1,0 +1,168 @@
+#!/bin/sh
+set -eu
+
+HASH_COMMON="${SHEEPFOLD_HASH_COMMON:-${0%/*}/sheepfold-hash-common}"
+[ -r "$HASH_COMMON" ] || HASH_COMMON=/usr/libexec/sheepfold/sheepfold-hash-common
+. "$HASH_COMMON"
+
+PEER_IP="${1:-}"
+LOCATION="${2:-}"
+MAX_AGE="${3:-86400}"
+CACHE_DIR="${SHEEPFOLD_UPNP_CACHE_DIR:-/tmp/sheepfold/device-upnp}"
+UBUS_BIN="${SHEEPFOLD_UBUS_BIN:-ubus}"
+IP_BIN="${SHEEPFOLD_IP_BIN:-ip}"
+CURL_BIN="${SHEEPFOLD_CURL_BIN:-curl}"
+JSHN_LIB="${SHEEPFOLD_UPNP_JSHN_LIB:-/usr/share/libubox/jshn.sh}"
+MAX_BYTES=65536
+
+fail() {
+	return 1
+}
+
+valid_ipv4() {
+	printf '%s\n' "$1" | awk -F . '
+		NF != 4 { exit 1 }
+		{
+			for (i = 1; i <= 4; i++)
+				if ($i !~ /^[0-9]+$/ || (length($i) > 1 && substr($i, 1, 1) == "0") ||
+				    $i < 0 || $i > 255) exit 1
+			if ($1 == 0 || $1 == 127 || $1 >= 224) exit 1
+		}
+	'
+}
+
+safe_field() {
+	printf '%s' "${1:-}" |
+		tr '\r\n\t' '   ' |
+		sed 's/[[:cntrl:]]//g; s/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//' |
+		cut -c1-256
+}
+
+xml_value() {
+	local file wanted
+	file="$1"
+	wanted="$2"
+	awk -v wanted="$wanted" '
+		BEGIN { RS = "<" }
+		{
+			boundary = index($0, ">")
+			if (!boundary) next
+			opening = substr($0, 1, boundary - 1)
+			content = substr($0, boundary + 1)
+			sub(/[[:space:]].*$/, "", opening)
+			sub(/^.*:/, "", opening)
+			if (tolower(opening) != wanted) next
+			gsub(/[\r\n\t]/, " ", content)
+			gsub(/[[:cntrl:]]/, "", content)
+			gsub(/[[:space:]][[:space:]]*/, " ", content)
+			sub(/^ /, "", content)
+			sub(/ $/, "", content)
+			print substr(content, 1, 256)
+			exit
+		}
+	' "$file"
+}
+
+lan_device_from_status() {
+	local status
+	status="$1"
+	[ -r "$JSHN_LIB" ] || return 1
+
+	# Ответ ubus разбирается штатным JSON-парсером OpenWrt. Так helper не получает
+	# скрытую зависимость от jsonfilter и не смешивает похожие ключи по регистру.
+	(
+		set +u
+		# shellcheck source=/usr/share/libubox/jshn.sh
+		. "$JSHN_LIB"
+		json_load "$status" >/dev/null 2>&1 || exit 1
+		json_get_var parsed_device l3_device
+		[ -n "$parsed_device" ] || json_get_var parsed_device device
+		printf '%s\n' "$parsed_device"
+		json_cleanup
+	)
+}
+
+case "$MAX_AGE" in ''|*[!0-9]*) MAX_AGE=86400 ;; esac
+[ "$MAX_AGE" -ge 900 ] || MAX_AGE=900
+[ "$MAX_AGE" -le 604800 ] || MAX_AGE=604800
+valid_ipv4 "$PEER_IP" || fail
+[ -n "$LOCATION" ] || fail
+printf '%s' "$LOCATION" | grep -Eq '^[^[:space:][:cntrl:]\\#]+$' || fail
+
+# LOCATION полностью контролируется LAN-клиентом. Разрешён только HTTP к тому же
+# каноническому IPv4, который прислал SSDP-ответ: без DNS, ведущих нулей,
+# userinfo, redirect и перехода к самому роутеру. Так XML улучшает распознавание,
+# но не становится SSRF. §devident1
+case "$LOCATION" in
+	http://*) remainder="${LOCATION#http://}" ;;
+	*) fail ;;
+esac
+authority="${remainder%%/*}"
+[ -n "$authority" ] || fail
+case "$authority" in *'@'*|*'['*|*']'*|*'?'*) fail ;; esac
+case "$authority" in
+	*:*)
+		host="${authority%:*}"
+		port="${authority##*:}"
+		case "$host" in *:*) fail ;; esac
+		case "$port" in ''|*[!0-9]*) fail ;; esac
+		[ "$port" -ge 1 ] && [ "$port" -le 65535 ] || fail
+		;;
+	*) host="$authority" ;;
+esac
+[ "$host" = "$PEER_IP" ] || fail
+
+lan_status="$($UBUS_BIN -S call network.interface.lan status 2>/dev/null || true)"
+[ -n "$lan_status" ] || fail
+lan_device="$(lan_device_from_status "$lan_status" 2>/dev/null || true)"
+printf '%s' "$lan_device" | grep -Eq '^[A-Za-z0-9_.:-]+$' || fail
+router_ip="$($IP_BIN -4 -o addr show dev "$lan_device" 2>/dev/null | awk '{ sub(/\/.*/, "", $4); print $4; exit }')"
+[ -z "$router_ip" ] || [ "$router_ip" != "$PEER_IP" ] || fail
+$IP_BIN -4 neigh show dev "$lan_device" 2>/dev/null |
+	awk -v wanted="$PEER_IP" '$1 == wanted && /lladdr/ && $NF ~ /^(REACHABLE|STALE|DELAY|PROBE|PERMANENT)$/ { found = 1 } END { exit !found }' || fail
+
+location_hash="$(sheepfold_state_hash_text "$LOCATION")"
+[ -n "$location_hash" ] || fail
+mkdir -p "$CACHE_DIR"
+chmod 700 "$CACHE_DIR" 2>/dev/null || true
+cache_file="$CACHE_DIR/$(printf '%s' "$PEER_IP" | tr '.' '_').tsv"
+now="$(date +%s)"
+cached_hash="$(awk -F '\t' 'NR == 1 { print $2 }' "$cache_file" 2>/dev/null || true)"
+cached_at="$(awk -F '\t' 'NR == 1 { print $3 }' "$cache_file" 2>/dev/null || printf 0)"
+case "$cached_at" in ''|*[!0-9]*) cached_at=0 ;; esac
+if [ "$cached_hash" = "$location_hash" ] && [ $((now - cached_at)) -ge 0 ] && \
+   [ $((now - cached_at)) -lt "$MAX_AGE" ]; then
+	exit 0
+fi
+
+body="$CACHE_DIR/.description-body.$$"
+output="$cache_file.tmp.$$"
+trap 'rm -f "$body" "$output"' EXIT HUP INT TERM
+umask 077
+http_status="$($CURL_BIN --silent --show-error --fail \
+	--interface "$lan_device" --noproxy '*' \
+	--proto '=http' --proto-redir '=http' --max-redirs 0 \
+	--connect-timeout 2 --max-time 3 --max-filesize "$MAX_BYTES" \
+	--output "$body" --write-out '%{http_code}' -- "$LOCATION" 2>/dev/null || true)"
+[ "$http_status" = 200 ] || fail
+[ -r "$body" ] || fail
+body_size="$(wc -c < "$body" | tr -d ' ')"
+case "$body_size" in ''|*[!0-9]*) fail ;; esac
+[ "$body_size" -gt 0 ] && [ "$body_size" -le "$MAX_BYTES" ] || fail
+grep -Eiq '<([[:alnum:]_-]+:)?device([[:space:]>])' "$body" || fail
+
+device_type="$(safe_field "$(xml_value "$body" devicetype)")"
+friendly_name="$(safe_field "$(xml_value "$body" friendlyname)")"
+manufacturer="$(safe_field "$(xml_value "$body" manufacturer)")"
+model_description="$(safe_field "$(xml_value "$body" modeldescription)")"
+model_name="$(safe_field "$(xml_value "$body" modelname)")"
+model_number="$(safe_field "$(xml_value "$body" modelnumber)")"
+serial_number="$(safe_field "$(xml_value "$body" serialnumber)")"
+udn="$(safe_field "$(xml_value "$body" udn)")"
+
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+	"$PEER_IP" "$location_hash" "$now" "$device_type" "$friendly_name" \
+	"$manufacturer" "$model_description" "$model_name" "$model_number" \
+	"$serial_number" "$udn" > "$output"
+chmod 600 "$output" 2>/dev/null || true
+mv -f "$output" "$cache_file"

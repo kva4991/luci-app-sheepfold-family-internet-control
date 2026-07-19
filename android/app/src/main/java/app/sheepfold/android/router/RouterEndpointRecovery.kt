@@ -17,8 +17,10 @@ object RouterEndpointRecovery {
         val host = failedUrl.host.takeIf { it.isNotBlank() } ?: return null
         val hostForUrl = if (host.contains(':')) "[$host]" else host
         val discoveryUrl = URL("https://$hostForUrl/.well-known/sheepfold.json")
-        val tlsPin = connection.tlsPinSha256 ?: return null
-        val json = readDiscovery(discoveryUrl, tlsPin) ?: return null
+        val tlsPin = connection.tlsPinSha256
+        val tlsSpki = connection.tlsSpkiSha256
+        if (tlsPin.isNullOrBlank() && tlsSpki.isNullOrBlank()) return null
+        val json = readDiscovery(discoveryUrl, tlsPin, tlsSpki) ?: return null
 
         val port = json.optString("httpsPort")
             .ifBlank { json.optString("appPort") }
@@ -34,14 +36,20 @@ object RouterEndpointRecovery {
 
         if (updatedApiUrl == failedApiUrl.trimEnd('/')) return null
 
-        // Discovery доверяем только при совпадении уже закреплённого сертификата роутера.
-        // После этого сохраняем новый порт для экранов, виджетов и фоновых задач.
+        // Discovery доверяем только на уже закреплённом локальном IP и при совпадении
+        // TLS-ключа (либо старого certificate pin). Меняется только порт. §dnsbind1
+        // После этого сохраняем новый endpoint для экранов, виджетов и фоновых задач.
         SheepfoldConnectionStore.updateApiUrl(context, updatedApiUrl)
         return updatedApiUrl
     }
 
-    private fun readDiscovery(url: URL, tlsPin: String): JSONObject? = runCatching {
-        val (http, _) = RouterHttps.open(url, tlsPin, allowTrustOnFirstUse = false)
+    private fun readDiscovery(url: URL, tlsPin: String?, tlsSpki: String?): JSONObject? = runCatching {
+        val (http, _) = RouterHttps.open(
+            url,
+            tlsPin,
+            allowTrustOnFirstUse = false,
+            tlsSpkiSha256 = tlsSpki
+        )
         try {
             http.connectTimeout = 3000
             http.readTimeout = 3000

@@ -32,10 +32,16 @@ describe('live router automation §routerharness', () => {
     assert.match(common, /'-O'/);
     assert.match(common, /OpenSSH 9[\s\S]*?SFTP[\s\S]*?OpenWrt/);
     assert.match(common, /Test-SheepfoldPrivateIpv4/);
+    assert.match(common, /Get-SheepfoldLuciBaseUrl/);
+    assert.match(common, /luciScheme[\s\S]*?'http'/);
+    assert.match(common, /luciPort[\s\S]*?80/);
     assert.match(common, /StrictHostKeyChecking=accept-new/);
     assert.match(common, /normalizedCommand[\s\S]*?Replace\("`r`n", "`n"\)[\s\S]*?Replace\("`r", "`n"\)/);
     assert.match(common, /ssh\.exe[\s\S]*?\$normalizedCommand/);
     assert.match(setup, /sheepfold_test_router_ed25519/);
+    assert.match(setup, /\[string\]\$LuciScheme = 'http'/);
+    assert.match(setup, /\[int\]\$LuciPort = 80/);
+    assert.doesNotMatch(setup, /\$HttpsPort|httpsPort =/);
     assert.match(setup, /Export-Clixml/);
     assert.match(setup, /\[string\]\$RouterHost = ''/);
     assert.doesNotMatch(setup, /\[string\]\$RouterHost = '192\./);
@@ -58,9 +64,25 @@ describe('live router automation §routerharness', () => {
     assert.match(scripts, /'\/grant:r'\s+"\$\(\$env:USERNAME\):\(OI\)\(CI\)\(F\)"/);
   });
 
+  it('can place generated scripts and private reports in an explicit Windows scratch directory', () => {
+    const common = read('tools/router-testing/routerTestCommon.ps1');
+    const backendRunner = read('tools/router-testing/runRouterTests.ps1');
+    const frontendRunner = read('tools/router-testing/runFrontendTests.ps1');
+
+    assert.match(common, /SHEEPFOLD_SCRIPT_SCRATCH_ROOT/);
+    assert.match(common, /IsPathRooted/);
+    assert.match(common, /sheepfold-temp/);
+    assert.match(backendRunner, /Get-SheepfoldWorkRoot/);
+    assert.match(backendRunner, /Join-Path \$workRoot "live-router\\\$runId"/);
+    assert.match(backendRunner, /Join-Path \$workRoot 'live-router-ipk'/);
+    assert.match(frontendRunner, /Get-SheepfoldWorkRoot/);
+    assert.match(frontendRunner, /Join-Path \$workRoot "live-router\\\$runId\\frontend"/);
+  });
+
   it('backs up configuration and forbids destructive router operations', () => {
     const runner = read('tools/router-testing/runRouterTests.ps1');
     const remote = read('tools/router-testing/remoteChecks.sh');
+    const runtimeMatrix = read('tools/router-testing/runCurrentRuntimeMatrix.ps1');
     const routerState = read('tools/router-testing/routerState.sh');
     // Запрет проверяет исполняемый код, а документация обязана называть запрещённые команды явно.
     const runnerCode = runner.replace(/<#[\s\S]*?#>/g, '');
@@ -85,13 +107,46 @@ describe('live router automation §routerharness', () => {
     assert.match(runner, /package-manager=apk/);
     assert.match(routerState, /apk info -e/);
     assert.match(remote, /apk info --from installed --fields version --format json/);
+    assert.match(remote, /tlsPublicKeyFingerprint/);
+    assert.match(remote, /openssl pkey -pubin/);
+    assert.match(remote, /tls-public-key-fingerprint/);
+    assert.match(remote, /\^router_model=\.\+\$/);
+    assert.match(remote, /\^firmware_version=\.\+\$/);
+    assert.doesNotMatch(remote, /\^model=\.\+\$|\^firmware=\.\+\$/);
     assert.doesNotMatch(runnerCode, /(?:opkg|apk) upgrade|sysupgrade|firstboot|jffs2reset/i);
     assert.doesNotMatch(stateCode, /(?:opkg|apk) upgrade|sysupgrade|firstboot|jffs2reset/i);
     assert.doesNotMatch(stateCode, /settings-import-applied|uci\s+(?:-q\s+)?commit/);
     assert.match(routerState, /\/tmp\/sheepfold-live-test-/);
     assert.match(remote, /02:53:48:45:45:50/);
     assert.match(remote, /trap restore_state EXIT HUP INT TERM/);
+    assert.match(remote, /firewall-sync\.flock/);
+    assert.match(remote, /acquire_firewall_test_lock/);
+    assert.match(remote, /while ! flock -n 8/);
+    assert.doesNotMatch(remote, /flock -w/);
+    assert.match(remote, /SHEEPFOLD_FIREWALL_LOCK_HELD=1/);
+    assert.match(runtimeMatrix, /\.SYNOPSIS[\s\S]*без установки пакета/);
+    assert.match(runtimeMatrix, /finally[\s\S]*runtime-restore-ok/);
+    assert.match(runtimeMatrix, /sha256sum[\s\S]*runtimeTarget/);
+    assert.match(runtimeMatrix, /runRouterTests[\s\S]*writeSafe[\s\S]*readOnly/);
     assert.match(remote, /settings-import-applied/);
+    assert.match(remote, /nft_set_has_mac sheepfold_exempt_macs "\$test_mac"/);
+    assert.match(remote, /nft_set_has_mac sheepfold_block_macs "\$test_mac"/);
+    assert.match(remote, /SHEEPFOLD_NOW_WEEKDAY=mon SHEEPFOLD_NOW_MINUTES=600/);
+    assert.match(remote, /scheduleBlockRuntime/);
+    assert.match(remote, /scheduleConflictOffRuntime/);
+    assert.match(remote, /scheduleConflictOnRuntime/);
+    assert.match(remote, /overnightScheduleRuntime/);
+    assert.match(remote, /scheduleAllowRuntime/);
+    assert.match(remote, /disabledScheduleRuntime/);
+    assert.match(remote, /noRestrictionsRuntime/);
+    assert.match(remote, /blocklistBeatsGroupRuntime/);
+    assert.match(remote, /noRestrictionsRelease/);
+    assert.match(remote, /device-temp-access "\$test_mac" 30/);
+    assert.match(remote, /tempAccessRuntime/);
+    assert.match(remote, /expire-temp-access/);
+    assert.match(remote, /tempAccessExpiry/);
+    assert.match(remote, /nft_set_has_mac sheepfold_restricted_macs "\$test_mac"/);
+    assert.match(remote, /runtimeRestore/);
     assert.match(runner, /'writeSafe'[\s\S]*?catch \{[\s\S]*?Restore-RemoteBackup/);
     assert.doesNotMatch(remoteCode, /\breboot\b|wifi\s+(down|off|disable)|wps-button|led-apply|flush ruleset/i);
   });
@@ -101,15 +156,27 @@ describe('live router automation §routerharness', () => {
     const browser = read('tools/router-testing/frontendSmoke.mjs');
 
     assert.match(wrapper, /playwright-core@1\.61\.1/);
+    assert.match(wrapper, /Get-SheepfoldLuciBaseUrl -Config \$config/);
+    assert.doesNotMatch(wrapper, /'https:\/\/\{0\}/);
     assert.match(wrapper, /routerTestCredential\.xml|Get-SheepfoldRouterCredentialPath/);
     assert.match(wrapper, /icacls\.exe \$reportDir/);
     assert.match(wrapper, /browser-артефактами LuCI/);
     assert.match(browser, /ignoreHTTPSErrors: true/);
+    assert.match(browser, /button\.cbi-button-positive\.important/);
+    assert.match(browser, /за пределы скрытой[\s\S]*?JS-обработчик/);
+    assert.match(browser, /waitForNavigation\(\{ waitUntil: 'domcontentloaded', timeout: 30_000 \}\)/);
+    assert.match(browser, /session cookie:[\s\S]*?Access denied/);
+    assert.match(browser, /Первый HTTP 403[\s\S]*?авторизованного интерфейса/);
+    assert.match(browser, /await page\.close\(\);[\s\S]*?page = await context\.newPage\(\)/);
+    assert.match(browser, /topTabs\.first\(\)\.waitFor\(\{ state: 'visible', timeout: 30_000 \}\)/);
+    assert.doesNotMatch(browser, /waitForTimeout\(800\)/);
     assert.match(browser, /width: 1440/);
     assert.match(browser, /width: 390/);
     assert.match(browser, /page\.screenshot/);
     assert.match(browser, /RPCError/);
     assert.match(browser, /validateRouterInformation/);
+    assert.match(browser, /validateLogPanel/);
+    assert.match(browser, /\.sf-log-filters-wrap/);
     assert.match(browser, /Router model/);
     assert.match(browser, /-failure\.png/);
     assert.doesNotMatch(browser, /\.click\([^)]*save|Сохранить.*click|Настройки успешно сохранены.*click/i);

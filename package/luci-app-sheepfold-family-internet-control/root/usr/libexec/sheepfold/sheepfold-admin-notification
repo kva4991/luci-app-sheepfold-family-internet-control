@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+HASH_COMMON="${SHEEPFOLD_HASH_COMMON:-${0%/*}/sheepfold-hash-common}"
+[ -r "$HASH_COMMON" ] || HASH_COMMON=/usr/libexec/sheepfold/sheepfold-hash-common
+. "$HASH_COMMON"
+
 STATE_DIR="${SHEEPFOLD_NOTIFICATION_DIR:-/etc/sheepfold/admin-notifications}"
 TELEGRAM_HELPER="${SHEEPFOLD_TELEGRAM_HELPER:-/usr/libexec/sheepfold/sheepfold-telegram-bot}"
 MAX_AGE_SECONDS=2592000
@@ -59,7 +63,8 @@ enqueue_notification() {
 	done
 
 	now="$(date +%s)"
-	hash="$(printf '%s' "$dedupe_key" | cksum | awk '{print $1}')"
+	hash="$(sheepfold_state_hash_text "$dedupe_key")" || return 1
+	hash="$(printf '%s' "$hash" | cut -c1-16)"
 	id="$now-$hash"
 	file="$STATE_DIR/$id.notification"
 	tmp="$file.tmp.$$"

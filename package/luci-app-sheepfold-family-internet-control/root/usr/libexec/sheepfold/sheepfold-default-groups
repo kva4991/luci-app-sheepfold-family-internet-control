@@ -83,9 +83,21 @@ ensure_owner_defaults() {
 	fi
 }
 
+repair_auto_group_list_corruption() {
+	local section option_name
+	# Старый детектор мог затереть имя секции устройства именем служебного списка.
+	# Эти поля принадлежат только config device; у config list их быть не может.
+	for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=list$/\1/p'); do
+		for option_name in group auto_group_assigned auto_group_reason detection_auto_group_status; do
+			uci -q delete "sheepfold.$section.$option_name" 2>/dev/null || true
+		done
+	done
+}
+
 ensure_default_groups() {
 	consume_install_language_pref
 	ensure_owner_defaults
+	repair_auto_group_list_corruption
 	names="$(default_group_names_for_language)"
 	no_restrictions_name="$(printf '%s' "$names" | sed -n '1p')"
 	child_name="$(printf '%s' "$names" | sed -n '2p')"

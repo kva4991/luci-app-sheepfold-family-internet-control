@@ -1,3 +1,8 @@
+/*
+ * Защищает хранение аварийно-полезных сайтов и их узкое firewall-исключение.
+ * Тест меняет только модели в памяти и читает исходники; реальный DNS/firewall
+ * проверяется отдельной категорией networkIntegration и на тестовом роутере.
+ */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -50,6 +55,9 @@ describe('emergency-useful sites persistence and enforcement §emerg1', () => {
       description: 'Государственные услуги',
       order: '1',
       enabled: '1',
+      source: 'country_profile',
+      profile_country: 'ru',
+      profile_id: 'gosuslugi',
     }];
     const uci = {
       sections: () => source,
@@ -61,10 +69,39 @@ describe('emergency-useful sites persistence and enforcement §emerg1', () => {
     const normalized = model.stage(uci, 'sheepfold', sites);
 
     assert.equal(sites[0][0], 'gosuslugi.ru');
+    assert.equal(sites[0][4], 'country_profile');
     assert.equal(normalized[0][3], 'emergency_gosuslugi_ru');
     assert.deepEqual(removed, ['emergency_gosuslugi_ru']);
     assert.ok(writes.some((entry) => entry.join(':') === 'emergency_gosuslugi_ru:domain:gosuslugi.ru'));
+    assert.ok(writes.some((entry) => entry.join(':') === 'emergency_gosuslugi_ru:profile_id:gosuslugi'));
     assert.throws(() => model.stage(uci, 'sheepfold', [sites[0], sites[0]]), /duplicate_domain/);
+  });
+
+  it('turns a deleted generated site into a persistent profile exclusion', () => {
+    const model = loadModel();
+    const writes = [];
+    const source = [{
+      '.name': 'emergency_profile_ru_mchs',
+      '.type': 'emergency_site',
+      domain: 'mchs.gov.ru',
+      name: 'МЧС России',
+      description: 'Чрезвычайные ситуации',
+      order: '1',
+      enabled: '1',
+      source: 'country_profile',
+      profile_country: 'ru',
+      profile_id: 'mchs',
+    }];
+    const uci = {
+      sections: () => source,
+      remove: () => {},
+      add: (_config, _type, section) => section,
+      set: (_config, section, option, value) => writes.push([section, option, value]),
+    };
+
+    model.stage(uci, 'sheepfold', []);
+    assert.ok(writes.some((entry) => entry.join(':') === 'emergency_profile_ru_mchs:enabled:0'));
+    assert.ok(writes.some((entry) => entry.join(':') === 'emergency_profile_ru_mchs:profile_id:mchs'));
   });
 
   it('keeps changes in the settings draft until the shared Save action', () => {

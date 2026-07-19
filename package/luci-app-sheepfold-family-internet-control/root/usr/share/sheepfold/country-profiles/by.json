@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "country": "by",
+  "displayName": {
+    "ru": "Беларусь",
+    "en": "Belarus",
+    "zh_Hans": "白俄罗斯"
+  },
+  "emergencySites": [
+    {
+      "id": "mchs",
+      "domain": "mchs.gov.by",
+      "name": { "ru": "МЧС Беларуси", "en": "Belarus Ministry of Emergency Situations", "zh_Hans": "白俄罗斯紧急情况部" },
+      "description": { "ru": "Официальная информация о чрезвычайных ситуациях и безопасности.", "en": "Official emergency and safety information.", "zh_Hans": "官方紧急情况与安全信息。" }
+    },
+    {
+      "id": "minzdrav",
+      "domain": "minzdrav.gov.by",
+      "name": { "ru": "Минздрав Беларуси", "en": "Belarus Ministry of Health", "zh_Hans": "白俄罗斯卫生部" },
+      "description": { "ru": "Официальная информация здравоохранения.", "en": "Official public health information.", "zh_Hans": "官方公共卫生信息。" }
+    },
+    {
+      "id": "government_portal",
+      "domain": "portal.gov.by",
+      "name": { "ru": "Портал электронных услуг Беларуси", "en": "Belarus electronic services portal", "zh_Hans": "白俄罗斯电子政务服务门户" },
+      "description": { "ru": "Государственные электронные услуги.", "en": "Government electronic services.", "zh_Hans": "政府电子服务。" }
+    },
+    {
+      "id": "government_account",
+      "domain": "account.gov.by",
+      "name": { "ru": "Вход в электронные услуги Беларуси", "en": "Belarus public services sign-in", "zh_Hans": "白俄罗斯公共服务登录" },
+      "description": { "ru": "Авторизация для государственных электронных услуг.", "en": "Sign-in for government electronic services.", "zh_Hans": "政府电子服务身份认证。" }
+    },
+    {
+      "id": "railway",
+      "domain": "rw.by",
+      "name": { "ru": "Белорусская железная дорога", "en": "Belarusian Railway", "zh_Hans": "白俄罗斯铁路" },
+      "description": { "ru": "Расписание поездов и информация о железнодорожных поездках.", "en": "Train schedules and railway travel information.", "zh_Hans": "列车时刻与铁路出行信息。" }
+    }
+  ]
+}

@@ -261,7 +261,10 @@ The target order is stored in `sheepfold.global.access_priority`. `Settings → 
 
 Strong device detection should use router-side signals such as DHCP/static lease data, hostname, vendor/OUI, open ports, service banners, mDNS/SSDP/UPnP names, and a previously confirmed device fingerprint. Detection by MAC, hostname, or open ports alone is not a cryptographic guarantee, so the UI must show why a device was trusted and allow the parent to correct it.
 
-Sheepfold must assume that a child can use an unregistered or borrowed phone. APK is only for parent-admin devices. Enforcement and detection for child devices must rely on router-visible data, not on child-device software or self-reported Android data.
+Sheepfold must assume that a child can use an unregistered or borrowed phone. Administrative
+controls belong only to the parent APK. The separately installed child APK is advisory and must
+not become an enforcement or identity authority: access control and detection for child devices
+continue to rely on router-visible data, not on child-device software or self-reported Android data.
 
 Device types should include a separate `Smart home` / `Умный дом` type for household endpoints such as floor-heating controllers, kettles, irons, light relays/switches, smart sockets, automatic curtains, sensors, and similar devices. These are different from smart-home hubs and servers such as Home Assistant or Zigbee gateways.
 
@@ -269,15 +272,27 @@ Strong detection should be implemented as an optional backend component/package,
 
 The detector must avoid continuous heavy scanning. It should run bounded local-network checks, cache results, expose confidence/explanation to LuCI/Android, and let the parent override the detected type or group.
 
-If a parent manually sets a device type, automatic type detection must stop for that device. If automatic detection already produced a clear type with confidence `>= 80`, further automatic type detection may be skipped. Below `80`, the UI must show `Unknown device type` until a better router-side signal appears or the parent chooses the type manually.
+If a parent manually sets a device type, automatic type classification must stop for that device, while trusted-identity comparison remains active. If automatic detection already produced a clear type with confidence `>= 70`, further type classification may be skipped when the classification fingerprint is unchanged. `No restrictions` still requires score `>= 80` and two independent evidence families (§agfix88, §detlife1).
 
 Operational behavior:
 
 - Sheepfold may run a lightweight resident watcher on the router.
-- The watcher should react to DHCP lease changes, especially when a device receives or updates an IP address.
-- A rare control scan is allowed as a safety net for router reboot, manual DHCP edits, or clients that behave unusually. Default control interval: 15 minutes.
-- Heavy checks such as `nmap` must be bounded by host count, port list, and timeout.
+- The watcher detects offline-to-online transitions from current LAN ARP/neighbour, hostapd association, or a recent DHCP hotplug signal. Static leases and stale lease rows alone are not connection events.
+- A new connection waits 20 seconds for complementary signals and is analyzed only if still online. At most four event scans run per 10-second service tick by default.
+- A missing online signal remains in a 90-second grace state so Wi-Fi sleep and 2.4/5 GHz or mesh roaming do not create a false new connection.
+- One online-only safety pass runs after service startup and once per day. Offline devices are never scanned by that fallback.
+- Heavy checks such as `nmap` must be bounded by host count, port list, timeout, and a one-day per-device rescan cache by default. A daily safety pass must not imply daily `nmap` for an unchanged confident device (§detload, §detlife1).
+- One bounded `hostapd.* get_clients` snapshot may contribute normalized HT/VHT/HE and speed classes as weak type hints. These fields never prove identity, never count as an independent evidence family, and never grant `No restrictions`; raw/current rates remain in RAM and only compact monotonic classes may persist (§detlife1).
+- Device-blocklist members retain presence and denied-router-access logging but receive no type detection, identity collection, port scan, or group assignment.
+- Classification hashes and trusted identity baselines are separate. Version 2 identity components use HMAC-SHA-256 with a local secret preserved across sysupgrade; they are not Android API credentials. A conflicting strong UUID/serial or two conflicting weak families create an indefinite quarantine overlay; missing one signal does not. `automatic` monitoring blocks that connection at device-blocklist level, while `manual` monitoring restricts it pending a parent decision. Device-allowlist and `No restrictions` privileges are suspended, while the original rights remain stored and return when the original trusted fingerprint reappears. An unresolved alert repeats at most daily (§detlife1).
+- A strong identity match or two matching weak families on a different MAC may only create a parent-facing resemblance suggestion. Sheepfold must not link the records or copy administrator rights, lists, groups, schedules, or temporary access automatically (§devident1).
+- If the same self-reported UUID appears on two currently online MAC records, the lower numeric device ID remains unchanged and only the newer record receives the indefinite identity quarantine. The parent notification identifies the new IP and older `#ID`; no rights are copied (§devident1, §detlife1).
+- Numeric device IDs are permanent audit references: allocate them monotonically, preserve gaps and never reuse or compact an ID after deletion (§deviceid2).
+- A future parent-confirmed merge is complete rather than field-by-field: all linked MACs become one logical device with one policy, the lower permanent ID remains primary, the absorbed ID remains an audit alias, and policy conflicts are shown before confirmation. Administrator pairing secrets are revoked and QR pairing is repeated (§merge01).
+- Full detection may use a peer-pinned UPnP description and bounded LAN-only WS-Discovery. Ordinary WS-Discovery passes are passive; one active Probe is allowed only for a newly connected device. UPnP LOCATION must use the exact numeric sender IPv4 with no DNS, redirects, router-self access, unbounded body or control URL. WS-Discovery XAddrs must never be fetched. UPnP is self-reported secondary evidence and cannot grant elevated policy by itself. SNMP is outside the product scope (§devident1, §detload).
+- Passive traffic must never be presented as revealing a Google, Yandex or other user account. Sheepfold does not perform TLS interception; any future account association requires explicit OAuth consent and is not a LAN identity factor (§devident1).
 - Automatic assignment to `No restrictions` is security-sensitive because the group bypasses global shutdown and schedules. It requires strong detection evidence, visible reasoning, and the existing one-time exclusion after a parent removes a device from the group. It never bypasses the device blocklist.
+- Smart speakers are excluded from automatic `No restrictions` assignment and remain ordinary managed devices.
 - A confident type percentage and an auto-group trust score are separate values. Until two independent evidence families are available for `No restrictions`, detection must continue collecting bounded signals instead of permanently locking the first result. LuCI must explain the exact reason when assignment is skipped (§agfix88).
 
 The LuCI page must fail closed when the router root password is unset or cannot be verified. A non-dismissible overlay links to the standard LuCI password page and prevents Sheepfold settings changes until the check succeeds (§rootgate).
@@ -285,6 +300,12 @@ The LuCI page must fail closed when the router root password is unset or cannot 
 The AI assistant settings expose the parent prompt version. A selected version maps to `usr/share/sheepfold/prompts/parent/<version>/system.txt`; adding a new prompt creates a new directory and never silently replaces an existing reviewed version (§prmvers).
 
 Child devices may optionally show `Request 30 minutes of internet`. The router enables it only when at least one administrator has explicitly opted in. The request is identified from router-side IP/DHCP/ARP data, is rate-limited, only creates a parent notification, and never grants access without a parent action (§child30).
+
+The child status screen shows only the router-local `HH:mm` of the next schedule boundary that actually changes effective access. It does not display a countdown or reveal rule names. Future-boundary evaluation runs on child status requests, not in the minute-by-minute firewall synchronization path (§b5wkq2e).
+
+The explicitly installed child APK may report a best-effort active-SIM snapshot to the home router. LuCI provides `all`, `new_only` (default), and `off` administrator-notification modes. A SIM present in the first valid report is journaled and, when enabled, notified with the explicit note that it was found during app installation. Only an initial report with no active SIM creates a silent empty baseline. Every later detected change is written to the local administrative journal, while phone/messenger delivery follows the selected mode. Android may omit the phone number. Sheepfold keeps at most 16 local subscription fingerprints and 16 fingerprint/available-number history entries; readable export masks this long-term field. Sheepfold must not request ICCID, IMSI, or IMEI and must identify the reporting device from router-side IP/DHCP/ARP data (§simchg1).
+
+Optional child Wi-Fi reports and their phone coordinates expire on the router after 90 days. Raw BSSID is never transmitted; disabling collection clears the pending phone queue, and LuCI provides an explicit history-clear action (§childwifi1).
 
 Installer mode:
 
@@ -414,6 +435,12 @@ The application should include security settings for local router access:
 - globally blocked devices may access the router only if `allow_router_for_blocked` is enabled;
 - emergency-useful sites mode can optionally allow selected public domains for blocked devices.
 
+An ordinary device that is neither blocklisted nor in unresolved identity quarantine may reach the
+local LuCI login page by default. Authentication, API Bearer tokens, rate limiting and failed-login
+logging protect management; blanket network denial for every non-administrator would lock out a
+parent using a new device and break legitimate local diagnostics. Unresolved identity quarantine
+always denies LuCI, SSH and Sheepfold API regardless of automatic/manual internet treatment.
+
 Emergency-useful sites may also be enabled for blocklisted devices by a separate setting, but this must not grant access to LuCI, SSH, or Sheepfold API.
 
 ## First-Open Router Password Gate
@@ -494,11 +521,14 @@ Secrets include bot tokens, API keys, sessions, passwords, and other credentials
 
 If the user wants a full backup including secrets, Sheepfold should require encrypted export with a password. Full unencrypted export with secrets should not be the default.
 
+Live one-time pairing codes are transient state and must not appear in either readable or encrypted backups. A non-secret random router installation ID distinguishes a same-router restore from migration. Migration to another router keeps permanent numeric device IDs, groups, schedules and access lists, but clears identity HMAC values, unresolved identity quarantine and administrator-phone bindings because the local identity secret is intentionally not exported. Administrator accounts remain and their phones must be paired again (§cfgbak1).
+
 Offline known devices should be cleaned after a configurable number of inactive days. Default: `90` days.
 
 ## Messaging
 
 - Telegram and VK should both support two-way chat: notifications, status, device search, temporary access, approvals, and confirmed administrative actions.
+- Telegram infrastructure actions that can cut connectivity or destroy operational state (`internet_off`, `wifi_off`, `clear_logs`, `update`, `reboot`) require a separate one-time confirmation. Temporary access and device-policy mutations (`grant_time`, `block_device`, `unblock_device`, `allowlist_add`, `blocklist_add`) use the same confirmation and preserve only a validated numeric device ID and bounded duration in pending state. Restoring global connectivity (`internet_on`, `wifi_on`) must remain immediately available (§tgconfirm).
 - VK is the default first-run messenger choice. The installed config should keep messenger `active` disabled until credentials and at least one approved administrator are configured.
 - A router can enable only one messenger adapter at a time: Telegram, VK, or experimental MAX.
 - MAX may remain as an optional experimental adapter until its public Bot API is confirmed for router-side use. It must be disabled by default and must not block the first stable Telegram/VK release.

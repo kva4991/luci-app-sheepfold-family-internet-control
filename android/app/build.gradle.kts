@@ -1,7 +1,7 @@
 import org.gradle.api.tasks.Copy
 
-val sheepfoldVersionCode = 40
-val sheepfoldVersionName = "0.1.39"
+val sheepfoldVersionCode = 45
+val sheepfoldVersionName = "0.1.44"
 
 plugins {
     id("com.android.application")
@@ -69,20 +69,23 @@ fun debugApkExportDir(): File {
 
     val userProfile = providers.environmentVariable("USERPROFILE").orNull
     if (!userProfile.isNullOrBlank()) {
-        return file("$userProfile/Downloads")
+        return file("$userProfile/Documents/pesochnica")
     }
 
     val home = providers.environmentVariable("HOME").orNull
     if (!home.isNullOrBlank()) {
-        return file("$home/Downloads")
+        return file("$home/Documents/pesochnica")
     }
 
     return layout.projectDirectory.dir("build/outputs/shared").asFile
 }
 
-val copyDebugApkToDownloads by tasks.registering(Copy::class) {
+val copyDebugApkToExportDir by tasks.registering(Copy::class) {
     group = "sheepfold"
-    description = "Copies the debug APK to Downloads, or to SHEEPFOLD_APK_OUTPUT_DIR when set."
+    description = "Copies the debug APK to the explicit Sheepfold artifact directory."
+    // Внешняя папка может содержать временные файлы других процессов. Gradle не
+    // должен считать весь пользовательский каталог собственным tracked output.
+    doNotTrackState("The user-selected artifact directory is shared with external files.")
 
     val exportDir = debugApkExportDir()
     from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
@@ -91,6 +94,10 @@ val copyDebugApkToDownloads by tasks.registering(Copy::class) {
 
     doFirst {
         exportDir.mkdirs()
+        exportDir.listFiles { file ->
+            file.isFile && file.name.startsWith("sheepfold-parent-v") && file.extension == "apk" &&
+                file.name != "sheepfold-parent-v$sheepfoldVersionName.apk"
+        }?.forEach(File::delete)
     }
 }
 
@@ -98,5 +105,5 @@ val exportDebugApk by tasks.registering {
     group = "sheepfold"
     description = "Builds the unified parent APK and explicitly copies it to the artifact directory."
     dependsOn("assembleDebug")
-    finalizedBy(copyDebugApkToDownloads)
+    finalizedBy(copyDebugApkToExportDir)
 }

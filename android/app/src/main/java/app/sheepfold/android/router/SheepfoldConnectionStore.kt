@@ -10,6 +10,7 @@ object SheepfoldConnectionStore {
     private const val deviceIdKey = "administratorDeviceId"
     private const val deviceMacKey = "administratorDeviceMac"
     private const val tlsPinKey = "routerTlsPinSha256"
+    private const val tlsSpkiKey = "routerTlsSpkiSha256"
     private const val legacyBearerTokenKey = "administratorBearerToken"
     private const val googleAccountKey = "googleAccount"
 
@@ -22,6 +23,7 @@ object SheepfoldConnectionStore {
             .putString(deviceIdKey, request.deviceId.orEmpty())
             .putString(deviceMacKey, request.deviceMac.orEmpty())
             .putString(tlsPinKey, request.tlsPinSha256.orEmpty())
+            .putString(tlsSpkiKey, request.tlsSpkiSha256.orEmpty())
             .remove(legacyBearerTokenKey)
             .apply()
         request.tlsPinSha256?.let { RouterTlsPin.save(context, it) }
@@ -50,6 +52,7 @@ object SheepfoldConnectionStore {
             request.tlsPinSha256 = preferences.getString(tlsPinKey, "")
                 .orEmpty()
                 .ifBlank { RouterTlsPin.read(context) }
+            request.tlsSpkiSha256 = preferences.getString(tlsSpkiKey, "").orEmpty().ifBlank { null }
         }
     }
 
@@ -75,6 +78,7 @@ object SheepfoldConnectionStore {
             .remove(deviceIdKey)
             .remove(deviceMacKey)
             .remove(tlsPinKey)
+            .remove(tlsSpkiKey)
             .remove(legacyBearerTokenKey)
             .apply()
         RouterTlsPin.clear(context)

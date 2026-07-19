@@ -1,9 +1,17 @@
 #!/bin/sh
 set -eu
 
+HASH_COMMON="${SHEEPFOLD_HASH_COMMON:-${0%/*}/sheepfold-hash-common}"
+[ -r "$HASH_COMMON" ] || HASH_COMMON=/usr/libexec/sheepfold/sheepfold-hash-common
+. "$HASH_COMMON"
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-${0%/*}/sheepfold-lock-common}"
+[ -r "$LOCK_COMMON" ] || LOCK_COMMON=/usr/libexec/sheepfold/sheepfold-lock-common
+. "$LOCK_COMMON"
+
 COMMAND="${1:-sync}"
 STATE_DIR="${SHEEPFOLD_FIREWALL_STATE_DIR:-/tmp/sheepfold/firewall}"
-STATE_HASH="$STATE_DIR/state.cksum"
+STATE_HASH="$STATE_DIR/state.hash"
+FIREWALL_LOCK="${SHEEPFOLD_FIREWALL_LOCK:-/tmp/sheepfold/firewall-sync.flock}"
 NFT_TABLE="inet fw4"
 SCHEDULE_EVALUATOR="${SHEEPFOLD_SCHEDULE_EVALUATOR:-/usr/libexec/sheepfold/sheepfold-schedule-evaluator}"
 DOMAIN_POLICY_ACTIVE="${SHEEPFOLD_DOMAIN_POLICY_ACTIVE:-/tmp/sheepfold/domain-policy/active}"
@@ -99,6 +107,7 @@ collect_lan_interfaces() {
 sets_available() {
         command -v nft >/dev/null 2>&1 || return 1
         nft list set inet fw4 sheepfold_block_macs >/dev/null 2>&1 &&
+        nft list set inet fw4 sheepfold_management_block_macs >/dev/null 2>&1 &&
         nft list set inet fw4 sheepfold_restricted_macs >/dev/null 2>&1 &&
         nft list set inet fw4 sheepfold_exempt_macs >/dev/null 2>&1 &&
                 nft list set inet fw4 sheepfold_global_ifaces >/dev/null 2>&1 &&
@@ -142,7 +151,9 @@ refresh_empty_emergency_sets() {
         printf '%s\n' "$now" > "$stamp"
         # fw4 reload очищает IP-наборы, но не UCI. Восстанавливаем их отдельно,
         # не заставляя основную синхронизацию ждать сетевые DNS-ответы. §emerg1
-        ("$helper" refresh >/dev/null 2>&1 || true) </dev/null &
+        # Фоновый DNS refresh не должен унаследовать fd 9 и удерживать общий
+        # firewall lock после завершения короткой nftables-транзакции.
+        (unset SHEEPFOLD_FIREWALL_LOCK_HELD; "$helper" refresh >/dev/null 2>&1 || true) 9>&- </dev/null &
 }
 
 join_macs() {
@@ -165,11 +176,27 @@ write_add_command() {
         printf ' }\n'
 }
 
+state_input() {
+        # Одного cat недостаточно: один и тот же MAC в block и restricted дал бы
+        # одинаковый поток байт, из-за чего sync сохранил бы устаревший nftables set. §fwlock1
+        printf '[block]\n'; cat "$1"
+        printf '[management-block]\n'; cat "$2"
+        printf '[restricted]\n'; cat "$3"
+        printf '[exempt]\n'; cat "$4"
+        printf '[global-ifaces]\n'; cat "$5"
+        printf '[emergency]\n'; cat "$6"
+        printf '[site-allow]\n'; cat "$7"
+        printf '[site-block-exempt]\n'; cat "$8"
+        printf '[site-filter-ifaces]\n'; cat "$9"
+}
+
 collect_state() {
-        local block_file="$1" restricted_file="$2" exempt_file="$3" global_iface_file="$4" emergency_mac_file="$5"
-        local site_allow_mac_file="$6" site_block_exempt_file="$7" site_filter_iface_file="$8"
+        local block_file="$1" management_block_file="$2" restricted_file="$3" exempt_file="$4"
+        local global_iface_file="$5" emergency_mac_file="$6" site_allow_mac_file="$7"
+        local site_block_exempt_file="$8" site_filter_iface_file="$9"
         local mac status section group no_restrictions_name admin_device
         local schedule_output schedule_status temp_access_until now global_block new_device_policy emergency_for_blocklist
+        local identity_quarantine_mode
         local domain_backend domain_allow_ready domain_block_ready site_block_mode
 
         emergency_for_blocklist="$(uci -q get sheepfold.global.domain_allowlist_for_blocklist 2>/dev/null || printf 1)"
@@ -186,6 +213,7 @@ collect_state() {
                 mac="$(normalize_mac "$mac")"
                 if valid_mac "$mac"; then
                         append_unique "$block_file" "$mac"
+                        append_unique "$management_block_file" "$mac"
                         [ "$emergency_for_blocklist" = 1 ] && append_unique "$emergency_mac_file" "$mac"
                 fi
         done
@@ -201,9 +229,28 @@ collect_state() {
                 status="$(uci -q get "sheepfold.$section.status" 2>/dev/null || true)"
                 group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
                 admin_device="$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)"
+                identity_quarantine_mode="$(uci -q get "sheepfold.$section.identity_quarantine_mode" 2>/dev/null || true)"
+
+                # Карантин перекрывает прежние права того же MAC, но не переписывает их:
+                # когда вернётся доверенный отпечаток, detector снимет только overlay. §detlife1
+                if [ "$identity_quarantine_mode" = block ]; then
+                        append_unique "$block_file" "$mac"
+                        append_unique "$management_block_file" "$mac"
+                        [ "$emergency_for_blocklist" = 1 ] && append_unique "$emergency_mac_file" "$mac"
+                        continue
+                fi
+                if [ "$identity_quarantine_mode" = restrict ]; then
+                        append_unique "$restricted_file" "$mac"
+                        # Ручной режим меняет только интернет-политику карантина.
+                        # LuCI, SSH и API закрыты при любом нерешённом mismatch. §detlife1
+                        append_unique "$management_block_file" "$mac"
+                        append_unique "$emergency_mac_file" "$mac"
+                        continue
+                fi
 
                 if [ "$status" = blocked ] || [ "$status" = block ]; then
                         append_unique "$block_file" "$mac"
+                        append_unique "$management_block_file" "$mac"
                         [ "$emergency_for_blocklist" = 1 ] && append_unique "$emergency_mac_file" "$mac"
                         continue
                 fi
@@ -215,9 +262,18 @@ collect_state() {
 
                 # Старые версии могли технически добавлять временный MAC в allowlist.
                 # Не считаем такую запись постоянным исключением: global block сильнее +N минут. §84azytj
-                if [ "$status" = allow ] || [ "$admin_device" = 1 ] || \
-                        { ! status_is_temporary "$status" && list_has_mac allowlist "$mac"; } || \
-                        { [ -n "$group" ] && [ "$group" = "$no_restrictions_name" ]; }; then
+                if [ "$admin_device" = 1 ]; then
+                        append_unique "$exempt_file" "$mac"
+                        continue
+                fi
+
+                if [ -n "$group" ] && [ "$group" = "$no_restrictions_name" ]; then
+                        append_unique "$exempt_file" "$mac"
+                        continue
+                fi
+
+                if [ "$status" = allow ] || \
+                        { ! status_is_temporary "$status" && list_has_mac allowlist "$mac"; }; then
                         append_unique "$exempt_file" "$mac"
                         continue
                 fi
@@ -292,9 +348,10 @@ sync_sets() {
         mkdir -p "$STATE_DIR"
         chmod 700 "$STATE_DIR" 2>/dev/null || true
 
-        local block_file restricted_file exempt_file global_iface_file emergency_mac_file
+        local block_file management_block_file restricted_file exempt_file global_iface_file emergency_mac_file
         local site_allow_mac_file site_block_exempt_file site_filter_iface_file batch current_hash previous_hash
         block_file="$STATE_DIR/block.macs"
+        management_block_file="$STATE_DIR/management-block.macs"
         restricted_file="$STATE_DIR/restricted.macs"
         exempt_file="$STATE_DIR/exempt.macs"
         global_iface_file="$STATE_DIR/global.ifaces"
@@ -304,6 +361,7 @@ sync_sets() {
         site_filter_iface_file="$STATE_DIR/site-filter.ifaces"
         batch="$STATE_DIR/update.nft"
         : > "$block_file"
+        : > "$management_block_file"
         : > "$restricted_file"
         : > "$exempt_file"
         : > "$global_iface_file"
@@ -311,7 +369,7 @@ sync_sets() {
         : > "$site_allow_mac_file"
         : > "$site_block_exempt_file"
         : > "$site_filter_iface_file"
-        collect_state "$block_file" "$restricted_file" "$exempt_file" "$global_iface_file" "$emergency_mac_file" \
+        collect_state "$block_file" "$management_block_file" "$restricted_file" "$exempt_file" "$global_iface_file" "$emergency_mac_file" \
                 "$site_allow_mac_file" "$site_block_exempt_file" "$site_filter_iface_file"
 
         # Нельзя подтверждать глобальную блокировку, если не найден ни один LAN-интерфейс:
@@ -330,8 +388,8 @@ sync_sets() {
                 return 1
         fi
 
-        current_hash="$(cat "$block_file" "$restricted_file" "$exempt_file" "$global_iface_file" "$emergency_mac_file" \
-                "$site_allow_mac_file" "$site_block_exempt_file" "$site_filter_iface_file" | cksum | awk '{ print $1 ":" $2 }')"
+	current_hash="$(state_input "$block_file" "$management_block_file" "$restricted_file" "$exempt_file" "$global_iface_file" "$emergency_mac_file" \
+		"$site_allow_mac_file" "$site_block_exempt_file" "$site_filter_iface_file" | sheepfold_state_hash_stdin)"
         previous_hash="$(cat "$STATE_HASH" 2>/dev/null || true)"
         if [ "$reset_domain_ips" != 1 ] && [ "$current_hash" = "$previous_hash" ] && sets_available; then
                 refresh_empty_emergency_sets
@@ -345,6 +403,7 @@ sync_sets() {
 
         {
                 printf 'flush set inet fw4 sheepfold_block_macs\n'
+                printf 'flush set inet fw4 sheepfold_management_block_macs\n'
                 printf 'flush set inet fw4 sheepfold_restricted_macs\n'
                 printf 'flush set inet fw4 sheepfold_exempt_macs\n'
                 printf 'flush set inet fw4 sheepfold_global_ifaces\n'
@@ -361,6 +420,7 @@ sync_sets() {
                         printf 'flush set inet fw4 sheepfold_site_block_v6\n'
                 fi
                 write_add_command mac sheepfold_block_macs "$block_file"
+                write_add_command mac sheepfold_management_block_macs "$management_block_file"
                 write_add_command mac sheepfold_restricted_macs "$restricted_file"
                 write_add_command mac sheepfold_exempt_macs "$exempt_file"
                 write_add_command ifname sheepfold_global_ifaces "$global_iface_file"
@@ -383,6 +443,7 @@ sync_sets() {
 clear_sets() {
         sets_available || return 0
         nft flush set inet fw4 sheepfold_block_macs
+        nft flush set inet fw4 sheepfold_management_block_macs
         nft flush set inet fw4 sheepfold_restricted_macs
         nft flush set inet fw4 sheepfold_exempt_macs
         nft flush set inet fw4 sheepfold_global_ifaces
@@ -419,10 +480,25 @@ status() {
         printf 'site_blocklist_ready=%s\n' "$(file_value blocklist_ready "$DOMAIN_POLICY_ACTIVE")"
 }
 
-case "$COMMAND" in
-        ensure|sync) sync_sets ;;
-        domain-reset) reset_domain_sets ;;
-        clear) clear_sets ;;
-        status) status ;;
-        *) echo "Usage: sheepfold-firewall [ensure|sync|domain-reset|clear|status]" >&2; exit 2 ;;
-esac
+run_command() {
+        case "$COMMAND" in
+                ensure|sync) sync_sets ;;
+                domain-reset) reset_domain_sets ;;
+                clear) clear_sets ;;
+                status) status ;;
+                *) echo "Usage: sheepfold-firewall [ensure|sync|domain-reset|clear|status]" >&2; return 2 ;;
+        esac
+}
+
+if [ "$COMMAND" = status ] || [ "${SHEEPFOLD_FIREWALL_LOCK_HELD:-0}" = 1 ]; then
+        run_command
+else
+        # UI, service, hotplug и DNS policy могут прийти одновременно. Все они пишут
+        # одни state-файлы и один nft batch, поэтому транзакцию сериализует kernel lock. §fwlock1
+        sheepfold_lock_acquire "$FIREWALL_LOCK" 30 || {
+                logger -t sheepfold "Could not acquire Sheepfold firewall lock"
+                exit 1
+        }
+        trap 'sheepfold_lock_release' EXIT HUP INT TERM
+        run_command
+fi

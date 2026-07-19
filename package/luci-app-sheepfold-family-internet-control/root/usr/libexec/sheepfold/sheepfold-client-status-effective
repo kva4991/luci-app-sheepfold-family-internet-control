@@ -18,18 +18,27 @@ kv_value() {
 }
 
 evaluate_schedule() {
+    local fallback_status
+    fallback_status="$1"
     schedule_output=""
     schedule_status=none
     schedule_reason=""
     schedule_conflict=0
     [ -x /usr/libexec/sheepfold/sheepfold-schedule-evaluator ] || return 1
 
-    schedule_output="$(/usr/libexec/sheepfold/sheepfold-schedule-evaluator "$device_section")"
+    schedule_output="$(/usr/libexec/sheepfold/sheepfold-schedule-evaluator "$device_section" "$fallback_status")"
     schedule_status="$(kv_value "$schedule_output" status)"
     schedule_reason="$(kv_value "$schedule_output" reason)"
     schedule_conflict="$(kv_value "$schedule_output" conflict)"
     schedule_name="$(kv_value "$schedule_output" active_schedule)"
+    next_change_time="$(kv_value "$schedule_output" next_change_time)"
     [ "$schedule_status" != none ]
+}
+
+format_epoch_time() {
+    local epoch
+    epoch="$1"
+    date -d "@$epoch" +%H:%M 2>/dev/null || date -r "$epoch" +%H:%M 2>/dev/null || true
 }
 
 mac_for_ip() {
@@ -76,15 +85,25 @@ valid_mac "$client_mac" || {
 
 device_section="$(device_section_for_mac "$client_mac" 2>/dev/null || true)"
 [ -n "$device_section" ] || {
-    print_kv status unknown
-    print_kv reason device_not_registered
+    new_device_policy="$(uci -q get sheepfold.global.new_device_policy 2>/dev/null || printf allow)"
+    if [ "$new_device_policy" = restrict ]; then
+        print_kv status restricted
+        print_kv reason new_device_policy
+    else
+        # Пока detector создаёт карточку, реальный доступ уже определяется
+        # глобальной политикой новых устройств. Нельзя показывать ребёнку
+        # «неизвестно» или «отключено», когда firewall пропускает трафик.
+        print_kv status allow
+        print_kv reason new_device_policy_allow
+    fi
     print_kv mac "$client_mac"
     exit 0
 }
 
 raw_status="$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || printf unknown)"
 schedule_name="$(uci -q get "sheepfold.$device_section.active_schedule" 2>/dev/null || true)"
-next_change_at="$(uci -q get "sheepfold.$device_section.next_change_at" 2>/dev/null || true)"
+next_change_at=""
+next_change_time=""
 temp_access_until="$(uci -q get "sheepfold.$device_section.temp_access_until" 2>/dev/null || printf 0)"
 admin_device="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
 device_group="$(uci -q get "sheepfold.$device_section.group" 2>/dev/null || true)"
@@ -96,6 +115,14 @@ now="$(date +%s)"
 
 case "$temp_access_until" in ''|*[!0-9]*) temp_access_until=0 ;; esac
 
+case "$raw_status" in
+    restricted|scheduled) fallback_access=block ;;
+    new|unknown|"")
+        [ "$new_device_policy" = restrict ] && fallback_access=block || fallback_access=allow
+        ;;
+    *) fallback_access=allow ;;
+esac
+
 status="$raw_status"
 reason="configured_status"
 
@@ -106,15 +133,17 @@ if list_has_mac blocklist "$client_mac" || [ "$raw_status" = blocked ] || [ "$ra
 elif [ "$admin_device" = 1 ]; then
     status=allow
     reason=administrator_device
+elif [ -n "$device_group" ] && [ "$device_group" = "$no_restrictions_group" ]; then
+    # Причина должна совпадать с фактическим порядком доступа: системная группа
+    # стоит выше белого списка устройств и расписаний. §84azytj
+    status=allow
+    reason=no_restrictions_group
 elif [ "$raw_status" = allow ] || {
     [ "$raw_status" != temp_access ] && [ "$raw_status" != temp-access ] && [ "$raw_status" != temporary ] &&
         list_has_mac allowlist "$client_mac"
 }; then
     status=allow
     reason=allowlist
-elif [ -n "$device_group" ] && [ "$device_group" = "$no_restrictions_group" ]; then
-    status=allow
-    reason=no_restrictions_group
 elif [ "$global_block" = 1 ]; then
     # Глобальная кнопка сильнее временных +N минут; исключения только явные:
     # allowlist, администраторы и группа «Без ограничений». §84azytj
@@ -125,6 +154,7 @@ elif [ "$raw_status" = temp_access ] || [ "$raw_status" = temp-access ] || [ "$r
         status=temporary
         reason=temporary_access
         next_change_at="$temp_access_until"
+        next_change_time="$(format_epoch_time "$temp_access_until")"
     else
         # Просроченный временный доступ не считается разрешением, даже если detector
         # ещё не успел удалить временную запись из allowlist.
@@ -132,7 +162,7 @@ elif [ "$raw_status" = temp_access ] || [ "$raw_status" = temp-access ] || [ "$r
         reason=temporary_access_expired
         next_change_at=""
     fi
-elif evaluate_schedule; then
+elif evaluate_schedule "$fallback_access"; then
     if [ "$schedule_status" = block ]; then
         status=blocked
     else
@@ -151,8 +181,8 @@ elif [ "$raw_status" = new ] || [ "$raw_status" = unknown ] || [ -z "$raw_status
         status=restricted
         reason=new_device_policy
     else
-        status=unknown
-        reason=device_not_configured
+        status=allow
+        reason=new_device_policy_allow
     fi
 fi
 
@@ -163,4 +193,5 @@ print_kv device_section "$device_section"
 print_kv schedule_name "$schedule_name"
 print_kv schedule_conflict "${schedule_conflict:-0}"
 print_kv next_change_at "$next_change_at"
+print_kv next_change_time "$next_change_time"
 print_kv warning_before_minutes 5

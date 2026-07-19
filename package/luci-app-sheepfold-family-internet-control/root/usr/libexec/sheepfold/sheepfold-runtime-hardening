@@ -17,6 +17,12 @@ DEVICE_ID="$(path /usr/libexec/sheepfold/sheepfold-device-id)"
 DEVICE_CLASSIFIER="$(path /usr/libexec/sheepfold/sheepfold-device-classifier)"
 DEVICE_MDNS="$(path /usr/libexec/sheepfold/sheepfold-device-mdns)"
 DEVICE_MDNS_UCODE="$(path /usr/share/sheepfold/device-mdns.uc)"
+DEVICE_SSDP="$(path /usr/libexec/sheepfold/sheepfold-device-ssdp)"
+DEVICE_SSDP_UCODE="$(path /usr/share/sheepfold/device-ssdp.uc)"
+DEVICE_UPNP_DESCRIPTION="$(path /usr/libexec/sheepfold/sheepfold-device-upnp-description)"
+DEVICE_WSD="$(path /usr/libexec/sheepfold/sheepfold-device-ws-discovery)"
+DEVICE_WSD_UCODE="$(path /usr/share/sheepfold/device-ws-discovery.uc)"
+DEVICE_IDENTITY="$(path /usr/libexec/sheepfold/sheepfold-device-identity)"
 DEVICE_PRESENCE="$(path /usr/libexec/sheepfold/sheepfold-device-presence)"
 DEVICE_RECLASSIFY="$(path /usr/libexec/sheepfold/sheepfold-device-reclassify)"
 DHCP_SIGNALS="$(path /etc/hotplug.d/dhcp/90-sheepfold-device-signals)"
@@ -28,12 +34,22 @@ PAIR_DEVICE="$(path /usr/libexec/sheepfold/sheepfold-pair-device)"
 PAIR_COMMON="$(path /usr/libexec/sheepfold/sheepfold-pair-common)"
 TOKEN_COMMON="$(path /usr/libexec/sheepfold/sheepfold-token-common)"
 PAIR_API="$(path /usr/libexec/sheepfold/sheepfold-api-pair)"
+API_RATE_LIMIT="$(path /usr/libexec/sheepfold/sheepfold-api-rate-limit)"
 STATUS_API="$(path /usr/libexec/sheepfold/sheepfold-api-client-status)"
 ACCESS_REQUEST="$(path /usr/libexec/sheepfold/sheepfold-access-request)"
 ADMIN_NOTIFICATION="$(path /usr/libexec/sheepfold/sheepfold-admin-notification)"
+SIM_MONITOR="$(path /usr/libexec/sheepfold/sheepfold-sim-monitor)"
+CHILD_WIFI_MONITOR="$(path /usr/libexec/sheepfold/sheepfold-child-wifi-monitor)"
+TLS_FINGERPRINT="$(path /usr/libexec/sheepfold/sheepfold-tls-fingerprint)"
+HASH_COMMON="$(path /usr/libexec/sheepfold/sheepfold-hash-common)"
+LOCK_COMMON="$(path /usr/libexec/sheepfold/sheepfold-lock-common)"
 FIREWALL="$(path /usr/libexec/sheepfold/sheepfold-firewall)"
 SCHEDULE_EVALUATOR="$(path /usr/libexec/sheepfold/sheepfold-schedule-evaluator)"
 EMERGENCY_SITES="$(path /usr/libexec/sheepfold/sheepfold-emergency-sites)"
+COUNTRY_PROFILE="$(path /usr/libexec/sheepfold/sheepfold-country-profile)"
+COUNTRY_PROFILE_RU="$(path /usr/share/sheepfold/country-profiles/ru.json)"
+COUNTRY_PROFILE_BY="$(path /usr/share/sheepfold/country-profiles/by.json)"
+COUNTRY_PROFILE_CN="$(path /usr/share/sheepfold/country-profiles/cn.json)"
 SITE_LISTS="$(path /usr/libexec/sheepfold/sheepfold-site-lists)"
 DOMAIN_POLICY="$(path /usr/libexec/sheepfold/sheepfold-domain-policy)"
 ADGUARD_ADAPTER="$(path /usr/libexec/sheepfold/sheepfold-adguard)"
@@ -64,10 +80,11 @@ CUDY_FIX_UNINSTALL="$CUDY_PROFILE/fixLed/uninstall"
 for required in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
-    "$DEVICE_MDNS_UCODE" "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" \
+    "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP" "$DEVICE_SSDP_UCODE" "$DEVICE_UPNP_DESCRIPTION" "$DEVICE_WSD" "$DEVICE_WSD_UCODE" "$DEVICE_IDENTITY" "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" \
     "$DHCP_SIGNALS" "$LED_CONTROL" "$IPV6_CONTROL" "$PACKAGE_MANAGER" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-    "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" \
-    "$FIREWALL" "$SCHEDULE_EVALUATOR" "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" \
+	"$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$API_RATE_LIMIT" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$SIM_MONITOR" "$CHILD_WIFI_MONITOR" "$TLS_FINGERPRINT" "$HASH_COMMON" "$LOCK_COMMON" \
+    "$FIREWALL" "$SCHEDULE_EVALUATOR" "$EMERGENCY_SITES" "$COUNTRY_PROFILE" \
+    "$COUNTRY_PROFILE_RU" "$COUNTRY_PROFILE_BY" "$COUNTRY_PROFILE_CN" "$SITE_LISTS" "$DOMAIN_POLICY" \
     "$ADGUARD_ADAPTER" "$ADGUARD_FEED" $VARIANT_REQUIRED \
     "$MAINTENANCE_WINDOW" "$KEY_DERIVE" \
     "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" "$ACL" "$PRIVACY_NOTICE" \
@@ -79,18 +96,18 @@ done
 # Git contents API не сохраняет executable bit, поэтому восстанавливаем его явно.
 for executable in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
+    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" "$DEVICE_SSDP" "$DEVICE_UPNP_DESCRIPTION" "$DEVICE_WSD" "$DEVICE_IDENTITY" \
     "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" "$PACKAGE_MANAGER" \
-    "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$FIREWALL" "$SCHEDULE_EVALUATOR" \
-    "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$ADGUARD_ADAPTER" "$ADGUARD_FEED" \
-    "$PAIR_API" "$PAIR_ACTIVATE" "$PAIR_DEVICE" $VARIANT_EXECUTABLES \
+	"$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$SIM_MONITOR" "$CHILD_WIFI_MONITOR" "$TLS_FINGERPRINT" "$FIREWALL" "$SCHEDULE_EVALUATOR" \
+    "$EMERGENCY_SITES" "$COUNTRY_PROFILE" "$SITE_LISTS" "$DOMAIN_POLICY" "$ADGUARD_ADAPTER" "$ADGUARD_FEED" \
+    "$PAIR_API" "$API_RATE_LIMIT" "$PAIR_ACTIVATE" "$PAIR_DEVICE" $VARIANT_EXECUTABLES \
     "$MAINTENANCE_WINDOW" "$KEY_DERIVE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL" \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
-chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$ACL" "$PRIVACY_NOTICE" "$DEVICE_MDNS_UCODE" \
-    "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND"
+chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$ACL" "$PRIVACY_NOTICE" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
+    "$COUNTRY_PROFILE_RU" "$COUNTRY_PROFILE_BY" "$COUNTRY_PROFILE_CN" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND"
 
 mkdir -p "$(path /etc/sheepfold/tokens)"
 chmod 0700 "$(path /etc/sheepfold)" "$(path /etc/sheepfold/tokens)" 2>/dev/null || true
@@ -104,6 +121,7 @@ grep -q '\[ "\$path_info" = "/pair-token" \]' "$CGI" || die "public CGI does not
 grep -q 'AI_HANDLER=' "$CGI" || die "role-aware AI handler is not connected"
 # SHEEPFOLD_AI_END
 grep -q '/router-info|/pair-status)' "$CGI" || die "diagnostic routes are not intercepted"
+grep -q '^[[:space:]]*/ping)' "$CGI" || die "dedicated discovery ping route is missing"
 grep -q 'query_token_forbidden' "$CGI" || die "Bearer token is still accepted in query string"
 grep -q 'legacy_settings_writer_disabled' "$CGI" || die "legacy untyped settings writer remains enabled"
 
@@ -114,7 +132,8 @@ grep -q '/control/filtering/set_url' "$ADGUARD_ADAPTER" || die "AdGuard managed-
 grep -q 'REMOTE_ADDR' "$ADGUARD_FEED" || die "AdGuard feed is not restricted to loopback"
 grep -q 'requested_token' "$ADGUARD_FEED" || die "AdGuard feed token check is missing"
 
-# Pairing не создаёт администратора и повторно проверяет blocklist.
+# Pairing не создаёт администратора, повторно проверяет blocklist и фиксирует
+# device ID, токен, права и одноразовый код одной UCI-транзакцией. §pairtx1
 grep -q 'PAIR_DEVICE=.*/sheepfold-pair-device' "$CONTROL" || die "pair-admin-device is not intercepted"
 grep -q 'PAIR_ACTIVATE=.*/sheepfold-pair-activate' "$CONTROL" || die "pairing-code activation is not intercepted"
 grep -q 'CLIENT_STATUS=.*/sheepfold-client-status-effective' "$CONTROL" || die "effective client status is not intercepted"
@@ -124,12 +143,19 @@ grep -q 'exec "\$CLIENT_STATUS"' "$CONTROL" || die "effective client status help
 grep -q '/etc/sheepfold/tokens' "$CONTROL" || die "persistent administrator token storage is missing"
 grep -q 'pair_admin_section_for_login' "$PAIR_ACTIVATE" || die "existing administrator lookup is missing"
 grep -q 'Create the account in LuCI first' "$PAIR_ACTIVATE" || die "missing-admin failure is not explicit"
+grep -q 'reset_old_pairing_attempts' "$PAIR_ACTIVATE" || die "new pairing code does not reset stale attempts"
+grep -q 'reset-bucket)' "$API_RATE_LIMIT" || die "pairing rate-limit reset is unavailable"
+grep -q 'record_failed_attempt' "$PAIR_API" || die "credential pairing failures are not counted"
 ! grep -q '=administrator' "$PAIR_ACTIVATE" || die "pair activation can create an administrator"
 
 block_checks="$(grep -c 'pair_list_has_mac blocklist' "$PAIR_DEVICE" || true)"
 [ "$block_checks" -ge 2 ] || die "pairing does not recheck blocklist"
 ! grep -q 'remove.*blocklist\|delete.*blocklist' "$PAIR_DEVICE" || die "pairing can mutate blocklist"
 grep -q 'pair_store_token' "$PAIR_DEVICE" || die "successful pairing does not store a token hash"
+grep -q 'PAIR_UCI_SAVEDIR' "$PAIR_DEVICE" || die "pairing does not isolate its UCI delta"
+grep -q 'ensure-staged' "$PAIR_DEVICE" || die "pairing device ID is committed before the transaction"
+grep -q 'ensure-staged)' "$DEVICE_ID" || die "staged device ID allocation is unavailable"
+grep -q 'pair_restore_snapshot' "$PAIR_DEVICE" || die "pairing has no commit-failure recovery"
 grep -q 'token_write_bound_file' "$PAIR_COMMON" || die "pairing does not store token device metadata"
 grep -q 'token_device_is_admin_paired' "$TOKEN_COMMON" || die "token device binding helper is missing"
 grep -q 'HTTP_X_SHEEPFOLD_DEVICE_ID' "$CGI" || die "API auth does not read bound device id"
@@ -148,6 +174,23 @@ grep -q '/notifications)' "$CGI" || die "administrator notifications route is mi
 grep -q 'require_admin' "$CGI" || die "administrator notifications are not protected"
 grep -q 'MAX_NOTIFICATIONS' "$ADMIN_NOTIFICATION" || die "administrator notification queue is unbounded"
 
+# SIM-отчёт детского APK не может выбрать произвольное устройство и не даёт прав.
+grep -q '/sim-report)' "$CGI" || die "public SIM report route is missing"
+grep -q 'enforce_rate_limit sim_report' "$CGI" || die "SIM report route is not rate limited"
+grep -q 'mac_for_ip' "$SIM_MONITOR" || die "SIM report trusts a client device identifier"
+grep -q 'sim_change_notifications' "$SIM_MONITOR" || die "SIM notification mode is ignored"
+grep -q 'sim_phone_history' "$SIM_MONITOR" || die "long-term SIM phone history is missing"
+grep -q 'sheepfold_lock_acquire' "$SIM_MONITOR" || die "SIM reports are not serialized"
+
+# Wi-Fi-отчёт хранит только локальный отпечаток сети и определяет устройство по IP.
+grep -q '/wifi-network-report)' "$CGI" || die "public child Wi-Fi report route is missing"
+grep -q 'enforce_rate_limit wifi_network_report' "$CGI" || die "child Wi-Fi report route is not rate limited"
+grep -q 'mac_for_ip' "$CHILD_WIFI_MONITOR" || die "child Wi-Fi report trusts a client device identifier"
+grep -q 'child_wifi_network_notifications' "$CHILD_WIFI_MONITOR" || die "child Wi-Fi notification mode is ignored"
+grep -q 'HISTORY_RETENTION_SECONDS=.*7776000' "$CHILD_WIFI_MONITOR" || die "child Wi-Fi history has no 90-day retention"
+! grep -q 'bssid=' "$CHILD_WIFI_MONITOR" || die "raw child Wi-Fi BSSID can be stored on the router"
+grep -q 'child-wifi-history-clear' "$CONTROL" || die "child Wi-Fi history cannot be cleared from LuCI"
+
 # Статус клиента учитывает blocklist, временный доступ и глобальную блокировку.
 grep -q 'global_block' "$CLIENT_STATUS" || die "effective status ignores global block"
 grep -q 'temporary_access_expired' "$CLIENT_STATUS" || die "effective status ignores expired temporary access"
@@ -157,7 +200,14 @@ grep -q 'schedule_pending_evaluation' "$CLIENT_STATUS" || die "scheduled status 
 grep -q 'DNSMASQ_VENDOR_CLASS' "$DHCP_SIGNALS" || die "DHCP vendor-class collection is missing"
 grep -q 'DNSMASQ_REQUESTED_OPTIONS' "$DHCP_SIGNALS" || die "DHCP option fingerprint collection is missing"
 grep -q 'device-signals.changed' "$SERVICE" || die "DHCP signal changes do not trigger detection"
-grep -q 'device-detection.lock' "$SERVICE" || die "background detection is not serialized"
+grep -q 'device-detection.flock' "$SERVICE" || die "background detection is not serialized"
+grep -q 'sheepfold_lock_acquire' "$SERVICE" || die "background detection ignores the common lock helper"
+grep -q 'run_scan_locked' "$DEVICE_DETECTOR" || die "direct device detection is not serialized"
+# При проверке staged root нельзя требовать flock от Windows/SDK-хоста.
+# На настоящем роутере ROOT пуст, и зависимость пакета обязана дать команду. §owrtci1
+if [ -z "$ROOT" ]; then
+    command -v flock >/dev/null 2>&1 || die "flock is unavailable"
+fi
 grep -q 'NETWORK_NAME_PATTERN=' "$DEVICE_CLASSIFIER" || die "network infrastructure guard is missing"
 classifier_policy="$(sed -n 's/^POLICY_VERSION="\([^"]*\)"/\1/p' "$DEVICE_CLASSIFIER" | sed -n '1p')"
 detector_policy="$(sed -n 's/^POLICY_VERSION="\([^"]*\)"/\1/p' "$DEVICE_DETECTOR" | sed -n '1p')"
@@ -171,6 +221,24 @@ grep -q 'ubus.call("umdns", "browse"' "$DEVICE_MDNS_UCODE" || die "mDNS reader d
 grep -q 'ubus.call("umdns", "hosts"' "$DEVICE_MDNS_UCODE" || die "mDNS reader does not use the OpenWrt hosts API"
 grep -q 'device-mdns.tsv' "$DEVICE_DETECTOR" || die "mDNS snapshot is not included in detection"
 grep -q 'detection_mdns_services' "$DEVICE_DETECTOR" || die "mDNS evidence is not persisted"
+grep -q 'SO_BINDTODEVICE' "$DEVICE_SSDP_UCODE" || die "SSDP discovery is not bound to LAN"
+grep -q 'M-SEARCH' "$DEVICE_SSDP_UCODE" || die "SSDP discovery request is missing"
+! grep -q 'uclient-fetch\|curl\|wget' "$DEVICE_SSDP_UCODE" || die "SSDP discovery must not fetch arbitrary description URLs"
+grep -q '\[ "\$host" = "\$PEER_IP" \]' "$DEVICE_UPNP_DESCRIPTION" || die "UPnP LOCATION is not pinned to the responding peer"
+grep -q -- "--max-redirs 0" "$DEVICE_UPNP_DESCRIPTION" || die "UPnP LOCATION redirects are not disabled"
+grep -q -- "--max-filesize" "$DEVICE_UPNP_DESCRIPTION" || die "UPnP description size is not bounded"
+grep -q -- "--interface \"\$lan_device\"" "$DEVICE_UPNP_DESCRIPTION" || die "UPnP description fetch is not LAN-bound"
+grep -q 'SO_BINDTODEVICE' "$DEVICE_WSD_UCODE" || die "WS-Discovery is not bound to LAN"
+grep -q 'IP_ADD_MEMBERSHIP' "$DEVICE_WSD_UCODE" || die "WS-Discovery passive listener is missing"
+grep -q '<d:Probe' "$DEVICE_WSD_UCODE" || die "WS-Discovery active probe is missing"
+grep -q 'SHEEPFOLD_WSD_ACTIVE_PROBE="\$FORCE"' "$DEVICE_WSD" || die "WS-Discovery probe is not restricted to a new-device event"
+grep -q 'if (ACTIVE_PROBE)' "$DEVICE_WSD_UCODE" || die "WS-Discovery probe is sent during passive scans"
+! grep -q 'uclient-fetch\|curl\|wget' "$DEVICE_WSD_UCODE" || die "WS-Discovery must not open advertised XAddrs"
+grep -q 'detection_ssdp_profile' "$DEVICE_DETECTOR" || die "SSDP evidence is not persisted"
+grep -q 'detection_wsd_profile' "$DEVICE_DETECTOR" || die "WS-Discovery evidence is not persisted"
+grep -q 'detection_identity_keys' "$DEVICE_DETECTOR" || die "stable device identity keys are not persisted"
+grep -q 'multiple_signal_families' "$DEVICE_IDENTITY" || die "logical-device linking lacks multifactor matching"
+! grep -Eq 'uci.*(set|add_list).*(allowlist|blocklist|\.group)' "$DEVICE_IDENTITY" || die "logical-device linking must not inherit access policy"
 grep -q '\[ "\$evidence_count" -lt 2 \]' "$DEVICE_DETECTOR" || die "automatic group assignment does not require two evidence families"
 grep -q 'detection_fingerprint' "$DEVICE_DETECTOR" || die "device fingerprint persistence is missing"
 grep -q 'detection_policy_version' "$DEVICE_DETECTOR" || die "classification policy version is not persisted"
@@ -186,7 +254,8 @@ grep -q 'DEVICE_PRESENCE=.*/sheepfold-device-presence' "$CONTROL" || die "device
 grep -q 'exec "\$DEVICE_PRESENCE"' "$CONTROL" || die "device presence helper is not executed"
 grep -q 'ONLINE_WINDOW_SECONDS=900' "$DEVICE_PRESENCE" || die "device online window is not fifteen minutes"
 grep -q 'refresh_from_dhcp_signals' "$DEVICE_PRESENCE" || die "DHCP presence history is missing"
-grep -q 'refresh_from_arp' "$DEVICE_PRESENCE" || die "ARP presence refresh is missing"
+grep -q 'current_from_arp' "$DEVICE_PRESENCE" || die "ARP presence source is missing"
+grep -q 'refresh_from_current_snapshot' "$DEVICE_PRESENCE" || die "current LAN presence snapshot is not applied"
 grep -q '\*,arp,\*' "$DEVICE_PRESENCE" || die "static-only detector state can be treated as online"
 grep -q '"\$PRESENCE" refresh' "$SERVICE" || die "presence history is not refreshed after detection"
 ! grep -q '/etc/sheepfold/device-presence' "$DEVICE_PRESENCE" || die "device presence is written to persistent flash"
@@ -195,7 +264,8 @@ grep -q '"\$PRESENCE" refresh' "$SERVICE" || die "presence history is not refres
 grep -q 'DEVICE_RECLASSIFY=.*/sheepfold-device-reclassify' "$CONTROL" || die "device reclassification is not routed"
 grep -q 'exec "\$DEVICE_RECLASSIFY"' "$CONTROL" || die "device reclassification helper is not executed"
 grep -q 'manual_device_type_locked' "$DEVICE_RECLASSIFY" || die "manual device type is not protected"
-grep -q 'device-detection.lock' "$DEVICE_RECLASSIFY" || die "manual reclassification is not serialized"
+grep -q 'device-detection.flock' "$DEVICE_RECLASSIFY" || die "manual reclassification is not serialized"
+grep -q 'sheepfold_lock_acquire' "$DEVICE_RECLASSIFY" || die "manual reclassification ignores the common lock helper"
 ! grep -q 'delete.*\.group\|delete.*allowlist\|delete.*blocklist' "$DEVICE_RECLASSIFY" || die "reclassification can change access policy"
 
 # LED helper выбирает профиль по board name и сохраняет общий fallback.
@@ -240,13 +310,17 @@ grep -q 'sheepfold-openssl-ensure' "$ACL" || die "OpenSSL verification helper is
 grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable individual logs"
 # SHEEPFOLD_AI_END
 
+# QR v2 закрепляет публичный ключ API до первого сетевого запроса Android.
+grep -q 'openssl pkey -pubin' "$TLS_FINGERPRINT" || die "TLS SPKI fingerprint calculation is missing"
+grep -q 'tls-public-key-fingerprint' "$CONTROL" || die "TLS SPKI fingerprint command is not connected"
+
 for script in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
     "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
     "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
     "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$FIREWALL" "$SCHEDULE_EVALUATOR" \
     "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$ADGUARD_ADAPTER" "$ADGUARD_FEED" \
-    "$PAIR_API" "$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
+	"$PAIR_API" "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$TLS_FINGERPRINT" \
     $VARIANT_EXECUTABLES "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do

@@ -2,6 +2,14 @@
 set -eu
 
 LOCK_DIR="/tmp/sheepfold-device-id.lock"
+TEMP_FILES=""
+
+# Pairing использует отдельный UCI savedir, чтобы ID вошёл в тот же commit, что
+# права администратора и сжигание одноразового кода. Обычные вызовы продолжают
+# работать с системным UCI-каталогом. §pairtx1
+if [ -n "${SHEEPFOLD_UCI_SAVEDIR:-}" ]; then
+    uci() { command uci -P "$SHEEPFOLD_UCI_SAVEDIR" "$@"; }
+fi
 
 is_positive_id() {
     case "${1:-}" in
@@ -11,6 +19,7 @@ is_positive_id() {
 }
 
 numeric_tail() {
+    local value candidate
     value="${1:-}"
     # Старые ID вроде D-0012 мигрируются в 12 целиком, а не в последнюю цифру.
     candidate="$(printf '%s' "$value" | sed 's/[^0-9][^0-9]*/ /g' | awk '{print $NF}')"
@@ -23,30 +32,60 @@ device_sections() {
     uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'
 }
 
-id_is_used_by_other() {
+first_owner_for_id() {
+    local wanted section current
     wanted="$1"
-    owner="$2"
     for section in $(device_sections); do
-        [ "$section" = "$owner" ] && continue
         current="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
         current="$(numeric_tail "$current" 2>/dev/null || true)"
-        [ "$current" = "$wanted" ] && return 0
+        [ "$current" = "$wanted" ] || continue
+        printf '%s\n' "$section"
+        return 0
     done
     return 1
 }
 
-highest_id() {
+id_is_used_by_other() {
+    local wanted owner first_owner
+    wanted="$1"
+    owner="$2"
+    first_owner="$(first_owner_for_id "$wanted" 2>/dev/null || true)"
+    [ -n "$first_owner" ] && [ "$first_owner" != "$owner" ]
+}
+
+highest_existing_id() {
+    local section current highest
     highest=0
     for section in $(device_sections); do
         current="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
         current="$(numeric_tail "$current" 2>/dev/null || true)"
         is_positive_id "$current" || continue
-        [ "$current" -gt "$highest" ] && highest="$current"
+        [ "$current" -le "$highest" ] || highest="$current"
     done
     printf '%s\n' "$highest"
 }
 
+next_unused_id() {
+    local candidate highest
+    ensure_global_section
+    candidate="$(uci -q get sheepfold.global.next_device_id 2>/dev/null || true)"
+    highest="$(highest_existing_id)"
+    if ! is_positive_id "$candidate" || [ "$candidate" -le "$highest" ]; then
+        candidate=$((highest + 1))
+    fi
+    while first_owner_for_id "$candidate" >/dev/null 2>&1; do
+        candidate=$((candidate + 1))
+    done
+    printf '%s\n' "$candidate"
+}
+
+cleanup() {
+    [ -z "$TEMP_FILES" ] || rm -f $TEMP_FILES 2>/dev/null || true
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+
 acquire_lock() {
+    local attempts
     attempts=0
     while ! mkdir "$LOCK_DIR" 2>/dev/null; do
         attempts=$((attempts + 1))
@@ -56,7 +95,7 @@ acquire_lock() {
         }
         sleep 1
     done
-    trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
+    trap cleanup EXIT INT TERM
 }
 
 ensure_global_section() {
@@ -64,31 +103,70 @@ ensure_global_section() {
         uci -q set sheepfold.global=sheepfold
 }
 
+rewrite_legacy_schedule_target() {
+    local old_id new_id section targets target changed
+    old_id="$1"
+    new_id="$2"
+    [ -n "$old_id" ] && [ "$old_id" != "$new_id" ] || return 0
+
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=schedule$/\1/p'); do
+        [ "$(uci -q get "sheepfold.$section.target_type" 2>/dev/null || true)" = device ] || continue
+        targets="$(uci -q get "sheepfold.$section.targets" 2>/dev/null || true)"
+        changed=0
+        for target in $targets; do
+            [ "$target" != "$old_id" ] || changed=1
+        done
+        [ "$changed" = 1 ] || continue
+        uci -q delete "sheepfold.$section.targets" 2>/dev/null || true
+        for target in $targets; do
+            [ "$target" != "$old_id" ] || target="$new_id"
+            uci -q add_list "sheepfold.$section.targets=$target"
+        done
+    done
+}
+
 ensure_id_locked() {
+    local section current candidate next owner
     section="$1"
     [ "$(uci -q get "sheepfold.$section" 2>/dev/null || true)" = device ] || return 1
 
     current="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
     candidate="$(numeric_tail "$current" 2>/dev/null || true)"
-    if is_positive_id "$candidate" && ! id_is_used_by_other "$candidate" "$section"; then
-        [ "$current" = "$candidate" ] || uci -q set "sheepfold.$section.id=$candidate"
+    owner="$(first_owner_for_id "$candidate" 2>/dev/null || true)"
+    if is_positive_id "$candidate" && { [ -z "$owner" ] || [ "$owner" = "$section" ]; }; then
+        if [ "$current" != "$candidate" ]; then
+            remember_legacy_id "$section" "$current"
+            uci -q set "sheepfold.$section.id=$candidate"
+            rewrite_legacy_schedule_target "$current" "$candidate"
+        fi
     else
         ensure_global_section
-        next="$(uci -q get sheepfold.global.next_device_id 2>/dev/null || true)"
-        is_positive_id "$next" || next=$(( $(highest_id) + 1 ))
-        while id_is_used_by_other "$next" "$section"; do
-            next=$((next + 1))
-        done
+        # Номер фигурирует в журналах, уведомлениях и расписаниях. Поэтому удалённый
+        # ID никогда не выдаётся снова, даже если из-за этого ряд чисел имеет пропуски. §deviceid2
+        next="$(next_unused_id)"
         candidate="$next"
+        [ -z "$current" ] || remember_legacy_id "$section" "$current"
         uci -q set "sheepfold.$section.id=$candidate"
     fi
 
     ensure_global_section
-    next="$(uci -q get sheepfold.global.next_device_id 2>/dev/null || true)"
-    is_positive_id "$next" || next=1
-    [ "$next" -gt "$candidate" ] || uci -q set "sheepfold.global.next_device_id=$((candidate + 1))"
+    next="$(next_unused_id)"
+    uci -q set "sheepfold.global.next_device_id=$next"
+    uci -q set sheepfold.global.device_id_layout_version='3'
     printf '%s\n' "$candidate"
 }
+
+remember_legacy_id() {
+    local section old_id existing
+    section="$1"
+    old_id="$2"
+    existing="$(uci -q get "sheepfold.$section.legacy_ids" 2>/dev/null || true)"
+    case " $existing " in
+        *" $old_id "*) return 0 ;;
+    esac
+    uci -q add_list "sheepfold.$section.legacy_ids=$old_id"
+}
+
 
 ensure_one() {
     acquire_lock
@@ -96,11 +174,30 @@ ensure_one() {
     uci -q commit sheepfold
 }
 
+ensure_staged_one() {
+    acquire_lock
+    ensure_id_locked "$1"
+}
+
 ensure_all() {
+    local section
     acquire_lock
     for section in $(device_sections); do
         ensure_id_locked "$section" >/dev/null
     done
+    uci -q commit sheepfold
+}
+
+migrate_all() {
+    local section
+    acquire_lock
+    # v3 сохраняет все корректные номера. Миграция меняет только старый формат,
+    # дубликаты и отсутствующие значения; существующие #ID не уплотняются. §deviceid2
+    for section in $(device_sections); do
+        ensure_id_locked "$section" >/dev/null
+    done
+    ensure_global_section
+    uci -q set sheepfold.global.device_id_layout_version='3'
     uci -q commit sheepfold
 }
 
@@ -109,8 +206,23 @@ case "${1:-}" in
         [ -n "${2:-}" ] || exit 2
         ensure_one "$2"
         ;;
+    ensure-staged)
+        [ -n "${2:-}" ] || exit 2
+        [ -n "${SHEEPFOLD_UCI_SAVEDIR:-}" ] || {
+            echo "ensure-staged requires an isolated UCI savedir." >&2
+            exit 2
+        }
+        ensure_staged_one "$2"
+        ;;
     ensure-all)
         ensure_all
+        ;;
+    compact)
+        # Совместимый алиас для старых скриптов: команда больше не уплотняет ID.
+        migrate_all
+        ;;
+    migrate)
+        migrate_all
         ;;
     get)
         [ -n "${2:-}" ] || exit 2
@@ -118,7 +230,7 @@ case "${1:-}" in
         numeric_tail "$value"
         ;;
     *)
-        echo "Usage: $0 ensure <device-section> | ensure-all | get <device-section>" >&2
+        echo "Usage: $0 ensure <device-section> | ensure-staged <device-section> | ensure-all | migrate | get <device-section>" >&2
         exit 2
         ;;
 esac

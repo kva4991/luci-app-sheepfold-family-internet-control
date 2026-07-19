@@ -14,14 +14,14 @@
 
 Запись последнего запуска: `/tmp/sheepfold/ai-ownership-last-run`.
 
-## UCI: хранение уникального ID устройства и процентов
+## UCI: внутренняя связь устройства и процентов
 
-Каждому устройству присваивается `deviceId` при первом обнаружении — **однажды и навсегда**:
+Пользовательский числовой `deviceId` Sheepfold не переиспользуется и не уплотняется, но всё равно не является доказательством физической личности устройства. Внутренняя связь строится по MAC-секции и доверенному baseline; если AI-модулю потребуется отдельный обезличенный ключ, он хранится отдельно как `ownershipDeviceKey` (§deviceid2):
 
 ```uci
 config device 'device_aabbccddeeff'
     option mac             'AA:BB:CC:DD:EE:FF'
-    option deviceId        'dev_7f3a9c'        # sha256(mac)[:6], неизменен
+    option ownershipDeviceKey 'dev_7f3a9c'     # отдельный внутренний ключ будущего AI-модуля
     option personalGroupId ''                  # пусто — не в личной группе
     # проценты принадлежности (обновляет ИИ)
     option ownershipVasya  '72'
@@ -47,7 +47,7 @@ FORMAT:
 {
   "devices": [
     {
-      "deviceId": "dev_7f3a9c",
+      "ownershipDeviceKey": "dev_7f3a9c",
       "mac": "AA:BB:CC:DD:EE:FF",
       "hostname": "android-phone",
       "ownership": { "Вася": 72, "Маша": 18, "unknown": 10 },

@@ -1,0 +1,45 @@
+#!/bin/sh
+set -eu
+
+UCODE_SOURCE="/usr/share/sheepfold/device-ws-discovery.uc"
+OUTPUT="/tmp/sheepfold/device-ws-discovery.tsv"
+LAST_SCAN="/tmp/sheepfold/device-ws-discovery.last-scan"
+TEMP="$OUTPUT.tmp.$$"
+MIN_INTERVAL="${1:-3600}"
+FORCE="${2:-0}"
+
+case "$MIN_INTERVAL" in ''|*[!0-9]*) MIN_INTERVAL=3600 ;; esac
+[ "$MIN_INTERVAL" -ge 900 ] || MIN_INTERVAL=900
+[ "$MIN_INTERVAL" -le 86400 ] || MIN_INTERVAL=86400
+case "$FORCE" in 1) ;; *) FORCE=0 ;; esac
+
+mkdir -p /tmp/sheepfold
+chmod 700 /tmp/sheepfold 2>/dev/null || true
+now="$(date +%s)"
+last="$(cat "$LAST_SCAN" 2>/dev/null || printf 0)"
+case "$last" in ''|*[!0-9]*) last=0 ;; esac
+age=$((now - last))
+[ "$age" -ge 0 ] || age="$MIN_INTERVAL"
+
+# Даже несколько почти одновременных DHCP-событий дают не больше одного Probe
+# за 30 секунд. Обычная страховочная сверка соблюдает часовой интервал. §detload
+if [ "$FORCE" = 1 ]; then
+	[ "$age" -ge 30 ] || exit 0
+else
+	[ -r "$OUTPUT" ] && [ "$age" -lt "$MIN_INTERVAL" ] && exit 0
+fi
+
+umask 077
+if command -v ucode >/dev/null 2>&1 && [ -r "$UCODE_SOURCE" ]; then
+	if ! SHEEPFOLD_WSD_ACTIVE_PROBE="$FORCE" ucode "$UCODE_SOURCE" > "$TEMP" 2>/dev/null; then
+		rm -f "$TEMP"
+		exit 0
+	fi
+else
+	exit 0
+fi
+
+chmod 600 "$TEMP" 2>/dev/null || true
+mv -f "$TEMP" "$OUTPUT"
+printf '%s\n' "$now" > "$LAST_SCAN"
+chmod 600 "$LAST_SCAN" 2>/dev/null || true

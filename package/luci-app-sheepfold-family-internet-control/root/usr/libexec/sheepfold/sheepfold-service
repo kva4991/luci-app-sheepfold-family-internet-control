@@ -1,18 +1,24 @@
 #!/bin/sh
 set -eu
 
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-${0%/*}/sheepfold-lock-common}"
+[ -r "$LOCK_COMMON" ] || LOCK_COMMON=/usr/libexec/sheepfold/sheepfold-lock-common
+. "$LOCK_COMMON"
+
 COMMAND="${1:-run}"
 DEFAULT_RAM_LOG="/tmp/sheepfold/events.log"
 DETECTOR="/usr/libexec/sheepfold/sheepfold-device-detector"
 PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
-SCAN_LOCK="/tmp/sheepfold/device-detection.lock"
+SCAN_LOCK="/tmp/sheepfold/device-detection.flock"
 UPDATER="/usr/libexec/sheepfold/sheepfold-updater"
 ROUTER_CONTROL="/usr/libexec/sheepfold/sheepfold-router-control"
 FIREWALL_HELPER="/usr/libexec/sheepfold/sheepfold-firewall"
 DOMAIN_POLICY_HELPER="/usr/libexec/sheepfold/sheepfold-domain-policy"
-LEASES_FILE="/tmp/dhcp.leases"
 SIGNAL_CHANGE_FLAG="/tmp/sheepfold/device-signals.changed"
 SIGNAL_PROCESSING_FLAG="/tmp/sheepfold/device-signals.processing"
+ONLINE_STATE_FILE="/tmp/sheepfold/device-online.current"
+OFFLINE_PENDING_FILE="/tmp/sheepfold/device-offline.pending"
+PENDING_CONNECTIONS_FILE="/tmp/sheepfold/device-connections.pending"
 UPDATE_REQUEST_FILE="/tmp/sheepfold/update.request"
 REBOOT_REQUEST_FILE="/tmp/sheepfold/reboot.request"
 LED_ALERT_ACK_FILE="/tmp/sheepfold/new-device-alert.ack"
@@ -52,6 +58,7 @@ handle_reboot_request() {
 }
 
 handle_router_control() {
+        local mode now control_interval
         mode="${1:-periodic}"
         [ -x "$ROUTER_CONTROL" ] || return 0
 
@@ -79,16 +86,12 @@ handle_router_control() {
 }
 
 run_detector() (
-        mkdir -p /tmp/sheepfold
-        attempts=0
-        while ! mkdir "$SCAN_LOCK" 2>/dev/null; do
-                attempts=$((attempts + 1))
-                [ "$attempts" -lt 30 ] || return 1
-                sleep 1
-        done
-        trap 'rmdir "$SCAN_LOCK" 2>/dev/null || true' EXIT HUP INT TERM
+	# Все фоновые и ручные входы используют один lock; detector получает явный
+	# признак уже удерживаемой блокировки и не пытается захватить её повторно. §detlock
+        sheepfold_lock_acquire "$SCAN_LOCK" 30 || return 1
+        trap 'sheepfold_lock_release' EXIT HUP INT TERM
 
-        if "$DETECTOR" "$@"; then
+        if SHEEPFOLD_DEVICE_LOCK_HELD=1 "$DETECTOR" "$@"; then
                 [ -x "$PRESENCE" ] && "$PRESENCE" refresh >/dev/null 2>&1 || true
                 return 0
         fi
@@ -111,7 +114,134 @@ restore_signal_change() {
                 : > "$SIGNAL_CHANGE_FLAG"
 }
 
+normalize_mac() {
+        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+valid_mac() {
+        printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'
+}
+
+online_state_has_mac() {
+        local mac
+        mac="$(normalize_mac "$1")"
+        [ -r "$ONLINE_STATE_FILE" ] || return 1
+        awk -F '\t' -v wanted="$mac" 'toupper($1) == wanted { found=1; exit } END { exit !found }' "$ONLINE_STATE_FILE"
+}
+
+queue_connection_scan() {
+        local mac due
+        mac="$(normalize_mac "$1")"
+        due="$2"
+        valid_mac "$mac" || return 0
+        case "$due" in ''|*[!0-9]*) return 0 ;; esac
+        touch "$PENDING_CONNECTIONS_FILE"
+        chmod 600 "$PENDING_CONNECTIONS_FILE" 2>/dev/null || true
+        awk -F '\t' -v wanted="$mac" 'toupper($2) == wanted { found=1 } END { exit !found }' \
+                "$PENDING_CONNECTIONS_FILE" 2>/dev/null && return 0
+        printf '%s\t%s\n' "$due" "$mac" >> "$PENDING_CONNECTIONS_FILE"
+}
+
+refresh_online_state() {
+	local now delay current_file stable_file offline_file mac ip sources offline_since offline_grace
+	now="$1"
+	delay="$2"
+	current_file="$ONLINE_STATE_FILE.tmp.$$"
+	stable_file="$ONLINE_STATE_FILE.stable.$$"
+	offline_file="$OFFLINE_PENDING_FILE.tmp.$$"
+	[ -x "$PRESENCE" ] || return 1
+        mkdir -p /tmp/sheepfold
+        umask 077
+	if ! "$PRESENCE" current > "$current_file"; then
+		rm -f "$current_file" "$stable_file" "$offline_file"
+		return 1
+	fi
+	offline_grace="$(uci -q get sheepfold.global.detector_offline_grace_seconds 2>/dev/null || printf 90)"
+	case "$offline_grace" in ''|*[!0-9]*) offline_grace=90 ;; esac
+	[ "$offline_grace" -ge 30 ] || offline_grace=30
+	[ "$offline_grace" -le 900 ] || offline_grace=900
+	cp "$current_file" "$stable_file"
+	: > "$offline_file"
+
+	if [ -r "$ONLINE_STATE_FILE" ]; then
+		# Короткий сон Wi-Fi, roaming между 2,4/5 ГГц или пропавшая ARP-запись не
+		# являются новым подключением. Старое online-состояние удерживается в течение
+		# grace-периода; только затем следующее появление создаёт событие. §detlife1
+		while IFS="$(printf '\t')" read -r mac ip sources; do
+			valid_mac "$(normalize_mac "$mac")" || continue
+			if awk -F '\t' -v wanted="$(normalize_mac "$mac")" \
+				'toupper($1) == wanted { found=1; exit } END { exit !found }' "$current_file"; then
+				continue
+			fi
+			offline_since="$(awk -F '\t' -v wanted="$(normalize_mac "$mac")" \
+				'toupper($1) == wanted { print $2; exit }' "$OFFLINE_PENDING_FILE" 2>/dev/null || true)"
+			case "$offline_since" in ''|*[!0-9]*) offline_since="$now" ;; esac
+			if [ $((now - offline_since)) -lt "$offline_grace" ]; then
+				printf '%s\t%s\t%s\n' "$mac" "$ip" "$sources" >> "$stable_file"
+				printf '%s\t%s\n' "$mac" "$offline_since" >> "$offline_file"
+			fi
+		done < "$ONLINE_STATE_FILE"
+
+		while IFS="$(printf '\t')" read -r mac ip sources; do
+			valid_mac "$(normalize_mac "$mac")" || continue
+			if ! awk -F '\t' -v wanted="$(normalize_mac "$mac")" \
+				'toupper($1) == wanted { found=1; exit } END { exit !found }' "$ONLINE_STATE_FILE"; then
+				queue_connection_scan "$mac" $((now + delay))
+			fi
+		done < "$stable_file"
+	fi
+	mv -f "$stable_file" "$ONLINE_STATE_FILE"
+	mv -f "$offline_file" "$OFFLINE_PENDING_FILE"
+	rm -f "$current_file"
+	chmod 600 "$ONLINE_STATE_FILE" 2>/dev/null || true
+	chmod 600 "$OFFLINE_PENDING_FILE" 2>/dev/null || true
+}
+
+run_detection_followups() {
+        [ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
+        refresh_adguard_client_policy
+}
+
+process_pending_connections() {
+        local now max_events remaining_file due mac processed ran
+        now="$1"
+        EVENT_SCAN_RAN=0
+        [ -s "$PENDING_CONNECTIONS_FILE" ] || return 0
+        max_events="$(uci -q get sheepfold.global.detector_max_event_scans_per_tick 2>/dev/null || printf 4)"
+        case "$max_events" in ''|*[!0-9]*) max_events=4 ;; esac
+        [ "$max_events" -ge 1 ] || max_events=1
+        [ "$max_events" -le 8 ] || max_events=8
+        remaining_file="$PENDING_CONNECTIONS_FILE.remaining.$$"
+        : > "$remaining_file"
+        processed=0
+        ran=0
+
+        while IFS="$(printf '\t')" read -r due mac; do
+                case "$due" in ''|*[!0-9]*) continue ;; esac
+                valid_mac "$(normalize_mac "$mac")" || continue
+                if [ "$due" -gt "$now" ]; then
+                        printf '%s\t%s\n' "$due" "$mac" >> "$remaining_file"
+                        continue
+                fi
+                online_state_has_mac "$mac" || continue
+                if [ "$processed" -ge "$max_events" ]; then
+                        printf '%s\t%s\n' $((now + 5)) "$mac" >> "$remaining_file"
+                        continue
+                fi
+                if run_detector scan event "$mac" >/dev/null 2>&1; then
+                        processed=$((processed + 1))
+                        ran=1
+                else
+                        printf '%s\t%s\n' $((now + 60)) "$mac" >> "$remaining_file"
+                fi
+        done < "$PENDING_CONNECTIONS_FILE"
+        mv -f "$remaining_file" "$PENDING_CONNECTIONS_FILE"
+        chmod 600 "$PENDING_CONNECTIONS_FILE" 2>/dev/null || true
+        EVENT_SCAN_RAN="$ran"
+}
+
 refresh_adguard_client_policy() {
+        local filter_backend integration_mode
         [ -x "$DOMAIN_POLICY_HELPER" ] || return 0
         [ "$(uci -q get sheepfold.global.adguard_auto_manage 2>/dev/null || printf 1)" = 1 ] || return 0
         filter_backend="$(uci -q get sheepfold.global.site_filter_backend 2>/dev/null || printf auto)"
@@ -126,6 +256,7 @@ refresh_adguard_client_policy() {
 }
 
 adguard_policy_requested() {
+	local group_sections group_section
 	[ "$(uci -q get sheepfold.global.site_blocklist_mode 2>/dev/null || printf disabled)" != disabled ] && return 0
 	group_sections="$(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=group$/\1/p')"
 	for group_section in $group_sections; do
@@ -135,6 +266,7 @@ adguard_policy_requested() {
 }
 
 handle_adguard_health() {
+	local health_backend health_integration health_now health_interval
 	[ -x "$DOMAIN_POLICY_HELPER" ] || return 0
 	[ "$(uci -q get sheepfold.global.adguard_auto_manage 2>/dev/null || printf 1)" = 1 ] || return 0
 	adguard_policy_requested || return 0
@@ -162,8 +294,10 @@ case "$COMMAND" in
 		run)
 				init_ram_log
 				echo "Sheepfold service started"
-				LAST_LEASES_STATE=""
-				LAST_FULL_SCAN=0
+				rm -f "$ONLINE_STATE_FILE" "$OFFLINE_PENDING_FILE" "$PENDING_CONNECTIONS_FILE" "$SIGNAL_PROCESSING_FLAG"
+				STARTUP_SCAN_DUE=0
+				STARTUP_SCAN_DONE=0
+				LAST_DAILY_SCAN=0
 				LAST_ADGUARD_HEALTH_TICK="$(date +%s)"
 				while :; do
                         handle_update_request
@@ -174,51 +308,62 @@ case "$COMMAND" in
                         DETECTION_MODE="$(uci -q get sheepfold.global.detection_mode 2>/dev/null || printf full)"
                         if [ "$DETECTION_MODE" != "disabled" ] && [ -x "$DETECTOR" ]; then
                                 NOW="$(date +%s)"
-                                INTERVAL="$(uci -q get sheepfold.global.detector_interval_seconds 2>/dev/null || printf 900)"
+                                INTERVAL="$(uci -q get sheepfold.global.detector_interval_seconds 2>/dev/null || printf 86400)"
                                 WATCH_INTERVAL="$(uci -q get sheepfold.global.detector_watch_interval_seconds 2>/dev/null || printf 10)"
+                                EVENT_DELAY="$(uci -q get sheepfold.global.detector_connection_delay_seconds 2>/dev/null || printf 20)"
                                 case "$INTERVAL" in
-                                        ''|*[!0-9]*) INTERVAL=900 ;;
+                                        ''|*[!0-9]*) INTERVAL=86400 ;;
                                 esac
                                 case "$WATCH_INTERVAL" in
                                         ''|*[!0-9]*) WATCH_INTERVAL=10 ;;
                                 esac
-                                [ "$INTERVAL" -lt 300 ] && INTERVAL=300
+                                case "$EVENT_DELAY" in
+                                        ''|*[!0-9]*) EVENT_DELAY=20 ;;
+                                esac
+                                [ "$INTERVAL" -lt 3600 ] && INTERVAL=3600
                                 [ "$WATCH_INTERVAL" -lt 5 ] && WATCH_INTERVAL=5
-
-                                if [ -r "$LEASES_FILE" ]; then
-                                        # Сравниваем весь файл аренд, а не только размер и последнюю строку:
-                                        # dnsmasq может обновить середину файла, и родитель ждёт реакции сразу.
-                                        LEASES_STATE="$(cksum "$LEASES_FILE" 2>/dev/null | awk '{ print $1 "-" $2 }')"
-                                else
-                                        LEASES_STATE="missing"
-                                fi
+                                [ "$EVENT_DELAY" -lt 5 ] && EVENT_DELAY=5
+                                [ "$EVENT_DELAY" -gt 120 ] && EVENT_DELAY=120
 
                                 SIGNALS_CHANGED=0
                                 if consume_signal_change; then
                                         SIGNALS_CHANGED=1
                                 fi
+                                if refresh_online_state "$NOW" "$EVENT_DELAY"; then
+                                        [ "$SIGNALS_CHANGED" = 1 ] && finish_signal_change
+                                elif [ "$SIGNALS_CHANGED" = 1 ]; then
+                                        restore_signal_change
+                                fi
 
-                                if [ "$LEASES_STATE" != "$LAST_LEASES_STATE" ] || [ "$SIGNALS_CHANGED" = "1" ]; then
-                                        SCAN_SCOPE=changed
-                                        [ "$LAST_FULL_SCAN" -eq 0 ] && SCAN_SCOPE=full
-                                        if run_detector scan "$SCAN_SCOPE" >/dev/null 2>&1; then
-                                                [ "$SIGNALS_CHANGED" = "1" ] && finish_signal_change
-                                                LAST_LEASES_STATE="$LEASES_STATE"
-                                                [ "$SCAN_SCOPE" = "full" ] && LAST_FULL_SCAN="$NOW"
-                                                [ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
-                                                refresh_adguard_client_policy
-                                        elif [ "$SIGNALS_CHANGED" = "1" ]; then
-                                                restore_signal_change
+                                if [ "$STARTUP_SCAN_DUE" -eq 0 ]; then
+                                        STARTUP_SCAN_DUE=$((NOW + EVENT_DELAY))
+                                fi
+
+                                # Первый проход и суточная страховочная сверка касаются только
+                                # подтверждённо online-клиентов. Выключенные устройства не трогаются. §detlife1
+                                if [ "$STARTUP_SCAN_DONE" -eq 0 ] && [ "$NOW" -ge "$STARTUP_SCAN_DUE" ]; then
+                                        if run_detector scan startup >/dev/null 2>&1; then
+                                                STARTUP_SCAN_DONE=1
+                                                LAST_DAILY_SCAN="$NOW"
+                                                rm -f "$PENDING_CONNECTIONS_FILE"
+                                                run_detection_followups
                                         fi
-                                elif [ $((NOW - LAST_FULL_SCAN)) -ge "$INTERVAL" ]; then
-                                        if run_detector scan full >/dev/null 2>&1; then
-                                                LAST_FULL_SCAN="$NOW"
-                                                [ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
-                                                refresh_adguard_client_policy
+                                elif [ "$STARTUP_SCAN_DONE" = 1 ]; then
+                                        process_pending_connections "$NOW"
+                                        [ "$EVENT_SCAN_RAN" = 1 ] && run_detection_followups
+                                        if [ $((NOW - LAST_DAILY_SCAN)) -ge "$INTERVAL" ]; then
+                                                if run_detector scan daily >/dev/null 2>&1; then
+                                                        LAST_DAILY_SCAN="$NOW"
+                                                        run_detection_followups
+                                                fi
                                         fi
                                 fi
                         else
                                 WATCH_INTERVAL=30
+					rm -f "$ONLINE_STATE_FILE" "$OFFLINE_PENDING_FILE" "$PENDING_CONNECTIONS_FILE"
+                                STARTUP_SCAN_DUE=0
+                                STARTUP_SCAN_DONE=0
+                                LAST_DAILY_SCAN=0
                         fi
                         sleep "$WATCH_INTERVAL"
                 done

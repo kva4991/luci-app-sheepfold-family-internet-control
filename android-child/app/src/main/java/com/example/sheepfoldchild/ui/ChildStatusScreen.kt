@@ -6,7 +6,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,10 +64,12 @@ private fun StatusCard(
     onRequestThirtyMinutes: () -> Unit
 ) {
     val isEnabled = status.internetState == "enabled"
-    val cardColor = if (isEnabled)
-        MaterialTheme.colorScheme.primaryContainer
-    else
-        MaterialTheme.colorScheme.errorContainer
+    val isDisabled = status.internetState == "disabled"
+    val cardColor = when {
+        isEnabled -> MaterialTheme.colorScheme.primaryContainer
+        isDisabled -> MaterialTheme.colorScheme.errorContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -84,10 +85,11 @@ private fun StatusCard(
         ) {
             // Крупный статус
             Text(
-                text = if (isEnabled)
-                    stringResource(R.string.status_enabled)
-                else
-                    stringResource(R.string.status_disabled),
+                text = when {
+                    isEnabled -> stringResource(R.string.status_enabled)
+                    isDisabled -> stringResource(R.string.status_disabled)
+                    else -> stringResource(R.string.status_unknown)
+                },
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
@@ -102,14 +104,14 @@ private fun StatusCard(
                 )
             }
 
-            // Таймер
-            status.minutesRemaining?.let { mins ->
+            // В карточке остаётся только точное время без предположения о причине.
+            status.nextAccessChangeTime?.let { changeTime ->
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
                 ) {
                     Text(
-                        text = stringResource(R.string.time_remaining, mins),
+                        text = changeTime,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Medium
@@ -144,12 +146,15 @@ private fun StatusCard(
                 )
             }
 
-            // Кнопка Обновить
+            // Явный перенос в ресурсе сохраняет одинаковую двухстрочную подпись на узких экранах.
             Button(
                 onClick = onRefresh,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(stringResource(R.string.btn_refresh))
+                Text(
+                    text = stringResource(R.string.btn_refresh),
+                    textAlign = TextAlign.Center
+                )
             }
 
             // Время последнего обновления
@@ -189,7 +194,10 @@ private fun ErrorCard(message: String, onRefresh: () -> Unit) {
                 onClick = onRefresh,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(stringResource(R.string.btn_refresh))
+                Text(
+                    text = stringResource(R.string.btn_refresh),
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }

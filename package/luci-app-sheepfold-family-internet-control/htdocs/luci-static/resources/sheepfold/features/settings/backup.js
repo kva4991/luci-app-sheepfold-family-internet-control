@@ -9,13 +9,42 @@ var maxSectionsPerConfig = 1024;
 var maxOptionsPerSection = 256;
 var maxValueLength = 131072;
 var pbkdf2Iterations = 250000;
+var routerIdOption = 'router_install_id';
+var transferDeviceOptions = {
+	admin_device: true,
+	admin_owner: true,
+	admin_login: true,
+	paired_from: true,
+	paired_at: true,
+	pairing_user_agent: true,
+	trusted_identity_keys: true,
+	trusted_identity_version: true,
+	detection_fingerprint: true,
+	detection_identity_keys: true,
+	detection_identity_version: true,
+	detection_last_analysis_at: true,
+	identity_quarantine_mode: true,
+	identity_quarantine_reason: true,
+	identity_quarantine_at: true,
+	identity_quarantine_keys: true,
+	identity_quarantine_keys_version: true,
+	identity_quarantine_notified_at: true,
+	identity_uuid_collision_pending: true,
+	identity_uuid_collision_with_id: true,
+	identity_uuid_collision_reason: true,
+	identity_uuid_collision_accepted_with_id: true
+};
 
 function own(object, key) {
 	return Object.prototype.hasOwnProperty.call(object || {}, key);
 }
 
 function secretOption(name) {
-	return /(password|passwd|token|secret|key|cookie|session)/i.test(String(name || ''));
+	return /(password|passwd|token|secret|key|cookie|session|sim_phone_history)/i.test(String(name || ''));
+}
+
+function transientOption(name) {
+	return name === 'pairing_code' || name === 'pairing_code_expires';
 }
 
 function safeIdentifier(value) {
@@ -57,7 +86,8 @@ function serializeSection(section, includeSecrets) {
 	Object.keys(section || {}).forEach(function (option) {
 		var value;
 
-		if (option.charAt(0) === '.' || typeof section[option] === 'function' || section[option] == null)
+		if (option.charAt(0) === '.' || transientOption(option) ||
+				typeof section[option] === 'function' || section[option] == null)
 			return;
 		if (!safeOptionName(option))
 			throw new Error('invalid_option_name');
@@ -168,6 +198,67 @@ function validate(payload) {
 	normalized.exportedAt = String(payload.exportedAt || '');
 	normalized.containsSecrets = containsSecrets;
 	return normalized;
+}
+
+function namedSection(payload, name, type) {
+	return (payload.configs.sheepfold || []).filter(function (section) {
+		return section.name === name && section.type === type;
+	})[0] || null;
+}
+
+function routerId(payload) {
+	var global = namedSection(payload, 'global', 'sheepfold');
+	var value = String(global && global.options[routerIdOption] || '').toLowerCase();
+
+	return /^[a-f0-9]{32,64}$/.test(value) ? value : '';
+}
+
+function removeTransientOptions(payload) {
+	(payload.configs.sheepfold || []).forEach(function (section) {
+		Object.keys(section.options || {}).forEach(function (option) {
+			if (transientOption(option))
+				delete section.options[option];
+		});
+	});
+}
+
+function resetTransferredDevice(section) {
+	Object.keys(section.options || {}).forEach(function (option) {
+		if (transferDeviceOptions[option])
+			delete section.options[option];
+	});
+}
+
+function prepareRestore(importedPayload, currentPayload) {
+	var restored = validate(importedPayload);
+	var current = validate(currentPayload);
+	var sourceId = routerId(restored);
+	var currentId = routerId(current);
+	var global;
+	var routerTransfer;
+
+	if (!currentId)
+		throw new Error('current_router_id_missing');
+
+	global = namedSection(restored, 'global', 'sheepfold');
+	global.options[routerIdOption] = currentId;
+	removeTransientOptions(restored);
+	routerTransfer = !sourceId || sourceId !== currentId;
+
+	if (routerTransfer) {
+		// HMAC-отпечатки зависят от локального секрета конкретного роутера. При
+		// переносе сохраняем постоянные ID и семейные правила, но строим доверенную
+		// базу заново и требуем новое QR-сопряжение админских телефонов. §cfgbak1
+		restored.configs.sheepfold.filter(function (section) {
+			return section.type === 'device';
+		}).forEach(resetTransferredDevice);
+	}
+
+	return {
+		payload: restored,
+		routerTransfer: routerTransfer,
+		legacySource: !sourceId
+	};
 }
 
 function summary(payload) {
@@ -281,8 +372,10 @@ return baseclass.extend({
 	encryptedFormat: encryptedFormat,
 	secretPlaceholder: secretPlaceholder,
 	secretOption: secretOption,
+	transientOption: transientOption,
 	build: build,
 	validate: validate,
+	prepareRestore: prepareRestore,
 	summary: summary,
 	encryptionAvailable: encryptionAvailable,
 	encrypt: encrypt,

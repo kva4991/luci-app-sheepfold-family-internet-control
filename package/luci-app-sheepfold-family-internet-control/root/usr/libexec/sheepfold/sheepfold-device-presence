@@ -5,7 +5,9 @@ COMMAND="${1:-list}"
 STATE_DIR="/tmp/sheepfold/device-state"
 SIGNAL_DIR="/tmp/sheepfold/device-signals"
 PRESENCE_DIR="/tmp/sheepfold/device-presence"
+JSHN_LIB="${SHEEPFOLD_JSHN_LIB:-/usr/share/libubox/jshn.sh}"
 ONLINE_WINDOW_SECONDS=900
+RECENT_DHCP_SECONDS=120
 
 normalize_mac() {
         printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
@@ -20,6 +22,7 @@ safe_field() {
 }
 
 read_field() {
+        local file key
         file="$1"
         key="$2"
         [ -r "$file" ] || return 0
@@ -28,6 +31,7 @@ read_field() {
 }
 
 presence_file_for_mac() {
+        local mac
         mac="$(normalize_mac "$1")"
         valid_mac "$mac" || return 1
         printf '%s/%s.tsv\n' "$PRESENCE_DIR" "$(printf '%s' "$mac" | tr ':' '_')"
@@ -38,6 +42,7 @@ mac_from_presence_file() {
 }
 
 write_seen() {
+        local mac seen_at ip source file current previous_ip tmp
         mac="$(normalize_mac "$1")"
         seen_at="$2"
         ip="$(safe_field "${3:-}")"
@@ -71,11 +76,12 @@ write_seen() {
 }
 
 refresh_from_detector_state() {
+        local file sources mac seen_at ip
         for file in "$STATE_DIR"/*.tsv; do
                 [ -r "$file" ] || continue
                 sources="$(read_field "$file" sources)"
                 case ",$sources," in
-                        *,arp,*) ;;
+                        *,arp,*|*,neighbor,*) ;;
                         *) continue ;;
                 esac
 
@@ -87,6 +93,7 @@ refresh_from_detector_state() {
 }
 
 refresh_from_dhcp_signals() {
+        local file action mac seen_at ip
         for file in "$SIGNAL_DIR"/*.dhcp; do
                 [ -r "$file" ] || continue
                 action="$(read_field "$file" action | tr '[:upper:]' '[:lower:]')"
@@ -101,13 +108,244 @@ refresh_from_dhcp_signals() {
         done
 }
 
-refresh_from_arp() {
-        [ -r /proc/net/arp ] || return 0
-        now="$(date +%s)"
-        awk 'NR > 1 && $3 == "0x2" { print toupper($4) "\t" $1 }' /proc/net/arp |
-                while IFS="$(printf '\t')" read -r mac ip; do
-                        write_seen "$mac" "$now" "$ip" arp
+collect_wan_interfaces() {
+        local section name networks devices network device status
+
+        printf '%s\n' wan wan6 pppoe-wan
+        for section in $(uci -q show firewall 2>/dev/null | sed -n 's/^firewall\.\([^.=]*\)=zone$/\1/p'); do
+                name="$(uci -q get "firewall.$section.name" 2>/dev/null || true)"
+                case "$name" in wan|wan6) ;; *) continue ;; esac
+
+                networks="$(uci -q get "firewall.$section.network" 2>/dev/null || true)"
+                devices="$(uci -q get "firewall.$section.device" 2>/dev/null || true)"
+                for device in $devices; do
+                        [ -n "$device" ] && printf '%s\n' "$device"
                 done
+                for network in $networks; do
+                        [ -n "$network" ] || continue
+                        printf '%s\n' "$network"
+                        for device in \
+                                $(uci -q get "network.$network.device" 2>/dev/null || true) \
+                                $(uci -q get "network.$network.ifname" 2>/dev/null || true); do
+                                [ -n "$device" ] && printf '%s\n' "$device"
+                        done
+                        if command -v ubus >/dev/null 2>&1 && command -v jsonfilter >/dev/null 2>&1; then
+                                status="$(ubus -S call "network.interface.$network" status 2>/dev/null || true)"
+                                printf '%s' "$status" | jsonfilter -e '@.device' -e '@.l3_device' 2>/dev/null || true
+                        fi
+                done
+        done
+}
+
+current_from_neighbor() {
+        local wan_file
+        wan_file="$1"
+        command -v ip >/dev/null 2>&1 || return 0
+
+        # Современный netifd может обновить neighbour раньше старой ARP-таблицы.
+        # Принимаются только записи с lladdr и рабочим состоянием из внутренней сети. §detlife1
+        { ip -4 neigh show 2>/dev/null || ip neigh show 2>/dev/null || true; } |
+                awk -v wan_file="$wan_file" '
+                BEGIN {
+                        while ((getline iface < wan_file) > 0)
+                                if (iface != "") wan[iface] = 1
+                        close(wan_file)
+                }
+                {
+                        address = $1
+                        iface = ""
+                        mac = ""
+                        state = toupper($NF)
+                        for (field = 2; field <= NF; field++) {
+                                if ($field == "dev" && field < NF) iface = $(field + 1)
+                                if ($field == "lladdr" && field < NF) mac = toupper($(field + 1))
+                        }
+                        if (iface == "" || wan[iface] || mac == "") next
+                        if (state !~ /^(REACHABLE|STALE|DELAY|PROBE|PERMANENT)$/) next
+                        if (mac !~ /^([0-9A-F][0-9A-F]:){5}[0-9A-F][0-9A-F]$/) next
+                        print mac "\t" address "\tneighbor"
+                }'
+}
+
+current_from_arp() {
+        local wan_file
+        wan_file="$1"
+        [ -r /proc/net/arp ] || return 0
+
+        awk -v wan_file="$wan_file" '
+                BEGIN {
+                        while ((getline iface < wan_file) > 0)
+                                if (iface != "") wan[iface] = 1
+                        close(wan_file)
+                }
+                NR > 1 && $3 == "0x2" && !wan[$6] {
+                        print toupper($4) "\t" $1 "\tarp"
+                }
+        ' /proc/net/arp
+}
+
+boolean_value() {
+        case "${1:-}" in
+                1|true|yes|on) printf '1\n' ;;
+                *) printf '0\n' ;;
+        esac
+}
+
+wifi_client_records() {
+        local output_mode
+        output_mode="${1:-presence}"
+        command -v ubus >/dev/null 2>&1 || return 0
+        [ -r "$JSHN_LIB" ] || return 0
+
+        # hostapd знает о подключении ещё до появления IP/ARP. JSON разбирается
+        # штатным jshn, а не регулярным выражением по вложенному объекту clients.
+        # Технология и rate — дешёвая подсказка типа, но не паспорт личности. §detlife1
+        (
+                set +u
+                . "$JSHN_LIB"
+                for object in $(ubus -S list 'hostapd.*' 2>/dev/null || true); do
+                        response="$(ubus -S call "$object" get_clients 2>/dev/null || true)"
+                        [ -n "$response" ] || continue
+                        json_cleanup
+                        json_load "$response" >/dev/null 2>&1 || continue
+                        json_select clients >/dev/null 2>&1 || continue
+                        json_get_keys client_macs
+                        for client_key in $client_macs; do
+                                mac="$(normalize_mac "$client_key")"
+                                valid_mac "$mac" || continue
+                                if [ "$output_mode" = presence ]; then
+                                        printf '%s\t\twifi\n' "$mac"
+                                        continue
+                                fi
+
+                                json_select "$client_key" >/dev/null 2>&1 || continue
+                                # Старые hostapd/клиенты вправе не вернуть отдельный
+                                # capability. При set -e отсутствие поля не должно
+                                # оборвать разбор остальных станций. §detlife1
+                                ht=0
+                                vht=0
+                                he=0
+                                json_get_var ht ht 2>/dev/null || ht=0
+                                json_get_var vht vht 2>/dev/null || vht=0
+                                json_get_var he he 2>/dev/null || he=0
+                                rx_rate=0
+                                tx_rate=0
+                                if json_select rate >/dev/null 2>&1; then
+                                        json_get_var rx_rate rx 2>/dev/null || rx_rate=0
+                                        json_get_var tx_rate tx 2>/dev/null || tx_rate=0
+                                        json_select .. >/dev/null 2>&1 || true
+                                fi
+                                json_select .. >/dev/null 2>&1 || true
+
+                                case "$rx_rate" in ''|*[!0-9]*) rx_rate=0 ;; esac
+                                case "$tx_rate" in ''|*[!0-9]*) tx_rate=0 ;; esac
+                                generation=legacy
+                                [ "$(boolean_value "$ht")" = 0 ] || generation=ht
+                                [ "$(boolean_value "$vht")" = 0 ] || generation=vht
+                                [ "$(boolean_value "$he")" = 0 ] || generation=he
+                                printf '%s\t%s\t%s\t%s\n' "$mac" "$generation" "$rx_rate" "$tx_rate"
+                        done
+                        json_select .. >/dev/null 2>&1 || true
+                done
+                json_cleanup
+        ) || true
+}
+
+current_from_wifi() {
+        wifi_client_records presence
+}
+
+wifi_capabilities_snapshot() {
+        # Один MAC может одновременно встретиться у нескольких BSS/mesh-точек.
+        # Берём наиболее сильное когда-либо увиденное в этом снимке наблюдение.
+        wifi_client_records capabilities | awk -F '\t' '
+                function rank(value) {
+                        if (value == "he") return 4
+                        if (value == "vht") return 3
+                        if (value == "ht") return 2
+                        return 1
+                }
+                NF >= 4 {
+                        mac = toupper($1)
+                        if (!(mac in seen)) order[++count] = mac
+                        seen[mac] = 1
+                        if (rank($2) > rank(generation[mac])) generation[mac] = $2
+                        if (($3 + 0) > rx[mac]) rx[mac] = $3 + 0
+                        if (($4 + 0) > tx[mac]) tx[mac] = $4 + 0
+                }
+                END {
+                        for (i = 1; i <= count; i++) {
+                                mac = order[i]
+                                print mac "\t" generation[mac] "\t" rx[mac] "\t" tx[mac]
+                        }
+                }'
+}
+
+current_from_recent_dhcp() {
+        local now wan_file file observed_at action mac ip interface
+        now="$1"
+        wan_file="$2"
+
+        for file in "$SIGNAL_DIR"/*.dhcp; do
+                [ -r "$file" ] || continue
+                observed_at="$(read_field "$file" observed_at)"
+                case "$observed_at" in ''|*[!0-9]*) continue ;; esac
+                [ "$observed_at" -le "$now" ] || continue
+                [ $((now - observed_at)) -le "$RECENT_DHCP_SECONDS" ] || continue
+                action="$(read_field "$file" action | tr '[:upper:]' '[:lower:]')"
+                case "$action" in del|delete|remove|release) continue ;; esac
+                interface="$(read_field "$file" interface)"
+                [ -z "$interface" ] || ! grep -Fqx "$interface" "$wan_file" 2>/dev/null || continue
+                mac="$(normalize_mac "$(read_field "$file" mac)")"
+                valid_mac "$mac" || continue
+                ip="$(read_field "$file" ip)"
+                printf '%s\t%s\tdhcp_event\n' "$mac" "$ip"
+        done
+}
+
+current_snapshot() {
+        local now wan_file
+        now="$(date +%s)"
+        wan_file="/tmp/sheepfold/device-wan-ifaces.$$"
+        mkdir -p /tmp/sheepfold
+        umask 077
+        collect_wan_interfaces | sort -u > "$wan_file"
+
+        {
+                current_from_neighbor "$wan_file"
+                current_from_arp "$wan_file"
+                current_from_wifi
+                current_from_recent_dhcp "$now" "$wan_file"
+        } | awk -F '\t' '
+                function valid_mac(value) {
+                        return value ~ /^([0-9A-F][0-9A-F]:){5}[0-9A-F][0-9A-F]$/
+                }
+                {
+                        mac = toupper($1)
+                        if (!valid_mac(mac)) next
+                        if (!(mac in order)) sequence[++count] = mac
+                        order[mac] = 1
+                        if (ip[mac] == "" && $2 != "") ip[mac] = $2
+                        if ($3 != "" && !source_seen[mac, $3]++)
+                                sources[mac] = sources[mac] (sources[mac] == "" ? "" : ",") $3
+                }
+                END {
+                        for (i = 1; i <= count; i++) {
+                                mac = sequence[i]
+                                print mac "\t" ip[mac] "\t" sources[mac]
+                        }
+                }
+        ' | sort
+        rm -f "$wan_file"
+}
+
+refresh_from_current_snapshot() {
+        local now mac ip sources
+        now="$(date +%s)"
+        current_snapshot | while IFS="$(printf '\t')" read -r mac ip sources; do
+                [ -n "$mac" ] || continue
+                write_seen "$mac" "$now" "$ip" "$sources"
+        done
 }
 
 refresh_presence() {
@@ -115,10 +353,11 @@ refresh_presence() {
         chmod 700 "$PRESENCE_DIR" 2>/dev/null || true
         refresh_from_dhcp_signals
         refresh_from_detector_state
-        refresh_from_arp
+        refresh_from_current_snapshot
 }
 
 known_macs() {
+        local tmp section mac file
         tmp="/tmp/sheepfold/device-presence-macs.$$"
         umask 077
         : > "$tmp"
@@ -139,6 +378,7 @@ known_macs() {
 }
 
 print_presence() {
+        local mac file last_seen ip now online age
         mac="$(normalize_mac "$1")"
         valid_mac "$mac" || return 0
         file="$(presence_file_for_mac "$mac")"
@@ -179,8 +419,14 @@ case "$COMMAND" in
                 refresh_presence
                 print_presence "${2:-}"
                 ;;
+        current)
+                current_snapshot
+                ;;
+        wifi-capabilities)
+                wifi_capabilities_snapshot
+                ;;
         *)
-                echo "Usage: sheepfold-device-presence [refresh|list|show <mac>]" >&2
+                echo "Usage: sheepfold-device-presence [refresh|list|show <mac>|current|wifi-capabilities]" >&2
                 exit 1
                 ;;
 esac

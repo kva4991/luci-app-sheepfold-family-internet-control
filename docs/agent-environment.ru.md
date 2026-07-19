@@ -21,6 +21,38 @@ git remote -v
 
 Не откатывай чужие изменения без прямой просьбы владельца проекта.
 
+## Временная папка и выдаваемые сборки на этом компьютере
+
+На текущем Windows-компьютере репозиторий остаётся по пути выше, а временные
+скрипты, приватные отчёты и кэши следует размещать в каталоге, который владелец
+выделил для прогонов Sheepfold:
+
+```powershell
+$env:SHEEPFOLD_SCRIPT_SCRATCH_ROOT = 'C:\Users\User\Documents\pesochnica'
+$env:SHEEPFOLD_APK_OUTPUT_DIR = 'C:\Users\User\Documents\pesochnica'
+$scratchTemp = Join-Path $env:SHEEPFOLD_SCRIPT_SCRATCH_ROOT 'sheepfold-temp'
+New-Item -ItemType Directory -Force -Path $scratchTemp | Out-Null
+$env:TEMP = $scratchTemp
+$env:TMP = $scratchTemp
+```
+
+`tools/router-testing/` сам использует `SHEEPFOLD_SCRIPT_SCRATCH_ROOT` для
+созданных shell-копий, backup и browser-отчётов. Обычные промежуточные IPK/APK
+по-прежнему остаются внутри репозитория. Только когда владелец прямо просит
+выдать готовый файл, его копируют в `C:\Users\User\Documents\pesochnica`, а не
+в `Downloads`. Исходники и `.git` в эту папку переносить не нужно. (§toolwin,
+§routerharness)
+
+На этом компьютере Kaspersky Endpoint Security может после SSH/SCP и установки
+пакета ошибочно поместить запускаемый `runRouterTests.ps1` в карантин как
+`PDM:Trojan.Win32.Generic`. Поэтому живой роутерный harness запускают не из
+рабочего дерева, а из одноразовой копии каталога `tools\router-testing` в
+`C:\Users\User\Documents\pesochnica\sheepfold-router-harness\tools\router-testing`.
+До копирования следует проверить `git diff` или сохранить патч незакоммиченных
+правок. Исходник в репозитории остаётся нетронутым даже при ложном срабатывании;
+отключать антивирус целиком для этого не требуется. (§routerharness)
+<!-- §winsbx1 -->
+
 ## Что должно быть установлено на Windows
 
 <!-- §toolwin -->
@@ -180,7 +212,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build-test-ipk.ps1
 .build\ipk-output\
 ```
 
-Сборщик пишет `.ipk` в `.build/ipk-output`. Для другого пути: `python scripts/build-test-ipk.py --variant all --out-dir D:\artifacts`. В Downloads копировать только по прямой просьбе пользователя.
+Сборщик пишет `.ipk` в `.build/ipk-output`. Для другого пути: `python scripts/build-test-ipk.py --variant all --out-dir D:\artifacts`. На этом компьютере явно запрошенную итоговую сборку копировать в `C:\Users\User\Documents\pesochnica`; обычный тестовый прогон туда ничего не экспортирует.
 
 Правильный `.ipk` для OpenWRT `opkg` здесь является gzip-tar архивом с файлами:
 
@@ -272,7 +304,7 @@ android-child\gradlew.bat -p android-child assembleDebug --stacktrace
 - `resource string/... not found` — отсутствующая Android string resource;
 - Kotlin nullable/type mismatch — реальная ошибка кода, чинить.
 
-Обычная Gradle-сборка оставляет два APK в `app/build/outputs/apk/debug`. Явные задачи `exportDebugApk` и `exportChildDebugApk` копируют их в заданный каталог; использовать их для Downloads только по прямой просьбе. Не коммить `android/app/build` и `android-child/app/build`.
+Обычная Gradle-сборка оставляет два APK в `app/build/outputs/apk/debug`. Явные задачи `exportDebugApk` и `exportChildDebugApk` копируют их в `SHEEPFOLD_APK_OUTPUT_DIR`; на текущем компьютере это `C:\Users\User\Documents\pesochnica`. Запускать export-задачи только по прямой просьбе. Не коммить `android/app/build` и `android-child/app/build`.
 
 ## GitHub Actions
 
@@ -315,8 +347,8 @@ docs/live-router-testing.ru.md
 
 Полный реестр операционных мелочей: [`docs/agent-gotchas.ru.md`](agent-gotchas.ru.md).
 
-- `sheepfold-service` должен реагировать на изменение DHCP-аренд быстро, но не запускать тяжёлый nmap-скан на каждое DHCP-событие.
-- Контрольный полный проход автообнаружения по умолчанию раз в 15 минут.
-- Быстрый проход по DHCP-событию должен обновлять аренды, ARP, DHCP/mDNS-сигналы, а тяжёлые проверки портов оставлять для полного прохода.
+- `sheepfold-service` должен реагировать на фактический переход устройства offline -> online, а не на любое изменение файла DHCP-аренд (§detlife1).
+- После подключения действует 20-секундная задержка для сбора признаков; тяжёлый `nmap` нужен только новому, изменившемуся или неуверенно распознанному online-устройству.
+- Контрольный проход автообнаружения выполняется раз в сутки только по подтверждённо online-устройствам. После запуска службы также выполняется один online-only проход.
 - `.ipk` нужно собирать OpenWRT-совместимым gzip-tar форматом. Старый Debian `ar` формат уже отвергался роутером как `Malformed package file`.
 - Публичное имя Android-приложения: `Sheepfold`, не `Овчарня`.

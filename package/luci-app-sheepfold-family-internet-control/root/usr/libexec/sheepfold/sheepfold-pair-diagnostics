@@ -1,0 +1,53 @@
+#!/bin/sh
+
+# Расширенная трассировка нужна только для разбора сопряжения на тестовом роутере.
+# Она живёт в RAM, ограничена по размеру и повторно маскирует секреты, даже если
+# вызывающий helper по ошибке передал чувствительное значение. §dscqr01 §pairlat1
+PAIR_DIAGNOSTIC_FILE="${SHEEPFOLD_PAIR_DIAGNOSTIC_FILE:-/tmp/sheepfold/pairing-diagnostic.log}"
+PAIR_DIAGNOSTIC_MAX_BYTES="${SHEEPFOLD_PAIR_DIAGNOSTIC_MAX_BYTES:-262144}"
+
+pair_diag_enabled() {
+    [ "$(uci -q get sheepfold.global.pairing_diagnostics 2>/dev/null || printf 0)" = 1 ]
+}
+
+pair_diag_safe() {
+    printf '%s' "$1" |
+        tr '\r\n\t' '   ' |
+        sed -E \
+            -e 's/(SF1|SF2)\|[^ ]+/[qr-redacted]/Ig' \
+            -e 's/(authorization|bearer|token|code|password|secret)=([^ ]+)/\1=[secret]/Ig' \
+            -e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/[mac]/g' |
+        cut -c1-600
+}
+
+pair_diag_rotate() {
+    local size rotated
+    [ -f "$PAIR_DIAGNOSTIC_FILE" ] || return 0
+    size="$(wc -c < "$PAIR_DIAGNOSTIC_FILE" 2>/dev/null || printf 0)"
+    case "$size" in ''|*[!0-9]*) size=0 ;; esac
+    [ "$size" -lt "$PAIR_DIAGNOSTIC_MAX_BYTES" ] || {
+        rotated="${PAIR_DIAGNOSTIC_FILE}.new.$$"
+        tail -n 600 "$PAIR_DIAGNOSTIC_FILE" > "$rotated" 2>/dev/null || : > "$rotated"
+        chmod 600 "$rotated" 2>/dev/null || true
+        mv -f "$rotated" "$PAIR_DIAGNOSTIC_FILE"
+    }
+}
+
+pair_diag_event() {
+    local event timestamp field
+    pair_diag_enabled || return 0
+    event="$(pair_diag_safe "${1:-unknown}")"
+    shift || true
+    mkdir -p "$(dirname "$PAIR_DIAGNOSTIC_FILE")"
+    chmod 700 "$(dirname "$PAIR_DIAGNOSTIC_FILE")" 2>/dev/null || true
+    pair_diag_rotate
+    timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date +%s)"
+    {
+        printf '%s pid=%s event=%s' "$timestamp" "$$" "$event"
+        for field in "$@"; do
+            printf ' %s' "$(pair_diag_safe "$field")"
+        done
+        printf '\n'
+    } >> "$PAIR_DIAGNOSTIC_FILE"
+    chmod 600 "$PAIR_DIAGNOSTIC_FILE" 2>/dev/null || true
+}

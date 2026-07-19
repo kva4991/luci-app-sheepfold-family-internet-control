@@ -41,18 +41,25 @@ const forbiddenPageText = [
 
 async function loginToLuci(page) {
   await page.goto(process.env.SHEEPFOLD_LUCI_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await continueThroughLocalCertificateWarning(page);
   const username = page.locator('input[name="luci_username"]');
   if (await username.count()) {
     await username.fill(process.env.SHEEPFOLD_LUCI_USER);
     await page.locator('input[name="luci_password"]').fill(process.env.SHEEPFOLD_LUCI_PASSWORD);
-    const submit = page.locator('button[type="submit"], input[type="submit"]').first();
+    // LuCI 25.12 выносит обычный <button> без type="submit" за пределы скрытой
+    // form.cbi-map и привязывает к нему JS-обработчик. Уникальные системные классы
+    // надёжнее текста кнопки и не зависят от выбранного языка интерфейса.
+    const submit = page.locator('button.cbi-button-positive.important');
+    if (await submit.count() !== 1) {
+      throw new Error('В форме входа LuCI не найдена единственная кнопка отправки.');
+    }
+    // sysauth.js вызывает form.submit(), то есть начинается полноценная
+    // навигация. Повторный page.goto() раньше мог оборвать POST до установки
+    // session cookie: оболочка загружалась, но UCI отвечал Access denied.
     await Promise.all([
-      page.waitForLoadState('domcontentloaded'),
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30_000 }),
       submit.click(),
     ]);
-    // LuCI может опрашивать status endpoint постоянно, поэтому networkidle здесь
-    // дал бы ложный timeout на полностью исправной странице.
-    await page.goto(process.env.SHEEPFOLD_LUCI_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
   } else {
     await page.waitForLoadState('domcontentloaded');
   }
@@ -60,6 +67,23 @@ async function loginToLuci(page) {
   if (await page.locator('input[name="luci_password"]').count()) {
     throw new Error('LuCI не принял сохранённые учётные данные.');
   }
+}
+
+async function continueThroughLocalCertificateWarning(page) {
+  const configuredUrl = new URL(process.env.SHEEPFOLD_LUCI_URL);
+  const privateIpv4 = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
+
+  if (!privateIpv4.test(configuredUrl.hostname)) return;
+
+  const kasperskyTitle = page.getByText('Kaspersky Endpoint Security для Windows', { exact: true });
+  const continueLink = page.getByText('Я понимаю риск, но хочу продолжить', { exact: true });
+  if (await kasperskyTitle.count() !== 1 || await continueLink.count() !== 1) return;
+
+  // Kaspersky перехватывает self-signed HTTPS раньше Chromium и тем самым
+  // обходит ignoreHTTPSErrors. Исключение допустимо только для буквального
+  // частного IP из профиля тестового роутера, а не для произвольного сайта.
+  await continueLink.click();
+  await page.waitForLoadState('domcontentloaded');
 }
 
 async function validateRouterInformation(page) {
@@ -90,29 +114,61 @@ async function validateRouterInformation(page) {
   return values;
 }
 
+async function validateLogPanel(page) {
+  const toolbarButtons = page.locator('.sf-log-toolbar-row button');
+  const buttonCount = await toolbarButtons.count();
+  if (buttonCount !== 3) {
+    throw new Error(`Панель журнала должна содержать фильтр, очистку и экспорт; найдено кнопок: ${buttonCount}`);
+  }
+
+  const filters = page.locator('.sf-log-filters-wrap');
+  const toggle = page.locator('.sf-log-toolbar-row > button.sf-action-neutral');
+  if (await toggle.count() !== 1) {
+    throw new Error('В панели журнала не найдена отдельная кнопка фильтра.');
+  }
+  await toggle.click();
+  await filters.waitFor({ state: 'visible', timeout: 5_000 });
+
+  const inputCount = await filters.locator('input').count();
+  const selectCount = await filters.locator('select').count();
+  if (inputCount !== 5 || selectCount !== 1) {
+    throw new Error(`Неполный набор фильтров журнала: input=${inputCount}, select=${selectCount}`);
+  }
+}
+
 async function checkViewport(browser, target) {
   const context = await browser.newContext({
     viewport: target.viewport,
     ignoreHTTPSErrors: true,
     locale: 'ru-RU',
   });
-  const page = await context.newPage();
+  let page = await context.newPage();
   const consoleErrors = [];
   const requestErrors = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
-  });
-  page.on('pageerror', (error) => consoleErrors.push(error.message));
-  page.on('requestfailed', (request) => {
-    const failure = request.failure();
-    if (new URL(request.url()).origin === new URL(process.env.SHEEPFOLD_LUCI_URL).origin) {
-      requestErrors.push(`${request.method()} ${request.url()}: ${failure?.errorText || 'unknown'}`);
-    }
-  });
 
   try {
     await loginToLuci(page);
-    await page.waitForTimeout(800);
+    // Первый HTTP 403 является штатным ответом LuCI до авторизации. После
+    // получения session cookie открываем чистую страницу в том же context и
+    // начинаем собирать ошибки только для уже авторизованного интерфейса.
+    await page.close();
+    page = await context.newPage();
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => consoleErrors.push(error.message));
+    page.on('requestfailed', (request) => {
+      const failure = request.failure();
+      if (new URL(request.url()).origin === new URL(process.env.SHEEPFOLD_LUCI_URL).origin) {
+        requestErrors.push(`${request.method()} ${request.url()}: ${failure?.errorText || 'unknown'}`);
+      }
+    });
+    await page.goto(process.env.SHEEPFOLD_LUCI_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    // После входа LuCI сначала показывает системный spinner и только затем
+    // асинхронно компилирует view Sheepfold. Ждать фиксированные 800 мс нельзя:
+    // время зависит от мощности роутера и холодного browser-кэша.
+    const topTabs = page.locator('button.sf-tab[data-tab]');
+    await topTabs.first().waitFor({ state: 'visible', timeout: 30_000 });
     const bodyText = await page.locator('body').innerText();
     if (!bodyText.includes('Sheepfold')) {
       throw new Error('На странице LuCI не найдено название Sheepfold.');
@@ -150,7 +206,6 @@ async function checkViewport(browser, target) {
       }
     };
 
-    const topTabs = page.locator('button.sf-tab[data-tab]');
     const topTabCount = await topTabs.count();
     if (topTabCount < 5) {
       throw new Error(`Найдено слишком мало верхних вкладок Sheepfold: ${topTabCount}`);
@@ -162,6 +217,9 @@ async function checkViewport(browser, target) {
       const panel = page.locator(`.sf-tab-panel[data-tab="${tabName}"]`);
       if (!(await panel.isVisible())) {
         throw new Error(`После нажатия не открылась верхняя панель ${tabName}`);
+      }
+      if (tabName === 'logs') {
+        await validateLogPanel(page);
       }
       checkedPanels.push(tabName);
       await checkPageOverflow(`top:${tabName}`);

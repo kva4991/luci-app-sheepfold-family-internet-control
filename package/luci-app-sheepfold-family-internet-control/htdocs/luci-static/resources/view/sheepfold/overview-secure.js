@@ -14,7 +14,7 @@ var renderSettings = overview.renderSettings;
 var renderAdmins = overview.renderAdmins;
 
 function routerControl(args) {
-	return fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', args);
+	return fs.exec('/usr/libexec/sheepfold/sheepfold-router-control', ['--luci'].concat(args || []));
 }
 
 function parseKeyValueOutput(text) {

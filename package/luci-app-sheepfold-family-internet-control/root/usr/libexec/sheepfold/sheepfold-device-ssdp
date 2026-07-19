@@ -1,0 +1,46 @@
+#!/bin/sh
+set -eu
+
+UCODE_SOURCE="/usr/share/sheepfold/device-ssdp.uc"
+OUTPUT="/tmp/sheepfold/device-ssdp.tsv"
+LAST_SCAN="/tmp/sheepfold/device-ssdp.last-scan"
+TEMP="$OUTPUT.tmp.$$"
+MIN_INTERVAL="${1:-3600}"
+FORCE="${2:-0}"
+
+case "$MIN_INTERVAL" in ''|*[!0-9]*) MIN_INTERVAL=3600 ;; esac
+[ "$MIN_INTERVAL" -ge 900 ] || MIN_INTERVAL=900
+[ "$MIN_INTERVAL" -le 86400 ] || MIN_INTERVAL=86400
+case "$FORCE" in 1) ;; *) FORCE=0 ;; esac
+
+mkdir -p /tmp/sheepfold
+chmod 700 /tmp/sheepfold 2>/dev/null || true
+now="$(date +%s)"
+last="$(cat "$LAST_SCAN" 2>/dev/null || printf 0)"
+case "$last" in ''|*[!0-9]*) last=0 ;; esac
+age=$((now - last))
+[ "$age" -ge 0 ] || age="$MIN_INTERVAL"
+
+if [ "$FORCE" = 1 ]; then
+	# Одновременные события подключения не должны создавать SSDP-шторм.
+	[ "$age" -ge 30 ] || exit 0
+else
+	[ -r "$OUTPUT" ] && [ "$age" -lt "$MIN_INTERVAL" ] && exit 0
+fi
+umask 077
+
+# Нулевой результат является корректным: часть устройств не публикует UPnP.
+# Предыдущее наблюдение уже сохранено в UCI как ключ идентичности и не теряется.
+if command -v ucode >/dev/null 2>&1 && [ -r "$UCODE_SOURCE" ]; then
+        if ! ucode "$UCODE_SOURCE" > "$TEMP" 2>/dev/null; then
+                rm -f "$TEMP"
+                exit 0
+        fi
+else
+        exit 0
+fi
+
+chmod 600 "$TEMP" 2>/dev/null || true
+mv -f "$TEMP" "$OUTPUT"
+printf '%s\n' "$now" > "$LAST_SCAN"
+chmod 600 "$LAST_SCAN" 2>/dev/null || true

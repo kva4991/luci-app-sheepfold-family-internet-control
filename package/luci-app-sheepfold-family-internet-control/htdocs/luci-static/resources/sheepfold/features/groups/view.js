@@ -1,5 +1,15 @@
 'use strict';
 'require baseclass';
+'require sheepfold.shared.icons as sharedIcons';
+
+function identityIcon(device) {
+	var protectedIdentity = !!(device && device.identityProtected);
+	var title = protectedIdentity ?
+		_('Stable device identity is available') :
+		_('This device is protected mainly by its MAC address; MAC spoofing cannot be reliably detected yet');
+
+	return sharedIcons.deviceIdentity(protectedIdentity, title);
+}
 
 function render(deps, embedded) {
 	var grouped = {};
@@ -94,7 +104,7 @@ function render(deps, embedded) {
 				])
 			]),
 			visible.length ? E('div', { 'class': 'sf-group-device-list' }, visible.map(function (device) {
-				return E('div', {}, [E('span', { 'class': 'sf-device-index' }, deps.deviceId(device)), E('span', {}, device.name)]);
+				return E('div', {}, [E('span', { 'class': 'sf-device-index' }, deps.deviceId(device)), identityIcon(device), E('span', {}, device.name)]);
 			}).concat(hiddenCount ? [E('div', { 'class': 'sf-group-device-more' }, '+ ' + hiddenCount + ' ' + _('more devices hidden'))] : [])) :
 				E('div', { 'class': 'sf-muted' }, _('No devices'))
 		]);

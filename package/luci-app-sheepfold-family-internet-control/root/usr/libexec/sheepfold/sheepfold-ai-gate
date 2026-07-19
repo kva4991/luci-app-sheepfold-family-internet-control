@@ -178,11 +178,15 @@ device_section="$(device_section_for_mac "$mac" 2>/dev/null || true)"
 [ -n "$device_section" ] || reject "403 Forbidden" device_not_registered "This device is not registered in Sheepfold."
 server_device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$device_section" 2>/dev/null || true)"
 [ -n "$server_device_id" ] || reject "500 Internal Server Error" device_id_missing "The router could not assign a numeric device id."
+server_legacy_ids="$(uci -q get "sheepfold.$device_section.legacy_ids" 2>/dev/null || true)"
 server_admin="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
 
-if [ "$requested_device_id" != "$server_device_id" ]; then
-    reject "403 Forbidden" device_identity_mismatch "Device id does not match the LAN device."
-fi
+# Старый ID допустим только у той же MAC-секции; это сохраняет сопряжение после
+# миграции старого строкового формата номера, не ослабляя проверку устройства. §deviceid2
+case " $server_device_id $server_legacy_ids " in
+    *" $requested_device_id "*) ;;
+    *) reject "403 Forbidden" device_identity_mismatch "Device id does not match the LAN device." ;;
+esac
 
 if [ "$admin_request" = 1 ]; then
     [ "$server_admin" = 1 ] || reject "403 Forbidden" administrator_device_required "Administrator token must be used from its paired device."
