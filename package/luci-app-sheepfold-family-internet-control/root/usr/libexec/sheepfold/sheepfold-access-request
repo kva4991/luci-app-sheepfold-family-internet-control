@@ -9,7 +9,7 @@ json_escape() {
     printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 
 mac_for_ip() {
     client_ip="$1"

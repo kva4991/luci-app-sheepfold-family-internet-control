@@ -21,6 +21,10 @@ const classifierPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-classifier',
 );
+const ouiOverridesPath = resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/device-oui-overrides',
+);
 const reclassifyPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-reclassify',
@@ -68,7 +72,10 @@ function classify({
   const result = spawnSync(
     'sh',
     [classifierPath, name, ports, staticName, signalFile, mac, mdnsServices, mdnsProfile, ssdpProfile, wsdProfile, wifiProfile],
-    { encoding: 'utf8' },
+    {
+      encoding: 'utf8',
+      env: { ...process.env, SHEEPFOLD_OUI_OVERRIDES: ouiOverridesPath },
+    },
   );
 
   assert.equal(result.status, 0, result.stderr || `Не удалось классифицировать ${name}`);
@@ -435,6 +442,50 @@ printf '%s\\n' "$section"
     assert.equal(smartHome.type, 'smart_home');
     assert.equal(smartHome.evidenceCount, 1);
     assert.equal(isAutoAssignable(smartHome), false);
+  });
+
+  it('распознаёт Tuya по локальному дополнению к устаревшей OUI-базе роутера', () => {
+    const device = classify({
+      name: 'wlan0',
+      mac: 'FC:67:1F:95:F9:55',
+      wifiProfile: 'generation=ht,speed=slow',
+    });
+
+    assert.equal(device.type, 'smart_home');
+    assert.ok(device.confidence >= 70);
+    assert.equal(device.ouiVendor, 'Tuya Smart Inc.');
+    assert.deepEqual(device.evidence, ['oui']);
+    assert.equal(isAutoAssignable(device), false);
+  });
+
+  it('считает случайные Wi-Fi MAC ZTE и TECNO с совпадающим DHCP client-id личными телефонами', () => {
+    for (const [mac, name] of [
+      ['72:ED:B7:B6:DD:77', 'qwerty6'],
+      ['76:5A:AF:5F:67:84', ''],
+    ]) {
+      const signalFile = createSignal({ client_id: `01:${mac}` });
+      const device = classify({
+        name,
+        mac,
+        signalFile,
+        wifiProfile: 'generation=ht,speed=slow',
+      });
+
+      assert.equal(device.type, 'phone');
+      assert.equal(device.confidence, 70);
+      assert.equal(device.targetGroup, 'Персональные устройства');
+      assert.equal(device.hardDeny, true);
+      assert.ok(!device.ouiVendor);
+    }
+  });
+
+  it('не пропускает online-устройство только потому, что DHCP не сообщил hostname', () => {
+    const source = readFileSync(detectorPath, 'utf8');
+    const aggregateBody = functionBody(source, 'aggregate_router_devices', 'scan_ports');
+
+    assert.match(aggregateBody, /name\[mac\] == "" \? "\*" : name\[mac\]/);
+    assert.match(source, /''\|'\*'\|arp\|dhcp\|static/);
+    assert.match(source, /ensure_dhcp_signal_file "\$mac" "\$ip" "\$name"/);
   });
 
   it('не включает Wi-Fi capabilities в доверенный identity baseline', () => {

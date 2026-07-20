@@ -19,7 +19,7 @@ html_escape() {
 }
 
 normalize_mac() {
-        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+        printf '%s' "$1" | tr 'a-z' 'A-Z'
 }
 
 mac_for_ip() {

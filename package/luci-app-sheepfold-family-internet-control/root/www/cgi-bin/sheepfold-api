@@ -9,6 +9,7 @@ AI_GATE="/usr/libexec/sheepfold/sheepfold-ai-gate"
 AI_HANDLER="/usr/libexec/sheepfold/sheepfold-ai-handler"
 # SHEEPFOLD_AI_END
 RATE_LIMIT="/usr/libexec/sheepfold/sheepfold-api-rate-limit"
+TOKEN_COMMON="/usr/libexec/sheepfold/sheepfold-token-common"
 ACCESS_REQUEST="/usr/libexec/sheepfold/sheepfold-access-request"
 ADMIN_NOTIFICATION="/usr/libexec/sheepfold/sheepfold-admin-notification"
 SIM_MONITOR="/usr/libexec/sheepfold/sheepfold-sim-monitor"
@@ -16,6 +17,13 @@ CHILD_WIFI_MONITOR="/usr/libexec/sheepfold/sheepfold-child-wifi-monitor"
 method="${REQUEST_METHOD:-GET}"
 path_info="${PATH_INFO:-}"
 client_ip="${REMOTE_ADDR:-unknown}"
+
+[ -r "$TOKEN_COMMON" ] || {
+    printf 'Status: 503 Service Unavailable\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\n\r\n'
+    printf '{"app":"sheepfold","ok":false,"error":"auth_backend_unavailable"}\n'
+    exit 0
+}
+. "$TOKEN_COMMON"
 
 header_json() {
     printf 'Status: %s\r\n' "$1"
@@ -49,7 +57,11 @@ require_admin() {
     client_device_id="${HTTP_X_SHEEPFOLD_DEVICE_ID:-}"
     client_device_mac="${HTTP_X_SHEEPFOLD_DEVICE_MAC:-}"
     case "${HTTP_AUTHORIZATION:-}" in [Bb]earer\ *) bearer="${HTTP_AUTHORIZATION#* }" ;; esac
+    # Заголовок X-Sheepfold-Device-Mac выбирает token binding, но право
+    # подтверждает MAC, который роутер видит у REMOTE_ADDR. Иначе украденный
+    # Bearer можно было бы использовать с поддельным клиентским заголовком.
     if [ -z "$bearer" ] || \
+       ! token_request_source_matches "$client_ip" "$client_device_mac" || \
        [ "$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" "$client_device_id" "$client_device_mac" 2>/dev/null || printf fail)" != ok ]; then
         header_json "401 Unauthorized"
         printf '{"app":"sheepfold","ok":false,"error":"auth_required","message":"Valid administrator Bearer token required."}\n'

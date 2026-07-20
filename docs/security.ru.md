@@ -62,7 +62,7 @@ admin_device + allowlist + стабильный device_id
 10. Попытки `/pair` ограничиваются по фактическому LAN-устройству.
 11. `deviceId` создаётся и возвращается сервером, а не выбирается клиентом.
 12. Ручная привязка устройств в secure LuCI отключена; права выдаются через QR-поток.
-13. Файл токена в `/etc/sheepfold/tokens/` хранит `login`, `device_id`, `mac`, `issued_at`, `expires_at` (plaintext Bearer на диске не пишется).
+13. Файл токена в `/etc/sheepfold/tokens/` хранит `login`, `device_id`, `mac`, `issued_at`, `expires_at` (plaintext Bearer на диске не пишется). При каждом административном запросе backend сверяет заявленный MAC с DHCP/neighbor-записью для фактического `REMOTE_ADDR`: один поддельный HTTP-заголовок не подтверждает устройство.
 14. Admin API принимает Bearer только вместе с `X-Sheepfold-Device-Id` и `X-Sheepfold-Device-Mac`, совпадающими с записью токена и парным admin-устройством в UCI.
 
 ## ИИ-помощник

@@ -8,7 +8,9 @@ TEMP_FILES=""
 # права администратора и сжигание одноразового кода. Обычные вызовы продолжают
 # работать с системным UCI-каталогом. §pairtx1
 if [ -n "${SHEEPFOLD_UCI_SAVEDIR:-}" ]; then
-    uci() { command uci -P "$SHEEPFOLD_UCI_SAVEDIR" "$@"; }
+    # Запись идёт в изолированный delta через -t, но итоговый commit pairing
+    # обязан примениться к основному /etc/config, поэтому -P здесь запрещён. §pairtx1
+    uci() { command uci -t "$SHEEPFOLD_UCI_SAVEDIR" -p "$SHEEPFOLD_UCI_SAVEDIR" "$@"; }
 fi
 
 is_positive_id() {

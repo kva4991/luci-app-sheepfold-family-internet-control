@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import app.sheepfold.android.R
+import app.sheepfold.android.diagnostics.DiagnosticLog
 import app.sheepfold.android.router.ActiveTransport
 import app.sheepfold.android.router.LocalNetworkState
 import app.sheepfold.android.router.LocalRouterDiscovery
@@ -198,6 +199,9 @@ private fun AgreementStep(onNext: () -> Unit) {
             } else {
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
+            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.P) {
+                add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
         }
     }
     var granted by remember {
@@ -207,6 +211,9 @@ private fun AgreementStep(onNext: () -> Unit) {
         granted = permissions.all { permission ->
             ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
         }
+        // Android 9 сможет создать тестовый журнал в «Загрузках» только после
+        // осознанного нажатия кнопки разрешений на экране соглашения.
+        DiagnosticLog.initialize(context)
     }
 
     Box(Modifier.fillMaxSize()) {

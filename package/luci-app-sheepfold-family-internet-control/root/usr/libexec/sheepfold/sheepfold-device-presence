@@ -10,7 +10,7 @@ ONLINE_WINDOW_SECONDS=900
 RECENT_DHCP_SECONDS=120
 
 normalize_mac() {
-        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+        printf '%s' "$1" | tr 'a-z' 'A-Z'
 }
 
 valid_mac() {
@@ -38,7 +38,7 @@ presence_file_for_mac() {
 }
 
 mac_from_presence_file() {
-        basename "$1" .tsv | tr '_' ':' | tr '[:lower:]' '[:upper:]'
+        basename "$1" .tsv | tr '_' ':' | tr 'a-z' 'A-Z'
 }
 
 write_seen() {
@@ -96,7 +96,7 @@ refresh_from_dhcp_signals() {
         local file action mac seen_at ip
         for file in "$SIGNAL_DIR"/*.dhcp; do
                 [ -r "$file" ] || continue
-                action="$(read_field "$file" action | tr '[:upper:]' '[:lower:]')"
+                action="$(read_field "$file" action | tr 'A-Z' 'a-z')"
                 case "$action" in
                         del|delete|remove|release) continue ;;
                 esac
@@ -192,8 +192,9 @@ boolean_value() {
 }
 
 wifi_client_records() {
-        local output_mode
-        output_mode="${1:-presence}"
+	local output_mode object response client_macs client_key client_json_key mac
+	local ht vht he rx_rate tx_rate generation
+	output_mode="${1:-presence}"
         command -v ubus >/dev/null 2>&1 || return 0
         [ -r "$JSHN_LIB" ] || return 0
 
@@ -208,17 +209,20 @@ wifi_client_records() {
                         [ -n "$response" ] || continue
                         json_cleanup
                         json_load "$response" >/dev/null 2>&1 || continue
-                        json_select clients >/dev/null 2>&1 || continue
-                        json_get_keys client_macs
-                        for client_key in $client_macs; do
-                                mac="$(normalize_mac "$client_key")"
-                                valid_mac "$mac" || continue
+			json_select clients >/dev/null 2>&1 || continue
+			json_get_keys client_macs
+			for client_key in $client_macs; do
+				# jshn превращает двоеточия JSON-ключа MAC в подчёркивания.
+				# Для json_select нужен исходный ключ jshn, наружу возвращаем MAC. §devpas1
+				client_json_key="$client_key"
+				mac="$(normalize_mac "$(printf '%s' "$client_key" | tr '_' ':')")"
+				valid_mac "$mac" || continue
                                 if [ "$output_mode" = presence ]; then
                                         printf '%s\t\twifi\n' "$mac"
                                         continue
                                 fi
 
-                                json_select "$client_key" >/dev/null 2>&1 || continue
+				json_select "$client_json_key" >/dev/null 2>&1 || continue
                                 # Старые hostapd/клиенты вправе не вернуть отдельный
                                 # capability. При set -e отсутствие поля не должно
                                 # оборвать разбор остальных станций. §detlife1
@@ -292,7 +296,7 @@ current_from_recent_dhcp() {
                 case "$observed_at" in ''|*[!0-9]*) continue ;; esac
                 [ "$observed_at" -le "$now" ] || continue
                 [ $((now - observed_at)) -le "$RECENT_DHCP_SECONDS" ] || continue
-                action="$(read_field "$file" action | tr '[:upper:]' '[:lower:]')"
+                action="$(read_field "$file" action | tr 'A-Z' 'a-z')"
                 case "$action" in del|delete|remove|release) continue ;; esac
                 interface="$(read_field "$file" interface)"
                 [ -z "$interface" ] || ! grep -Fqx "$interface" "$wan_file" 2>/dev/null || continue

@@ -68,7 +68,7 @@ valid_mac() {
 }
 
 normalize_mac() {
-    printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+    printf '%s' "$1" | tr 'a-z' 'A-Z'
 }
 
 valid_event_type() {
@@ -125,7 +125,7 @@ device_ids_for_mac() {
         done
         return 0
     done
-    printf '%s\n' "$wanted" | tr -d ':' | tr '[:upper:]' '[:lower:]'
+    printf '%s\n' "$wanted" | tr -d ':' | tr 'A-Z' 'a-z'
 }
 
 current_log_file() {

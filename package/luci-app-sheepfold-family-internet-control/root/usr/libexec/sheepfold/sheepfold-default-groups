@@ -169,7 +169,7 @@ migrate_device_group_aliases() {
 		esac
 
 		name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
-		case "$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')" in
+		case "$(printf '%s' "$name" | tr 'A-Z' 'a-z')" in
 			arp|dhcp|static)
 				uci -q delete "sheepfold.$section.name" 2>/dev/null || true
 				;;

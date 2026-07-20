@@ -127,6 +127,7 @@ describe('Интерфейс автоопределения устройств',
 
   it('показывает одинаковый индикатор устойчивой идентификации во всех списках устройств', () => {
 	const overview = readFileSync(overviewPath, 'utf8');
+	const personal = readFileSync(viewPath, 'utf8');
 	const inventory = readFileSync(resolve(
 		repoRoot,
 		'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/inventory.js',
@@ -145,6 +146,8 @@ describe('Интерфейс автоопределения устройств',
 	), 'utf8');
 
 	assert.match(inventory, /identityProtectionLevel/);
+	assert.match(inventory, /function effectiveDeviceType/);
+	assert.match(personal, /deviceInventory\.effectiveDeviceType/);
 	assert.match(inventory, /upnp_uuid/);
 	assert.match(inventory, /mdns_serial/);
 	assert.match(icons, /function deviceIdentity/);

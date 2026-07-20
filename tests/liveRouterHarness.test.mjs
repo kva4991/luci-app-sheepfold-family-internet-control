@@ -108,6 +108,10 @@ describe('live router automation §routerharness', () => {
     assert.match(routerState, /apk info -e/);
     assert.match(remote, /apk info --from installed --fields version --format json/);
     assert.match(remote, /tlsPublicKeyFingerprint/);
+    assert.match(remote, /pairingUciTransaction/);
+    assert.match(remote, /uci -c "\$config_dir" -t "\$delta_dir" -p "\$delta_dir" commit/);
+    assert.match(remote, /uci -t "\$PAIR_UCI_SAVEDIR" -p "\$PAIR_UCI_SAVEDIR"/);
+    assert.doesNotMatch(remote, /^\s*uci\(\).*command uci -P/m);
     assert.match(remote, /openssl pkey -pubin/);
     assert.match(remote, /tls-public-key-fingerprint/);
     assert.match(remote, /\^router_model=\.\+\$/);

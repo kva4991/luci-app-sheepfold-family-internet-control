@@ -39,4 +39,12 @@ describe('child next access change time', () => {
     assert.doesNotMatch(accessScreen, /time_remaining/);
     assert.doesNotMatch(statusScreen, /time_remaining/);
   });
+
+  it('does not explain which router rule allowed internet access', () => {
+    assert.match(accessScreen, /val showPolicyDetails = status\.internetState != "enabled"/);
+    assert.match(accessScreen, /if \(showPolicyDetails\) \{\s*status\.accessMode/s);
+    assert.match(accessScreen, /if \(showPolicyDetails\) \{\s*status\.message/s);
+    assert.match(statusScreen, /val showPolicyDetails = !isEnabled/);
+    assert.match(statusScreen, /if \(showPolicyDetails\) \{\s*status\.message/s);
+  });
 });

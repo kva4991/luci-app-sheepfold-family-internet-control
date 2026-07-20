@@ -21,7 +21,7 @@ MAX_SIM_COUNT=4
 MAX_KNOWN_FINGERPRINTS=16
 MAX_PHONE_HISTORY=16
 
-normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 
 mac_for_ip() {
 	client_ip="$1"
@@ -80,7 +80,7 @@ parse_payload() {
 				grep -q "^${slot}|" "$normalized_file" 2>/dev/null && return 1
 				sim_count=$((sim_count + 1))
 				[ "$sim_count" -le "$MAX_SIM_COUNT" ] || return 1
-				printf '%s|%s|%s|%s|%s\n' "$slot" "$(printf '%s' "$fingerprint" | tr '[:upper:]' '[:lower:]')" "$phone" "$mcc" "$mnc" >> "$normalized_file"
+				printf '%s|%s|%s|%s|%s\n' "$slot" "$(printf '%s' "$fingerprint" | tr 'A-Z' 'a-z')" "$phone" "$mcc" "$mnc" >> "$normalized_file"
 				;;
 			'') ;;
 			*) return 1 ;;

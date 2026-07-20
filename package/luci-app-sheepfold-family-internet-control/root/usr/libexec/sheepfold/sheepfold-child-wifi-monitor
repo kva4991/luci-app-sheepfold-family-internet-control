@@ -18,7 +18,7 @@ STATE_DIR="${SHEEPFOLD_CHILD_WIFI_STATE_DIR:-/etc/sheepfold/child-wifi-networks}
 MAX_NETWORKS_PER_DEVICE=100
 HISTORY_RETENTION_SECONDS="${SHEEPFOLD_CHILD_WIFI_RETENTION_SECONDS:-7776000}"
 
-normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 
 mac_for_ip() {
 	local client_ip mac

@@ -151,6 +151,22 @@ describe('extracted LuCI domain models §frontmod', () => {
     assert.equal(devices[1].staticSection, 'boiler_lease');
   });
 
+  it('uses detected type unless the parent explicitly fixed a manual type §devpas1', () => {
+    const inventory = loadFeature('devices/inventory.js');
+
+    assert.equal(inventory.effectiveDeviceType({
+      device_type: 'unknown',
+      detected_type: 'smart_home',
+      manual_device_type: '0'
+    }), 'smart_home');
+    assert.equal(inventory.effectiveDeviceType({
+      device_type: 'phone',
+      detected_type: 'smart_home',
+      manual_device_type: '1'
+    }), 'phone');
+    assert.equal(inventory.effectiveDeviceType({ device_type: 'camera' }), 'camera');
+  });
+
   it('keeps allowlist and device blocklist mutually exclusive without automatic transfer §lstxcl1', () => {
     const inventory = loadFeature('devices/inventory.js');
     const accessLists = loadFeature('devices/access-lists.js', { deviceInventory: inventory });

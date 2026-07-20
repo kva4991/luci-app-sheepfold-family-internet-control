@@ -78,6 +78,23 @@ describe('Android pairing discovery and access-list UI', () => {
     assert.match(overview, /function pairingPayload[\s\S]*SF2\|h=[\s\S]*spki=/);
   });
 
+  it('does not open the main screen until the issued token passes an authenticated router request §pairtx1', () => {
+    const manager = read('android/app/src/main/java/app/sheepfold/android/router/SecureRouterConnectionManager.kt');
+    const client = read('android/app/src/main/java/app/sheepfold/android/router/RouterAdminClient.kt');
+    const api = read('package/luci-app-sheepfold-family-internet-control/root/www/cgi-bin/sheepfold-api');
+
+    assert.match(client, /suspend fun verifyAdministratorAccess\(\)/);
+    assert.match(client, /verifyAdministratorAccess\(\)[\s\S]*request\("GET", "\/router-info"\)/);
+    assert.match(api, /\/router-info\|\/pair-status\)[\s\S]*require_admin/);
+    assert.match(manager, /RouterAdminClient\(connected\)\.verifyAdministratorAccess\(\)/);
+    assert.match(manager, /pair\.authorization\.succeeded/);
+    assert.match(manager, /не подтвердил привязку телефона к администратору/);
+    assert.ok(
+      manager.indexOf('verifyAdministratorAccess()') < manager.indexOf('return connected'),
+      'the connection must not be returned before administrator access is verified',
+    );
+  });
+
   it('uses clear child-facing refresh and access status labels', () => {
     assert.match(childStrings, /Обновить\\nданные/);
     assert.match(childStatusScreen, /stringResource\(R\.string\.btn_refresh\)[\s\S]*textAlign = TextAlign\.Center/);
@@ -110,12 +127,12 @@ describe('Android pairing discovery and access-list UI', () => {
     assert.match(addModal, /persistDeviceListMembership/);
   });
 
-  it('bumps Android and OpenWrt package versions for the fix', () => {
-    assert.match(androidBuild, /sheepfoldVersionCode = 45/);
-    assert.match(androidBuild, /sheepfoldVersionName = "0\.1\.44"/);
-    assert.match(childBuild, /sheepfoldChildVersionCode = 11/);
-    assert.match(childBuild, /sheepfoldChildVersionName = "1\.10"/);
+  it('keeps current Android and OpenWrt release versions synchronized', () => {
+    assert.match(androidBuild, /sheepfoldVersionCode = 47/);
+    assert.match(androidBuild, /sheepfoldVersionName = "0\.1\.46"/);
+    assert.match(childBuild, /sheepfoldChildVersionCode = 12/);
+    assert.match(childBuild, /sheepfoldChildVersionName = "1\.11"/);
     const release = Number(makefile.match(/PKG_RELEASE:=(\d+)/)?.[1] || 0);
-    assert.ok(release >= 230);
+    assert.ok(release >= 235);
   });
 });

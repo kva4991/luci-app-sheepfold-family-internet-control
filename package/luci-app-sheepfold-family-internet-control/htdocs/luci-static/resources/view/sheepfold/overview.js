@@ -30,12 +30,15 @@
 'require sheepfold.features.schedules.view as scheduleView';
 'require sheepfold.features.schedules.editor as scheduleEditor';
 'require sheepfold.features.settings.backup as settingsBackupModel';
+'require sheepfold.features.settings.backup-panel as settingsBackupPanelModel';
 'require sheepfold.features.settings.draft as settingsDraftModel';
 'require sheepfold.features.sites.status as siteListStatus';
+'require sheepfold.features.storage.panel as storagePanelModel';
 'require sheepfold.features.wifi.cards as wifiCards';
 'require sheepfold.features.wifi.payload as wifiPayload';
 'require sheepfold.shared.forms as sharedForms';
 'require sheepfold.shared.icons as sharedIcons';
+'require sheepfold.shared.downloads as downloads';
 
 var devices = [];
 var NOT_CONFIGURED_GROUP = 'Not configured';
@@ -91,8 +94,26 @@ var rootPasswordCheckFailed = false;
 var settingsDraft = settingsDraftModel.create(updateSettingsSaveButtons);
 var logPanel = logPanelModel.create({
         clear: function () { return fs.write(logCachePath(), ''); },
-        download: downloadTextFile,
+        download: downloads.textFile,
         notify: notify
+});
+var settingsBackupPanel = settingsBackupPanelModel.create({
+	payload: sheepfoldSettingsPayload,
+	apply: applyImportedPayload,
+	exportMode: function () { return settingValue('export_mode', 'safe'); },
+	resetDraft: function () { settingsDraft.reset(); },
+	notify: notify,
+	notifyCentered: notifyCentered
+});
+var storagePanel = storagePanelModel.create({
+	settingValue: settingValue,
+	setOption: setSettingsDraftOption,
+	sectionInputField: sectionInputField,
+	sectionSelectField: saveSelectSectionField,
+	divider: settingsDivider,
+	routerControl: routerControl,
+	errorText: commandErrorText,
+	infoValue: infoValue
 });
 var tabs = [
         ['users', 'User lists'],
@@ -626,108 +647,12 @@ function ensureRouterControlOk(result, fallback) {
         return routerBackend.ensureOk(result, fallback || _('Action failed.'));
 }
 
-function parseKeyValueOutput(text) {
-        return routerBackend.parseKeyValues(text);
-}
-
 function commandErrorText(error, fallback) {
         return routerBackend.errorText(error, fallback || _('Action failed.'));
 }
 
-function formatPingMs(value) {
-        return routerInfo.formatPingMs(value);
-}
-
-function formatInternetProbeLine(host, pingMs) {
-        return routerInfo.probeLine(host, pingMs);
-}
-
-function internetStatusDetails(values) {
-        return routerInfo.internetDetails(values);
-}
-
-function routerInfoHasData(values) {
-        return routerInfo.hasData(values);
-}
-
-function routerControlWithTimeout(args, timeoutMs) {
-        return routerBackend.withTimeout(args, timeoutMs, _('Router command timed out.'));
-}
-
-function loadRouterInformation(force) {
-        return routerInfo.load(force);
-}
-
-function rebootRouterButton() {
-        return routerMaintenance.rebootButton(notify);
-}
-
-function updateAppButton() {
-        return routerMaintenance.updateButton(notify);
-}
-
-function updateVersionStatusText(version, status) {
-        return routerMaintenance.versionStatusText(version, status);
-}
-
-function updateAppRow() {
-        return routerMaintenance.updateRow(notify);
-}
-
 function infoValue(value, fallback) {
         return routerInfo.infoValue(value, fallback);
-}
-
-function translatedStatus(value) {
-        return routerInfo.translatedStatus(value);
-}
-
-function packageVersionStatusLabel(status) {
-        return routerInfo.packageStatus(status);
-}
-
-function formatInstalledPackageInfo(installed, version, versionStatus) {
-        return routerInfo.packageInfo(installed, version, versionStatus);
-}
-
-function informationRow(label, value) {
-        return routerInfo.row(label, value);
-}
-
-function renderWifiModulesInfo(values) {
-        return routerInfo.wifiModules(values);
-}
-
-function renderRouterInfoContent(body, values) {
-        return routerInfo.renderContent(body, values);
-}
-
-function routerInfoLoadingSpinner() {
-        return routerInfo.spinner();
-}
-
-function paintRouterInformationPanel(body, refreshButton) {
-        return routerInfo.paint(body, refreshButton);
-}
-
-function routerInformationPanel() {
-        return routerInfo.panel();
-}
-
-function downloadTextFile(filename, text) {
-        var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-        var url = window.URL.createObjectURL(blob);
-        var link = document.createElement('a');
-
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        window.setTimeout(function () {
-                window.URL.revokeObjectURL(url);
-        }, 0);
 }
 
 function backupSectionsByConfig() {
@@ -742,90 +667,6 @@ function backupSectionsByConfig() {
 
 function sheepfoldSettingsPayload(includeSecrets) {
         return settingsBackupModel.build(backupSectionsByConfig(), includeSecrets, new Date().toISOString());
-}
-
-function sheepfoldSettingsExportText(includeSecrets) {
-        return JSON.stringify(sheepfoldSettingsPayload(!!includeSecrets), null, 2) + '\n';
-}
-
-function backupErrorMessage(error) {
-        var code = error && error.message || '';
-
-        if (code === 'password_too_short')
-                return _('Use at least 12 characters for the backup password.');
-        if (code === 'conflicting_device_lists')
-                return _('The backup contains a device in both the allowlist and the blocklist.');
-        if (code === 'global_section_missing' || code === 'required_lists_missing')
-                return _('The backup does not contain the required Sheepfold sections.');
-        if (code === 'encryption_unavailable')
-                return _('This browser cannot create or open an encrypted backup.');
-        if (code === 'unencrypted_secrets_forbidden')
-                return _('A backup containing passwords or tokens must be encrypted.');
-        if (/^(invalid_|duplicate_|too_many_|option_value_|named_section_)/.test(code))
-                return _('Import file format is not recognized.');
-        return _('Could not import settings. The previous settings were kept.');
-}
-
-function exportSafeSettings() {
-        var stamp = new Date().toISOString().replace(/[:.]/g, '-');
-
-        downloadTextFile('sheepfold-settings-' + stamp + '.json', sheepfoldSettingsExportText(false));
-        notify(_('Settings export saved.'), 'info');
-}
-
-function showEncryptedSettingsExport() {
-        var password = E('input', { 'class': 'cbi-input-password', 'type': 'password', 'autocomplete': 'new-password' });
-        var repeat = E('input', { 'class': 'cbi-input-password', 'type': 'password', 'autocomplete': 'new-password' });
-        var status = E('p', { 'class': 'sf-muted' });
-        var saveButton;
-
-        saveButton = E('button', {
-                'class': 'btn cbi-button cbi-button-positive',
-                'click': function () {
-                        var stamp;
-
-                        if (password.value.length < 12) {
-                                status.textContent = _('Use at least 12 characters for the backup password.');
-                                return;
-                        }
-                        if (password.value !== repeat.value) {
-                                status.textContent = _('Backup passwords do not match.');
-                                return;
-                        }
-
-                        saveButton.disabled = true;
-                        status.textContent = _('Encrypting backup...');
-                        settingsBackupModel.encrypt(sheepfoldSettingsPayload(true), password.value).then(function (envelope) {
-                                stamp = new Date().toISOString().replace(/[:.]/g, '-');
-                                downloadTextFile('sheepfold-full-backup-' + stamp + '.json', JSON.stringify(envelope, null, 2) + '\n');
-                                password.value = '';
-                                repeat.value = '';
-                                ui.hideModal();
-                                notify(_('Encrypted full backup saved.'), 'info');
-                        }, function (error) {
-                                saveButton.disabled = false;
-                                status.textContent = backupErrorMessage(error);
-                        });
-                }
-        }, _('Create encrypted backup'));
-
-        ui.showModal(_('Encrypted full backup'), [
-                E('p', {}, _('This backup contains passwords and tokens. Keep the file and its password separately. Without the password, the backup cannot be restored.')),
-                E('label', { 'class': 'sf-field sf-field-wide' }, [E('span', {}, _('Backup password')), password]),
-                E('label', { 'class': 'sf-field sf-field-wide' }, [E('span', {}, _('Repeat backup password')), repeat]),
-                status,
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
-                        saveButton
-                ])
-        ]);
-}
-
-function exportSettingsAndUsers() {
-        if (settingValue('export_mode', 'safe') === 'encrypted')
-                showEncryptedSettingsExport();
-        else
-                exportSafeSettings();
 }
 
 function importedSectionByName(sections, name) {
@@ -930,146 +771,6 @@ function applyImportedPayload(payload) {
                         };
                 });
         });
-}
-
-function showImportConfirmation(payload) {
-        var preview;
-        var info;
-        var status = E('p', { 'class': 'sf-muted' });
-        var warnings;
-        var applyButton;
-
-        try {
-                preview = settingsBackupModel.prepareRestore(
-                        payload,
-                        settingsBackupModel.validate(sheepfoldSettingsPayload(true))
-                );
-        } catch (error) {
-                notify(backupErrorMessage(error), 'warning');
-                return;
-        }
-
-        info = settingsBackupModel.summary(preview.payload);
-        warnings = [
-                E('strong', {}, _('Existing Sheepfold settings, static DHCP leases and Wi-Fi settings will be replaced.')),
-                E('br'),
-                info.containsSecrets ?
-                        _('The encrypted backup contains secrets.') :
-                        _('This backup does not contain secrets. Existing matching secrets will be kept; missing ones must be entered again.'),
-                E('br'),
-                _('Wi-Fi may restart and temporarily disconnect this device.')
-        ];
-
-        if (preview.routerTransfer) {
-                warnings.push(E('br'));
-                warnings.push(_('This backup was created on another router or by an older Sheepfold version. Device numbers, groups, schedules and lists will be kept, but device fingerprints and administrator phone bindings will be rebuilt. Pair administrator phones again after import.'));
-        }
-
-        applyButton = E('button', {
-                'class': 'btn cbi-button cbi-button-positive',
-                'click': function () {
-                        applyButton.disabled = true;
-                        status.textContent = _('Applying backup...');
-                        applyImportedPayload(payload).then(function (result) {
-                                settingsDraft.reset();
-                                ui.hideModal();
-                                notifyCentered(_('Settings imported successfully. The page will reload.'));
-                                if (!result.servicesRefreshed)
-                                        notify(_('Settings were restored, but router services could not be refreshed.'), 'warning');
-                                window.setTimeout(function () { window.location.reload(); }, 1200);
-                        }, function (error) {
-                                applyButton.disabled = false;
-                                status.textContent = backupErrorMessage(error);
-                        });
-                }
-        }, _('Import and apply'));
-
-        ui.showModal(_('Import all settings and user list'), [
-                E('p', {}, _('The backup contains: %s devices, %s groups, %s schedules, %s administrators, %s static DHCP leases and %s Wi-Fi sections.')
-                        .replace('%s', info.devices).replace('%s', info.groups).replace('%s', info.schedules)
-                        .replace('%s', info.administrators).replace('%s', info.dhcpHosts).replace('%s', info.wifiSections)),
-                E('div', { 'class': 'sf-note sf-note-warning' }, warnings),
-                status,
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
-                        applyButton
-                ])
-        ]);
-}
-
-function showEncryptedImport(envelope) {
-        var password = E('input', { 'class': 'cbi-input-password', 'type': 'password', 'autocomplete': 'current-password' });
-        var status = E('p', { 'class': 'sf-muted' });
-        var openButton;
-
-        openButton = E('button', {
-                'class': 'btn cbi-button cbi-button-positive',
-                'click': function () {
-                        openButton.disabled = true;
-                        status.textContent = _('Decrypting backup...');
-                        settingsBackupModel.decrypt(envelope, password.value).then(function (payload) {
-                                password.value = '';
-                                showImportConfirmation(payload);
-                        }, function () {
-                                openButton.disabled = false;
-                                status.textContent = _('Could not decrypt the backup. Check the password and file.');
-                        });
-                }
-        }, _('Decrypt and check'));
-
-        ui.showModal(_('Open encrypted backup'), [
-                E('label', { 'class': 'sf-field sf-field-wide' }, [E('span', {}, _('Backup password')), password]),
-                status,
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
-                        openButton
-                ])
-        ]);
-}
-
-function importSettingsAndUsers() {
-        var input = E('input', {
-                'type': 'file',
-                'accept': 'application/json,.json',
-                'change': function () {
-                        var file = input.files && input.files[0];
-                        var reader;
-
-                        if (!file)
-                                return;
-                        if (file.size > 5 * 1024 * 1024) {
-                                notify(_('The backup file is too large.'), 'warning');
-                                return;
-                        }
-
-                        reader = new FileReader();
-                        reader.onload = function () {
-                                var parsed;
-                                var payload;
-
-                                try {
-                                        parsed = JSON.parse(String(reader.result || ''));
-                                        if (parsed.format === settingsBackupModel.encryptedFormat) {
-                                                showEncryptedImport(parsed);
-                                                return;
-                                        }
-                                        payload = settingsBackupModel.validate(parsed);
-                                        if (payload.containsSecrets)
-                                                throw new Error('unencrypted_secrets_forbidden');
-                                } catch (error) {
-                                        notify(backupErrorMessage(error), 'warning');
-                                        return;
-                                }
-                                showImportConfirmation(payload);
-                        };
-                        reader.onerror = function () {
-                                notify(_('Could not read import file.'), 'warning');
-                        };
-                        reader.readAsText(file);
-                }
-        });
-
-        input.click();
 }
 
 function svgIcon(paths, attrs) {
@@ -1180,7 +881,7 @@ function loadTlsPublicKeyFingerprint() {
                 var fingerprint;
 
                 ensureRouterControlOk(result, _('Could not read the router TLS public-key fingerprint.'));
-                values = parseKeyValueOutput(result.stdout || '');
+                values = routerBackend.parseKeyValues(result.stdout || '');
                 fingerprint = String(values.fingerprint || '').trim().toLowerCase();
 
                 // QR нельзя выпускать без проверяемого 256-битного отпечатка:
@@ -1227,7 +928,7 @@ function pairingStatusForAdministrator(admin, since) {
                 admin.login || '',
                 String(since || 0)
         ]).then(function (result) {
-                return parseKeyValueOutput(result.stdout || '');
+                return routerBackend.parseKeyValues(result.stdout || '');
         });
 }
 
@@ -3369,586 +3070,6 @@ function globalTextareaOptionField(label, option, defaultValue, savedMessage, er
         ]);
 }
 
-function logStorageStatusView() {
-        var lamp = E('span', { 'class': 'sf-storage-status-lamp warn' });
-        var text = E('span', { 'class': 'sf-storage-status-text' }, _('Checking storage status...'));
-
-        function applyStatus(payload) {
-                var state = payload && payload.state ? payload.state : 'error';
-
-                lamp.className = 'sf-storage-status-lamp ' + (state === 'ok' ? 'ok' : state === 'warn' ? 'warn' : 'error');
-                text.textContent = payload && payload.message ? payload.message : _('Could not read storage status.');
-        }
-
-        function refresh() {
-                text.textContent = _('Checking storage status...');
-                lamp.className = 'sf-storage-status-lamp warn';
-
-                return routerControl(['log-storage-status']).then(function (result) {
-                        var code = Number(result && result.code || 0);
-                        var payload = null;
-
-                        if (code === 0) {
-                                try {
-                                        payload = JSON.parse(String(result.stdout || '').trim() || '{}');
-                                } catch (error) {
-                                        payload = null;
-                                }
-                        }
-
-                        applyStatus(payload || { state: 'error', message: _('Could not read storage status.') });
-                }, function () {
-                        applyStatus({ state: 'error', message: _('Could not read storage status.') });
-                });
-        }
-
-        return {
-                node: E('span', { 'class': 'sf-storage-status' }, [lamp, text]),
-                refresh: refresh
-        };
-}
-
-function parseRouterJsonOutput(result) {
-        var code = Number(result && result.code || 0);
-
-        if (code !== 0)
-                return null;
-
-        try {
-                return JSON.parse(String(result.stdout || '').trim() || '{}');
-        } catch (error) {
-                return null;
-        }
-}
-
-function formatYandexSyncAge(at) {
-        var parsed;
-
-        if (!at)
-                return '';
-
-        parsed = Date.parse(String(at).replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
-        if (isNaN(parsed))
-                return String(at);
-
-        var diffSec = Math.max(0, Math.round((Date.now() - parsed) / 1000));
-
-        if (diffSec < 60)
-                return _('just now');
-        if (diffSec < 3600)
-                return String(Math.floor(diffSec / 60)) + ' ' + _('min ago');
-        if (diffSec < 86400)
-                return String(Math.floor(diffSec / 3600)) + ' ' + _('h ago');
-
-        return String(Math.floor(diffSec / 86400)) + ' ' + _('d ago');
-}
-
-function yandexDiskMaintenancePanel() {
-        var statusNode = E('div', { 'class': 'sf-yandex-disk-actions-status sf-note' });
-        var syncStatusNode = E('div', { 'class': 'sf-yandex-disk-sync-status sf-muted' });
-        var listNode = E('div', { 'class': 'sf-yandex-disk-file-list' });
-        var backupSelect = E('select', { 'class': 'cbi-input-select sf-yandex-disk-backup-select' }, [
-                E('option', { value: '' }, _('Latest backup'))
-        ]);
-
-        function setStatus(message, tone) {
-                statusNode.textContent = message || '';
-                statusNode.className = 'sf-yandex-disk-actions-status sf-note' +
-                        (tone ? ' sf-note-' + tone : '');
-        }
-
-        function renderSyncStatus(payload) {
-                var when;
-                var line;
-
-                if (!payload) {
-                        syncStatusNode.textContent = _('Could not read Yandex Disk sync status.');
-                        syncStatusNode.className = 'sf-yandex-disk-sync-status sf-note sf-note-warning';
-                        return;
-                }
-
-                if (payload.ok === false && payload.message === 'no sync yet') {
-                        syncStatusNode.textContent = _('No sync to Yandex Disk yet.');
-                        syncStatusNode.className = 'sf-yandex-disk-sync-status sf-muted';
-                        return;
-                }
-
-                when = formatYandexSyncAge(payload.at);
-                line = _('Last Yandex Disk sync:') + ' ' + (when || infoValue(payload.at)) +
-                        (payload.message ? ' — ' + payload.message : '');
-
-                syncStatusNode.textContent = line;
-                syncStatusNode.className = 'sf-yandex-disk-sync-status sf-note' +
-                        (payload.ok ? ' sf-note-info' : ' sf-note-warning');
-        }
-
-        function refreshSyncStatus() {
-                routerControl(['yandex-disk-sync-status']).then(function (result) {
-                        renderSyncStatus(parseRouterJsonOutput(result));
-                }, function () {
-                        renderSyncStatus(null);
-                });
-        }
-
-        function populateBackupSelect(backups) {
-                var sorted = (backups || []).slice().sort(function (a, b) {
-                        return String(b.name || '').localeCompare(String(a.name || ''));
-                });
-
-                backupSelect.replaceChildren(E('option', { value: '' }, _('Latest backup')));
-                sorted.forEach(function (item) {
-                        backupSelect.appendChild(E('option', { value: item.name }, item.name));
-                });
-        }
-
-        function restoreSelectedBackup() {
-                var selected = backupSelect.value || '';
-                var confirmMessage = selected ?
-                        _('Restore Sheepfold settings from configuration backup %s on Yandex Disk?').replace('%s', selected) :
-                        _('Restore Sheepfold settings from the latest configuration backup on Yandex Disk?');
-
-                if (!window.confirm(confirmMessage))
-                        return;
-
-                setStatus(_('Restoring configuration from Yandex Disk...'));
-
-                routerControl(selected ?
-                        ['yandex-disk-restore-config', selected] :
-                        ['yandex-disk-restore-config']
-                ).then(function (result) {
-                        var payload = parseRouterJsonOutput(result);
-
-                        if (payload && payload.ok) {
-                                setStatus(
-                                        _('Configuration restored from Yandex Disk:') + ' ' +
-                                                infoValue(payload.restored),
-                                        'info'
-                                );
-                                refreshSyncStatus();
-                                window.setTimeout(function () {
-                                        window.location.reload();
-                                }, 1200);
-                                return;
-                        }
-
-                        setStatus(_('Could not restore configuration from Yandex Disk.'), 'warning');
-                }, function () {
-                        setStatus(_('Could not restore configuration from Yandex Disk.'), 'warning');
-                });
-        }
-
-        function renderFileList(payload) {
-                if (!payload || !payload.ok) {
-                        listNode.replaceChildren(E('div', { 'class': 'sf-muted' }, _('Could not read Yandex Disk file list.')));
-                        return;
-                }
-
-                populateBackupSelect(payload.backups || []);
-                listNode.replaceChildren.apply(listNode, [
-                        [_('Logs on Yandex Disk'), payload.logs || []],
-                        [_('Configuration backups on Yandex Disk'), payload.backups || []]
-                ].map(function (section) {
-                        var items = section[1];
-
-                        return E('div', { 'class': 'sf-yandex-disk-file-group' }, [
-                                E('strong', {}, section[0]),
-                                items.length ?
-                                        E('ul', {}, items.map(function (item) {
-                                                var sizeKb = Math.max(1, Math.round((item.bytes || 0) / 1024));
-
-                                                return E('li', {}, item.name + ' (' + sizeKb + ' KB)');
-                                        })) :
-                                        E('div', { 'class': 'sf-muted' }, _('No files'))
-                        ]);
-                }));
-        }
-
-        window.setTimeout(refreshSyncStatus, 0);
-
-        return E('div', { 'class': 'sf-yandex-disk-actions' }, [
-                E('div', { 'class': 'sf-toolbar sf-yandex-disk-toolbar' }, [
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        setStatus(_('Testing Yandex Disk login...'));
-
-                                        routerControl(['yandex-disk-test']).then(function (result) {
-                                                var payload = parseRouterJsonOutput(result);
-
-                                                if (payload && payload.ok)
-                                                        setStatus(payload.message || _('Yandex Disk login works.'), 'info');
-                                                else
-                                                        setStatus(_('Yandex Disk login failed.'), 'warning');
-                                        }, function () {
-                                                setStatus(_('Yandex Disk login failed.'), 'warning');
-                                        });
-                                }
-                        }, _('Test Yandex Disk login')),
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        setStatus(_('Loading file list from Yandex Disk...'));
-
-                                        routerControl(['yandex-disk-list']).then(function (result) {
-                                                var payload = parseRouterJsonOutput(result);
-
-                                                renderFileList(payload);
-                                                if (payload && payload.ok)
-                                                        setStatus(_('Yandex Disk file list updated.'), 'info');
-                                                else
-                                                        setStatus(_('Could not read Yandex Disk file list.'), 'warning');
-                                        }, function () {
-                                                setStatus(_('Could not read Yandex Disk file list.'), 'warning');
-                                        });
-                                }
-                        }, _('Show files on disk')),
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        refreshSyncStatus();
-                                }
-                        }, _('Refresh sync status'))
-                ]),
-                syncStatusNode,
-                E('div', { 'class': 'sf-yandex-disk-restore-row' }, [
-                        backupSelect,
-                        E('button', {
-                                'class': 'sf-action sf-action-positive',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        restoreSelectedBackup();
-                                }
-                        }, _('Restore configuration backup'))
-                ]),
-                statusNode,
-                listNode
-        ]);
-}
-
-function googleDiskMaintenancePanel() {
-        var statusNode = E('div', { 'class': 'sf-google-drive-actions-status sf-note' });
-        var syncStatusNode = E('div', { 'class': 'sf-google-drive-sync-status sf-muted' });
-        var listNode = E('div', { 'class': 'sf-google-drive-file-list' });
-        var backupSelect = E('select', { 'class': 'cbi-input-select sf-google-drive-backup-select' }, [
-                E('option', { value: '' }, _('Latest backup'))
-        ]);
-
-        function setStatus(message, tone) {
-                statusNode.textContent = message || '';
-                statusNode.className = 'sf-google-drive-actions-status sf-note' +
-                        (tone ? ' sf-note-' + tone : '');
-        }
-
-        function renderSyncStatus(payload) {
-                var when;
-                var line;
-
-                if (!payload) {
-                        syncStatusNode.textContent = _('Could not read Google Drive sync status.');
-                        syncStatusNode.className = 'sf-google-drive-sync-status sf-note sf-note-warning';
-                        return;
-                }
-
-                if (payload.ok === false && payload.message === 'no sync yet') {
-                        syncStatusNode.textContent = _('No sync to Google Drive yet.');
-                        syncStatusNode.className = 'sf-google-drive-sync-status sf-muted';
-                        return;
-                }
-
-                when = formatYandexSyncAge(payload.at);
-                line = _('Last Google Drive sync:') + ' ' + (when || infoValue(payload.at)) +
-                        (payload.message ? ' — ' + payload.message : '');
-
-                syncStatusNode.textContent = line;
-                syncStatusNode.className = 'sf-google-drive-sync-status sf-note' +
-                        (payload.ok ? ' sf-note-info' : ' sf-note-warning');
-        }
-
-        function refreshSyncStatus() {
-                routerControl(['google-drive-sync-status']).then(function (result) {
-                        renderSyncStatus(parseRouterJsonOutput(result));
-                }, function () {
-                        renderSyncStatus(null);
-                });
-        }
-
-        function populateBackupSelect(backups) {
-                var sorted = (backups || []).slice().sort(function (a, b) {
-                        return String(b.name || '').localeCompare(String(a.name || ''));
-                });
-
-                backupSelect.replaceChildren(E('option', { value: '' }, _('Latest backup')));
-                sorted.forEach(function (item) {
-                        backupSelect.appendChild(E('option', { value: item.name }, item.name));
-                });
-        }
-
-        function restoreSelectedBackup() {
-                var selected = backupSelect.value || '';
-                var confirmMessage = selected ?
-                        _('Restore Sheepfold settings from configuration backup %s on Google Drive?').replace('%s', selected) :
-                        _('Restore Sheepfold settings from the latest configuration backup on Google Drive?');
-
-                if (!window.confirm(confirmMessage))
-                        return;
-
-                setStatus(_('Restoring configuration from Google Drive...'));
-
-                routerControl(selected ?
-                        ['google-drive-restore-config', selected] :
-                        ['google-drive-restore-config']
-                ).then(function (result) {
-                        var payload = parseRouterJsonOutput(result);
-
-                        if (payload && payload.ok) {
-                                setStatus(
-                                        _('Configuration restored from Google Drive:') + ' ' +
-                                                infoValue(payload.restored),
-                                        'info'
-                                );
-                                refreshSyncStatus();
-                                window.setTimeout(function () {
-                                        window.location.reload();
-                                }, 1200);
-                                return;
-                        }
-
-                        setStatus(_('Could not restore configuration from Google Drive.'), 'warning');
-                }, function () {
-                        setStatus(_('Could not restore configuration from Google Drive.'), 'warning');
-                });
-        }
-
-        function renderFileList(payload) {
-                if (!payload || !payload.ok) {
-                        listNode.replaceChildren(E('div', { 'class': 'sf-muted' }, _('Could not read Google Drive file list.')));
-                        return;
-                }
-
-                populateBackupSelect(payload.backups || []);
-                listNode.replaceChildren.apply(listNode, [
-                        [_('Logs on Google Drive'), payload.logs || []],
-                        [_('Configuration backups on Google Drive'), payload.backups || []]
-                ].map(function (section) {
-                        var items = section[1];
-
-                        return E('div', { 'class': 'sf-google-drive-file-group' }, [
-                                E('strong', {}, section[0]),
-                                items.length ?
-                                        E('ul', {}, items.map(function (item) {
-                                                var sizeKb = Math.max(1, Math.round((item.bytes || 0) / 1024));
-
-                                                return E('li', {}, item.name + ' (' + sizeKb + ' KB)');
-                                        })) :
-                                        E('div', { 'class': 'sf-muted' }, _('No files'))
-                        ]);
-                }));
-        }
-
-        window.setTimeout(refreshSyncStatus, 0);
-
-        return E('div', { 'class': 'sf-google-drive-actions' }, [
-                E('div', { 'class': 'sf-toolbar sf-google-drive-toolbar' }, [
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        setStatus(_('Testing Google Drive authorization...'));
-
-                                        routerControl(['google-drive-test']).then(function (result) {
-                                                var payload = parseRouterJsonOutput(result);
-
-                                                if (payload && payload.ok)
-                                                        setStatus(payload.message || _('Google Drive authorization works.'), 'info');
-                                                else
-                                                        setStatus(_('Google Drive authorization failed.'), 'warning');
-                                        }, function () {
-                                                setStatus(_('Google Drive authorization failed.'), 'warning');
-                                        });
-                                }
-                        }, _('Test Google Drive authorization')),
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        setStatus(_('Loading file list from Google Drive...'));
-
-                                        routerControl(['google-drive-list']).then(function (result) {
-                                                var payload = parseRouterJsonOutput(result);
-
-                                                renderFileList(payload);
-                                                if (payload && payload.ok)
-                                                        setStatus(_('Google Drive file list updated.'), 'info');
-                                                else
-                                                        setStatus(_('Could not read Google Drive file list.'), 'warning');
-                                        }, function () {
-                                                setStatus(_('Could not read Google Drive file list.'), 'warning');
-                                        });
-                                }
-                        }, _('Show files on disk')),
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        refreshSyncStatus();
-                                }
-                        }, _('Refresh sync status'))
-                ]),
-                syncStatusNode,
-                E('div', { 'class': 'sf-google-drive-restore-row' }, [
-                        backupSelect,
-                        E('button', {
-                                'class': 'sf-action sf-action-positive',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        restoreSelectedBackup();
-                                }
-                        }, _('Restore configuration backup'))
-                ]),
-                statusNode,
-                listNode
-        ]);
-}
-
-function logStorageLocationField() {
-        var currentValue = settingValue('log_storage', 'ram');
-        var statusView = logStorageStatusView();
-        var yandexBlock = E('div', { 'class': 'sf-yandex-disk-settings' });
-        var googleBlock = E('div', { 'class': 'sf-google-drive-settings' });
-        var select;
-
-        function syncVisibility() {
-                yandexBlock.hidden = select.value === 'yandex_disk' ? null : 'hidden';
-                googleBlock.hidden = select.value === 'google_drive' ? null : 'hidden';
-                statusView.refresh();
-        }
-
-        select = E('select', {
-                'class': 'cbi-input-select',
-                'change': function (ev) {
-                        setSettingsDraftOption('log_storage', ev.currentTarget.value);
-                        syncVisibility();
-                }
-        }, [
-                ['ram', _('RAM, router operational memory, cleared on reboot (recommended)')],
-                ['usb', _('USB flash drive')],
-                ['yandex_disk', _('Yandex Disk')],
-                ['google_drive', _('Google Drive')]
-        ].map(function (item) {
-                return E('option', {
-                        'value': item[0],
-                        'selected': item[0] === currentValue ? 'selected' : null
-                }, item[1]);
-        }));
-
-        yandexBlock.appendChild(settingsDivider(_('Yandex Disk settings')));
-        yandexBlock.appendChild(sectionInputField(
-                'cloud',
-                _('Yandex Disk login'),
-                'login',
-                '',
-                'login@yandex.ru',
-                _('Use an app password from Yandex ID security settings.')
-        ));
-        yandexBlock.appendChild(sectionInputField(
-                'cloud',
-                _('Yandex Disk password'),
-                'password',
-                '',
-                '',
-                _('Use an app password from Yandex ID security settings.'),
-                true
-        ));
-        yandexBlock.appendChild(sectionInputField(
-                'cloud',
-                _('Root folder on disk for Sheepfold'),
-                'root_folder',
-                '/sheepfold',
-                '/sheepfold'
-        ));
-        yandexBlock.appendChild(saveSelectSectionField(
-                'cloud',
-                _('Allowed storage for Sheepfold data'),
-                'quota_mb',
-                '500',
-                [
-                        ['50', _('50 MB')],
-                        ['100', _('100 MB')],
-                        ['250', _('250 MB')],
-                        ['500', _('500 MB')],
-                        ['1024', _('1 GB')]
-                ],
-                _('Sheepfold uploads journals, rotated archives and configuration backups within this limit.')
-        ));
-        yandexBlock.appendChild(yandexDiskMaintenancePanel());
-
-        googleBlock.appendChild(settingsDivider(_('Google Drive settings')));
-        googleBlock.appendChild(sectionInputField(
-                'gdrive',
-                _('Google OAuth client ID'),
-                'client_id',
-                '',
-                '',
-                _('Create an OAuth client in Google Cloud Console (Desktop app type).')
-        ));
-        googleBlock.appendChild(sectionInputField(
-                'gdrive',
-                _('Google OAuth client secret'),
-                'client_secret',
-                '',
-                '',
-                _('Optional for some clients, but usually required for refresh-token exchange.'),
-                true
-        ));
-        googleBlock.appendChild(sectionInputField(
-                'gdrive',
-                _('Google OAuth refresh token'),
-                'refresh_token',
-                '',
-                '',
-                _('Obtain once on a PC and paste here. Sheepfold stores it only on the router.'),
-                true
-        ));
-        googleBlock.appendChild(sectionInputField(
-                'gdrive',
-                _('Root folder on disk for Sheepfold'),
-                'root_folder',
-                '/sheepfold',
-                '/sheepfold'
-        ));
-        googleBlock.appendChild(saveSelectSectionField(
-                'gdrive',
-                _('Allowed storage for Sheepfold data'),
-                'quota_mb',
-                '500',
-                [
-                        ['50', _('50 MB')],
-                        ['100', _('100 MB')],
-                        ['250', _('250 MB')],
-                        ['500', _('500 MB')],
-                        ['1024', _('1 GB')]
-                ],
-                _('Sheepfold uploads journals, rotated archives and configuration backups within this limit.')
-        ));
-        googleBlock.appendChild(googleDiskMaintenancePanel());
-
-        syncVisibility();
-
-        return E('div', { 'class': 'sf-log-storage-field-wrap' }, [
-                E('label', { 'class': 'sf-field sf-field-wide sf-log-storage-field' }, [
-                        E('span', {}, _('Log storage location')),
-                        E('div', { 'class': 'sf-log-storage-row' }, [
-                                select,
-                                statusView.node
-                        ])
-                ]),
-                yandexBlock,
-                googleBlock
-        ]);
-}
 
 function cachePathField() {
         var currentValue = settingValue('log_cache_path', defaultLogCachePath) || defaultLogCachePath;
@@ -4842,7 +3963,7 @@ function messengerSettingsBox() {
                 },
                 icon: iconSvg,
                 routerControl: routerControl,
-                parseOutput: parseKeyValueOutput,
+                parseOutput: routerBackend.parseKeyValues,
                 errorText: commandErrorText,
                 notify: notify,
                 changed: markSettingsDraftChanged,
@@ -5741,7 +4862,7 @@ return view.extend({
                 });
 
                 if (tab === 'info' && routerInfo.status() !== 'loading')
-                        loadRouterInformation(routerInfo.status() !== 'ready').catch(function () {});
+                        routerInfo.load(routerInfo.status() !== 'ready').catch(function () {});
         },
 
         renderSettingsTabRow: function (tabs, extraClass) {
@@ -6154,7 +5275,7 @@ return view.extend({
                 return E('div', { 'class': 'sf-flat-form' }, [
                         E('p', { 'class': 'sf-note' },
                                 _('Store journals in RAM to protect router flash memory. USB, Yandex Disk, or Google Drive can archive rotated logs and configuration backups when configured.')),
-                        logStorageLocationField(),
+                        storagePanel.render(),
                         cachePathField(),
                         saveSelectGlobalField(_('Log retention on router'), 'log_retention', '3d', [
                                 ['1d', _('1 day')],
@@ -6240,18 +5361,18 @@ return view.extend({
                                         'class': 'sf-action sf-action-neutral',
                                         'click': function (ev) {
                                                 ev.preventDefault();
-                                                importSettingsAndUsers();
+                                                settingsBackupPanel.importAll();
                                         }
                                 }, _('Import all settings and user list')),
                                 E('button', {
                                         'class': 'sf-action sf-action-neutral',
                                         'click': function (ev) {
                                                 ev.preventDefault();
-                                                exportSettingsAndUsers();
+                                                settingsBackupPanel.exportAll();
                                         }
                                 }, _('Export all settings and user list')),
-                                updateAppRow(),
-                                rebootRouterButton()
+                                routerMaintenance.updateRow(notify),
+                                routerMaintenance.rebootButton(notify)
                         ])
                 ]);
         },
@@ -6281,7 +5402,7 @@ return view.extend({
                         ]),
                         E('div', { 'class': 'sf-settings-tabs-separator', 'aria-hidden': 'true' }),
                         settingsSaveBar(true),
-                        this.renderSettingsPanel('info', routerInformationPanel()),
+                        this.renderSettingsPanel('info', routerInfo.panel()),
                         this.renderSettingsPanel('general', this.renderSettingsGeneral()),
                         this.renderSettingsPanel('integrations', this.renderIntegrations()),
                         this.renderSettingsPanel('messenger', this.renderBot()),

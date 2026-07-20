@@ -40,13 +40,13 @@ collect_domains() {
         for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=emergency_site$/\1/p'); do
                 enabled="$(uci -q get "sheepfold.$section.enabled" 2>/dev/null || printf 1)"
                 [ "$enabled" = 1 ] || continue
-                domain="$(uci -q get "sheepfold.$section.domain" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+                domain="$(uci -q get "sheepfold.$section.domain" 2>/dev/null | tr 'A-Z' 'a-z' || true)"
                 valid_domain "$domain" && append_unique "$DOMAINS_FILE" "$domain"
         done
 
         # Старый list остаётся входом только для миграционной совместимости.
         for legacy in $(uci -q get sheepfold.domain_allowlist.domain 2>/dev/null || true); do
-                domain="$(printf '%s' "$legacy" | tr '[:upper:]' '[:lower:]')"
+                domain="$(printf '%s' "$legacy" | tr 'A-Z' 'a-z')"
                 valid_domain "$domain" && append_unique "$DOMAINS_FILE" "$domain"
         done
         sort -u "$DOMAINS_FILE" -o "$DOMAINS_FILE"

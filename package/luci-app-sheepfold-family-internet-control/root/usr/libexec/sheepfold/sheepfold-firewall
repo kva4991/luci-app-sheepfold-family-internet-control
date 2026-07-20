@@ -17,7 +17,7 @@ SCHEDULE_EVALUATOR="${SHEEPFOLD_SCHEDULE_EVALUATOR:-/usr/libexec/sheepfold/sheep
 DOMAIN_POLICY_ACTIVE="${SHEEPFOLD_DOMAIN_POLICY_ACTIVE:-/tmp/sheepfold/domain-policy/active}"
 
 normalize_mac() {
-        printf '%s' "${1:-}" | tr '[:lower:]' '[:upper:]'
+        printf '%s' "${1:-}" | tr 'a-z' 'A-Z'
 }
 
 valid_mac() {

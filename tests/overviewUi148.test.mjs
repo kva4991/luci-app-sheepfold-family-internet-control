@@ -9,6 +9,7 @@ const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet
 const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/view/sheepfold/overview.js');
 const wifiCardsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/wifi/cards.js');
 const logPanelPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/logs/panel.js');
+const routerInfoPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/router/info.js');
 const cssPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/sheepfold.css');
 const logHelperPath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-log');
 const yandexPath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-yandex-disk');
@@ -40,6 +41,7 @@ describe('overview UI release 148', () => {
   it('adds journal filters for time range, ip, mac, device name and message phrases', () => {
     const overview = readFileSync(overviewPath, 'utf8');
     const logPanel = readFileSync(logPanelPath, 'utf8');
+    const routerInfo = readFileSync(routerInfoPath, 'utf8');
 
     assert.match(overview, /require sheepfold\.features\.logs\.panel as logPanelModel/);
     assert.match(overview, /logPanel\.setText\(results\[2\]\)/);
@@ -49,7 +51,8 @@ describe('overview UI release 148', () => {
     assert.match(logPanel, /'type': 'datetime-local'/);
     assert.match(logPanel, /No log entries match the current filters/);
     assert.match(overview, /function supplementGroupedDevicesFromUci/);
-    assert.match(overview, /function routerInfoLoadingSpinner/);
+    assert.match(routerInfo, /function spinner/);
+    assert.doesNotMatch(overview, /function routerInfoLoadingSpinner/);
   });
 
   it('mirrors journal writes to USB and schedules Yandex push from sheepfold-log', () => {

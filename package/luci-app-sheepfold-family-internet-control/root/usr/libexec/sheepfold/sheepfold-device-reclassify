@@ -8,7 +8,7 @@ LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-${0%/*}/sheepfold-lock-common}"
 [ -r "$LOCK_COMMON" ] || LOCK_COMMON=/usr/libexec/sheepfold/sheepfold-lock-common
 . "$LOCK_COMMON"
 SCAN_LOCK="/tmp/sheepfold/device-detection.flock"
-mac="$(printf '%s' "${1:-}" | tr '[:lower:]' '[:upper:]')"
+mac="$(printf '%s' "${1:-}" | tr 'a-z' 'A-Z')"
 
 printf '%s' "$mac" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' || {
         echo "invalid_mac" >&2
@@ -17,7 +17,7 @@ printf '%s' "$mac" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' || {
 
 section=""
 for candidate in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
-        existing="$(uci -q get "sheepfold.$candidate.mac" 2>/dev/null | tr '[:lower:]' '[:upper:]' || true)"
+        existing="$(uci -q get "sheepfold.$candidate.mac" 2>/dev/null | tr 'a-z' 'A-Z' || true)"
         if [ "$existing" = "$mac" ]; then
                 section="$candidate"
                 break
@@ -30,7 +30,7 @@ done
 }
 
 for blocked_mac in $(uci -q get sheepfold.blocklist.mac 2>/dev/null || true); do
-        [ "$(printf '%s' "$blocked_mac" | tr '[:lower:]' '[:upper:]')" = "$mac" ] || continue
+        [ "$(printf '%s' "$blocked_mac" | tr 'a-z' 'A-Z')" = "$mac" ] || continue
         echo "device_blocklisted" >&2
         exit 4
 done

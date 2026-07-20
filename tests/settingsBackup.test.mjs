@@ -15,6 +15,7 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const resources = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources');
 const backupPath = join(resources, 'sheepfold/features/settings/backup.js');
 const overview = readFileSync(join(resources, 'view/sheepfold/overview.js'), 'utf8');
+const backupPanel = readFileSync(join(resources, 'sheepfold/features/settings/backup-panel.js'), 'utf8');
 const routerControl = readFileSync(join(
   root,
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-router-control-legacy'
@@ -209,12 +210,15 @@ describe('settings backup and restore', () => {
 
   it('applies managed UCI configs, preserves placeholders and refreshes router services', () => {
     assert.match(overview, /require sheepfold\.features\.settings\.backup as settingsBackupModel/);
+    assert.match(overview, /require sheepfold\.features\.settings\.backup-panel as settingsBackupPanelModel/);
     assert.match(overview, /function stageImportedConfig\(config, importedSections, currentSections, managedTypes\)/);
     assert.match(overview, /value === settingsBackupModel\.secretPlaceholder/);
-    assert.match(overview, /payload\.containsSecrets[\s\S]*unencrypted_secrets_forbidden/);
+    assert.match(backupPanel, /payload\.containsSecrets[\s\S]*unencrypted_secrets_forbidden/);
+    assert.match(backupPanel, /backupModel\.prepareRestore\([\s\S]*backupModel\.validate\(deps\.payload\(true\)\)/);
     assert.match(overview, /settingsBackupModel\.prepareRestore\(payload, previous\)/);
     assert.match(overview, /saveUciChanges\(\['sheepfold', 'dhcp', 'wireless'\]\)/);
     assert.match(overview, /routerControl\(\['settings-import-applied'\]\)/);
+    assert.doesNotMatch(backupPanel, /\buci\.(get|set|unset|remove)|saveUciChanges|routerControl/);
     assert.doesNotMatch(overview, /Applying imported settings will be added after backend/);
     assert.match(routerControl, /settings_import_applied\(\)/);
     assert.match(routerControl, /settings-import-applied\)/);

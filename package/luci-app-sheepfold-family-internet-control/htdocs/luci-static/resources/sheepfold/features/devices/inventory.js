@@ -36,6 +36,18 @@ function generatedSectionName(prefix, mac) {
 	return prefix + '_' + normalizeMac(mac).toLowerCase().replace(/:/g, '');
 }
 
+function effectiveDeviceType(section) {
+	if (!section)
+		return 'unknown';
+
+	// device_type хранит ручное или старое значение. Пока родитель явно не
+	// зафиксировал тип, свежий результат детектора должен иметь приоритет. §devpas1
+	if (section.manual_device_type === '1')
+		return section.device_type || 'unknown';
+
+	return section.detected_type || section.device_type || 'unknown';
+}
+
 function addDevice(map, mac, data) {
 	var normalizedMac = normalizeMac(mac);
 	var current;
@@ -303,7 +315,7 @@ function build(options) {
 		var groupName = section && section.group ?
 			options.normalizeGroupName(section.group) : options.notConfiguredGroup;
 		var group = options.groupSectionByName(groupName);
-		var deviceType = section && (section.device_type || section.detected_type) || 'unknown';
+		var deviceType = effectiveDeviceType(section);
 		var identityLevel = identityProtectionLevel(section);
 
 		if (allowlist[mac])
@@ -401,6 +413,7 @@ return baseclass.extend({
 	reservedListSection: reservedListSection,
 	reservedSourceName: reservedSourceName,
 	generatedSectionName: generatedSectionName,
+	effectiveDeviceType: effectiveDeviceType,
 	parseDhcp: parseDhcp,
 	parseArp: parseArp,
 	listMacs: listMacs,

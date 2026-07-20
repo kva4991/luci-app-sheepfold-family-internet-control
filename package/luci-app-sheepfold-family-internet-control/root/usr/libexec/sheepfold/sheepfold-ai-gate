@@ -39,7 +39,7 @@ form_get() {
     done
 }
 
-normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 valid_mac() { printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
 
 mac_for_ip() {

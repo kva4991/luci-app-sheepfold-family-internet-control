@@ -51,6 +51,12 @@ class RouterAdminClient(
     private val appContext = context?.applicationContext
     private var activeApiUrl = connection.apiUrl
 
+    /** Подтверждает, что сохранённый токен уже связан с админским устройством на роутере. */
+    suspend fun verifyAdministratorAccess() = withContext(Dispatchers.IO) {
+        request("GET", "/router-info")
+        Unit
+    }
+
     suspend fun loadDevices(): List<RouterDevice> = withContext(Dispatchers.IO) {
         val json = request("GET", "/devices")
         val devices = json.optJSONArray("devices") ?: return@withContext emptyList()

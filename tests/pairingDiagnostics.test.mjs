@@ -1,3 +1,9 @@
+/*
+ * Проверяет безопасную диагностическую трассу QR-сопряжения на Android и
+ * роутере: журнал ограничен, секреты удаляются, а разрешение старого Android
+ * запрашивается только явной кнопкой первого экрана. Тест не заменяет прогон
+ * камеры и файлового журнала на физическом телефоне.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -10,6 +16,8 @@ const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
 const androidLog = read('android/app/src/main/java/app/sheepfold/android/diagnostics/DiagnosticLog.kt');
 const connection = read('android/app/src/main/java/app/sheepfold/android/router/SecureRouterConnectionManager.kt');
 const discovery = read('android/app/src/main/java/app/sheepfold/android/router/LocalRouterDiscovery.kt');
+const mainActivity = read('android/app/src/main/java/app/sheepfold/android/MainActivity.kt');
+const setupScreen = read('android/app/src/main/java/app/sheepfold/android/ui/setup/SafeRouterSetupScreen.kt');
 const manifest = read('android/app/src/main/AndroidManifest.xml');
 const pairDiagnostics = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-pair-diagnostics');
 const apiPair = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-api-pair');
@@ -24,6 +32,10 @@ test('debug parent APK writes bounded redacted diagnostics to Downloads', () => 
   assert.match(androidLog, /\[secret\]/);
   assert.match(androidLog, /\[mac\]/);
   assert.match(manifest, /WRITE_EXTERNAL_STORAGE[^>]+maxSdkVersion="28"/);
+  assert.match(setupScreen, /AgreementStep/);
+  assert.match(setupScreen, /Build\.VERSION\.SDK_INT == Build\.VERSION_CODES\.P/);
+  assert.match(setupScreen, /Manifest\.permission\.WRITE_EXTERNAL_STORAGE/);
+  assert.doesNotMatch(mainActivity, /RequestMultiplePermissions|permissionLauncher/);
   assert.match(connection, /pair\.http\.sending/);
   assert.match(connection, /pair\.http\.response/);
   assert.match(discovery, /discovery\.document\.failed/);

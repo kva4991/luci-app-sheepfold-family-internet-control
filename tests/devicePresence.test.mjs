@@ -52,6 +52,8 @@ describe('Статус присутствия устройств', () => {
 
     assert.match(source, /wifi-capabilities/);
     assert.match(source, /ubus -S call "\$object" get_clients/);
+    assert.match(source, /tr '_' ':'/);
+    assert.match(source, /client_json_key="\$client_key"/);
     assert.match(source, /json_get_var ht ht/);
     assert.match(source, /json_get_var vht vht/);
     assert.match(source, /json_get_var he he/);

@@ -5,6 +5,7 @@
 'require uci';
 'require ui';
 'require fs';
+'require sheepfold.features.devices.inventory as deviceInventory';
 
 /*
  * secureOverview нужен как зависимость: он патчит базовый overview до того,
@@ -186,7 +187,7 @@ function detectionDetails(section) {
 		E('p', { 'class': 'sf-device-detection-intro' }, intro),
 		E('div', { 'class': 'sf-device-detection-grid' }, [
 			detectionLine('IP-адрес', section && section.ip || 'нет данных'),
-			detectionLine('Определённый тип', section && (section.device_type || section.detected_type) || 'нет данных'),
+			detectionLine('Определённый тип', section ? deviceInventory.effectiveDeviceType(section) : 'нет данных'),
 			detectionLine('Уверенность типа', confidence ? confidence + '%' : 'нет данных'),
 			detectionLine('Противоречащие признаки', competingEvidenceText(section && section.detection_competing_evidence)),
 			detectionLine(_('Connection identity check'), section && section.identity_quarantine_mode ?

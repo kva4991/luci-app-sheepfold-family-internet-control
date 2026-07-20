@@ -1,11 +1,31 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 const read = (path) => readFileSync(path, 'utf8');
 
+function readFilesRecursively(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${directory}/${entry.name}`;
+    return entry.isDirectory() ? readFilesRecursively(path) : [{ path, source: read(path) }];
+  });
+}
+
 describe('Backend runtime input bounds', () => {
+  it('uses BusyBox-safe ASCII ranges for tr across the packaged rootfs §bbxtr01', () => {
+    const root = 'package/luci-app-sheepfold-family-internet-control/root';
+    const forbiddenOperands = /tr(?:\s+-cd)?\s+['"]\[:(?:lower|upper|alnum):\]['"]/;
+
+    for (const { path, source } of readFilesRecursively(root)) {
+      assert.doesNotMatch(source, forbiddenOperands, `${path} использует несовместимый операнд BusyBox tr`);
+    }
+
+    const classifier = read(`${root}/usr/libexec/sheepfold/sheepfold-device-classifier`);
+    assert.match(classifier, /tr 'A-Z' 'a-z'/);
+    assert.match(classifier, /tr 'a-z' 'A-Z'/);
+  });
+
   it('validates the HTTPS API port everywhere it is consumed', () => {
     const init = read('package/luci-app-sheepfold-family-internet-control/root/etc/init.d/sheepfold');
     const api = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-api-legacy');

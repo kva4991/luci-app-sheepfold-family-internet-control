@@ -44,11 +44,14 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.match(overview, /require sheepfold\.features\.schedules\.editor as scheduleEditor/);
     assert.match(overview, /require sheepfold\.features\.settings\.draft as settingsDraftModel/);
     assert.match(overview, /require sheepfold\.features\.settings\.backup as settingsBackupModel/);
+    assert.match(overview, /require sheepfold\.features\.settings\.backup-panel as settingsBackupPanelModel/);
     assert.match(overview, /require sheepfold\.features\.sites\.status as siteListStatus/);
+    assert.match(overview, /require sheepfold\.features\.storage\.panel as storagePanelModel/);
     assert.match(overview, /require sheepfold\.core\.backend\.router as routerBackend/);
     assert.match(overview, /require sheepfold\.core\.security\.random as secureRandom/);
     assert.match(overview, /require sheepfold\.shared\.forms as sharedForms/);
     assert.match(overview, /require sheepfold\.shared\.icons as sharedIcons/);
+    assert.match(overview, /require sheepfold\.shared\.downloads as downloads/);
 
     assert.doesNotMatch(overview, /function reedSolomonGenerator/);
     assert.doesNotMatch(overview, /function logPhrasePattern/);
@@ -60,6 +63,11 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.doesNotMatch(overview, /function addRouterDevice/);
     assert.doesNotMatch(overview, /function renderLogRows/);
     assert.doesNotMatch(overview, /function createLogFilterUi/);
+    assert.doesNotMatch(overview, /function showEncryptedSettingsExport/);
+    assert.doesNotMatch(overview, /function showImportConfirmation/);
+    assert.doesNotMatch(overview, /function downloadTextFile/);
+    assert.doesNotMatch(overview, /function logStorageLocationField/);
+    assert.doesNotMatch(overview, /function yandexDiskMaintenancePanel/);
     assert.doesNotMatch(overview, /Math\.random\(\)/);
   });
 
@@ -87,7 +95,10 @@ describe('LuCI frontend modules §frontmod', () => {
     const messenger = moduleSource('sheepfold/features/messenger/settings.js');
     const settingsDraft = moduleSource('sheepfold/features/settings/draft.js');
     const settingsBackup = moduleSource('sheepfold/features/settings/backup.js');
+    const settingsBackupPanel = moduleSource('sheepfold/features/settings/backup-panel.js');
+    const downloads = moduleSource('sheepfold/shared/downloads.js');
     const siteListStatus = moduleSource('sheepfold/features/sites/status.js');
+    const storagePanel = moduleSource('sheepfold/features/storage/panel.js');
     const emergencySites = moduleSource('sheepfold/features/emergency/sites.js');
     const scheduleView = moduleSource('sheepfold/features/schedules/view.js');
     const scheduleEditor = moduleSource('sheepfold/features/schedules/editor.js');
@@ -133,11 +144,20 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.match(settingsDraft, /function dirtySavers/);
     assert.match(settingsBackup, /function encrypt\(payload, password\)/);
     assert.match(settingsBackup, /function validateAccessLists/);
+    assert.match(settingsBackupPanel, /function create\(deps\)/);
+    assert.match(settingsBackupPanel, /function showImportConfirmation\(payload\)/);
+    assert.match(settingsBackupPanel, /downloads\.textFile/);
+    assert.doesNotMatch(settingsBackupPanel, /\buci\.(get|set|unset|remove)|saveUciChanges|routerControl/);
+    assert.match(downloads, /function textFile\(filename, text\)/);
     assert.match(siteListStatus, /function describe\(values\)/);
     assert.match(siteListStatus, /site-lists-status/);
     assert.match(siteListStatus, /function sourceRecords\(values\)/);
     assert.match(siteListStatus, /site-lists-accept-shrink/);
     assert.match(siteListStatus, /var remaining = 10/);
+    assert.match(storagePanel, /function create\(deps\)/);
+    assert.match(storagePanel, /function logStorageLocationField/);
+    assert.match(storagePanel, /deps\.routerControl/);
+    assert.doesNotMatch(storagePanel, /\buci\.(get|set|unset|remove)|safeUciSections|overview/);
     assert.match(emergencySites, /function normalizeDomain/);
     assert.match(emergencySites, /function stage\(uci, config, sites\)/);
     assert.match(scheduleView, /function render\(deps, embedded\)/);

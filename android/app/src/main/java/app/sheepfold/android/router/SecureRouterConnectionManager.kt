@@ -140,7 +140,7 @@ class SecureRouterConnectionManager {
         )
     }
 
-    private fun pair(request: RouterConnectionRequest, apiUrl: String): RouterConnectionRequest {
+    private suspend fun pair(request: RouterConnectionRequest, apiUrl: String): RouterConnectionRequest {
         val url = URL("${apiUrl.trimEnd('/')}/pair")
         require(url.protocol.equals("https", ignoreCase = true)) {
             "Сопряжение выполняется только по HTTPS"
@@ -213,7 +213,7 @@ class SecureRouterConnectionManager {
                 "routerName" to json.optString("routerName")
             )
 
-            return RouterConnectionRequest(
+            val connected = RouterConnectionRequest(
                 apiUrl = apiUrl,
                 routerName = json.optString("routerName").ifBlank { request.routerName },
                 administratorLogin = request.administratorLogin
@@ -224,6 +224,22 @@ class SecureRouterConnectionManager {
                 connected.tlsPinSha256 = capturedPin?.value ?: request.tlsPinSha256
                 connected.tlsSpkiSha256 = request.tlsSpkiSha256
             }
+
+            try {
+                // Ответ /pair ещё не доказывает, что UCI-права попали в основной
+                // конфиг. До сохранения credential проверяем его обычным защищённым
+                // запросом, иначе APK может открыть главное окно без привязки. §pairtx1
+                RouterAdminClient(connected).verifyAdministratorAccess()
+            } catch (error: Exception) {
+                DiagnosticLog.error("pair.authorization.failed", error, "deviceId" to deviceId)
+                throw IllegalStateException(
+                    "Роутер выдал токен, но не подтвердил привязку телефона к администратору. " +
+                        "Закройте и снова откройте настройки администратора в LuCI, затем отсканируйте новый QR-код.",
+                    error
+                )
+            }
+            DiagnosticLog.info("pair.authorization.succeeded", "deviceId" to deviceId)
+            return connected
         } finally {
             connection.disconnect()
         }

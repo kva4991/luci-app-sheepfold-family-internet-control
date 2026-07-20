@@ -34,7 +34,7 @@ IDENTITY_RECONCILER="/usr/libexec/sheepfold/sheepfold-device-identity"
 PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
 IDENTITY_SECRET_FILE="${SHEEPFOLD_IDENTITY_SECRET_FILE:-/etc/sheepfold/.device-identity-hmac}"
 DEFAULT_SCAN_PORTS="22,53,80,81,443,445,548,554,631,1883,3000,3001,5000,5001,5353,8000,8006,8080,8081,8123,8554,9000,9100,32400"
-POLICY_VERSION="9"
+POLICY_VERSION="10"
 NEW_DEVICE_BADGE_SECONDS=86400
 DEFAULT_GROUPS="/usr/libexec/sheepfold/sheepfold-default-groups"
 DEVICE_ID_HELPER="/usr/libexec/sheepfold/sheepfold-device-id"
@@ -95,7 +95,7 @@ identity_hash_secret() {
 }
 
 normalize_mac() {
-        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+        printf '%s' "$1" | tr 'a-z' 'A-Z'
 }
 
 valid_mac() {
@@ -182,7 +182,7 @@ ensure_device_section() {
                 return 0
         fi
 
-        section="device_$(printf '%s' "$mac" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+        section="device_$(printf '%s' "$mac" | tr 'A-Z' 'a-z' | tr -d ':')"
         uci_set_if_changed "sheepfold.$section" device
         uci_set_if_changed "sheepfold.$section.mac" "$mac"
         uci_set_if_changed "sheepfold.$section.just_detected" 1
@@ -230,9 +230,48 @@ sources_confirm_online() {
 }
 
 signal_file_for_mac() {
-        mac="$(normalize_mac "$1")"
-        valid_mac "$mac" || return 1
-        printf '%s/%s.dhcp\n' "$SIGNAL_DIR" "$(printf '%s' "$mac" | tr ':' '_')"
+	local mac
+	mac="$(normalize_mac "$1")"
+	valid_mac "$mac" || return 1
+	printf '%s/%s.dhcp\n' "$SIGNAL_DIR" "$(printf '%s' "$mac" | tr ':' '_')"
+}
+
+ensure_dhcp_signal_file() {
+	local mac ip observed_name signal_file lease_record lease_name client_id tmp
+	mac="$(normalize_mac "$1")"
+	ip="$2"
+	observed_name="$3"
+	signal_file="$(signal_file_for_mac "$mac" || true)"
+	[ -n "$signal_file" ] || return 1
+	[ -r "$signal_file" ] && { printf '%s\n' "$signal_file"; return 0; }
+	[ -r /tmp/dhcp.leases ] || { printf '%s\n' "$signal_file"; return 0; }
+
+	# Не все сборки dnsmasq передают Option 55/60 в hotplug. Минимальный fallback
+	# сохраняет только уже имеющиеся в RAM lease-поля и не подменяет богатый снимок,
+	# который мог создать штатный DHCP hotplug. §devpas1
+	lease_record="$(awk -v wanted="$mac" 'toupper($2) == wanted { print $4 "\t" $5; exit }' /tmp/dhcp.leases 2>/dev/null || true)"
+	[ -n "$lease_record" ] || { printf '%s\n' "$signal_file"; return 0; }
+	lease_name="${lease_record%%	*}"
+	client_id="${lease_record#*	}"
+	[ "$client_id" != "$lease_record" ] || client_id=""
+	[ "$lease_name" != "*" ] || lease_name=""
+	[ -n "$lease_name" ] || lease_name="$observed_name"
+	case "$lease_name" in '*') lease_name="" ;; esac
+	case "$client_id" in '*') client_id="" ;; esac
+
+	tmp="$signal_file.tmp.$$"
+	umask 077
+	{
+		printf 'observed_at\t%s\n' "$(date +%s)"
+		printf 'action\tlease_snapshot\n'
+		printf 'mac\t%s\n' "$mac"
+		printf 'ip\t%s\n' "$ip"
+		printf 'hostname\t%s\n' "$(printf '%s' "$lease_name" | tr '\r\n\t' '   ' | cut -c1-255)"
+		printf 'client_id\t%s\n' "$(printf '%s' "$client_id" | tr '\r\n\t' '   ' | cut -c1-255)"
+	} > "$tmp" || { rm -f "$tmp"; printf '%s\n' "$signal_file"; return 0; }
+	chmod 600 "$tmp" 2>/dev/null || true
+	mv -f "$tmp" "$signal_file"
+	printf '%s\n' "$signal_file"
 }
 
 static_name_for_mac() {
@@ -388,7 +427,7 @@ signal_value_from_file() {
 
 normalize_identity_value() {
         printf '%s' "$1" |
-                tr '[:upper:]' '[:lower:]' |
+                tr 'A-Z' 'a-z' |
                 tr '\r\n\t' '   ' |
                 sed 's/[[:cntrl:]]//g; s/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//' |
                 cut -c1-256
@@ -507,8 +546,8 @@ build_identity_keys() {
 		[ -n "$IDENTITY_HASH_SECRET" ] || return 0
 	fi
         client_id="$(signal_value_from_file "$signal_file" client_id)"
-        client_compact="$(printf '%s' "$client_id" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')"
-        mac_compact="$(printf '%s' "$mac" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+        client_compact="$(printf '%s' "$client_id" | tr -cd 'A-Za-z0-9' | tr 'A-Z' 'a-z')"
+        mac_compact="$(printf '%s' "$mac" | tr -d ':' | tr 'A-Z' 'a-z')"
 
         {
                 # DHCP client-id, равный самому MAC или 01+MAC, не является вторым
@@ -732,8 +771,8 @@ collect_upnp_description() {
 }
 
 is_reserved_device_name() {
-        case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
-                arp|dhcp|static) return 0 ;;
+        case "$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')" in
+		''|'*'|arp|dhcp|static) return 0 ;;
                 *) return 1 ;;
         esac
 }
@@ -788,7 +827,9 @@ aggregate_router_devices() {
         END {
                 for (i = 1; i <= count; i++) {
                         mac = order[i]
-                        print mac "\t" ip[mac] "\t" name[mac] "\t" sources[mac]
+				# BusyBox read считает tab пробельным IFS и схлопывает пустое третье
+				# поле. Явный placeholder сохраняет sources на четвёртой позиции. §devpas1
+				print mac "\t" ip[mac] "\t" (name[mac] == "" ? "*" : name[mac]) "\t" sources[mac]
                 }
         }' "$RAW_FILE"
 }
@@ -1444,7 +1485,7 @@ write_detection() {
 	wifi_speed="${wifi_rest#*|}"
         section="$(ensure_device_section "$mac")"
         static_name="$(static_name_for_mac "$mac" || true)"
-        signal_file="$(signal_file_for_mac "$mac" || true)"
+		signal_file="$(ensure_dhcp_signal_file "$mac" "$ip" "$name" || true)"
 	fingerprint="$(build_fingerprint "$mac" "$name" "$static_name" "$signal_file" "$ports" \
 		"$mdns_services" "$mdns_profile" "$ssdp_profile" "$wsd_profile" "$identity_keys" "$wifi_profile")"
         result="$("$CLASSIFIER" "$name" "$ports" "$static_name" "$signal_file" "$mac" \
@@ -1585,7 +1626,7 @@ process_detected_device() {
         fi
 
         static_name="$(static_name_for_mac "$mac" || true)"
-        signal_file="$(signal_file_for_mac "$mac" || true)"
+		signal_file="$(ensure_dhcp_signal_file "$mac" "$ip" "$name" || true)"
 	collect_upnp_description "$effective_mode" "$section" "$ip" "$min_confidence"
         mdns_services="$(mdns_services_for_ip "$ip" || true)"
         mdns_profile="$(mdns_profile_for_ip "$ip" || true)"

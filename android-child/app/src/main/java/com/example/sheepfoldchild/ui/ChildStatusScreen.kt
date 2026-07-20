@@ -65,6 +65,7 @@ private fun StatusCard(
 ) {
     val isEnabled = status.internetState == "enabled"
     val isDisabled = status.internetState == "disabled"
+    val showPolicyDetails = !isEnabled
     val cardColor = when {
         isEnabled -> MaterialTheme.colorScheme.primaryContainer
         isDisabled -> MaterialTheme.colorScheme.errorContainer
@@ -119,14 +120,17 @@ private fun StatusCard(
                 }
             }
 
-            // Сообщение
-            status.message?.let { msg ->
-                Text(
-                    text = msg,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
+            // При разрешённом доступе ребёнку достаточно самого статуса. Причину
+            // ограничения показываем только тогда, когда интернет недоступен.
+            if (showPolicyDetails) {
+                status.message?.let { msg ->
+                    Text(
+                        text = msg,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
             }
 
             if (status.canRequestAccessExtension && !status.isAdministrator) {

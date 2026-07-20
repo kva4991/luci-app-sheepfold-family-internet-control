@@ -94,7 +94,9 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 ├── package/
 │   └── luci-app-sheepfold-family-internet-control/
 │       ├── htdocs/luci-static/resources/view/sheepfold/
-│       │   └── overview.js   # Визуальный прототип LuCI
+│       │   └── overview.js   # Маршрут и композиция предметных LuCI-модулей
+│       ├── htdocs/luci-static/resources/sheepfold/features/
+│       │   └── ...           # Устройства, настройки, хранение, журнал и другие области
 │       └── Makefile
 ├── docs/                     # Документация
 │   ├── agent-playbook.ru.md  # Плейбук для AI
