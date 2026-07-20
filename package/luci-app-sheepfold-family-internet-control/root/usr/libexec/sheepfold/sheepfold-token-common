@@ -1,9 +1,34 @@
 #!/bin/sh
 # Общие функции хранения и проверки административных Bearer-токенов.
 
-token_normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+token_normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 
 token_valid_mac() { printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
+
+# Административный клиент сообщает свой MAC для выбора bound-token, но доверять
+# этому заголовку нельзя. Источник подтверждает сам роутер по DHCP/neighbor.
+token_mac_for_ip() {
+	client_ip="$1"
+	observed_mac=""
+	[ -n "$client_ip" ] || return 1
+
+	if [ -r /tmp/dhcp.leases ]; then
+		observed_mac="$(awk -v ip="$client_ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases)"
+	fi
+	if ! token_valid_mac "$observed_mac"; then
+		observed_mac="$(ip neigh show "$client_ip" 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == "lladdr") { print toupper($(i + 1)); exit } }')"
+	fi
+	token_valid_mac "$observed_mac" || return 1
+	printf '%s\n' "$observed_mac"
+}
+
+token_request_source_matches() {
+	client_ip="$1"
+	claimed_mac="$(token_normalize_mac "$2")"
+	token_valid_mac "$claimed_mac" || return 1
+	observed_mac="$(token_mac_for_ip "$client_ip")" || return 1
+	[ "$observed_mac" = "$claimed_mac" ]
+}
 
 token_file_get() {
 	file="$1"

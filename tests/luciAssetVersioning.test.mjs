@@ -19,12 +19,6 @@ function readProjectFile(path) {
   return readFileSync(path, 'utf8');
 }
 
-function makeVariable(source, name) {
-  const match = source.match(new RegExp(`^${name}:=([^\\r\\n]+)`, 'm'));
-  assert.ok(match, `В Makefile нет переменной ${name}`);
-  return match[1].trim();
-}
-
 describe('LuCI asset versioning', () => {
   it('loads Sheepfold CSS with the UCI asset version', () => {
     const source = readProjectFile(overviewPath);

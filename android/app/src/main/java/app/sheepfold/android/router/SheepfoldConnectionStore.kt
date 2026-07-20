@@ -13,6 +13,7 @@ object SheepfoldConnectionStore {
     private const val tlsSpkiKey = "routerTlsSpkiSha256"
     private const val legacyBearerTokenKey = "administratorBearerToken"
     private const val googleAccountKey = "googleAccount"
+    private const val pairingLossKey = "routerPairingLoss"
 
     fun save(context: Context, request: RouterConnectionRequest) {
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
@@ -25,6 +26,7 @@ object SheepfoldConnectionStore {
             .putString(tlsPinKey, request.tlsPinSha256.orEmpty())
             .putString(tlsSpkiKey, request.tlsSpkiSha256.orEmpty())
             .remove(legacyBearerTokenKey)
+            .remove(pairingLossKey)
             .apply()
         request.tlsPinSha256?.let { RouterTlsPin.save(context, it) }
         SecureSecretStore.write(context, request.bearerToken)
@@ -70,6 +72,31 @@ object SheepfoldConnectionStore {
     }
 
     fun clear(context: Context) {
+        clearConnection(context)
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+            .edit()
+            .remove(pairingLossKey)
+            .apply()
+    }
+
+    /** Стирает только роутерную сессию; соглашение и защита приложения живут отдельно. §authrs1 */
+    fun clearForPairing(context: Context, reason: RouterPairingLoss) {
+        clearConnection(context)
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+            .edit()
+            .putString(pairingLossKey, reason.name)
+            .apply()
+    }
+
+    fun consumePairingLoss(context: Context): RouterPairingLoss? {
+        val preferences = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val reason = preferences.getString(pairingLossKey, null)
+            ?.let { stored -> RouterPairingLoss.entries.firstOrNull { it.name == stored } }
+        preferences.edit().remove(pairingLossKey).apply()
+        return reason
+    }
+
+    private fun clearConnection(context: Context) {
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
             .edit()
             .remove(apiUrlKey)

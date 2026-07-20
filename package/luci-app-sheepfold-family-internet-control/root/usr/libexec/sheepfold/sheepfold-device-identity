@@ -19,7 +19,7 @@ device_sections() {
 }
 
 normalize_mac() {
-        printf '%s' "${1:-}" | tr '[:lower:]' '[:upper:]'
+        printf '%s' "${1:-}" | tr 'a-z' 'A-Z'
 }
 
 device_is_blocklisted() {

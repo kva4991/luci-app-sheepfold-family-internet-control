@@ -115,7 +115,7 @@ restore_signal_change() {
 }
 
 normalize_mac() {
-        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+        printf '%s' "$1" | tr 'a-z' 'A-Z'
 }
 
 valid_mac() {

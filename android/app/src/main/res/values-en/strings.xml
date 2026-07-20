@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="setup_connected_to">Connected to server (%1$s)</string>
+    <string name="pairing_access_revoked">Access was revoked on the router. Pair the app again.</string>
+    <string name="pairing_token_rejected">The saved router pairing is no longer valid. Pair the app again.</string>
+    <string name="pairing_tls_identity_changed">The router HTTPS fingerprint changed. The connection was stopped; explicitly pair the app again.</string>
     <string name="setup_agreement_prefix">I agree to the </string>
     <string name="setup_agreement_link">User Agreement</string>
     <string name="setup_agreement_suffix"> and processing of personal and technical data required for Sheepfold.</string>
@@ -129,6 +132,8 @@
     <string name="widget_internet_enabled">Sheepfold internet enable widget</string>
     <string name="widget_internet_disabled">Sheepfold internet disable widget</string>
     <string name="widget_internet_switch">Sheepfold internet control widget</string>
+    <string name="widget_internet_on">ON</string>
+    <string name="widget_internet_off">OFF</string>
 
     <string name="action_ok">OK</string>
     <string name="action_cancel">Cancel</string>

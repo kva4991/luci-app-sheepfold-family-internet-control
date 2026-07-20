@@ -1,6 +1,7 @@
 package app.sheepfold.android.notifications
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -55,17 +56,6 @@ object SheepfoldNotifications {
             return
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val granted = ContextCompat.checkSelfPermission(
-                appContext,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-
-            if (!granted) {
-                return
-            }
-        }
-
         val openAppIntent = Intent(appContext, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             appContext,
@@ -87,8 +77,9 @@ object SheepfoldNotifications {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        NotificationManagerCompat.from(appContext)
-            .notify(10_000 + device.id, notification)
+        if (!postNotification(appContext, 10_000 + device.id, notification)) {
+            return
+        }
 
         notifiedPrefs.edit()
             .putBoolean(notifiedKey, true)
@@ -121,7 +112,9 @@ object SheepfoldNotifications {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        NotificationManagerCompat.from(appContext).notify(20_000 + request.id.hashCode().and(0x3fff), notification)
+        if (!postNotification(appContext, 20_000 + request.id.hashCode().and(0x3fff), notification)) {
+            return
+        }
         preferences.edit().putBoolean(request.id, true).apply()
     }
 
@@ -148,9 +141,25 @@ object SheepfoldNotifications {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        NotificationManagerCompat.from(appContext)
-            .notify(30_000 + event.id.hashCode().and(0x3fff), notification)
+        if (!postNotification(appContext, 30_000 + event.id.hashCode().and(0x3fff), notification)) {
+            return
+        }
         preferences.edit().putBoolean(event.id, true).apply()
+    }
+
+    private fun postNotification(context: Context, id: Int, notification: Notification): Boolean {
+        val manager = NotificationManagerCompat.from(context)
+        if (!manager.areNotificationsEnabled() || !notificationsAllowed(context)) {
+            return false
+        }
+
+        return try {
+            // Разрешение может быть отозвано между проверкой и системным вызовом
+            manager.notify(id, notification)
+            true
+        } catch (_: SecurityException) {
+            false
+        }
     }
 
     private fun notificationsAllowed(context: Context): Boolean {

@@ -112,7 +112,10 @@ object SheepfoldWidgetRenderer {
     private fun singleButtonView(context: Context, blockedButton: Boolean, id: Int): RemoteViews {
         val blocked = isBlocked(context)
         return RemoteViews(context.packageName, R.layout.widget_internet_single).apply {
-            setTextViewText(R.id.widgetButton, if (blockedButton) "OFF" else "ON")
+            setTextViewText(
+                R.id.widgetButton,
+                context.getString(if (blockedButton) R.string.widget_internet_off else R.string.widget_internet_on)
+            )
             setInt(
                 R.id.widgetButton,
                 "setBackgroundResource",

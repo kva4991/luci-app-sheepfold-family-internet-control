@@ -8,7 +8,9 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
 const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/view/sheepfold/overview.js');
 const wifiCardsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/wifi/cards.js');
+const wifiEditorPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/wifi/editor.js');
 const logPanelPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/logs/panel.js');
+const routerInfoPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/router/info.js');
 const cssPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/sheepfold.css');
 const logHelperPath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-log');
 const yandexPath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-yandex-disk');
@@ -19,27 +21,30 @@ describe('overview UI release 148', () => {
   it('restores Wi-Fi save flow with wireless UCI and wifi reload', () => {
     const overview = readFileSync(overviewPath, 'utf8');
     const wifiCards = readFileSync(wifiCardsPath, 'utf8');
+    const wifiEditor = readFileSync(wifiEditorPath, 'utf8');
 
-    assert.match(overview, /function saveWifiNetworksNow/);
-    assert.match(overview, /function wifiSaveBar/);
+    assert.match(overview, /require sheepfold\.features\.wifi\.editor as wifiEditorModel/);
+    assert.match(overview, /wifiEditorModel\.create/);
     assert.match(wifiCards, /sectionName: sectionName/);
     assert.match(overview, /saveUciChanges\(\['wireless'\]\)/);
     assert.match(overview, /fs\.exec\('\/sbin\/wifi', \['reload'\]\)/);
-    assert.match(overview, /wifiSaveBar\(\)/);
-    assert.match(overview, /data-wifi-save/);
+    assert.match(overview, /wifiEditor\.saveBar\(\)/);
+    assert.match(wifiEditor, /data-wifi-save/);
     assert.match(wifiCards, /enabledInput/);
     assert.match(wifiCards, /current\.enabled !== editor\.original\.enabled/);
     assert.doesNotMatch(wifiCards, /section\.disabled !== '1' &&/);
-    assert.match(overview, /uci\.set\('wireless', editor\.sectionName, 'disabled', '1'\)/);
-    assert.match(overview, /uci\.unset\('wireless', editor\.sectionName, 'disabled'\)/);
-    assert.match(overview, /snapshot\.enabled !== editor\.original\.enabled \|\| radiosToEnable\[editor\.device\]/);
-    assert.match(overview, /Object\.keys\(radiosToEnable\)/);
-    assert.match(overview, /uci\.unset\('wireless', device, 'disabled'\)/);
+    assert.match(wifiEditor, /deps\.setOption\(editor\.sectionName, 'disabled', '1'\)/);
+    assert.match(wifiEditor, /deps\.unsetOption\(editor\.sectionName, 'disabled'\)/);
+    assert.match(wifiEditor, /snapshot\.enabled !== editor\.original\.enabled \|\| radiosToEnable\[editor\.device\]/);
+    assert.match(wifiEditor, /Object\.keys\(plan\.radiosToEnable\)/);
+    assert.match(wifiEditor, /deps\.unsetOption\(device, 'disabled'\)/);
+    assert.doesNotMatch(overview, /function saveWifiNetworksNow/);
   });
 
   it('adds journal filters for time range, ip, mac, device name and message phrases', () => {
     const overview = readFileSync(overviewPath, 'utf8');
     const logPanel = readFileSync(logPanelPath, 'utf8');
+    const routerInfo = readFileSync(routerInfoPath, 'utf8');
 
     assert.match(overview, /require sheepfold\.features\.logs\.panel as logPanelModel/);
     assert.match(overview, /logPanel\.setText\(results\[2\]\)/);
@@ -49,7 +54,8 @@ describe('overview UI release 148', () => {
     assert.match(logPanel, /'type': 'datetime-local'/);
     assert.match(logPanel, /No log entries match the current filters/);
     assert.match(overview, /function supplementGroupedDevicesFromUci/);
-    assert.match(overview, /function routerInfoLoadingSpinner/);
+    assert.match(routerInfo, /function spinner/);
+    assert.doesNotMatch(overview, /function routerInfoLoadingSpinner/);
   });
 
   it('mirrors journal writes to USB and schedules Yandex push from sheepfold-log', () => {

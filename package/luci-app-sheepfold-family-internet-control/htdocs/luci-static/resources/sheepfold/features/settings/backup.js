@@ -35,10 +35,6 @@ var transferDeviceOptions = {
 	identity_uuid_collision_accepted_with_id: true
 };
 
-function own(object, key) {
-	return Object.prototype.hasOwnProperty.call(object || {}, key);
-}
-
 function secretOption(name) {
 	return /(password|passwd|token|secret|key|cookie|session|sim_phone_history)/i.test(String(name || ''));
 }

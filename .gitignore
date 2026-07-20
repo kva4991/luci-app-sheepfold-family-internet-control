@@ -8,6 +8,8 @@ staging_dir/
 tmp/
 .build/
 dist/
+node_modules/
+.eslintcache
 *.ipk
 *.apk
 

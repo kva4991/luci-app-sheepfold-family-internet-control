@@ -151,9 +151,29 @@ pair_begin_transaction || {
     exit 6
 }
 
-# Все следующие UCI-вызовы работают только в delta-каталоге этой операции.
-# Поэтому чужие неприменённые изменения LuCI не коммитятся вместе с pairing.
-uci() { command uci -P "$PAIR_UCI_SAVEDIR" "$@"; }
+# `-t` направляет новые delta в каталог транзакции, а `-p` читает их поверх
+# основного `/etc/config`. У `-P` другой смысл: он делает временный каталог
+# default-путём, поэтому даже успешный commit не меняет основной конфиг. §pairtx1
+uci() { command uci -t "$PAIR_UCI_SAVEDIR" -p "$PAIR_UCI_SAVEDIR" "$@"; }
+
+pair_committed_allowlist_has_mac() {
+    local wanted existing
+    wanted="$(pair_normalize_mac "$1")"
+    pair_valid_mac "$wanted" || return 1
+    for existing in $(command uci -q get sheepfold.allowlist.mac 2>/dev/null || true); do
+        [ "$(pair_normalize_mac "$existing")" = "$wanted" ] && return 0
+    done
+    return 1
+}
+
+pair_committed_state_is_valid() {
+    [ "$(command uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || true)" = 1 ] &&
+        [ "$(command uci -q get "sheepfold.$device_section.admin_login" 2>/dev/null || true)" = "$login" ] &&
+        [ "$(pair_normalize_mac "$(command uci -q get "sheepfold.$device_section.mac" 2>/dev/null || true)")" = "$device_mac" ] &&
+        [ "$(command uci -q get "sheepfold.$device_section.id" 2>/dev/null || true)" = "$device_id" ] &&
+        pair_committed_allowlist_has_mac "$device_mac" &&
+        ! command uci -q get "sheepfold.$admin_section.pairing_code" >/dev/null 2>&1
+}
 
 [ "$(uci -q get "sheepfold.$device_section" 2>/dev/null || true)" = device ] || \
     uci -q set "sheepfold.$device_section=device"
@@ -205,6 +225,13 @@ PAIR_RESTORE_SNAPSHOT=1
 PAIR_DIAG_STAGE="commit_uci"
 if ! uci -q commit sheepfold; then
     echo "Could not save pairing. Token was revoked and administrator rights were not granted." >&2
+    exit 6
+fi
+PAIR_DIAG_STAGE="verify_commit"
+if ! pair_committed_state_is_valid; then
+    # Успех commit нельзя принимать на веру: ошибочная UCI search/save-path
+    # конфигурация уже выдавала APK токен без реальных админских прав. §pairtx1
+    echo "Pairing state was not persisted in the main router configuration. Token was revoked." >&2
     exit 6
 fi
 PAIR_RESTORE_SNAPSHOT=0

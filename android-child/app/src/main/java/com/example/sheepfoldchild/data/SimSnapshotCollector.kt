@@ -7,6 +7,7 @@ import android.os.Build
 import android.telephony.PhoneNumberUtils
 import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import java.security.MessageDigest
 
@@ -18,12 +19,18 @@ import java.security.MessageDigest
 object SimSnapshotCollector {
 
     fun payload(context: Context): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return null
+        return payloadApi22(context)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP_MR1)
+    private fun payloadApi22(context: Context): String? {
         if (!hasPermission(context, Manifest.permission.READ_PHONE_STATE)) return null
         if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION)) {
             return null
         }
 
-        val subscriptionManager = context.getSystemService(SubscriptionManager::class.java)
+        val subscriptionManager = ContextCompat.getSystemService(context, SubscriptionManager::class.java)
             ?: return null
         val subscriptions = try {
             subscriptionManager.activeSubscriptionInfoList.orEmpty()
@@ -55,6 +62,7 @@ object SimSnapshotCollector {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP_MR1)
     private fun fingerprint(subscription: SubscriptionInfo): String {
         // Номер не участвует в отпечатке: Android может сообщить его позже для
         // той же SIM, и это не должно создавать ложное событие замены.
@@ -71,6 +79,7 @@ object SimSnapshotCollector {
             .joinToString("") { byte -> "%02x".format(byte) }
     }
 
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP_MR1)
     private fun phoneNumber(
         context: Context,
         manager: SubscriptionManager,
@@ -91,6 +100,7 @@ object SimSnapshotCollector {
     }
 
     @Suppress("DEPRECATION")
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP_MR1)
     private fun mcc(subscription: SubscriptionInfo): String =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             subscription.mccString.orEmpty().filter(Char::isDigit).take(3)
@@ -99,6 +109,7 @@ object SimSnapshotCollector {
         }
 
     @Suppress("DEPRECATION")
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP_MR1)
     private fun mnc(subscription: SubscriptionInfo): String =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             subscription.mncString.orEmpty().filter(Char::isDigit).take(3)

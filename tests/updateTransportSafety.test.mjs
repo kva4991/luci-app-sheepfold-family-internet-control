@@ -246,7 +246,7 @@ json_get_var() {
     arch) value='noarch' ;;
     *) value='' ;;
   esac
-  eval "$1=\\\"\\$value\\\""
+  eval "$1=\\"\\$value\\""
 }
 `);
 

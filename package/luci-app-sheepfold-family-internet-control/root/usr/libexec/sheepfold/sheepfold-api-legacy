@@ -4,6 +4,10 @@
 # /www/cgi-bin/sheepfold-api, он маршрутизирует безопасные endpoint-ы отдельно
 # и делегирует остальное сюда. До релиза это текущая реализация, а не архив.
 
+TOKEN_COMMON="/usr/libexec/sheepfold/sheepfold-token-common"
+[ -r "$TOKEN_COMMON" ] || exit 1
+. "$TOKEN_COMMON"
+
 json_escape() {
 	# JSON здесь собирается POSIX shell-ом без jq, чтобы endpoint жил даже на лёгких роутерах.
 	# Поэтому обязательно убираем переносы/табы и экранируем кавычки, иначе один лог сломает ответ API.
@@ -46,6 +50,18 @@ auth_check() {
 
 	client_device_id="${HTTP_X_SHEEPFOLD_DEVICE_ID:-}"
 	client_device_mac="${HTTP_X_SHEEPFOLD_DEVICE_MAC:-}"
+	if ! token_request_source_matches "${REMOTE_ADDR:-}" "$client_device_mac"; then
+		header_json "401 Unauthorized"
+		printf '{"app":"sheepfold","ok":false,"error":"device_source_mismatch","message":"Administrator device source does not match the bound token."}\n'
+		exit 0
+	fi
+	if ! token_device_is_admin_paired "$client_device_id" "$client_device_mac"; then
+		# Отдельный код позволяет APK объяснить явное отвязывание устройства,
+		# не принимая временную сетевую ошибку за отзыв доступа. §authrs1
+		header_json "401 Unauthorized"
+		printf '{"app":"sheepfold","ok":false,"error":"device_unbound","message":"Administrator device is no longer paired."}\n'
+		exit 0
+	fi
 
 	# Делегируем проверку в sheepfold-router-control, который знает хэши и привязку к устройству.
 	result="$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" "$client_device_id" "$client_device_mac" 2>/dev/null || printf 'fail')"

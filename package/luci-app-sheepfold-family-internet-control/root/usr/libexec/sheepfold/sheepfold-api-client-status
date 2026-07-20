@@ -16,7 +16,7 @@ header_json() {
     printf 'Cache-Control: no-store\r\n\r\n'
 }
 
-normalize_mac() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 
 # Детское приложение получает только итоговый флаг доступности. Проверка
 # повторяется на backend при каждом AI-запросе, поэтому поле не является

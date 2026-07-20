@@ -17,7 +17,6 @@ class SecureRouterConnectionManager {
         require(!request.administratorLogin.isNullOrBlank()) { "Укажите логин администратора" }
         require(!request.temporaryPassword.isNullOrBlank()) { "Укажите временный код сопряжения" }
 
-        var lastError: Throwable? = null
         val allowHostname = !request.tlsSpkiSha256.isNullOrBlank()
         val candidates = candidateApiUrls(request.apiUrl, allowHostname)
         DiagnosticLog.info(
@@ -26,27 +25,39 @@ class SecureRouterConnectionManager {
             "spki" to !request.tlsSpkiSha256.isNullOrBlank(),
             "legacyPin" to !request.tlsPinSha256.isNullOrBlank()
         )
+        var lastProbeError: Throwable? = null
+        var selectedApiUrl: String? = null
         for (apiUrl in candidates) {
             val startedAt = System.nanoTime()
-            DiagnosticLog.info("pair.candidate.started", "api" to apiUrl)
-            val result = runCatching { pair(request, apiUrl) }
-            if (result.isSuccess) {
+            DiagnosticLog.info("pair.candidate.probe.started", "api" to apiUrl)
+            val probe = runCatching { pairingEndpointIsReady(request, apiUrl) }
+            if (probe.getOrDefault(false)) {
                 DiagnosticLog.info(
-                    "pair.candidate.succeeded",
+                    "pair.candidate.probe.succeeded",
                     "api" to apiUrl,
                     "durationMs" to elapsedMs(startedAt)
                 )
-                return@withContext result.getOrThrow()
+                selectedApiUrl = apiUrl
+                break
             }
-            DiagnosticLog.error(
-                "pair.candidate.failed",
-                result.exceptionOrNull(),
+            DiagnosticLog.warn(
+                "pair.candidate.probe.failed",
                 "api" to apiUrl,
                 "durationMs" to elapsedMs(startedAt)
             )
-            lastError = friendlyConnectionError(result.exceptionOrNull(), apiUrl)
+            lastProbeError = probe.exceptionOrNull()
         }
-        throw lastError ?: IllegalStateException("Не удалось подключиться к роутеру Sheepfold")
+
+        val apiUrl = selectedApiUrl
+            ?: throw friendlyConnectionError(lastProbeError, candidates.firstOrNull().orEmpty())
+        // Сначала выбираем endpoint безопасным GET /ping, затем отправляем QR-код
+        // ровно один раз. После неясного timeout повторять одноразовый секрет нельзя. §authrs1
+        runCatching { pair(request, apiUrl) }
+            .onSuccess { connected ->
+                DiagnosticLog.info("pair.candidate.succeeded", "api" to apiUrl)
+                return@withContext connected
+            }
+            .getOrElse { error -> throw friendlyConnectionError(error, apiUrl) }
     }
 
     fun parseQrPayload(payload: String): RouterConnectionRequest {
@@ -140,7 +151,7 @@ class SecureRouterConnectionManager {
         )
     }
 
-    private fun pair(request: RouterConnectionRequest, apiUrl: String): RouterConnectionRequest {
+    private suspend fun pair(request: RouterConnectionRequest, apiUrl: String): RouterConnectionRequest {
         val url = URL("${apiUrl.trimEnd('/')}/pair")
         require(url.protocol.equals("https", ignoreCase = true)) {
             "Сопряжение выполняется только по HTTPS"
@@ -213,7 +224,7 @@ class SecureRouterConnectionManager {
                 "routerName" to json.optString("routerName")
             )
 
-            return RouterConnectionRequest(
+            val connected = RouterConnectionRequest(
                 apiUrl = apiUrl,
                 routerName = json.optString("routerName").ifBlank { request.routerName },
                 administratorLogin = request.administratorLogin
@@ -224,6 +235,42 @@ class SecureRouterConnectionManager {
                 connected.tlsPinSha256 = capturedPin?.value ?: request.tlsPinSha256
                 connected.tlsSpkiSha256 = request.tlsSpkiSha256
             }
+
+            try {
+                // Ответ /pair ещё не доказывает, что UCI-права попали в основной
+                // конфиг. До сохранения credential проверяем его обычным защищённым
+                // запросом, иначе APK может открыть главное окно без привязки. §pairtx1
+                RouterAdminClient(connected).verifyAdministratorAccess()
+            } catch (error: Exception) {
+                DiagnosticLog.error("pair.authorization.failed", error, "deviceId" to deviceId)
+                throw IllegalStateException(
+                    "Роутер выдал токен, но не подтвердил привязку телефона к администратору. " +
+                        "Закройте и снова откройте настройки администратора в LuCI, затем отсканируйте новый QR-код.",
+                    error
+                )
+            }
+            DiagnosticLog.info("pair.authorization.succeeded", "deviceId" to deviceId)
+            return connected
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun pairingEndpointIsReady(request: RouterConnectionRequest, apiUrl: String): Boolean {
+        val url = URL("${apiUrl.trimEnd('/')}/ping")
+        val (connection, _) = RouterHttps.open(
+            url = url,
+            tlsPinSha256 = request.tlsPinSha256,
+            allowTrustOnFirstUse = request.tlsPinSha256.isNullOrBlank() && request.tlsSpkiSha256.isNullOrBlank(),
+            tlsSpkiSha256 = request.tlsSpkiSha256
+        )
+        return try {
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
+            connection.requestMethod = "GET"
+            connection.instanceFollowRedirects = false
+            connection.setRequestProperty("Accept", "application/json")
+            connection.responseCode in 200..299
         } finally {
             connection.disconnect()
         }

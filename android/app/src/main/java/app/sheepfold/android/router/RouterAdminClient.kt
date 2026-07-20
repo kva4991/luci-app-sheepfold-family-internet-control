@@ -51,6 +51,12 @@ class RouterAdminClient(
     private val appContext = context?.applicationContext
     private var activeApiUrl = connection.apiUrl
 
+    /** Подтверждает, что сохранённый токен уже связан с админским устройством на роутере. */
+    suspend fun verifyAdministratorAccess() = withContext(Dispatchers.IO) {
+        request("GET", "/router-info")
+        Unit
+    }
+
     suspend fun loadDevices(): List<RouterDevice> = withContext(Dispatchers.IO) {
         val json = request("GET", "/devices")
         val devices = json.optJSONArray("devices") ?: return@withContext emptyList()
@@ -185,6 +191,7 @@ class RouterAdminClient(
         if (firstAttempt.isSuccess) return firstAttempt.getOrThrow()
 
         val firstError = firstAttempt.exceptionOrNull()
+        reportSessionFailure(firstError)?.let { throw it }
         if (appContext != null && endpointCanBeRecovered(firstError)) {
             val recoveredApiUrl = RouterEndpointRecovery.discoverAndStore(
                 appContext,
@@ -193,7 +200,11 @@ class RouterAdminClient(
             )
             if (recoveredApiUrl != null) {
                 activeApiUrl = recoveredApiUrl
-                return requestOnce(activeApiUrl, method, path, form)
+                val recoveredAttempt = runCatching { requestOnce(activeApiUrl, method, path, form) }
+                if (recoveredAttempt.isSuccess) return recoveredAttempt.getOrThrow()
+                val recoveredError = recoveredAttempt.exceptionOrNull()
+                reportSessionFailure(recoveredError)?.let { throw it }
+                throw recoveredError ?: IllegalStateException("Роутер недоступен")
             }
         }
 
@@ -249,12 +260,16 @@ class RouterAdminClient(
                 .orEmpty()
             val json = runCatching { JSONObject(body) }.getOrNull()
             if (code !in 200..299) {
+                val errorCode = json?.optString("error").orEmpty()
+                val serverMessage = json?.optString("message")
+                    ?.ifBlank { errorCode }
+                    .orEmpty()
+                    .ifBlank { body.ifBlank { "HTTP $code" } }
+                RouterSessionFailure.fromHttp(code, errorCode)?.let { throw it }
                 throw RouterHttpException(
                     code,
-                    json?.optString("message")
-                        ?.ifBlank { json.optString("error") }
-                        .orEmpty()
-                        .ifBlank { body.ifBlank { "HTTP $code" } }
+                    errorCode,
+                    serverMessage
                 )
             }
             return json ?: throw IllegalStateException("Роутер вернул некорректный JSON")
@@ -268,10 +283,16 @@ class RouterAdminClient(
             error is NoRouteToHostException ||
             error is RouterHttpException && error.statusCode == 404
 
+    private fun reportSessionFailure(error: Throwable?): RouterSessionException? =
+        RouterSessionFailure.fromThrowable(error)?.also { failure ->
+            appContext?.let { RouterSessionEvents.report(it, failure) }
+        }
+
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())
 }
 
 private class RouterHttpException(
     val statusCode: Int,
+    val errorCode: String,
     message: String
 ) : IllegalStateException(message)

@@ -5,9 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -24,6 +22,8 @@ import app.sheepfold.android.diagnostics.DiagnosticLog
 import app.sheepfold.android.notifications.SheepfoldNotifications
 import app.sheepfold.android.notifications.AccessRequestWorker
 import app.sheepfold.android.router.SheepfoldConnectionStore
+import app.sheepfold.android.router.RouterPairingLoss
+import app.sheepfold.android.router.RouterSessionEvents
 import app.sheepfold.android.security.AppProtectionStore
 import app.sheepfold.android.ui.main.OperationalMainScreen
 import app.sheepfold.android.ui.security.AppUnlockScreen
@@ -48,34 +48,36 @@ private fun SheepfoldRoot() {
     var setupComplete by remember { mutableStateOf(SheepfoldConnectionStore.hasConnection(context)) }
     var connection by remember { mutableStateOf(SheepfoldConnectionStore.read(context)) }
     var unlocked by remember { mutableStateOf(!AppProtectionStore.requiresAuthentication(context)) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) {
-        // После выдачи legacy-доступа Android 9 журнал сможет создать файл в Downloads.
-        DiagnosticLog.initialize(context)
+    var pairingLoss by remember { mutableStateOf(SheepfoldConnectionStore.consumePairingLoss(context)) }
+    val pairingMessage = pairingLoss?.let { reason ->
+        context.getString(
+            when (reason) {
+                RouterPairingLoss.ACCESS_REVOKED -> R.string.pairing_access_revoked
+                RouterPairingLoss.TOKEN_REJECTED -> R.string.pairing_token_rejected
+                RouterPairingLoss.TLS_IDENTITY_CHANGED -> R.string.pairing_tls_identity_changed
+            }
+        )
     }
+
     LaunchedEffect(Unit) {
-        val missing = buildList {
-            if (
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-            ) {
-                add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-            if (
-                Build.VERSION.SDK_INT == Build.VERSION_CODES.P &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
-            ) {
-                add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
+        RouterSessionEvents.events.collect { reason ->
+            SheepfoldConnectionStore.consumePairingLoss(context)
+            pairingLoss = reason
+            connection = null
+            setupComplete = false
         }
-        if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray())
     }
 
     SheepfoldTheme(themeMode = themeMode) {
         Surface(modifier = Modifier.fillMaxSize()) {
             when {
+                pairingLoss != null && !unlocked -> {
+                    AppUnlockScreen(
+                        mode = AppProtectionStore.mode(context),
+                        onVerify = { AppProtectionStore.verify(context, it) },
+                        onUnlocked = { unlocked = true }
+                    )
+                }
                 setupComplete && connection != null && !unlocked -> {
                     AppUnlockScreen(
                         mode = AppProtectionStore.mode(context),
@@ -95,17 +97,24 @@ private fun SheepfoldRoot() {
                             SheepfoldConnectionStore.clear(context)
                             connection = null
                             setupComplete = false
+                            pairingLoss = null
                             unlocked = true
                         }
                     )
                 }
                 else -> {
-                    SafeRouterSetupScreen { request ->
+                    SafeRouterSetupScreen(
+                        pairingOnly = pairingLoss != null,
+                        pairingMessage = pairingMessage
+                    ) { request ->
                         SheepfoldConnectionStore.save(context, request)
                         revokeCameraPermissionAfterPairing(context)
                         connection = request
                         setupComplete = true
-                        unlocked = !AppProtectionStore.requiresAuthentication(context)
+                        pairingLoss = null
+                        // Пользователь только что прошёл настройку или явную повторную
+                        // привязку, поэтому сразу открываем приложение без лишнего unlock.
+                        unlocked = true
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package app.sheepfold.android.router
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -18,7 +19,7 @@ data class AiAssistantRequest(
 )
 
 object AiAssistantClient {
-    suspend fun ask(request: AiAssistantRequest): String = withContext(Dispatchers.IO) {
+    suspend fun ask(context: Context, request: AiAssistantRequest): String = withContext(Dispatchers.IO) {
         val deviceId = request.connection.deviceId
             ?: throw IllegalStateException("Идентификатор парного устройства отсутствует")
         var lastError: Throwable? = null
@@ -26,6 +27,10 @@ object AiAssistantClient {
             val result = runCatching { askOnce(request, apiBase, deviceId) }
             if (result.isSuccess) return@withContext result.getOrThrow()
             lastError = result.exceptionOrNull()
+            RouterSessionFailure.fromThrowable(lastError)?.let { failure ->
+                RouterSessionEvents.report(context.applicationContext, failure)
+                throw failure
+            }
         }
         throw lastError ?: IllegalStateException("Роутер не смог получить ответ ИИ")
     }
@@ -78,6 +83,9 @@ object AiAssistantClient {
 
             val responseBody = readBody(connection)
             if (connection.responseCode !in 200..299) {
+                val responseJson = runCatching { JSONObject(responseBody) }.getOrNull()
+                val errorCode = responseJson?.optString("error").orEmpty()
+                RouterSessionFailure.fromHttp(connection.responseCode, errorCode)?.let { throw it }
                 throw IllegalStateException(apiError(responseBody).ifBlank {
                     "Роутер не смог получить ответ ИИ."
                 })

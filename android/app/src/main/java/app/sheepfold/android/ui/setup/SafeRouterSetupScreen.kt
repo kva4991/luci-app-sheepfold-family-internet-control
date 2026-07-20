@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import app.sheepfold.android.R
+import app.sheepfold.android.diagnostics.DiagnosticLog
 import app.sheepfold.android.router.ActiveTransport
 import app.sheepfold.android.router.LocalNetworkState
 import app.sheepfold.android.router.LocalRouterDiscovery
@@ -100,12 +101,18 @@ import java.util.concurrent.atomic.AtomicBoolean
 private enum class SetupStep { AGREEMENT, NETWORK, MAC, PAIRING, QR, MANUAL, PROTECTION }
 
 @Composable
-fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
+fun SafeRouterSetupScreen(
+    pairingOnly: Boolean = false,
+    pairingMessage: String? = null,
+    onSetupComplete: (RouterConnectionRequest) -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val manager = remember { SecureRouterConnectionManager() }
-    var step by remember { mutableStateOf(SetupStep.AGREEMENT) }
+    var step by remember(pairingOnly) {
+        mutableStateOf(if (pairingOnly) SetupStep.PAIRING else SetupStep.AGREEMENT)
+    }
     var networkState by remember { mutableStateOf(LocalRouterDiscovery.networkState(context)) }
     var discovery by remember { mutableStateOf<LocalSheepfoldDiscovery?>(null) }
     var connected by remember { mutableStateOf<RouterConnectionRequest?>(null) }
@@ -116,7 +123,7 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
             SetupStep.AGREEMENT -> SetupStep.AGREEMENT
             SetupStep.NETWORK -> SetupStep.AGREEMENT
             SetupStep.MAC -> SetupStep.NETWORK
-            SetupStep.PAIRING -> SetupStep.MAC
+            SetupStep.PAIRING -> if (pairingOnly) SetupStep.PAIRING else SetupStep.MAC
             SetupStep.QR, SetupStep.MANUAL -> SetupStep.PAIRING
             SetupStep.PROTECTION -> SetupStep.PAIRING
         }
@@ -130,7 +137,7 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
                 .onSuccess {
                     connected = it
                     snackbar.showSnackbar(context.getString(R.string.setup_connected_to, it.routerName))
-                    step = SetupStep.PROTECTION
+                    if (pairingOnly) onSetupComplete(it) else step = SetupStep.PROTECTION
                 }
                 .onFailure { snackbar.showSnackbar(it.message ?: context.getString(R.string.setup_connection_failed)) }
             busy = false
@@ -138,6 +145,10 @@ fun SafeRouterSetupScreen(onSetupComplete: (RouterConnectionRequest) -> Unit) {
     }
 
     BackHandler(enabled = step != SetupStep.AGREEMENT) { back() }
+
+    LaunchedEffect(pairingMessage) {
+        if (!pairingMessage.isNullOrBlank()) snackbar.showSnackbar(pairingMessage)
+    }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -198,6 +209,9 @@ private fun AgreementStep(onNext: () -> Unit) {
             } else {
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
+            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.P) {
+                add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
         }
     }
     var granted by remember {
@@ -207,6 +221,9 @@ private fun AgreementStep(onNext: () -> Unit) {
         granted = permissions.all { permission ->
             ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
         }
+        // Android 9 сможет создать тестовый журнал в «Загрузках» только после
+        // осознанного нажатия кнопки разрешений на экране соглашения.
+        DiagnosticLog.initialize(context)
     }
 
     Box(Modifier.fillMaxSize()) {

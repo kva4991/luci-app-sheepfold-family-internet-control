@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.sheepfold.android.R
@@ -38,6 +39,7 @@ fun productFeatureTab(connection: RouterConnectionRequest, aiAvailable: Boolean)
 
 @Composable
 private fun AiTab(connection: RouterConnectionRequest) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val failureText = stringResource(R.string.ai_answer_failed)
     var question by remember { mutableStateOf("") }
@@ -64,6 +66,7 @@ private fun AiTab(connection: RouterConnectionRequest) {
                 scope.launch {
                     answer = runCatching {
                         AiAssistantClient.ask(
+                            context,
                             AiAssistantRequest(
                                 connection = connection,
                                 provider = "",

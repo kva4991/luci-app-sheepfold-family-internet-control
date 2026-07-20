@@ -1,3 +1,9 @@
+/*
+ * Защищает контракт панели «Информация»: backend обязан вернуть непустой
+ * диагностический снимок, а стандартные цели проверки связи не должны
+ * зависеть от иностранных сервисов, которые могут быть недоступны в России.
+ * Статический тест не подтверждает реальный ICMP-ответ конкретного роутера.
+ */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,8 +49,9 @@ describe('Router information panel', () => {
     assert.match(source, /for radio in \$wifi_radios/);
     assert.match(source, /ping_quick_ms/);
     assert.match(source, /ping_ya_ru_ms/);
-    assert.match(source, /ping_google_com_ms/);
-    assert.match(source, /ping_youtube_com_ms/);
+    assert.match(source, /ping_gosuslugi_ru_ms/);
+    assert.match(source, /ping_ntp_vniiftri_ru_ms/);
+    assert.doesNotMatch(source, /ping_google_com_ms|ping_youtube_com_ms|1\.1\.1\.1|8\.8\.8\.8/);
     assert.match(source, /print_kv storage_space/);
   });
 
@@ -78,8 +85,9 @@ describe('Router information panel', () => {
     assert.match(source, /routerBackend\.withTimeout/);
     assert.match(source, /function internetDetails/);
     assert.match(source, /probeLine\('ya\.ru'/);
-    assert.match(source, /probeLine\('google\.com'/);
-    assert.match(source, /probeLine\('youtube\.com'/);
+    assert.match(source, /probeLine\('gosuslugi\.ru'/);
+    assert.match(source, /probeLine\('ntp1\.vniiftri\.ru'/);
+    assert.doesNotMatch(source, /probeLine\('google\.com'|probeLine\('youtube\.com'/);
     assert.match(source, /row\(_\('Router storage'\), infoValue\(values\.storage_space\)\)/);
     assert.match(source, /if \(!hasData\(values\)\)/);
     assert.match(source, /state\.status = 'error'/);
@@ -110,8 +118,9 @@ describe('Router information panel', () => {
 
     assert.match(legacy, /package_upgradable_any/);
     assert.match(legacy, /print_kv podkop_version_status/);
-    assert.match(overview, /function formatInstalledPackageInfo/);
-    assert.match(overview, /packageVersionStatusLabel/);
+    assert.match(overview, /require sheepfold\.features\.router\.info as routerInfo/);
+    assert.doesNotMatch(overview, /function formatInstalledPackageInfo|function packageVersionStatusLabel/);
     assert.match(infoModule, /values\.podkop_version_status/);
+    assert.match(infoModule, /function packageInfo/);
   });
 });

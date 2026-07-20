@@ -23,6 +23,7 @@ import kotlin.math.roundToInt
 object WifiNetworkSnapshotCollector {
 
     private const val MAX_LOCATION_AGE_MS = 60 * 60 * 1000L
+    private const val UNKNOWN_SSID = "<unknown ssid>"
 
     fun payload(context: Context, includeLocation: Boolean): String? {
         if (!hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)) return null
@@ -36,7 +37,7 @@ object WifiNetworkSnapshotCollector {
             ?.removeSurrounding("\"")
             ?.replace(Regex("[\\r\\n\\t|]"), " ")
             ?.take(96)
-            ?.takeUnless { it.isBlank() || it == WifiManager.UNKNOWN_SSID }
+            ?.takeUnless { it.isBlank() || it == UNKNOWN_SSID }
             ?: return null
         val bssid = wifiInfo.bssid
             ?.lowercase(Locale.US)
@@ -68,14 +69,16 @@ object WifiNetworkSnapshotCollector {
 
     @SuppressLint("MissingPermission")
     private fun currentWifiInfo(context: Context): WifiInfo? {
-        val connectivity = context.getSystemService(ConnectivityManager::class.java)
-        val network = connectivity?.activeNetwork
-        val capabilities = network?.let(connectivity::getNetworkCapabilities)
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-        ) {
-            (capabilities.transportInfo as? WifiInfo)?.let { return it }
+        val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val network = connectivity?.activeNetwork
+            val capabilities = network?.let(connectivity::getNetworkCapabilities)
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+            ) {
+                (capabilities.transportInfo as? WifiInfo)?.let { return it }
+            }
         }
 
         // Wi-Fi без доступа в интернет может не быть активным транспортом:
@@ -89,7 +92,7 @@ object WifiNetworkSnapshotCollector {
 
     @SuppressLint("MissingPermission")
     private fun recentLocation(context: Context, now: Long): Location? {
-        val manager = context.getSystemService(LocationManager::class.java) ?: return null
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
         return manager.getProviders(true)
             .mapNotNull { provider -> runCatching { manager.getLastKnownLocation(provider) }.getOrNull() }
             .filter { location ->

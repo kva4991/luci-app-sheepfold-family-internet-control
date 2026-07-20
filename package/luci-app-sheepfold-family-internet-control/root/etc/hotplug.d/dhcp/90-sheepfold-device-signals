@@ -4,7 +4,7 @@ SIGNAL_DIR="/tmp/sheepfold/device-signals"
 CHANGE_FLAG="/tmp/sheepfold/device-signals.changed"
 
 normalize_mac() {
-        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+        printf '%s' "$1" | tr 'a-z' 'A-Z'
 }
 
 valid_mac() {

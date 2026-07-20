@@ -85,6 +85,12 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install JavaScript tooling
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint:js
+
       - name: Run JavaScript tests
         run: node --test tests/*.test.mjs
 
@@ -111,6 +117,17 @@ jobs:
           java-version: '17'
 
       - uses: gradle/actions/setup-gradle@v6
+
+      - name: Run Android Lint
+        run: ./${{ matrix.project }}/gradlew -p "${{ matrix.project }}" lintDebug --stacktrace
+
+      - name: Upload Android Lint report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-lint-${{ matrix.kind }}
+          path: ${{ matrix.project }}/app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
 
       - name: Build debug APK
         run: ./${{ matrix.project }}/gradlew -p "${{ matrix.project }}" ${{ matrix.task }} --stacktrace

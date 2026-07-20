@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.OutputStreamWriter
@@ -99,6 +100,7 @@ object DiagnosticLog {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun appendWithMediaStore(context: Context, line: String) {
         val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         if (prefs.getLong(byteCountKey, 0L) >= maxBytes) {

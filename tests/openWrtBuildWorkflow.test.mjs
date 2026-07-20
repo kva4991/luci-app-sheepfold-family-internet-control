@@ -81,12 +81,12 @@ describe('OpenWrt GitHub Actions build §owrtci1', () => {
   });
 
   it('publishes only a complete verified matrix and scopes release writes', () => {
-    assert.match(workflow, /^permissions:\n  contents: read$/m);
+    assert.match(workflow, /^permissions:\n {2}contents: read$/m);
     assert.match(
       workflow,
       /publish-release:[\s\S]*if: github\.event_name == 'release' && github\.event\.release\.prerelease == false/,
     );
-    assert.match(workflow, /publish-release:[\s\S]*permissions:\n      contents: write/);
+    assert.match(workflow, /publish-release:[\s\S]*permissions:\n {6}contents: write/);
     assert.match(workflow, /needs: bundle/);
     assert.match(workflow, /scripts\/create-openwrt-release-manifest\.py/);
     assert.match(workflow, /SHA256SUMS/);

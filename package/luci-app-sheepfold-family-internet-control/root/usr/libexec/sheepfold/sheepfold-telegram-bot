@@ -297,10 +297,10 @@ device_section_by_query() {
 
         case "$query" in
                 *:*)
-                        mac="$(printf '%s' "$query" | tr '[:lower:]' '[:upper:]')"
+                        mac="$(printf '%s' "$query" | tr 'a-z' 'A-Z')"
                         for section in $(uci -q show sheepfold 2>/dev/null | sed -n "s/^sheepfold\.\([^.=]*\)=device$/\1/p"); do
                                 existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
-                                [ "$(printf '%s' "$existing" | tr '[:lower:]' '[:upper:]')" = "$mac" ] && {
+                                [ "$(printf '%s' "$existing" | tr 'a-z' 'A-Z')" = "$mac" ] && {
                                         printf '%s\n' "$section"
                                         return 0
                                 }

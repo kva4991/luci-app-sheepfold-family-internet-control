@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "lint": "npm run lint:js && npm run lint:android",
+    "lint:js": "eslint eslint.config.js \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"tools/**/*.mjs\" \"package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/**/*.js\"",
+    "lint:android": "node scripts/runAndroidLint.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:list": "node scripts/run-test-category.mjs --list",
     "test:category": "node scripts/run-test-category.mjs",
@@ -29,5 +32,10 @@
     "router:fullSafe": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runRouterTests.ps1 -Profile fullSafe",
     "router:frontend": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runFrontendTests.ps1",
     "router:allSafe": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/router-testing/runAllRouterTests.ps1"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.7.0",
+    "globals": "17.7.0"
   }
 }

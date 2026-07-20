@@ -51,9 +51,9 @@ nft_set_has_mac() {
 }
 
 device_section_for_mac() {
-    wanted_mac="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+    wanted_mac="$(printf '%s' "$1" | tr 'a-z' 'A-Z')"
     for device_section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
-        current_mac="$(uci -q get "sheepfold.$device_section.mac" 2>/dev/null | tr '[:lower:]' '[:upper:]')"
+        current_mac="$(uci -q get "sheepfold.$device_section.mac" 2>/dev/null | tr 'a-z' 'A-Z')"
         [ "$current_mac" = "$wanted_mac" ] || continue
         printf '%s\n' "$device_section"
         return 0
@@ -96,6 +96,39 @@ installed_package_version() {
     esac
 }
 
+pairing_uci_transaction_check() {
+    transaction_root="$run_dir/pairing-uci-transaction"
+    config_dir="$transaction_root/config"
+    delta_dir="$transaction_root/delta"
+
+    # Удаляем только собственные заранее известные probe-файлы. Рекурсивная
+    # очистка вычисленного пути в readOnly-тесте не нужна.
+    rm -f "$config_dir/sheepfold_pairing_probe" "$delta_dir/sheepfold_pairing_probe"
+    rmdir "$config_dir" "$delta_dir" "$transaction_root" 2>/dev/null || true
+    mkdir -p "$config_dir" "$delta_dir"
+    printf "config probe 'main'\n\toption value 'before'\n" > "$config_dir/sheepfold_pairing_probe"
+
+    # Pairing должен видеть подготовленные изменения, не меняя основной конфиг до commit.
+    # Сочетание -P здесь запрещено: на настоящем OpenWrt оно коммитит обратно во временный каталог. §pairtx1
+    uci -c "$config_dir" -t "$delta_dir" -p "$delta_dir" \
+        set sheepfold_pairing_probe.main.value='after'
+    base_before_commit="$(uci -c "$config_dir" -q get sheepfold_pairing_probe.main.value 2>/dev/null || true)"
+    staged_before_commit="$(uci -c "$config_dir" -t "$delta_dir" -p "$delta_dir" -q get sheepfold_pairing_probe.main.value 2>/dev/null || true)"
+    [ "$base_before_commit" = 'before' ] ||
+        fail pairingUciTransaction 'Изолированная UCI-запись изменила основной конфиг до commit'
+    [ "$staged_before_commit" = 'after' ] ||
+        fail pairingUciTransaction 'Изолированная UCI-транзакция не видит подготовленное значение'
+
+    uci -c "$config_dir" -t "$delta_dir" -p "$delta_dir" commit sheepfold_pairing_probe
+    committed_value="$(uci -c "$config_dir" -q get sheepfold_pairing_probe.main.value 2>/dev/null || true)"
+    [ "$committed_value" = 'after' ] ||
+        fail pairingUciTransaction 'Final commit не перенёс подготовленное значение в основной UCI-конфиг'
+
+    rm -f "$config_dir/sheepfold_pairing_probe" "$delta_dir/sheepfold_pairing_probe"
+    rmdir "$config_dir" "$delta_dir" "$transaction_root" 2>/dev/null || true
+    pass pairingUciTransaction 'UCI-транзакция pairing изолирует изменения и переносит их только при final commit'
+}
+
 read_only_checks() {
     require_command uci
     require_command ubus
@@ -122,6 +155,20 @@ read_only_checks() {
     asset_version="$(uci -q get sheepfold.global.ui_asset_version 2>/dev/null || true)"
     [ -n "$asset_version" ] || fail uiAssetVersion 'ui_asset_version пустой'
     pass uciConfig "Обязательные секции UCI присутствуют; версия ресурсов $asset_version"
+
+    pair_device='/usr/libexec/sheepfold/sheepfold-pair-device'
+    device_id='/usr/libexec/sheepfold/sheepfold-device-id'
+    require_executable "$pair_device"
+    require_executable "$device_id"
+    grep -Fq 'uci -t "$PAIR_UCI_SAVEDIR" -p "$PAIR_UCI_SAVEDIR"' "$pair_device" ||
+        fail pairingUciWrapper 'Pairing backend не использует безопасную UCI-транзакцию -t/-p'
+    grep -Fq 'uci -t "$SHEEPFOLD_UCI_SAVEDIR" -p "$SHEEPFOLD_UCI_SAVEDIR"' "$device_id" ||
+        fail pairingUciWrapper 'Allocator ID не использует общую UCI-транзакцию pairing'
+    if grep -Fq 'uci -P "$PAIR_UCI_SAVEDIR"' "$pair_device" ||
+            grep -Fq 'uci -P "$SHEEPFOLD_UCI_SAVEDIR"' "$device_id"; then
+        fail pairingUciWrapper 'Pairing backend содержит опасный UCI wrapper -P'
+    fi
+    pairing_uci_transaction_check
 
     require_executable "$router_control"
     require_executable /usr/libexec/sheepfold/sheepfold-router-control-legacy

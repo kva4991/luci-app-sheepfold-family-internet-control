@@ -184,7 +184,7 @@ esac
     assert.match(ssdp, /SO_BINDTODEVICE/);
     assert.match(ssdp, /M-SEARCH \* HTTP\/1\.1/);
     assert.match(ssdp, /MAX_RESPONSES = 128/);
-    assert.doesNotMatch(ssdp, /\!~/);
+    assert.doesNotMatch(ssdp, /!~/);
     assert.doesNotMatch(ssdp, /\\x00/);
     assert.match(ssdp, /ord\(source, offset\)/);
     assert.doesNotMatch(ssdp, /uclient-fetch|curl|wget|URL\.openConnection/);

@@ -10,12 +10,14 @@ const menuAiPath = join(root, 'package/luci-app-sheepfold-family-internet-contro
 const aclPath = join(root, 'package/luci-app-sheepfold-family-internet-control/root/usr/share/rpcd/acl.d/luci-app-sheepfold-family-internet-control.json');
 const defaultsPath = join(root, 'package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/sheepfold.uci.defaults');
 const makefilePath = join(root, 'package/luci-app-sheepfold-family-internet-control/Makefile');
+const storagePanelPath = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/storage/panel.js');
 
 const overview = readFileSync(overviewPath, 'utf8');
 const secure = readFileSync(securePath, 'utf8');
 const acl = readFileSync(aclPath, 'utf8');
 const defaults = readFileSync(defaultsPath, 'utf8');
 const makefile = readFileSync(makefilePath, 'utf8');
+const storagePanel = readFileSync(storagePanelPath, 'utf8');
 
 test('AI assistant and router memory live in settings second-level tabs', () => {
   assert.match(overview, /settingsTabsSecondary/);
@@ -49,22 +51,29 @@ test('storage backends are reachable from LuCI ACL and have default UCI sections
 });
 
 test('storage tab exposes cloud storage backends and storage status UI', () => {
-  assert.match(overview, /logStorageLocationField/);
-  assert.match(overview, /yandex_disk/);
-  assert.match(overview, /google_drive/);
-  assert.match(overview, /sf-storage-status-lamp/);
-  assert.match(overview, /router operational memory, cleared on reboot/);
-  assert.match(overview, /yandexDiskMaintenancePanel/);
-  assert.match(overview, /googleDiskMaintenancePanel/);
-  assert.match(overview, /yandex-disk-test/);
-  assert.match(overview, /google-drive-test/);
-  assert.match(overview, /google-drive-list/);
-  assert.match(overview, /google-drive-restore-config/);
-  assert.match(overview, /google-drive-sync-status/);
-  assert.match(overview, /sf-yandex-disk-backup-select/);
-  assert.match(overview, /sf-google-drive-backup-select/);
-  assert.match(overview, /Refresh sync status/);
-  assert.doesNotMatch(overview, /RAM only \(recommended\)/);
+  assert.match(overview, /require sheepfold\.features\.storage\.panel as storagePanelModel/);
+  assert.match(overview, /storagePanel\.render\(\)/);
+  assert.doesNotMatch(overview, /function logStorageLocationField|function yandexDiskMaintenancePanel|function googleDriveMaintenancePanel/);
+  assert.match(storagePanel, /function logStorageLocationField/);
+  assert.match(storagePanel, /yandex_disk/);
+  assert.match(storagePanel, /google_drive/);
+  assert.match(storagePanel, /sf-storage-status-lamp/);
+  assert.match(storagePanel, /router operational memory, cleared on reboot/);
+  assert.match(storagePanel, /yandexDiskMaintenancePanel/);
+  assert.match(storagePanel, /googleDriveMaintenancePanel/);
+  assert.match(storagePanel, /function cloudMaintenancePanel\(config\)/);
+  assert.match(storagePanel, /commandPrefix: 'yandex-disk'/);
+  assert.match(storagePanel, /commandPrefix: 'google-drive'/);
+  assert.match(storagePanel, /config\.commandPrefix \+ '-test'/);
+  assert.match(storagePanel, /config\.commandPrefix \+ '-list'/);
+  assert.match(storagePanel, /config\.commandPrefix \+ '-restore-config'/);
+  assert.match(storagePanel, /config\.commandPrefix \+ '-sync-status'/);
+  assert.match(storagePanel, /classPrefix: 'sf-yandex-disk'/);
+  assert.match(storagePanel, /classPrefix: 'sf-google-drive'/);
+  assert.match(storagePanel, /classPrefix \+ '-backup-select'/);
+  assert.match(storagePanel, /Refresh sync status/);
+  assert.doesNotMatch(storagePanel, /RAM only \(recommended\)/);
+  assert.doesNotMatch(storagePanel, /\buci\.(get|set|unset|remove)/);
 });
 
 test('secure wrapper uses valid LuCI inheritance', () => {

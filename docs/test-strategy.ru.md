@@ -33,6 +33,21 @@ npm.cmd run test:list
 
 Каноническая карта находится в `tests/categories.mjs`, runner — в `scripts/run-test-category.mjs`. Тест `tests/testCategories.test.mjs` не позволяет добавить новый `*.test.mjs` без категории или оставить ссылку на удалённый файл.
 
+## Статический анализ
+
+<!-- §lint1 -->
+
+Статические проверки запускаются отдельно от предметных Node-тестов:
+
+```powershell
+npm.cmd run lint:js
+npm.cmd run lint:android
+```
+
+`lint:js` проверяет LuCI, Node-скрипты и тесты. Конфигурация знает о LuCI-loader, внедряемых глобалах и верхнеуровневом `return`, поэтому результат полезнее обычного `node --check`. `lint:android` последовательно запускает штатный `lintDebug` родительского и детского APK через их Gradle Wrapper. На Windows ему нужен доступ к установленным Android SDK и Gradle cache; в ограниченной Codex-песочнице команду может потребоваться выполнить вне sandbox.
+
+Обе проверки обязательны перед push, если соответствующая часть исходников менялась. Полная команда `npm.cmd run lint` объединяет их, но при работе только с LuCI быстрее запускать `lint:js`. Android Lint может оставлять предупреждения об обновлениях зависимостей или планируемых ресурсах; ошибки CI не скрывать baseline-файлом без отдельного обоснования.
+
 ## Категории
 
 | Команда | Когда запускать |
@@ -134,6 +149,7 @@ npm.cmd run test:packaging
 Категория `android` проверяет договорённости исходного кода, но не заменяет сборку:
 
 ```powershell
+npm.cmd run lint:android
 android\gradlew.bat -p android :app:assembleDebug
 android-child\gradlew.bat -p android-child :app:assembleDebug
 ```

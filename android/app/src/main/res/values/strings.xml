@@ -63,6 +63,9 @@
     <string name="setup_camera_denied">Камера не разрешена. Ручное сопряжение и вставка QR-данных остаются доступными.</string>
     <string name="setup_connection_failed">Не удалось подключиться к роутеру</string>
     <string name="setup_connected_to">Подключено к серверу (%1$s)</string>
+    <string name="pairing_access_revoked">Доступ отозван на роутере. Выполните привязку заново.</string>
+    <string name="pairing_token_rejected">Сохранённая привязка к роутеру больше не действует. Выполните привязку заново.</string>
+    <string name="pairing_tls_identity_changed">HTTPS-отпечаток роутера изменился. Соединение остановлено; выполните явную привязку заново.</string>
     <string name="setup_agreement_prefix">Я согласен с </string>
     <string name="setup_agreement_link">пользовательским соглашением</string>
     <string name="setup_agreement_suffix"> и обработкой персональных и технических данных, необходимых для работы Sheepfold.</string>
@@ -129,6 +132,8 @@
     <string name="widget_internet_enabled">Виджет включения интернета Sheepfold</string>
     <string name="widget_internet_disabled">Виджет отключения интернета Sheepfold</string>
     <string name="widget_internet_switch">Виджет управления интернетом Sheepfold</string>
+    <string name="widget_internet_on">ВКЛ</string>
+    <string name="widget_internet_off">ВЫКЛ</string>
 
     <string name="action_ok">ОК</string>
     <string name="action_cancel">Отмена</string>

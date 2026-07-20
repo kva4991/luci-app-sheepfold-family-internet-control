@@ -48,8 +48,8 @@ function internetDetails(values) {
 	var lines = [
 		translatedStatus(values.internet_status),
 		probeLine('ya.ru', values.ping_ya_ru_ms || values.ping_yandex_ms),
-		probeLine('google.com', values.ping_google_com_ms),
-		probeLine('youtube.com', values.ping_youtube_com_ms)
+		probeLine('gosuslugi.ru', values.ping_gosuslugi_ru_ms),
+		probeLine('ntp1.vniiftri.ru', values.ping_ntp_vniiftri_ru_ms)
 	];
 
 	if (reason && values.internet_status !== 'online')

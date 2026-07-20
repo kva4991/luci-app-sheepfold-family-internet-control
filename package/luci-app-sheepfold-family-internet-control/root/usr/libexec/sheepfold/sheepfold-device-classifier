@@ -11,9 +11,10 @@ MDNS_PROFILE="${7:-}"
 SSDP_PROFILE="${8:-}"
 WSD_PROFILE="${9:-}"
 WIFI_PROFILE="${10:-}"
+OUI_OVERRIDES="${SHEEPFOLD_OUI_OVERRIDES:-/usr/share/sheepfold/device-oui-overrides}"
 NO_RESTRICTIONS_GROUP="$(uci -q get sheepfold.no_restrictions.name 2>/dev/null || printf 'Без ограничений')"
 PERSONAL_DEVICES_GROUP="$(uci -q get sheepfold.personal_devices.name 2>/dev/null || printf 'Персональные устройства')"
-POLICY_VERSION="9"
+POLICY_VERSION="10"
 NETWORK_NAME_PATTERN='(^|[^a-z0-9])(openwrt|router|gateway|repeater|extender|access[ _-]?point|wireless[ _-]?ap|wi-?fi[ _-]?ap|mesh)([^a-z0-9]|$)|(^|[^a-z0-9])ap[-_][a-z0-9]'
 SMART_HOME_GATEWAY_PATTERN='thread border router|matter bridge|homekit bridge|zigbee gateway|zigbee bridge|z-wave gateway|zwave gateway|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|tradfri gateway|ikea dirigera|dirigera|hue bridge|sonoff zigbee bridge'
 
@@ -34,7 +35,9 @@ text_has() {
 }
 
 name_is_network_infrastructure() {
-        candidate_name="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+	# Явные ASCII-диапазоны обязательны: BusyBox tr на целевом роутере
+	# искажает строки при использовании GNU-подобных POSIX-классов. (§bbxtr01)
+        candidate_name="$(printf '%s' "$1" | tr 'A-Z' 'a-z')"
         [ -n "$candidate_name" ] || return 1
 
         if text_has "$candidate_name" "$SMART_HOME_GATEWAY_PATTERN"; then
@@ -130,7 +133,7 @@ personal_device_type() {
 classify_text() {
         local text lower detected_type detected_confidence detected_reason
         text="$1"
-        lower="$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')"
+        lower="$(printf '%s' "$text" | tr 'A-Z' 'a-z')"
         detected_type="smart"
         detected_confidence=35
         detected_reason="lightweight router metadata"
@@ -212,19 +215,34 @@ classify_text() {
 
 mac_is_locally_administered() {
         local normalized first_octet
-        normalized="$(printf '%s' "$MAC" | tr '[:lower:]' '[:upper:]')"
-        printf '%s' "$normalized" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' || return 0
+        normalized="$(printf '%s' "$MAC" | tr 'a-z' 'A-Z')"
+		printf '%s' "$normalized" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' || return 1
         first_octet="${normalized%%:*}"
         [ $((0x$first_octet & 2)) -ne 0 ]
 }
 
-lookup_oui_vendor() {
-        local prefix database
-        mac_is_locally_administered && return 0
-        prefix="$(printf '%s' "$MAC" | tr -d ':' | tr '[:lower:]' '[:upper:]' | cut -c1-6)"
-        [ "${#prefix}" -eq 6 ] || return 0
+dhcp_client_id_matches_mac() {
+	local normalized_mac normalized_client
+	normalized_mac="$(printf '%s' "$MAC" | tr -d ':-' | tr 'A-Z' 'a-z')"
+	normalized_client="$(printf '%s' "$1" | tr -d ':-' | tr 'A-Z' 'a-z')"
+	case "$normalized_client" in
+		"$normalized_mac"|"01$normalized_mac") return 0 ;;
+	esac
+	return 1
+}
 
-        for database in /usr/share/nmap/nmap-mac-prefixes /usr/share/nmap/nmap-mac-prefixes.txt; do
+lookup_oui_vendor() {
+	local prefix database vendor
+	mac_is_locally_administered && return 0
+	prefix="$(printf '%s' "$MAC" | tr -d ':' | tr 'a-z' 'A-Z' | cut -c1-6)"
+	[ "${#prefix}" -eq 6 ] || return 0
+
+	if [ -r "$OUI_OVERRIDES" ]; then
+		vendor="$(awk -v wanted="$prefix" 'toupper($1) == wanted { $1=""; sub(/^[[:space:]]+/, ""); print; exit }' "$OUI_OVERRIDES" 2>/dev/null || true)"
+		[ -z "$vendor" ] || { printf '%s\n' "$vendor"; return 0; }
+	fi
+
+	for database in /usr/share/nmap/nmap-mac-prefixes /usr/share/nmap/nmap-mac-prefixes.txt; do
                 [ -r "$database" ] || continue
                 awk -v wanted="$prefix" 'toupper($1) == wanted { $1=""; sub(/^[[:space:]]+/, ""); print; exit }' "$database"
                 return 0
@@ -233,7 +251,7 @@ lookup_oui_vendor() {
 
 oui_type() {
         local vendor
-        vendor="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+        vendor="$(printf '%s' "$1" | tr 'A-Z' 'a-z')"
 
         if text_has "$vendor" 'synology|qnap|ixsystems|truenas'; then
                 printf 'server\n'
@@ -320,11 +338,26 @@ vendor_class="$(signal_value vendor_class)"
 user_class="$(signal_value user_class)"
 mud_url="$(signal_value mud_url)"
 supplied_hostname="$(signal_value supplied_hostname)"
+dhcp_client_id="$(signal_value client_id)"
 dhcp_text="$vendor_class $user_class $mud_url $supplied_hostname"
 
 if [ -n "$(printf '%s' "$dhcp_text" | tr -d ' ')" ]; then
         dhcp_result="$(classify_text "$dhcp_text")"
-        apply_text_result "$dhcp_result" dhcp 35
+	apply_text_result "$dhcp_result" dhcp 35
+fi
+
+wifi_generation="$(wifi_profile_value generation)"
+wifi_speed_class="$(wifi_profile_value speed)"
+if [ "$TYPE" = smart ] && mac_is_locally_administered && \
+   dhcp_client_id_matches_mac "$dhcp_client_id" && [ -n "$wifi_generation" ]; then
+	# Android/iOS и некоторые ноутбуки скрывают OUI случайным MAC. Совпадающий
+	# DHCP client-id вместе с реальной Wi-Fi association позволяет безопасно
+	# считать устройство личным, но не доказывает бренд, модель или личность. §devpas1
+	TYPE="phone"
+	TYPE_CONFIDENCE=70
+	REASON="private-address personal Wi-Fi client profile"
+	HARD_DENY=1
+	add_evidence dhcp_privacy 0
 fi
 
 if [ -n "$MDNS_PROFILE" ]; then
@@ -409,11 +442,17 @@ if [ -n "$OUI_VENDOR" ]; then
                 add_evidence oui 30
                 TYPE_CONFIDENCE=$((TYPE_CONFIDENCE + 4))
                 [ "$TYPE_CONFIDENCE" -le 99 ] || TYPE_CONFIDENCE=99
-        elif [ "$TYPE" = "smart" ] && [ "$candidate_oui_type" != "unknown" ]; then
-                TYPE="$candidate_oui_type"
-                TYPE_CONFIDENCE=65
-                REASON="device manufacturer marker"
-                add_evidence oui 30
+	elif [ "$TYPE" = "smart" ] && [ "$candidate_oui_type" != "unknown" ]; then
+		TYPE="$candidate_oui_type"
+		if [ "$candidate_oui_type" = smart_home ]; then
+			# Узкий OUI IoT-производителя достаточен для значка типа, но одного
+			# семейства по-прежнему недостаточно для «Без ограничений».
+			TYPE_CONFIDENCE=72
+		else
+			TYPE_CONFIDENCE=65
+		fi
+		REASON="device manufacturer marker"
+		add_evidence oui 30
 	elif [ "$candidate_oui_type" != "unknown" ] && [ "$candidate_oui_type" != "$TYPE" ]; then
 		add_competing_evidence oui "$candidate_oui_type" 30
         fi
@@ -478,8 +517,6 @@ elif port_open 9100 || port_open 631; then
         add_evidence ports 45
 fi
 
-wifi_generation="$(wifi_profile_value generation)"
-wifi_speed_class="$(wifi_profile_value speed)"
 if personal_device_type "$TYPE"; then
         case "$wifi_generation:$wifi_speed_class" in
                 he:*|vht:very_fast|vht:fast)

@@ -113,8 +113,8 @@ describe('Android HTTPS hardening', () => {
 
     assert.match(statusRepo, /Поддерживается только HTTPS/);
     assert.match(aiRepo, /Поддерживается только HTTPS/);
-    assert.doesNotMatch(statusRepo, /\+\=\s*"http:\/\/|mutableListOf\("http:\/\//);
-    assert.doesNotMatch(aiRepo, /\+\=\s*"http:\/\/|mutableListOf\("http:\/\//);
+    assert.doesNotMatch(statusRepo, /\+=\s*"http:\/\/|mutableListOf\("http:\/\//);
+    assert.doesNotMatch(aiRepo, /\+=\s*"http:\/\/|mutableListOf\("http:\/\//);
     assert.match(statusRepo, /ChildRouterHttps\.open/);
     assert.match(aiRepo, /ChildRouterHttps\.open/);
     assert.match(childHttps, /SHA-256/);

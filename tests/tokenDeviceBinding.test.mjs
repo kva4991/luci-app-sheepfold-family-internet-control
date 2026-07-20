@@ -1,3 +1,9 @@
+/*
+ * Проверяет, что администраторский Bearer связан не только с постоянным ID и
+ * сохранённым MAC, но и с MAC, который сам роутер наблюдает у REMOTE_ADDR.
+ * Fault-injection дополнительно защищает атомарность pairing; тест не заменяет
+ * проверку ARP/DHCP на живом роутере и физическом телефоне.
+ */
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
@@ -129,7 +135,7 @@ describe('Administrator token device binding', () => {
     const pairDevice = readProjectFile('root/usr/libexec/sheepfold/sheepfold-pair-device');
     const deviceId = readProjectFile('root/usr/libexec/sheepfold/sheepfold-device-id');
     const transactionStart = pairDevice.indexOf('pair_begin_transaction ||');
-    const isolatedUci = pairDevice.indexOf('command uci -P "$PAIR_UCI_SAVEDIR"');
+    const isolatedUci = pairDevice.indexOf('command uci -t "$PAIR_UCI_SAVEDIR" -p "$PAIR_UCI_SAVEDIR"');
     const stagedId = pairDevice.indexOf('ensure-staged "$device_section"');
     const tokenStore = pairDevice.indexOf('if ! pair_store_token; then');
     const adminGrant = pairDevice.indexOf('admin_device=1');
@@ -143,6 +149,23 @@ describe('Administrator token device binding', () => {
     assert.ok(adminGrant > tokenStore, 'administrator rights must be staged only after token storage');
     assert.ok(codeConsume > adminGrant, 'the one-time code must be consumed with the rights grant');
     assert.ok(finalCommit > codeConsume, 'rights and code consumption must share the final UCI commit');
+    assert.doesNotMatch(pairDevice, /command uci -P "\$PAIR_UCI_SAVEDIR"/);
+    assert.match(deviceId, /command uci -t "\$SHEEPFOLD_UCI_SAVEDIR" -p "\$SHEEPFOLD_UCI_SAVEDIR"/);
+    assert.doesNotMatch(deviceId, /command uci -P "\$SHEEPFOLD_UCI_SAVEDIR"/);
+    const commitVerification = pairDevice.indexOf('if ! pair_committed_state_is_valid; then');
+    const transactionComplete = pairDevice.indexOf('PAIR_TRANSACTION_ACTIVE=0', finalCommit);
+    assert.ok(commitVerification > finalCommit, 'pairing must read back the committed main UCI state');
+    assert.ok(transactionComplete > commitVerification, 'token must remain revocable until main UCI read-back succeeds');
+    const committedStateCheck = pairDevice.slice(
+      pairDevice.indexOf('pair_committed_state_is_valid()'),
+      pairDevice.indexOf('\n}\n', pairDevice.indexOf('pair_committed_state_is_valid()')) + 3,
+    );
+    assert.match(committedStateCheck, /command uci[\s\S]*admin_device/);
+    assert.match(committedStateCheck, /command uci[\s\S]*admin_login/);
+    assert.match(committedStateCheck, /command uci[\s\S]*\.mac/);
+    assert.match(committedStateCheck, /command uci[\s\S]*\.id/);
+    assert.match(committedStateCheck, /pair_committed_allowlist_has_mac/);
+    assert.match(committedStateCheck, /pairing_code/);
     assert.match(pairDevice, /PAIR_TRANSACTION_ACTIVE/);
     assert.match(pairDevice, /rm -f "\$PAIR_TOKEN_DIR\/\$PAIR_TOKEN_HASH"/);
     assert.match(pairDevice, /PAIR_RESTORE_SNAPSHOT/);
@@ -181,13 +204,19 @@ describe('Administrator token device binding', () => {
     const cgi = readProjectFile('root/www/cgi-bin/sheepfold-api');
     const apiLegacy = readProjectFile('root/usr/libexec/sheepfold/sheepfold-api-legacy');
     const aiGate = readProjectFile('root/usr/libexec/sheepfold/sheepfold-ai-gate');
+    const tokenCommon = readProjectFile('root/usr/libexec/sheepfold/sheepfold-token-common');
 
     assert.match(control, /check_token "\$\{2:-\}" "\$\{3:-\}" "\$\{4:-\}"/);
     assert.match(control, /revoke-device-tokens/);
     assert.match(cgi, /HTTP_X_SHEEPFOLD_DEVICE_ID/);
+    assert.match(cgi, /token_request_source_matches "\$client_ip" "\$client_device_mac"/);
     assert.match(cgi, /check-token "\$bearer" "\$client_device_id" "\$client_device_mac"/);
     assert.match(apiLegacy, /HTTP_X_SHEEPFOLD_DEVICE_MAC/);
+    assert.match(apiLegacy, /token_request_source_matches "\$\{REMOTE_ADDR:-\}" "\$client_device_mac"/);
     assert.match(apiLegacy, /check-token "\$bearer" "\$client_device_id" "\$client_device_mac"/);
+    assert.match(tokenCommon, /token_mac_for_ip\(\)/);
+    assert.match(tokenCommon, /\/tmp\/dhcp\.leases/);
+    assert.match(tokenCommon, /ip neigh show "\$client_ip"/);
     assert.match(aiGate, /is_admin_request "\$requested_device_id" "\$mac"/);
   });
 

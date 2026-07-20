@@ -8,7 +8,7 @@ function normalizeDomain(value) {
 	var labels;
 
 	domain = domain.replace(/^[a-z][a-z0-9+.-]*:\/\//, '');
-	domain = domain.split(/[\/?#]/)[0].replace(/:\d+$/, '');
+	domain = domain.split(/[/?#]/)[0].replace(/:\d+$/, '');
 	domain = domain.replace(/^\.+|\.+$/g, '').replace(/^www\./, '');
 	if (!domain || domain.length > 253 || /^\d+(\.\d+){3}$/.test(domain))
 		return '';

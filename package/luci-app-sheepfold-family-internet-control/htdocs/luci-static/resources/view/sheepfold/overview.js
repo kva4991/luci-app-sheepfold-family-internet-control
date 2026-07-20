@@ -20,6 +20,7 @@
 'require sheepfold.features.groups.model as groupModel';
 'require sheepfold.features.groups.view as groupView';
 'require sheepfold.features.groups.editor as groupEditor';
+'require sheepfold.features.integrations.panel as integrationPanel';
 'require sheepfold.features.logs.panel as logPanelModel';
 'require sheepfold.features.messenger.settings as messengerSettings';
 'require sheepfold.features.notifications.settings as notificationSettings';
@@ -30,12 +31,16 @@
 'require sheepfold.features.schedules.view as scheduleView';
 'require sheepfold.features.schedules.editor as scheduleEditor';
 'require sheepfold.features.settings.backup as settingsBackupModel';
+'require sheepfold.features.settings.backup-panel as settingsBackupPanelModel';
 'require sheepfold.features.settings.draft as settingsDraftModel';
 'require sheepfold.features.sites.status as siteListStatus';
+'require sheepfold.features.storage.panel as storagePanelModel';
 'require sheepfold.features.wifi.cards as wifiCards';
+'require sheepfold.features.wifi.editor as wifiEditorModel';
 'require sheepfold.features.wifi.payload as wifiPayload';
 'require sheepfold.shared.forms as sharedForms';
 'require sheepfold.shared.icons as sharedIcons';
+'require sheepfold.shared.downloads as downloads';
 
 var devices = [];
 var NOT_CONFIGURED_GROUP = 'Not configured';
@@ -77,8 +82,6 @@ var admins = [
         }
 ];
 
-var wifiNetworkEditors = [];
-var wifiIsSaving = false;
 var activeOverviewView = null;
 
 // Проверка выполняется backend-ом по /etc/shadow. До ответа работаем fail-closed:
@@ -91,9 +94,49 @@ var rootPasswordCheckFailed = false;
 var settingsDraft = settingsDraftModel.create(updateSettingsSaveButtons);
 var logPanel = logPanelModel.create({
         clear: function () { return fs.write(logCachePath(), ''); },
-        download: downloadTextFile,
+        download: downloads.textFile,
         notify: notify
 });
+var settingsBackupPanel = settingsBackupPanelModel.create({
+	payload: sheepfoldSettingsPayload,
+	apply: applyImportedPayload,
+	exportMode: function () { return settingValue('export_mode', 'safe'); },
+	resetDraft: function () { settingsDraft.reset(); },
+	notify: notify,
+	notifyCentered: notifyCentered
+});
+var storagePanel = storagePanelModel.create({
+	settingValue: settingValue,
+	setOption: setSettingsDraftOption,
+	sectionInputField: sectionInputField,
+	sectionSelectField: saveSelectSectionField,
+	divider: settingsDivider,
+	routerControl: routerControl,
+	errorText: commandErrorText,
+	infoValue: infoValue
+});
+var wifiEditor = wifiEditorModel.create({
+	setOption: function (section, option, value) { uci.set('wireless', section, option, value); },
+	unsetOption: function (section, option) { uci.unset('wireless', section, option); },
+	save: function () { return saveUciChanges(['wireless']); },
+	reload: function () {
+		return fs.exec('/sbin/wifi', ['reload']).catch(function () {
+			return fs.exec('/sbin/wifi', []);
+		});
+	},
+	confirm: function (message) { return window.confirm(message); },
+	notify: notify,
+	errorText: commandErrorText
+});
+var integrationUi = {
+	value: settingValue,
+	setOption: setSettingsDraftOption,
+	setOptions: setSettingsDraftOptions,
+	checkbox: checkboxControl,
+	sectionInput: sectionInputField,
+	divider: settingsDivider,
+	compactStatus: function () { return siteListStatus.compactPanel(); }
+};
 var tabs = [
         ['users', 'User lists'],
         ['management', 'User management'],
@@ -596,16 +639,6 @@ function refreshUserListsWithoutPageReload() {
         });
 }
 
-function actionButton(label, tone, message) {
-        return E('button', {
-                'class': 'sf-action sf-action-' + tone,
-                'click': function (ev) {
-                        ev.preventDefault();
-                        notify(message || _('This action is a visual prototype only.'), tone === 'danger' ? 'warning' : 'info');
-                }
-        }, label);
-}
-
 function routerControl(args) {
         return routerBackend.run(args);
 }
@@ -626,108 +659,12 @@ function ensureRouterControlOk(result, fallback) {
         return routerBackend.ensureOk(result, fallback || _('Action failed.'));
 }
 
-function parseKeyValueOutput(text) {
-        return routerBackend.parseKeyValues(text);
-}
-
 function commandErrorText(error, fallback) {
         return routerBackend.errorText(error, fallback || _('Action failed.'));
 }
 
-function formatPingMs(value) {
-        return routerInfo.formatPingMs(value);
-}
-
-function formatInternetProbeLine(host, pingMs) {
-        return routerInfo.probeLine(host, pingMs);
-}
-
-function internetStatusDetails(values) {
-        return routerInfo.internetDetails(values);
-}
-
-function routerInfoHasData(values) {
-        return routerInfo.hasData(values);
-}
-
-function routerControlWithTimeout(args, timeoutMs) {
-        return routerBackend.withTimeout(args, timeoutMs, _('Router command timed out.'));
-}
-
-function loadRouterInformation(force) {
-        return routerInfo.load(force);
-}
-
-function rebootRouterButton() {
-        return routerMaintenance.rebootButton(notify);
-}
-
-function updateAppButton() {
-        return routerMaintenance.updateButton(notify);
-}
-
-function updateVersionStatusText(version, status) {
-        return routerMaintenance.versionStatusText(version, status);
-}
-
-function updateAppRow() {
-        return routerMaintenance.updateRow(notify);
-}
-
 function infoValue(value, fallback) {
         return routerInfo.infoValue(value, fallback);
-}
-
-function translatedStatus(value) {
-        return routerInfo.translatedStatus(value);
-}
-
-function packageVersionStatusLabel(status) {
-        return routerInfo.packageStatus(status);
-}
-
-function formatInstalledPackageInfo(installed, version, versionStatus) {
-        return routerInfo.packageInfo(installed, version, versionStatus);
-}
-
-function informationRow(label, value) {
-        return routerInfo.row(label, value);
-}
-
-function renderWifiModulesInfo(values) {
-        return routerInfo.wifiModules(values);
-}
-
-function renderRouterInfoContent(body, values) {
-        return routerInfo.renderContent(body, values);
-}
-
-function routerInfoLoadingSpinner() {
-        return routerInfo.spinner();
-}
-
-function paintRouterInformationPanel(body, refreshButton) {
-        return routerInfo.paint(body, refreshButton);
-}
-
-function routerInformationPanel() {
-        return routerInfo.panel();
-}
-
-function downloadTextFile(filename, text) {
-        var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-        var url = window.URL.createObjectURL(blob);
-        var link = document.createElement('a');
-
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        window.setTimeout(function () {
-                window.URL.revokeObjectURL(url);
-        }, 0);
 }
 
 function backupSectionsByConfig() {
@@ -742,90 +679,6 @@ function backupSectionsByConfig() {
 
 function sheepfoldSettingsPayload(includeSecrets) {
         return settingsBackupModel.build(backupSectionsByConfig(), includeSecrets, new Date().toISOString());
-}
-
-function sheepfoldSettingsExportText(includeSecrets) {
-        return JSON.stringify(sheepfoldSettingsPayload(!!includeSecrets), null, 2) + '\n';
-}
-
-function backupErrorMessage(error) {
-        var code = error && error.message || '';
-
-        if (code === 'password_too_short')
-                return _('Use at least 12 characters for the backup password.');
-        if (code === 'conflicting_device_lists')
-                return _('The backup contains a device in both the allowlist and the blocklist.');
-        if (code === 'global_section_missing' || code === 'required_lists_missing')
-                return _('The backup does not contain the required Sheepfold sections.');
-        if (code === 'encryption_unavailable')
-                return _('This browser cannot create or open an encrypted backup.');
-        if (code === 'unencrypted_secrets_forbidden')
-                return _('A backup containing passwords or tokens must be encrypted.');
-        if (/^(invalid_|duplicate_|too_many_|option_value_|named_section_)/.test(code))
-                return _('Import file format is not recognized.');
-        return _('Could not import settings. The previous settings were kept.');
-}
-
-function exportSafeSettings() {
-        var stamp = new Date().toISOString().replace(/[:.]/g, '-');
-
-        downloadTextFile('sheepfold-settings-' + stamp + '.json', sheepfoldSettingsExportText(false));
-        notify(_('Settings export saved.'), 'info');
-}
-
-function showEncryptedSettingsExport() {
-        var password = E('input', { 'class': 'cbi-input-password', 'type': 'password', 'autocomplete': 'new-password' });
-        var repeat = E('input', { 'class': 'cbi-input-password', 'type': 'password', 'autocomplete': 'new-password' });
-        var status = E('p', { 'class': 'sf-muted' });
-        var saveButton;
-
-        saveButton = E('button', {
-                'class': 'btn cbi-button cbi-button-positive',
-                'click': function () {
-                        var stamp;
-
-                        if (password.value.length < 12) {
-                                status.textContent = _('Use at least 12 characters for the backup password.');
-                                return;
-                        }
-                        if (password.value !== repeat.value) {
-                                status.textContent = _('Backup passwords do not match.');
-                                return;
-                        }
-
-                        saveButton.disabled = true;
-                        status.textContent = _('Encrypting backup...');
-                        settingsBackupModel.encrypt(sheepfoldSettingsPayload(true), password.value).then(function (envelope) {
-                                stamp = new Date().toISOString().replace(/[:.]/g, '-');
-                                downloadTextFile('sheepfold-full-backup-' + stamp + '.json', JSON.stringify(envelope, null, 2) + '\n');
-                                password.value = '';
-                                repeat.value = '';
-                                ui.hideModal();
-                                notify(_('Encrypted full backup saved.'), 'info');
-                        }, function (error) {
-                                saveButton.disabled = false;
-                                status.textContent = backupErrorMessage(error);
-                        });
-                }
-        }, _('Create encrypted backup'));
-
-        ui.showModal(_('Encrypted full backup'), [
-                E('p', {}, _('This backup contains passwords and tokens. Keep the file and its password separately. Without the password, the backup cannot be restored.')),
-                E('label', { 'class': 'sf-field sf-field-wide' }, [E('span', {}, _('Backup password')), password]),
-                E('label', { 'class': 'sf-field sf-field-wide' }, [E('span', {}, _('Repeat backup password')), repeat]),
-                status,
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
-                        saveButton
-                ])
-        ]);
-}
-
-function exportSettingsAndUsers() {
-        if (settingValue('export_mode', 'safe') === 'encrypted')
-                showEncryptedSettingsExport();
-        else
-                exportSafeSettings();
 }
 
 function importedSectionByName(sections, name) {
@@ -932,152 +785,8 @@ function applyImportedPayload(payload) {
         });
 }
 
-function showImportConfirmation(payload) {
-        var preview;
-        var info;
-        var status = E('p', { 'class': 'sf-muted' });
-        var warnings;
-        var applyButton;
-
-        try {
-                preview = settingsBackupModel.prepareRestore(
-                        payload,
-                        settingsBackupModel.validate(sheepfoldSettingsPayload(true))
-                );
-        } catch (error) {
-                notify(backupErrorMessage(error), 'warning');
-                return;
-        }
-
-        info = settingsBackupModel.summary(preview.payload);
-        warnings = [
-                E('strong', {}, _('Existing Sheepfold settings, static DHCP leases and Wi-Fi settings will be replaced.')),
-                E('br'),
-                info.containsSecrets ?
-                        _('The encrypted backup contains secrets.') :
-                        _('This backup does not contain secrets. Existing matching secrets will be kept; missing ones must be entered again.'),
-                E('br'),
-                _('Wi-Fi may restart and temporarily disconnect this device.')
-        ];
-
-        if (preview.routerTransfer) {
-                warnings.push(E('br'));
-                warnings.push(_('This backup was created on another router or by an older Sheepfold version. Device numbers, groups, schedules and lists will be kept, but device fingerprints and administrator phone bindings will be rebuilt. Pair administrator phones again after import.'));
-        }
-
-        applyButton = E('button', {
-                'class': 'btn cbi-button cbi-button-positive',
-                'click': function () {
-                        applyButton.disabled = true;
-                        status.textContent = _('Applying backup...');
-                        applyImportedPayload(payload).then(function (result) {
-                                settingsDraft.reset();
-                                ui.hideModal();
-                                notifyCentered(_('Settings imported successfully. The page will reload.'));
-                                if (!result.servicesRefreshed)
-                                        notify(_('Settings were restored, but router services could not be refreshed.'), 'warning');
-                                window.setTimeout(function () { window.location.reload(); }, 1200);
-                        }, function (error) {
-                                applyButton.disabled = false;
-                                status.textContent = backupErrorMessage(error);
-                        });
-                }
-        }, _('Import and apply'));
-
-        ui.showModal(_('Import all settings and user list'), [
-                E('p', {}, _('The backup contains: %s devices, %s groups, %s schedules, %s administrators, %s static DHCP leases and %s Wi-Fi sections.')
-                        .replace('%s', info.devices).replace('%s', info.groups).replace('%s', info.schedules)
-                        .replace('%s', info.administrators).replace('%s', info.dhcpHosts).replace('%s', info.wifiSections)),
-                E('div', { 'class': 'sf-note sf-note-warning' }, warnings),
-                status,
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
-                        applyButton
-                ])
-        ]);
-}
-
-function showEncryptedImport(envelope) {
-        var password = E('input', { 'class': 'cbi-input-password', 'type': 'password', 'autocomplete': 'current-password' });
-        var status = E('p', { 'class': 'sf-muted' });
-        var openButton;
-
-        openButton = E('button', {
-                'class': 'btn cbi-button cbi-button-positive',
-                'click': function () {
-                        openButton.disabled = true;
-                        status.textContent = _('Decrypting backup...');
-                        settingsBackupModel.decrypt(envelope, password.value).then(function (payload) {
-                                password.value = '';
-                                showImportConfirmation(payload);
-                        }, function () {
-                                openButton.disabled = false;
-                                status.textContent = _('Could not decrypt the backup. Check the password and file.');
-                        });
-                }
-        }, _('Decrypt and check'));
-
-        ui.showModal(_('Open encrypted backup'), [
-                E('label', { 'class': 'sf-field sf-field-wide' }, [E('span', {}, _('Backup password')), password]),
-                status,
-                E('div', { 'class': 'right sf-modal-actions' }, [
-                        E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
-                        openButton
-                ])
-        ]);
-}
-
-function importSettingsAndUsers() {
-        var input = E('input', {
-                'type': 'file',
-                'accept': 'application/json,.json',
-                'change': function () {
-                        var file = input.files && input.files[0];
-                        var reader;
-
-                        if (!file)
-                                return;
-                        if (file.size > 5 * 1024 * 1024) {
-                                notify(_('The backup file is too large.'), 'warning');
-                                return;
-                        }
-
-                        reader = new FileReader();
-                        reader.onload = function () {
-                                var parsed;
-                                var payload;
-
-                                try {
-                                        parsed = JSON.parse(String(reader.result || ''));
-                                        if (parsed.format === settingsBackupModel.encryptedFormat) {
-                                                showEncryptedImport(parsed);
-                                                return;
-                                        }
-                                        payload = settingsBackupModel.validate(parsed);
-                                        if (payload.containsSecrets)
-                                                throw new Error('unencrypted_secrets_forbidden');
-                                } catch (error) {
-                                        notify(backupErrorMessage(error), 'warning');
-                                        return;
-                                }
-                                showImportConfirmation(payload);
-                        };
-                        reader.onerror = function () {
-                                notify(_('Could not read import file.'), 'warning');
-                        };
-                        reader.readAsText(file);
-                }
-        });
-
-        input.click();
-}
-
 function svgIcon(paths, attrs) {
         return sharedIcons.svg(paths, attrs);
-}
-
-function adminDeviceIcon() {
-        return sharedIcons.adminDevice(_('Admin device'));
 }
 
 function adminCrownIcon() {
@@ -1110,14 +819,6 @@ function displayDeviceType(device) {
                 device,
                 safeUciGet('sheepfold', 'global', 'detector_min_device_type_confidence', '70')
         );
-}
-
-function deviceTypeOptions() {
-        return deviceTypes.options();
-}
-
-function inferDeviceType(item, configured) {
-        return deviceTypes.infer(item, configured);
 }
 
 function deviceTypeIcon(type) {
@@ -1180,7 +881,7 @@ function loadTlsPublicKeyFingerprint() {
                 var fingerprint;
 
                 ensureRouterControlOk(result, _('Could not read the router TLS public-key fingerprint.'));
-                values = parseKeyValueOutput(result.stdout || '');
+                values = routerBackend.parseKeyValues(result.stdout || '');
                 fingerprint = String(values.fingerprint || '').trim().toLowerCase();
 
                 // QR нельзя выпускать без проверяемого 256-битного отпечатка:
@@ -1227,7 +928,7 @@ function pairingStatusForAdministrator(admin, since) {
                 admin.login || '',
                 String(since || 0)
         ]).then(function (result) {
-                return parseKeyValueOutput(result.stdout || '');
+                return routerBackend.parseKeyValues(result.stdout || '');
         });
 }
 
@@ -1451,55 +1152,6 @@ function adminSortHeader(label, key) {
         });
 }
 
-function showPairingModal(device) {
-        var routerAddress = currentRouterAddress();
-        var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
-        var apiPath = '/cgi-bin/sheepfold-api';
-        var apiUrl = 'https://' + routerAddress + ':' + port + apiPath;
-        var pairingCode = device.pairingCode || generatePairingCode();
-        ui.showModal(_('Pairing settings'), [
-                E('p', { 'class': 'spinning' }, _('Preparing secure pairing...'))
-        ]);
-        loadTlsPublicKeyFingerprint().then(function (tlsSpkiSha256) {
-                var pairingPayloadText = pairingPayload(
-                        routerAddress,
-                        port,
-                        device.adminLogin || 'SuperParent',
-                        pairingCode,
-                        tlsSpkiSha256
-                );
-
-                ui.showModal(_('Pairing settings'), [
-                E('div', { 'class': 'sf-modal-pairing' }, [
-                        E('div', { 'class': 'sf-qr-wrap' }, [
-                                qrCode(pairingPayloadText),
-                                E('p', {}, _('Scan this QR code with the Android app to connect it to this router.'))
-                        ]),
-                        E('div', { 'class': 'sf-manual-settings' }, [
-                                E('h4', {}, _('Manual setup')),
-                                settingLine(_('Router address'), routerAddress),
-                                settingLine(_('Sheepfold API URL'), apiUrl),
-                                settingLine(_('Administrator login'), device.adminLogin || 'SuperParent'),
-                                settingLine(_('Pairing code'), pairingCode),
-                                settingLine(_('Token lifetime'), _('10 minutes')),
-                                settingLine(_('QR payload'), pairingPayloadText),
-                                settingLine(_('Wi-Fi MAC check'), _('Use the real device MAC for this home Wi-Fi network.')),
-                                E('div', { 'class': 'sf-note sf-note-warning' }, _('Android must require the real device MAC for this home Wi-Fi network before continuing setup.'))
-                        ])
-                ]),
-                E('div', { 'class': 'right' }, [
-                        E('button', {
-                                'class': 'btn cbi-button',
-                                'click': ui.hideModal
-                        }, _('Close'))
-                ])
-                ]);
-        }).catch(function () {
-                ui.hideModal();
-                notify(_('Could not prepare secure pairing. Check the TLS configuration and reopen this window.'), 'warning');
-        });
-}
-
 function showAdminSettingsModal(admin) {
         var routerAddress = currentRouterAddress();
         var port = safeUciGet('sheepfold', 'global', 'app_port', '5201');
@@ -1567,16 +1219,6 @@ function showAdminSettingsModal(admin) {
         });
 }
 
-function pairingButton(device) {
-        return E('button', {
-                'class': 'sf-action sf-action-pairing',
-                'click': function (ev) {
-                        ev.preventDefault();
-                        showPairingModal(device);
-                }
-        }, [adminDeviceIcon(), E('span', {}, _('Pairing'))]);
-}
-
 function listDeviceCanBeAdded(device, targetStatus) {
         var mac = normalizeMac(device && device.mac);
 
@@ -1593,50 +1235,6 @@ function listDeviceCanBeAdded(device, targetStatus) {
                 device.status !== 'blocked' &&
                 !macInSheepfoldList('allowlist', mac) &&
                 !macInSheepfoldList('blocklist', mac);
-}
-
-function listDeviceCandidateTable(targetStatus, onSelect) {
-        var rows = devices.filter(function (device) {
-                return listDeviceCanBeAdded(device, targetStatus);
-        });
-
-        if (!rows.length)
-                return E('div', { 'class': 'sf-note sf-note-warning' }, _('No devices available to add.'));
-
-        return E('div', { 'class': 'sf-add-device-candidates' }, [
-                E('strong', {}, _('Available devices')),
-                E('table', { 'class': 'sf-quick-table sf-add-device-table' }, [
-                        E('thead', {}, [
-                                E('tr', {}, [
-                                        E('th', {}, _('ID')),
-                                        E('th', {}, _('Device')),
-                                        E('th', {}, _('IP address')),
-                                        E('th', {}, _('MAC address')),
-                                        E('th', {}, _('Actions'))
-                                ])
-                        ]),
-                        E('tbody', {}, rows.map(function (device) {
-                                return E('tr', {}, [
-                                        E('td', {}, formattedDeviceDisplayId(device)),
-                                        E('td', {}, [
-						E('strong', {}, [deviceIdentityIcon(device), E('span', {}, device.name || _('Unknown device'))]),
-                                                E('small', {}, displayGroupName(device.group))
-                                        ]),
-                                        E('td', {}, device.ip || '-'),
-                                        E('td', { 'class': 'sf-mono' }, device.mac || '-'),
-                                        E('td', {}, [
-                                                E('button', {
-                                                        'class': 'sf-action sf-action-positive',
-                                                        'click': function (ev) {
-                                                                ev.preventDefault();
-                                                                onSelect(device);
-                                                        }
-                                                }, _('Select'))
-                                        ])
-                                ]);
-                        }))
-                ])
-        ]);
 }
 
 function grantDeviceTemporaryAccess(device, minutes) {
@@ -1659,7 +1257,7 @@ function grantDeviceTemporaryAccess(device, minutes) {
         return routerControl(['device-temp-access', mac, String(duration)]).then(function (result) {
                 ensureRouterControlOk(result, _('Could not grant temporary access.'));
                 notify(_('Temporary access granted.'), 'info');
-                return load();
+                return reloadSheepfoldDeviceInventory();
         }, function (error) {
                 notify(commandErrorText(error, _('Could not grant temporary access.')), 'warning');
         });
@@ -2230,10 +1828,6 @@ function defaultGroupDisplayName(sectionId, fallback) {
 
 function noRestrictionsGroupName() {
         return defaultGroupDisplayName('no_restrictions', 'No restrictions');
-}
-
-function childGroupName() {
-        return defaultGroupDisplayName('child_1', _('First child'));
 }
 
 function personalDevicesGroupName() {
@@ -3333,18 +2927,6 @@ function deviceTable(rows, options) {
         ].concat(tableRows));
 }
 
-function field(label, value, hint) {
-        return sharedForms.field(label, value, hint);
-}
-
-function selectField(label, value, values, hint) {
-        return sharedForms.selectField(label, value, values, hint);
-}
-
-function textareaField(label, value, hint) {
-        return sharedForms.textareaField(label, value, hint);
-}
-
 function globalTextareaOptionField(label, option, defaultValue, savedMessage, errorMessage, hint, rows) {
         var textareaRows = rows || 5;
         var textarea = E('textarea', {
@@ -3369,586 +2951,6 @@ function globalTextareaOptionField(label, option, defaultValue, savedMessage, er
         ]);
 }
 
-function logStorageStatusView() {
-        var lamp = E('span', { 'class': 'sf-storage-status-lamp warn' });
-        var text = E('span', { 'class': 'sf-storage-status-text' }, _('Checking storage status...'));
-
-        function applyStatus(payload) {
-                var state = payload && payload.state ? payload.state : 'error';
-
-                lamp.className = 'sf-storage-status-lamp ' + (state === 'ok' ? 'ok' : state === 'warn' ? 'warn' : 'error');
-                text.textContent = payload && payload.message ? payload.message : _('Could not read storage status.');
-        }
-
-        function refresh() {
-                text.textContent = _('Checking storage status...');
-                lamp.className = 'sf-storage-status-lamp warn';
-
-                return routerControl(['log-storage-status']).then(function (result) {
-                        var code = Number(result && result.code || 0);
-                        var payload = null;
-
-                        if (code === 0) {
-                                try {
-                                        payload = JSON.parse(String(result.stdout || '').trim() || '{}');
-                                } catch (error) {
-                                        payload = null;
-                                }
-                        }
-
-                        applyStatus(payload || { state: 'error', message: _('Could not read storage status.') });
-                }, function () {
-                        applyStatus({ state: 'error', message: _('Could not read storage status.') });
-                });
-        }
-
-        return {
-                node: E('span', { 'class': 'sf-storage-status' }, [lamp, text]),
-                refresh: refresh
-        };
-}
-
-function parseRouterJsonOutput(result) {
-        var code = Number(result && result.code || 0);
-
-        if (code !== 0)
-                return null;
-
-        try {
-                return JSON.parse(String(result.stdout || '').trim() || '{}');
-        } catch (error) {
-                return null;
-        }
-}
-
-function formatYandexSyncAge(at) {
-        var parsed;
-
-        if (!at)
-                return '';
-
-        parsed = Date.parse(String(at).replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
-        if (isNaN(parsed))
-                return String(at);
-
-        var diffSec = Math.max(0, Math.round((Date.now() - parsed) / 1000));
-
-        if (diffSec < 60)
-                return _('just now');
-        if (diffSec < 3600)
-                return String(Math.floor(diffSec / 60)) + ' ' + _('min ago');
-        if (diffSec < 86400)
-                return String(Math.floor(diffSec / 3600)) + ' ' + _('h ago');
-
-        return String(Math.floor(diffSec / 86400)) + ' ' + _('d ago');
-}
-
-function yandexDiskMaintenancePanel() {
-        var statusNode = E('div', { 'class': 'sf-yandex-disk-actions-status sf-note' });
-        var syncStatusNode = E('div', { 'class': 'sf-yandex-disk-sync-status sf-muted' });
-        var listNode = E('div', { 'class': 'sf-yandex-disk-file-list' });
-        var backupSelect = E('select', { 'class': 'cbi-input-select sf-yandex-disk-backup-select' }, [
-                E('option', { value: '' }, _('Latest backup'))
-        ]);
-
-        function setStatus(message, tone) {
-                statusNode.textContent = message || '';
-                statusNode.className = 'sf-yandex-disk-actions-status sf-note' +
-                        (tone ? ' sf-note-' + tone : '');
-        }
-
-        function renderSyncStatus(payload) {
-                var when;
-                var line;
-
-                if (!payload) {
-                        syncStatusNode.textContent = _('Could not read Yandex Disk sync status.');
-                        syncStatusNode.className = 'sf-yandex-disk-sync-status sf-note sf-note-warning';
-                        return;
-                }
-
-                if (payload.ok === false && payload.message === 'no sync yet') {
-                        syncStatusNode.textContent = _('No sync to Yandex Disk yet.');
-                        syncStatusNode.className = 'sf-yandex-disk-sync-status sf-muted';
-                        return;
-                }
-
-                when = formatYandexSyncAge(payload.at);
-                line = _('Last Yandex Disk sync:') + ' ' + (when || infoValue(payload.at)) +
-                        (payload.message ? ' — ' + payload.message : '');
-
-                syncStatusNode.textContent = line;
-                syncStatusNode.className = 'sf-yandex-disk-sync-status sf-note' +
-                        (payload.ok ? ' sf-note-info' : ' sf-note-warning');
-        }
-
-        function refreshSyncStatus() {
-                routerControl(['yandex-disk-sync-status']).then(function (result) {
-                        renderSyncStatus(parseRouterJsonOutput(result));
-                }, function () {
-                        renderSyncStatus(null);
-                });
-        }
-
-        function populateBackupSelect(backups) {
-                var sorted = (backups || []).slice().sort(function (a, b) {
-                        return String(b.name || '').localeCompare(String(a.name || ''));
-                });
-
-                backupSelect.replaceChildren(E('option', { value: '' }, _('Latest backup')));
-                sorted.forEach(function (item) {
-                        backupSelect.appendChild(E('option', { value: item.name }, item.name));
-                });
-        }
-
-        function restoreSelectedBackup() {
-                var selected = backupSelect.value || '';
-                var confirmMessage = selected ?
-                        _('Restore Sheepfold settings from configuration backup %s on Yandex Disk?').replace('%s', selected) :
-                        _('Restore Sheepfold settings from the latest configuration backup on Yandex Disk?');
-
-                if (!window.confirm(confirmMessage))
-                        return;
-
-                setStatus(_('Restoring configuration from Yandex Disk...'));
-
-                routerControl(selected ?
-                        ['yandex-disk-restore-config', selected] :
-                        ['yandex-disk-restore-config']
-                ).then(function (result) {
-                        var payload = parseRouterJsonOutput(result);
-
-                        if (payload && payload.ok) {
-                                setStatus(
-                                        _('Configuration restored from Yandex Disk:') + ' ' +
-                                                infoValue(payload.restored),
-                                        'info'
-                                );
-                                refreshSyncStatus();
-                                window.setTimeout(function () {
-                                        window.location.reload();
-                                }, 1200);
-                                return;
-                        }
-
-                        setStatus(_('Could not restore configuration from Yandex Disk.'), 'warning');
-                }, function () {
-                        setStatus(_('Could not restore configuration from Yandex Disk.'), 'warning');
-                });
-        }
-
-        function renderFileList(payload) {
-                if (!payload || !payload.ok) {
-                        listNode.replaceChildren(E('div', { 'class': 'sf-muted' }, _('Could not read Yandex Disk file list.')));
-                        return;
-                }
-
-                populateBackupSelect(payload.backups || []);
-                listNode.replaceChildren.apply(listNode, [
-                        [_('Logs on Yandex Disk'), payload.logs || []],
-                        [_('Configuration backups on Yandex Disk'), payload.backups || []]
-                ].map(function (section) {
-                        var items = section[1];
-
-                        return E('div', { 'class': 'sf-yandex-disk-file-group' }, [
-                                E('strong', {}, section[0]),
-                                items.length ?
-                                        E('ul', {}, items.map(function (item) {
-                                                var sizeKb = Math.max(1, Math.round((item.bytes || 0) / 1024));
-
-                                                return E('li', {}, item.name + ' (' + sizeKb + ' KB)');
-                                        })) :
-                                        E('div', { 'class': 'sf-muted' }, _('No files'))
-                        ]);
-                }));
-        }
-
-        window.setTimeout(refreshSyncStatus, 0);
-
-        return E('div', { 'class': 'sf-yandex-disk-actions' }, [
-                E('div', { 'class': 'sf-toolbar sf-yandex-disk-toolbar' }, [
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        setStatus(_('Testing Yandex Disk login...'));
-
-                                        routerControl(['yandex-disk-test']).then(function (result) {
-                                                var payload = parseRouterJsonOutput(result);
-
-                                                if (payload && payload.ok)
-                                                        setStatus(payload.message || _('Yandex Disk login works.'), 'info');
-                                                else
-                                                        setStatus(_('Yandex Disk login failed.'), 'warning');
-                                        }, function () {
-                                                setStatus(_('Yandex Disk login failed.'), 'warning');
-                                        });
-                                }
-                        }, _('Test Yandex Disk login')),
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        setStatus(_('Loading file list from Yandex Disk...'));
-
-                                        routerControl(['yandex-disk-list']).then(function (result) {
-                                                var payload = parseRouterJsonOutput(result);
-
-                                                renderFileList(payload);
-                                                if (payload && payload.ok)
-                                                        setStatus(_('Yandex Disk file list updated.'), 'info');
-                                                else
-                                                        setStatus(_('Could not read Yandex Disk file list.'), 'warning');
-                                        }, function () {
-                                                setStatus(_('Could not read Yandex Disk file list.'), 'warning');
-                                        });
-                                }
-                        }, _('Show files on disk')),
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        refreshSyncStatus();
-                                }
-                        }, _('Refresh sync status'))
-                ]),
-                syncStatusNode,
-                E('div', { 'class': 'sf-yandex-disk-restore-row' }, [
-                        backupSelect,
-                        E('button', {
-                                'class': 'sf-action sf-action-positive',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        restoreSelectedBackup();
-                                }
-                        }, _('Restore configuration backup'))
-                ]),
-                statusNode,
-                listNode
-        ]);
-}
-
-function googleDiskMaintenancePanel() {
-        var statusNode = E('div', { 'class': 'sf-google-drive-actions-status sf-note' });
-        var syncStatusNode = E('div', { 'class': 'sf-google-drive-sync-status sf-muted' });
-        var listNode = E('div', { 'class': 'sf-google-drive-file-list' });
-        var backupSelect = E('select', { 'class': 'cbi-input-select sf-google-drive-backup-select' }, [
-                E('option', { value: '' }, _('Latest backup'))
-        ]);
-
-        function setStatus(message, tone) {
-                statusNode.textContent = message || '';
-                statusNode.className = 'sf-google-drive-actions-status sf-note' +
-                        (tone ? ' sf-note-' + tone : '');
-        }
-
-        function renderSyncStatus(payload) {
-                var when;
-                var line;
-
-                if (!payload) {
-                        syncStatusNode.textContent = _('Could not read Google Drive sync status.');
-                        syncStatusNode.className = 'sf-google-drive-sync-status sf-note sf-note-warning';
-                        return;
-                }
-
-                if (payload.ok === false && payload.message === 'no sync yet') {
-                        syncStatusNode.textContent = _('No sync to Google Drive yet.');
-                        syncStatusNode.className = 'sf-google-drive-sync-status sf-muted';
-                        return;
-                }
-
-                when = formatYandexSyncAge(payload.at);
-                line = _('Last Google Drive sync:') + ' ' + (when || infoValue(payload.at)) +
-                        (payload.message ? ' — ' + payload.message : '');
-
-                syncStatusNode.textContent = line;
-                syncStatusNode.className = 'sf-google-drive-sync-status sf-note' +
-                        (payload.ok ? ' sf-note-info' : ' sf-note-warning');
-        }
-
-        function refreshSyncStatus() {
-                routerControl(['google-drive-sync-status']).then(function (result) {
-                        renderSyncStatus(parseRouterJsonOutput(result));
-                }, function () {
-                        renderSyncStatus(null);
-                });
-        }
-
-        function populateBackupSelect(backups) {
-                var sorted = (backups || []).slice().sort(function (a, b) {
-                        return String(b.name || '').localeCompare(String(a.name || ''));
-                });
-
-                backupSelect.replaceChildren(E('option', { value: '' }, _('Latest backup')));
-                sorted.forEach(function (item) {
-                        backupSelect.appendChild(E('option', { value: item.name }, item.name));
-                });
-        }
-
-        function restoreSelectedBackup() {
-                var selected = backupSelect.value || '';
-                var confirmMessage = selected ?
-                        _('Restore Sheepfold settings from configuration backup %s on Google Drive?').replace('%s', selected) :
-                        _('Restore Sheepfold settings from the latest configuration backup on Google Drive?');
-
-                if (!window.confirm(confirmMessage))
-                        return;
-
-                setStatus(_('Restoring configuration from Google Drive...'));
-
-                routerControl(selected ?
-                        ['google-drive-restore-config', selected] :
-                        ['google-drive-restore-config']
-                ).then(function (result) {
-                        var payload = parseRouterJsonOutput(result);
-
-                        if (payload && payload.ok) {
-                                setStatus(
-                                        _('Configuration restored from Google Drive:') + ' ' +
-                                                infoValue(payload.restored),
-                                        'info'
-                                );
-                                refreshSyncStatus();
-                                window.setTimeout(function () {
-                                        window.location.reload();
-                                }, 1200);
-                                return;
-                        }
-
-                        setStatus(_('Could not restore configuration from Google Drive.'), 'warning');
-                }, function () {
-                        setStatus(_('Could not restore configuration from Google Drive.'), 'warning');
-                });
-        }
-
-        function renderFileList(payload) {
-                if (!payload || !payload.ok) {
-                        listNode.replaceChildren(E('div', { 'class': 'sf-muted' }, _('Could not read Google Drive file list.')));
-                        return;
-                }
-
-                populateBackupSelect(payload.backups || []);
-                listNode.replaceChildren.apply(listNode, [
-                        [_('Logs on Google Drive'), payload.logs || []],
-                        [_('Configuration backups on Google Drive'), payload.backups || []]
-                ].map(function (section) {
-                        var items = section[1];
-
-                        return E('div', { 'class': 'sf-google-drive-file-group' }, [
-                                E('strong', {}, section[0]),
-                                items.length ?
-                                        E('ul', {}, items.map(function (item) {
-                                                var sizeKb = Math.max(1, Math.round((item.bytes || 0) / 1024));
-
-                                                return E('li', {}, item.name + ' (' + sizeKb + ' KB)');
-                                        })) :
-                                        E('div', { 'class': 'sf-muted' }, _('No files'))
-                        ]);
-                }));
-        }
-
-        window.setTimeout(refreshSyncStatus, 0);
-
-        return E('div', { 'class': 'sf-google-drive-actions' }, [
-                E('div', { 'class': 'sf-toolbar sf-google-drive-toolbar' }, [
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        setStatus(_('Testing Google Drive authorization...'));
-
-                                        routerControl(['google-drive-test']).then(function (result) {
-                                                var payload = parseRouterJsonOutput(result);
-
-                                                if (payload && payload.ok)
-                                                        setStatus(payload.message || _('Google Drive authorization works.'), 'info');
-                                                else
-                                                        setStatus(_('Google Drive authorization failed.'), 'warning');
-                                        }, function () {
-                                                setStatus(_('Google Drive authorization failed.'), 'warning');
-                                        });
-                                }
-                        }, _('Test Google Drive authorization')),
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        setStatus(_('Loading file list from Google Drive...'));
-
-                                        routerControl(['google-drive-list']).then(function (result) {
-                                                var payload = parseRouterJsonOutput(result);
-
-                                                renderFileList(payload);
-                                                if (payload && payload.ok)
-                                                        setStatus(_('Google Drive file list updated.'), 'info');
-                                                else
-                                                        setStatus(_('Could not read Google Drive file list.'), 'warning');
-                                        }, function () {
-                                                setStatus(_('Could not read Google Drive file list.'), 'warning');
-                                        });
-                                }
-                        }, _('Show files on disk')),
-                        E('button', {
-                                'class': 'sf-action sf-action-neutral',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        refreshSyncStatus();
-                                }
-                        }, _('Refresh sync status'))
-                ]),
-                syncStatusNode,
-                E('div', { 'class': 'sf-google-drive-restore-row' }, [
-                        backupSelect,
-                        E('button', {
-                                'class': 'sf-action sf-action-positive',
-                                'click': function (ev) {
-                                        ev.preventDefault();
-                                        restoreSelectedBackup();
-                                }
-                        }, _('Restore configuration backup'))
-                ]),
-                statusNode,
-                listNode
-        ]);
-}
-
-function logStorageLocationField() {
-        var currentValue = settingValue('log_storage', 'ram');
-        var statusView = logStorageStatusView();
-        var yandexBlock = E('div', { 'class': 'sf-yandex-disk-settings' });
-        var googleBlock = E('div', { 'class': 'sf-google-drive-settings' });
-        var select;
-
-        function syncVisibility() {
-                yandexBlock.hidden = select.value === 'yandex_disk' ? null : 'hidden';
-                googleBlock.hidden = select.value === 'google_drive' ? null : 'hidden';
-                statusView.refresh();
-        }
-
-        select = E('select', {
-                'class': 'cbi-input-select',
-                'change': function (ev) {
-                        setSettingsDraftOption('log_storage', ev.currentTarget.value);
-                        syncVisibility();
-                }
-        }, [
-                ['ram', _('RAM, router operational memory, cleared on reboot (recommended)')],
-                ['usb', _('USB flash drive')],
-                ['yandex_disk', _('Yandex Disk')],
-                ['google_drive', _('Google Drive')]
-        ].map(function (item) {
-                return E('option', {
-                        'value': item[0],
-                        'selected': item[0] === currentValue ? 'selected' : null
-                }, item[1]);
-        }));
-
-        yandexBlock.appendChild(settingsDivider(_('Yandex Disk settings')));
-        yandexBlock.appendChild(sectionInputField(
-                'cloud',
-                _('Yandex Disk login'),
-                'login',
-                '',
-                'login@yandex.ru',
-                _('Use an app password from Yandex ID security settings.')
-        ));
-        yandexBlock.appendChild(sectionInputField(
-                'cloud',
-                _('Yandex Disk password'),
-                'password',
-                '',
-                '',
-                _('Use an app password from Yandex ID security settings.'),
-                true
-        ));
-        yandexBlock.appendChild(sectionInputField(
-                'cloud',
-                _('Root folder on disk for Sheepfold'),
-                'root_folder',
-                '/sheepfold',
-                '/sheepfold'
-        ));
-        yandexBlock.appendChild(saveSelectSectionField(
-                'cloud',
-                _('Allowed storage for Sheepfold data'),
-                'quota_mb',
-                '500',
-                [
-                        ['50', _('50 MB')],
-                        ['100', _('100 MB')],
-                        ['250', _('250 MB')],
-                        ['500', _('500 MB')],
-                        ['1024', _('1 GB')]
-                ],
-                _('Sheepfold uploads journals, rotated archives and configuration backups within this limit.')
-        ));
-        yandexBlock.appendChild(yandexDiskMaintenancePanel());
-
-        googleBlock.appendChild(settingsDivider(_('Google Drive settings')));
-        googleBlock.appendChild(sectionInputField(
-                'gdrive',
-                _('Google OAuth client ID'),
-                'client_id',
-                '',
-                '',
-                _('Create an OAuth client in Google Cloud Console (Desktop app type).')
-        ));
-        googleBlock.appendChild(sectionInputField(
-                'gdrive',
-                _('Google OAuth client secret'),
-                'client_secret',
-                '',
-                '',
-                _('Optional for some clients, but usually required for refresh-token exchange.'),
-                true
-        ));
-        googleBlock.appendChild(sectionInputField(
-                'gdrive',
-                _('Google OAuth refresh token'),
-                'refresh_token',
-                '',
-                '',
-                _('Obtain once on a PC and paste here. Sheepfold stores it only on the router.'),
-                true
-        ));
-        googleBlock.appendChild(sectionInputField(
-                'gdrive',
-                _('Root folder on disk for Sheepfold'),
-                'root_folder',
-                '/sheepfold',
-                '/sheepfold'
-        ));
-        googleBlock.appendChild(saveSelectSectionField(
-                'gdrive',
-                _('Allowed storage for Sheepfold data'),
-                'quota_mb',
-                '500',
-                [
-                        ['50', _('50 MB')],
-                        ['100', _('100 MB')],
-                        ['250', _('250 MB')],
-                        ['500', _('500 MB')],
-                        ['1024', _('1 GB')]
-                ],
-                _('Sheepfold uploads journals, rotated archives and configuration backups within this limit.')
-        ));
-        googleBlock.appendChild(googleDiskMaintenancePanel());
-
-        syncVisibility();
-
-        return E('div', { 'class': 'sf-log-storage-field-wrap' }, [
-                E('label', { 'class': 'sf-field sf-field-wide sf-log-storage-field' }, [
-                        E('span', {}, _('Log storage location')),
-                        E('div', { 'class': 'sf-log-storage-row' }, [
-                                select,
-                                statusView.node
-                        ])
-                ]),
-                yandexBlock,
-                googleBlock
-        ]);
-}
 
 function cachePathField() {
         var currentValue = settingValue('log_cache_path', defaultLogCachePath) || defaultLogCachePath;
@@ -4547,71 +3549,6 @@ function globalFlagOptionField(label, option, defaultValue, hint) {
         return control.node;
 }
 
-function integrationUsesPodkop(mode) {
-        return mode === 'podkop' || mode === 'adguard_podkop';
-}
-
-function updateRouterIpv6Control(mode) {
-        var forced = integrationUsesPodkop(mode);
-
-        document.querySelectorAll('[data-router-ipv6-control]').forEach(function (input) {
-                input.checked = forced || settingValue('router_ipv6_disabled', '0') === '1';
-                input.disabled = forced;
-        });
-        document.querySelectorAll('[data-router-ipv6-note]').forEach(function (note) {
-                note.textContent = forced ?
-                        _('IPv6 is disabled automatically because the selected integration uses Podkop.') :
-                        _('Current Podkop releases do not provide complete IPv6 support. Enable this manually only when it is needed without Podkop.');
-        });
-}
-
-function syncRouterIpv6DraftForIntegration(mode) {
-        var current = settingValue('router_ipv6_disabled', '0');
-        var source = settingValue('router_ipv6_mode_source', 'default');
-
-        if (integrationUsesPodkop(mode)) {
-                if (current !== '1')
-                        setSettingsDraftOptions({
-                                router_ipv6_disabled: '1',
-                                router_ipv6_mode_source: 'auto_podkop'
-                        });
-                else if (source === 'default')
-                        setSettingsDraftOption('router_ipv6_mode_source', 'auto_podkop');
-        } else if (source === 'auto_podkop') {
-                setSettingsDraftOptions({
-                        router_ipv6_disabled: '0',
-                        router_ipv6_mode_source: 'default'
-                });
-        }
-
-        updateRouterIpv6Control(mode);
-}
-
-function routerIpv6Field() {
-        var mode = settingValue('integration_mode', 'none');
-        var forced = integrationUsesPodkop(mode);
-        var control = checkboxControl(
-                _('Disable IPv6 on the router'),
-                forced || settingValue('router_ipv6_disabled', '0') === '1',
-                null,
-                {
-                        'data-router-ipv6-control': '1',
-                        'disabled': forced ? 'disabled' : null,
-                        'change': function (ev) {
-                                setSettingsDraftOptions({
-                                        router_ipv6_disabled: ev.currentTarget.checked ? '1' : '0',
-                                        router_ipv6_mode_source: 'manual'
-                                });
-                        }
-                }
-        );
-
-        control.node.appendChild(E('small', { 'data-router-ipv6-note': '1' }, forced ?
-                _('IPv6 is disabled automatically because the selected integration uses Podkop.') :
-                _('Current Podkop releases do not provide complete IPv6 support. Enable this manually only when it is needed without Podkop.')));
-        return control.node;
-}
-
 function sectionFlagOptionField(section, label, option, defaultValue, hint) {
         var control = checkboxControl(label, sectionSettingValue(section, option, defaultValue || '0') === '1', hint, {
                 'change': function (ev) {
@@ -4719,95 +3656,6 @@ function globalInputOptionField(label, option, defaultValue, placeholder, hint, 
         ]);
 }
 
-function siteFilteringIntegrationBox() {
-        var container = E('div', { 'class': 'sf-site-filter-settings' });
-
-        function rebuild() {
-                var backend = settingValue('site_filter_backend', 'auto');
-                var autoManage = settingValue('adguard_auto_manage', '1') === '1';
-                var backendSelect = E('select', {
-                        'class': 'cbi-input-select',
-                        'change': function (ev) {
-                                setSettingsDraftOption('site_filter_backend', ev.currentTarget.value);
-                                rebuild();
-                        }
-                }, [
-                        ['auto', _('Automatically (recommended)')],
-                        ['adguard', 'AdGuard Home'],
-                        ['sheepfold', _('Built-in Sheepfold tools')]
-                ].map(function (item) {
-                        return E('option', {
-                                'value': item[0],
-                                'selected': item[0] === backend ? 'selected' : null
-                        }, item[1]);
-                }));
-                var autoManageControl = checkboxControl(
-                        _('Automatic AdGuard Home management'),
-                        autoManage,
-                        _('Sheepfold adds and updates only its own filter. User filters and AdGuard Home settings are not overwritten.'),
-                        {
-                                'change': function (ev) {
-                                        setSettingsDraftOption('adguard_auto_manage', ev.currentTarget.checked ? '1' : '0');
-                                        rebuild();
-                                }
-                        }
-                );
-                var fields = [
-                        E('div', { 'class': 'sf-filter-backend-row' }, [
-                                E('label', { 'class': 'sf-field sf-field-wide sf-filter-backend-control' }, [
-                                        E('span', {}, _('Site filtering is performed through')),
-                                        backendSelect,
-                                        E('small', {}, _('Automatic mode uses AdGuard Home only when it is selected in the integration chain and Sheepfold confirms the managed filter. Otherwise the built-in filtering is used.'))
-                                ]),
-                                siteListStatus.compactPanel()
-                        ]),
-                        autoManageControl.node
-                ];
-
-                if (backend !== 'sheepfold' && autoManage) {
-                        fields.push(
-                                E('div', { 'class': 'sf-grid two sf-adguard-credentials' }, [
-                                        sectionInputField(
-                                                'adguard',
-                                                _('AdGuard Home address'),
-                                                'url',
-                                                'http://127.0.0.1:3000',
-                                                'http://127.0.0.1:3000',
-                                                _('Use the local AdGuard Home administration address without /control at the end.'),
-                                                false
-                                        ),
-                                        sectionInputField(
-                                                'adguard',
-                                                _('AdGuard Home username'),
-                                                'username',
-                                                '',
-                                                _('Optional'),
-                                                _('Leave both credential fields empty only when the local AdGuard Home API has no authentication.'),
-                                                false
-                                        ),
-                                        sectionInputField(
-                                                'adguard',
-                                                _('AdGuard Home password'),
-                                                'password',
-                                                '',
-                                                '',
-                                                _('The password is used only by the router for local API calls and is never shown in status output.'),
-                                                true
-                                        )
-                                ])
-                        );
-                } else if (!autoManage && backend !== 'sheepfold') {
-                        fields.push(E('p', { 'class': 'sf-note sf-note-warning' },
-                                _('Automatic management is off. Sheepfold will not change AdGuard Home and cannot confirm manually configured lists.')));
-                }
-
-                container.replaceChildren.apply(container, fields);
-        }
-
-        rebuild();
-        return container;
-}
-
 function appPortField() {
         var currentValue = settingValue('app_port', '5201');
         var input = E('input', {
@@ -4842,7 +3690,7 @@ function messengerSettingsBox() {
                 },
                 icon: iconSvg,
                 routerControl: routerControl,
-                parseOutput: parseKeyValueOutput,
+                parseOutput: routerBackend.parseKeyValues,
                 errorText: commandErrorText,
                 notify: notify,
                 changed: markSettingsDraftChanged,
@@ -5121,14 +3969,6 @@ function iconButton(title, icon, tone, handler) {
         return sharedIcons.button(title, icon, tone, handler);
 }
 
-function wifiQrEscape(value) {
-        return wifiPayload.escape(value);
-}
-
-function wifiQrSecurity(encryption) {
-        return wifiPayload.security(encryption);
-}
-
 function wifiQrPayload(ssid, password, encryption) {
         return wifiPayload.build(ssid, password, encryption);
 }
@@ -5161,10 +4001,6 @@ function normalizeMac(mac) {
 
 function listOptionValues(value) {
         return deviceInventory.listValues(value);
-}
-
-function sheepfoldListMacs(listName) {
-        return deviceInventory.listMacs(safeUciSections('sheepfold', 'list'), listName);
 }
 
 function macInSheepfoldList(listName, mac) {
@@ -5392,126 +4228,6 @@ function readWifiNetworksFromUci() {
         return wifiCards.readNetworks(safeUciSections('wireless', 'wifi-iface'), safeUciGet);
 }
 
-function clearWifiNetworkEditors() {
-        wifiNetworkEditors = [];
-}
-
-function wifiEditorSnapshot(editor) {
-        return wifiCards.editorSnapshot(editor);
-}
-
-function wifiEditorIsDirty(editor) {
-        return wifiCards.editorIsDirty(editor);
-}
-
-function updateWifiSaveButton() {
-        var dirty = wifiNetworkEditors.some(function (editor) {
-                return wifiEditorIsDirty(editor);
-        });
-
-        document.querySelectorAll('[data-wifi-save]').forEach(function (button) {
-                button.disabled = wifiIsSaving ? true : (!dirty ? true : null);
-                button.classList.toggle('sf-action-muted', !dirty);
-        });
-}
-
-function registerWifiNetworkEditor(editor) {
-        wifiNetworkEditors.push(editor);
-
-        editor.ssidInput.addEventListener('input', updateWifiSaveButton);
-        editor.passwordInput.addEventListener('input', updateWifiSaveButton);
-        editor.securitySelect.addEventListener('change', updateWifiSaveButton);
-        editor.channelSelect.addEventListener('change', updateWifiSaveButton);
-        editor.enabledInput.addEventListener('change', updateWifiSaveButton);
-}
-
-function saveWifiNetworksNow() {
-	var radiosToEnable = {};
-	var turnsWifiOff;
-
-        if (wifiIsSaving || !wifiNetworkEditors.length)
-                return Promise.resolve();
-
-	turnsWifiOff = wifiNetworkEditors.some(function (editor) {
-		return editor.original.enabled && !wifiEditorSnapshot(editor).enabled;
-	});
-	if (turnsWifiOff && !window.confirm(_('One or more Wi-Fi networks will be turned off. The current wireless connection may be lost. Continue?')))
-		return Promise.resolve();
-
-        wifiIsSaving = true;
-        updateWifiSaveButton();
-
-	wifiNetworkEditors.forEach(function (editor) {
-		if (editor.device && editor.radioDisabled && wifiEditorSnapshot(editor).enabled)
-			radiosToEnable[editor.device] = true;
-	});
-
-        wifiNetworkEditors.forEach(function (editor) {
-                var snapshot = wifiEditorSnapshot(editor);
-                var encryption = snapshot.encryption;
-
-                if (!editor.sectionName)
-                        return;
-
-                uci.set('wireless', editor.sectionName, 'ssid', snapshot.ssid);
-                uci.set('wireless', editor.sectionName, 'encryption', encryption);
-		if (snapshot.enabled !== editor.original.enabled || radiosToEnable[editor.device]) {
-			if (snapshot.enabled)
-				uci.unset('wireless', editor.sectionName, 'disabled');
-			else
-				uci.set('wireless', editor.sectionName, 'disabled', '1');
-		}
-
-                if (encryption === 'none')
-                        uci.unset('wireless', editor.sectionName, 'key');
-                else
-                        uci.set('wireless', editor.sectionName, 'key', snapshot.password);
-
-                if (editor.device)
-                        uci.set('wireless', editor.device, 'channel', snapshot.channel || 'auto');
-        });
-
-	// Если радио было выключено целиком, одного снятия disabled с wifi-iface
-	// недостаточно. При его включении явно сохраняем OFF у соседних AP, чтобы
-	// они не поднялись вместе с radio, но при обычном сохранении их UCI не трогаем. §wifitgl1
-	Object.keys(radiosToEnable).forEach(function (device) {
-		uci.unset('wireless', device, 'disabled');
-	});
-
-        return saveUciChanges(['wireless']).then(function () {
-                return fs.exec('/sbin/wifi', ['reload']).catch(function () {
-                        return fs.exec('/sbin/wifi', []);
-                });
-        }).then(function () {
-                wifiNetworkEditors.forEach(function (editor) {
-                        editor.original = wifiEditorSnapshot(editor);
-			if (editor.device && radiosToEnable[editor.device])
-				editor.radioDisabled = false;
-                });
-                notify(_('Wi-Fi settings saved.'), 'info');
-        }, function (error) {
-                notify(_('Could not save Wi-Fi settings.') + ' ' + commandErrorText(error, ''), 'warning');
-                return Promise.reject(error);
-        }).finally(function () {
-                wifiIsSaving = false;
-                updateWifiSaveButton();
-        });
-}
-
-function wifiSaveBar() {
-        return E('div', { 'class': 'sf-wifi-save-bar' }, [
-                E('button', {
-                        'class': 'sf-action sf-action-positive sf-action-nowrap sf-action-muted',
-                        'data-wifi-save': '1',
-                        'disabled': 'disabled',
-                        'click': function (ev) {
-                                ev.preventDefault();
-                                saveWifiNetworksNow();
-                        }
-                }, _('Save'))
-        ]);
-}
-
 function wifiNetworkCardColor(index) {
         var palette = groupColorPalette();
 
@@ -5522,7 +4238,7 @@ function wifiNetworkBox(network, index) {
         return wifiCards.networkBox(network, index, {
                 qrPayload: wifiQrPayload,
                 qrCode: qrCode,
-                registerEditor: registerWifiNetworkEditor,
+                registerEditor: wifiEditor.register,
                 cardColor: wifiNetworkCardColor,
                 title: wifiNetworkTitle
         });
@@ -5741,7 +4457,7 @@ return view.extend({
                 });
 
                 if (tab === 'info' && routerInfo.status() !== 'loading')
-                        loadRouterInformation(routerInfo.status() !== 'ready').catch(function () {});
+                        routerInfo.load(routerInfo.status() !== 'ready').catch(function () {});
         },
 
         renderSettingsTabRow: function (tabs, extraClass) {
@@ -6001,7 +4717,7 @@ return view.extend({
         renderWifi: function () {
                 var networks = this.readWifiNetworks();
 
-                clearWifiNetworkEditors();
+                wifiEditor.clear();
 
                 return E('div', { 'class': 'sf-panel' }, [
                         networks.length ?
@@ -6009,72 +4725,12 @@ return view.extend({
                                         return wifiNetworkBox(network, index);
                                 })) :
                                 E('div', { 'class': 'sf-note sf-note-warning' }, _('No active Wi-Fi networks were found in the router wireless config.')),
-                        networks.length ? wifiSaveBar() : ''
+                        networks.length ? wifiEditor.saveBar() : ''
                 ]);
-        },
-
-        integrationModeNotes: function (mode) {
-                var notes = {
-                        none: _('Sheepfold works alone.'),
-                        adguard: _('Sheepfold blocks/allows devices before AdGuard Home DNS filtering.'),
-                        podkop: _('Sheepfold must not overwrite Podkop-managed routing, Dnsmasq, nftables, or sing-box state.'),
-                        adguard_podkop: _('Recommended chain: Sheepfold -> AdGuard Home -> Podkop.')
-                };
-
-                return notes[mode] || notes.none;
         },
 
         renderIntegrations: function () {
-                var self = this;
-                var mode = settingValue('integration_mode', 'none');
-                var modeNote = E('span', {}, this.integrationModeNotes(mode));
-                var modeSelect = E('select', {
-                        'class': 'cbi-input-select',
-                        'change': function (ev) {
-                                var nextMode = ev.currentTarget.value;
-
-                                 setSettingsDraftOptions({
-                                         integration_mode: nextMode,
-                                         integration_mode_source: 'manual',
-                                         integration_mode_user_set: '1'
-                                 });
-                                 syncRouterIpv6DraftForIntegration(nextMode);
-                                 modeNote.textContent = self.integrationModeNotes(nextMode);
-                        }
-                }, [
-                        ['none', _('None')],
-                        ['adguard', 'AdGuard Home'],
-                        ['podkop', 'Podkop'],
-                        ['adguard_podkop', 'AdGuard Home + Podkop']
-                ].map(function (item) {
-                        return E('option', { 'value': item[0], 'selected': item[0] === mode ? 'selected' : null }, item[1]);
-                }));
-
-                return E('div', { 'class': 'sf-settings-section' }, [
-                        E('div', { 'class': 'sf-form-row' }, [
-                                E('label', { 'class': 'sf-field sf-field-wide' }, [
-                                        E('span', {}, _('Use together with')),
-                                        modeSelect,
-                                        E('small', {}, _('Auto-detected during installation. You can change it manually if needed.'))
-                                ])
-                        ]),
-                        E('div', { 'class': 'sf-grid two' }, [
-                                E('div', { 'class': 'sf-box sf-status-card' }, [
-                                        E('h4', {}, _('AdGuard Home status')),
-                                        E('p', {}, _('AdGuard Home filters DNS requests after Sheepfold allows a device. It helps block ads, trackers, and unwanted domains.'))
-                                ]),
-                                E('div', { 'class': 'sf-box sf-status-card' }, [
-                                        E('h4', {}, _('Podkop status')),
-                                        E('p', {}, _('Podkop routes already allowed traffic according to its own routing rules. Sheepfold does not change Podkop routes, marks, or sing-box settings.'))
-                                ])
-                        ]),
-                        E('div', { 'class': 'sf-note' }, [
-                                E('strong', {}, _('Mode notes')),
-                                modeNote
-                        ]),
-			settingsDivider(_('Site filtering')),
-			siteFilteringIntegrationBox()
-                ]);
+		return integrationPanel.render(integrationUi);
         },
 
         renderBot: function () {
@@ -6154,7 +4810,7 @@ return view.extend({
                 return E('div', { 'class': 'sf-flat-form' }, [
                         E('p', { 'class': 'sf-note' },
                                 _('Store journals in RAM to protect router flash memory. USB, Yandex Disk, or Google Drive can archive rotated logs and configuration backups when configured.')),
-                        logStorageLocationField(),
+                        storagePanel.render(),
                         cachePathField(),
                         saveSelectGlobalField(_('Log retention on router'), 'log_retention', '3d', [
                                 ['1d', _('1 day')],
@@ -6201,7 +4857,7 @@ return view.extend({
                         settingsDivider(_('Router time and NTP')),
                          routerTimeSettingsField(),
                          settingsDivider(_('Network compatibility')),
-                         routerIpv6Field(),
+                         integrationPanel.ipv6Field(integrationUi),
                          settingsDivider(_('WPS button')),
                         wpsActionField(_('WPS short button press'), 'wps_short_press_action'),
                         wpsActionField(_('WPS long button press'), 'wps_long_press_action'),
@@ -6240,18 +4896,18 @@ return view.extend({
                                         'class': 'sf-action sf-action-neutral',
                                         'click': function (ev) {
                                                 ev.preventDefault();
-                                                importSettingsAndUsers();
+                                                settingsBackupPanel.importAll();
                                         }
                                 }, _('Import all settings and user list')),
                                 E('button', {
                                         'class': 'sf-action sf-action-neutral',
                                         'click': function (ev) {
                                                 ev.preventDefault();
-                                                exportSettingsAndUsers();
+                                                settingsBackupPanel.exportAll();
                                         }
                                 }, _('Export all settings and user list')),
-                                updateAppRow(),
-                                rebootRouterButton()
+                                routerMaintenance.updateRow(notify),
+                                routerMaintenance.rebootButton(notify)
                         ])
                 ]);
         },
@@ -6281,7 +4937,7 @@ return view.extend({
                         ]),
                         E('div', { 'class': 'sf-settings-tabs-separator', 'aria-hidden': 'true' }),
                         settingsSaveBar(true),
-                        this.renderSettingsPanel('info', routerInformationPanel()),
+                        this.renderSettingsPanel('info', routerInfo.panel()),
                         this.renderSettingsPanel('general', this.renderSettingsGeneral()),
                         this.renderSettingsPanel('integrations', this.renderIntegrations()),
                         this.renderSettingsPanel('messenger', this.renderBot()),

@@ -15,6 +15,7 @@ SERVICE="$(path /usr/libexec/sheepfold/sheepfold-service)"
 DEVICE_DETECTOR="$(path /usr/libexec/sheepfold/sheepfold-device-detector)"
 DEVICE_ID="$(path /usr/libexec/sheepfold/sheepfold-device-id)"
 DEVICE_CLASSIFIER="$(path /usr/libexec/sheepfold/sheepfold-device-classifier)"
+DEVICE_OUI_OVERRIDES="$(path /usr/share/sheepfold/device-oui-overrides)"
 DEVICE_MDNS="$(path /usr/libexec/sheepfold/sheepfold-device-mdns)"
 DEVICE_MDNS_UCODE="$(path /usr/share/sheepfold/device-mdns.uc)"
 DEVICE_SSDP="$(path /usr/libexec/sheepfold/sheepfold-device-ssdp)"
@@ -79,7 +80,7 @@ CUDY_FIX_UNINSTALL="$CUDY_PROFILE/fixLed/uninstall"
 
 for required in \
     "$CGI" "$CGI_LEGACY" "$CONTROL" "$CONTROL_LEGACY" "$CLIENT_STATUS" \
-    "$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_MDNS" \
+	"$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS" \
     "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP" "$DEVICE_SSDP_UCODE" "$DEVICE_UPNP_DESCRIPTION" "$DEVICE_WSD" "$DEVICE_WSD_UCODE" "$DEVICE_IDENTITY" "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" \
     "$DHCP_SIGNALS" "$LED_CONTROL" "$IPV6_CONTROL" "$PACKAGE_MANAGER" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
 	"$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$API_RATE_LIMIT" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$SIM_MONITOR" "$CHILD_WIFI_MONITOR" "$TLS_FINGERPRINT" "$HASH_COMMON" "$LOCK_COMMON" \
@@ -106,7 +107,7 @@ for executable in \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
-chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$ACL" "$PRIVACY_NOTICE" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
+chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$ACL" "$PRIVACY_NOTICE" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
     "$COUNTRY_PROFILE_RU" "$COUNTRY_PROFILE_BY" "$COUNTRY_PROFILE_CN" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND"
 
 mkdir -p "$(path /etc/sheepfold/tokens)"
@@ -153,6 +154,14 @@ block_checks="$(grep -c 'pair_list_has_mac blocklist' "$PAIR_DEVICE" || true)"
 ! grep -q 'remove.*blocklist\|delete.*blocklist' "$PAIR_DEVICE" || die "pairing can mutate blocklist"
 grep -q 'pair_store_token' "$PAIR_DEVICE" || die "successful pairing does not store a token hash"
 grep -q 'PAIR_UCI_SAVEDIR' "$PAIR_DEVICE" || die "pairing does not isolate its UCI delta"
+grep -q 'uci -t "\$PAIR_UCI_SAVEDIR" -p "\$PAIR_UCI_SAVEDIR"' "$PAIR_DEVICE" || \
+    die "pairing does not separate UCI delta writes from the main config commit"
+! grep -q 'uci -P "\$PAIR_UCI_SAVEDIR"' "$PAIR_DEVICE" || \
+    die "pairing uses -P and can commit only into the disposable UCI directory"
+grep -q 'uci -t "\$SHEEPFOLD_UCI_SAVEDIR" -p "\$SHEEPFOLD_UCI_SAVEDIR"' "$DEVICE_ID" || \
+    die "staged device ID does not share the safe pairing UCI transaction"
+grep -q 'pair_committed_state_is_valid' "$PAIR_DEVICE" || \
+    die "pairing does not verify the main UCI config before returning a token"
 grep -q 'ensure-staged' "$PAIR_DEVICE" || die "pairing device ID is committed before the transaction"
 grep -q 'ensure-staged)' "$DEVICE_ID" || die "staged device ID allocation is unavailable"
 grep -q 'pair_restore_snapshot' "$PAIR_DEVICE" || die "pairing has no commit-failure recovery"
@@ -215,6 +224,7 @@ detector_policy="$(sed -n 's/^POLICY_VERSION="\([^"]*\)"/\1/p' "$DEVICE_DETECTOR
     die "device classifier and detector policy versions differ"
 grep -q 'EVIDENCE_COUNT' "$DEVICE_CLASSIFIER" || die "independent evidence counting is missing"
 grep -q 'nmap-mac-prefixes' "$DEVICE_CLASSIFIER" || die "local OUI lookup is missing"
+grep -q '^FC671F Tuya Smart Inc\.$' "$DEVICE_OUI_OVERRIDES" || die "supplemental OUI database is invalid"
 grep -q 'mdns_has' "$DEVICE_CLASSIFIER" || die "mDNS evidence handling is missing"
 grep -q 'ucode "\$UCODE_SOURCE"' "$DEVICE_MDNS" || die "mDNS shell wrapper does not invoke ucode safely"
 grep -q 'ubus.call("umdns", "browse"' "$DEVICE_MDNS_UCODE" || die "mDNS reader does not use the OpenWrt browse API"

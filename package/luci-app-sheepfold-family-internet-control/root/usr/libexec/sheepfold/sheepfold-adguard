@@ -756,7 +756,7 @@ sort_unique_file() {
 }
 
 normalize_mac() {
-	printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+	printf '%s' "$1" | tr 'a-z' 'A-Z'
 }
 
 collect_policy_clients() {
@@ -842,7 +842,7 @@ collect_emergency_domains() {
 	for section in $sections; do
 		[ "$(uci_get "sheepfold.$section.enabled" 1)" = 1 ] || continue
 		domain="$(uci_get "sheepfold.$section.domain" '')"
-		domain="$(printf '%s' "$domain" | tr '[:upper:]' '[:lower:]')"
+		domain="$(printf '%s' "$domain" | tr 'A-Z' 'a-z')"
 		valid_domain "$domain" && append_unique "$output" "$domain"
 	done
 	sort_unique_file "$output"

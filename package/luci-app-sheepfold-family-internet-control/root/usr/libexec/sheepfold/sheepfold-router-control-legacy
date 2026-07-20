@@ -142,7 +142,7 @@ valid_posix_timezone() {
 
 # Нормализует MAC в верхний регистр и проверяет формат XX:XX:XX:XX:XX:XX.
 normalize_mac() {
-        printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+        printf '%s' "$1" | tr 'a-z' 'A-Z'
 }
 
 valid_mac() {
@@ -266,7 +266,7 @@ device_section_for_mac() {
 
         # Генерируем имя секции из MAC без двоеточий.
         local section
-        section="device_$(printf '%s' "$mac" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+        section="device_$(printf '%s' "$mac" | tr -d ':' | tr 'A-Z' 'a-z')"
         uci -q get "sheepfold.$section" >/dev/null 2>&1 || uci -q set "sheepfold.$section=device"
         uci -q set "sheepfold.$section.mac=$mac"
         /usr/libexec/sheepfold/sheepfold-device-id ensure "$section" >/dev/null
@@ -302,7 +302,7 @@ admin_section_name_for_login() {
                         ;;
                 *)
                         local section
-                        section="admin_$(printf '%s' "$login" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_]/_/g; s/^_*//; s/_*$//')"
+                        section="admin_$(printf '%s' "$login" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9_]/_/g; s/^_*//; s/_*$//')"
                         [ "$section" != "admin_" ] || section="admin_manual"
                         printf '%s\n' "$section"
                         ;;
@@ -357,7 +357,9 @@ ubus_wan_status() {
 }
 
 wan_connectivity_ok() {
-        for host in ya.ru gosuslugi.ru ntp1.vniiftri.ru 1.1.1.1 8.8.8.8; do
+        # §a753lc5: иностранные публичные DNS нельзя считать надёжной проверкой
+        # интернета в России: их блокировка не означает обрыв WAN у семьи.
+        for host in ya.ru gosuslugi.ru ntp1.vniiftri.ru; do
                 ping -c 1 -W 2 "$host" >/dev/null 2>&1 && return 0
         done
         return 1
@@ -1393,7 +1395,7 @@ time_save() {
 # -----------------------------------------------------------------------------
 
 router_info() {
-        local status_json wan_state wan_reason ping_ms ping_ya_ru_ms ping_google_com_ms ping_youtube_com_ms any_ping_ok
+        local status_json wan_state wan_reason ping_ms ping_ya_ru_ms ping_gosuslugi_ru_ms ping_ntp_vniiftri_ru_ms any_ping_ok
         local firmware release model kernel
         local sheepfold_version podkop_version adguard_version podkop_version_status
         local lan_ports lan_count uptime_text load_avg memory_text storage_text
@@ -1407,13 +1409,13 @@ router_info() {
         wan_state="unknown"
         wan_reason="статус WAN неизвестен"
         ping_ya_ru_ms="$(ping_quick_ms ya.ru 2>/dev/null || true)"
-        ping_google_com_ms="$(ping_quick_ms google.com 2>/dev/null || true)"
-        ping_youtube_com_ms="$(ping_quick_ms youtube.com 2>/dev/null || true)"
+        ping_gosuslugi_ru_ms="$(ping_quick_ms gosuslugi.ru 2>/dev/null || true)"
+        ping_ntp_vniiftri_ru_ms="$(ping_quick_ms ntp1.vniiftri.ru 2>/dev/null || true)"
         ping_ms="$ping_ya_ru_ms"
         any_ping_ok=0
         [ -n "$ping_ya_ru_ms" ] && any_ping_ok=1
-        [ -n "$ping_google_com_ms" ] && any_ping_ok=1
-        [ -n "$ping_youtube_com_ms" ] && any_ping_ok=1
+        [ -n "$ping_gosuslugi_ru_ms" ] && any_ping_ok=1
+        [ -n "$ping_ntp_vniiftri_ru_ms" ] && any_ping_ok=1
         firmware="unknown"
         release="unknown"
         model="$(router_model_text)"
@@ -1486,10 +1488,10 @@ router_info() {
         print_kv sheepfold_version   "$sheepfold_version"
         print_kv internet_status     "$wan_state"
         print_kv internet_reason     "$wan_reason"
-        print_kv ping_ya_ru_ms         "${ping_ya_ru_ms:-timeout}"
-        print_kv ping_google_com_ms    "${ping_google_com_ms:-timeout}"
-        print_kv ping_youtube_com_ms   "${ping_youtube_com_ms:-timeout}"
-        print_kv ping_yandex_ms        "${ping_ya_ru_ms:-timeout}"
+        print_kv ping_ya_ru_ms           "${ping_ya_ru_ms:-timeout}"
+        print_kv ping_gosuslugi_ru_ms    "${ping_gosuslugi_ru_ms:-timeout}"
+        print_kv ping_ntp_vniiftri_ru_ms "${ping_ntp_vniiftri_ru_ms:-timeout}"
+        print_kv ping_yandex_ms          "${ping_ya_ru_ms:-timeout}"
         print_kv firmware_version    "$firmware"
         print_kv openwrt_release     "$release"
         print_kv kernel_version      "$kernel"

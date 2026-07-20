@@ -14,6 +14,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
 const helper = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-ipv6-control');
 const overview = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js');
+const integrationPanel = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/integrations/panel.js');
 const defaults = read('package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/sheepfold.uci.defaults');
 const makefile = read('package/luci-app-sheepfold-family-internet-control/Makefile');
 const init = read('package/luci-app-sheepfold-family-internet-control/root/etc/init.d/sheepfold');
@@ -106,9 +107,10 @@ function runHelper(testFixture, command = 'apply') {
 
 describe('router IPv6 management for Podkop §ipv6pod', () => {
   it('exposes one saved Misc setting and locks it on Podkop integrations', () => {
-    assert.match(overview, /Disable IPv6 on the router/);
-    assert.match(overview, /integrationUsesPodkop/);
-    assert.match(overview, /router_ipv6_mode_source: 'auto_podkop'/);
+    assert.match(overview, /integrationPanel\.ipv6Field\(integrationUi\)/);
+    assert.match(integrationPanel, /Disable IPv6 on the router/);
+    assert.match(integrationPanel, /function usesPodkop/);
+    assert.match(integrationPanel, /router_ipv6_mode_source: 'auto_podkop'/);
     assert.match(overview, /routerControl\(\['ipv6-apply'\]\)/);
     assert.match(defaults, /option router_ipv6_disabled '0'/);
     assert.match(defaults, /option router_ipv6_mode_source 'default'/);

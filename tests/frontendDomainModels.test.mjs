@@ -103,6 +103,50 @@ describe('extracted LuCI domain models §frontmod', () => {
     assert.equal(wifi.bandKind('6ghz', 'auto'), '6g');
   });
 
+  it('plans Wi-Fi shutdown and shared radio enabling without touching UCI §wifitgl1', () => {
+    const wifiCards = loadFeature('wifi/cards.js');
+    const wifiEditor = loadFeature('wifi/editor.js', { wifiCards });
+    const editor = (device, radioDisabled, beforeEnabled, afterEnabled) => ({
+      sectionName: `${device}_ap`,
+      device,
+      radioDisabled,
+      original: {
+        ssid: 'Home', password: 'password', encryption: 'psk2', channel: 'auto', enabled: beforeEnabled
+      },
+      ssidInput: { value: 'Home' },
+      passwordInput: { value: 'password' },
+      securitySelect: { value: 'psk2' },
+      channelSelect: { value: 'auto' },
+      enabledInput: { checked: afterEnabled }
+    });
+    const plan = wifiEditor.savePlan([
+      editor('radio0', false, true, false),
+      editor('radio1', true, false, true)
+    ]);
+
+    assert.equal(plan.turnsWifiOff, true);
+    assert.deepEqual({ ...plan.radiosToEnable }, { radio1: true });
+    assert.equal(plan.items.length, 2);
+    assert.equal(plan.items[0].snapshot.enabled, false);
+    assert.equal(plan.items[1].snapshot.enabled, true);
+  });
+
+  it('restores only IPv6 state that Sheepfold changed automatically for Podkop §ipv6pod', () => {
+    const integrations = loadFeature('integrations/panel.js');
+
+    assert.deepEqual({ ...integrations.ipv6Draft('podkop', '0', 'default') }, {
+      router_ipv6_disabled: '1',
+      router_ipv6_mode_source: 'auto_podkop'
+    });
+    assert.deepEqual({ ...integrations.ipv6Draft('none', '1', 'auto_podkop') }, {
+      router_ipv6_disabled: '0',
+      router_ipv6_mode_source: 'default'
+    });
+    assert.equal(integrations.ipv6Draft('none', '1', 'manual'), null);
+    assert.equal(integrations.usesPodkop('adguard_podkop'), true);
+    assert.equal(integrations.usesPodkop('adguard'), false);
+  });
+
   it('merges router device sources and preserves existing static DHCP sections §devinv', () => {
     const inventory = loadFeature('devices/inventory.js');
     const devices = inventory.build({
@@ -149,6 +193,22 @@ describe('extracted LuCI domain models §frontmod', () => {
     assert.equal(devices[1].name, 'Котёл');
     assert.equal(devices[1].status, 'blocked');
     assert.equal(devices[1].staticSection, 'boiler_lease');
+  });
+
+  it('uses detected type unless the parent explicitly fixed a manual type §devpas1', () => {
+    const inventory = loadFeature('devices/inventory.js');
+
+    assert.equal(inventory.effectiveDeviceType({
+      device_type: 'unknown',
+      detected_type: 'smart_home',
+      manual_device_type: '0'
+    }), 'smart_home');
+    assert.equal(inventory.effectiveDeviceType({
+      device_type: 'phone',
+      detected_type: 'smart_home',
+      manual_device_type: '1'
+    }), 'phone');
+    assert.equal(inventory.effectiveDeviceType({ device_type: 'camera' }), 'camera');
   });
 
   it('keeps allowlist and device blocklist mutually exclusive without automatic transfer §lstxcl1', () => {

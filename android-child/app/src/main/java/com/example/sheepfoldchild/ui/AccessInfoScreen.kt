@@ -27,6 +27,7 @@ fun AccessInfoScreen(status: ClientStatusData?) {
         }
         return
     }
+    val showPolicyDetails = status.internetState != "enabled"
 
     LazyColumn(
         modifier = Modifier
@@ -66,22 +67,25 @@ fun AccessInfoScreen(status: ClientStatusData?) {
             )
         }
 
-        // Режим доступа — в понятных словах
-        status.accessMode?.let { mode ->
-            item {
-                val modeStr = when (mode) {
-                    "allowlist"  -> stringResource(R.string.access_mode_allowlist)
-                    "blocked"    -> stringResource(R.string.access_mode_blocked)
-                    "scheduled"  -> stringResource(R.string.access_mode_scheduled)
-                    "temporary"  -> stringResource(R.string.access_mode_temporary)
-                    "restricted" -> stringResource(R.string.access_mode_restricted)
-                    "default"    -> stringResource(R.string.access_mode_default)
-                    else         -> stringResource(R.string.access_mode_unknown)
+        // Настройка, которая дала доступ, не нужна ребёнку: при enabled интерфейс
+        // сообщает только, что интернет разрешён, и при наличии показывает время.
+        if (showPolicyDetails) {
+            status.accessMode?.let { mode ->
+                item {
+                    val modeStr = when (mode) {
+                        "allowlist"  -> stringResource(R.string.access_mode_allowlist)
+                        "blocked"    -> stringResource(R.string.access_mode_blocked)
+                        "scheduled"  -> stringResource(R.string.access_mode_scheduled)
+                        "temporary"  -> stringResource(R.string.access_mode_temporary)
+                        "restricted" -> stringResource(R.string.access_mode_restricted)
+                        "default"    -> stringResource(R.string.access_mode_default)
+                        else         -> stringResource(R.string.access_mode_unknown)
+                    }
+                    InfoCard(
+                        label = stringResource(R.string.access_mode_label),
+                        value = modeStr
+                    )
                 }
-                InfoCard(
-                    label = stringResource(R.string.access_mode_label),
-                    value = modeStr
-                )
             }
         }
 
@@ -96,13 +100,15 @@ fun AccessInfoScreen(status: ClientStatusData?) {
             }
         }
 
-        // Сообщение от роутера
-        status.message?.let { msg ->
-            item {
-                InfoCard(
-                    label = stringResource(R.string.access_message_label),
-                    value = msg
-                )
+        // Сообщение с причиной относится только к ограниченному доступу.
+        if (showPolicyDetails) {
+            status.message?.let { msg ->
+                item {
+                    InfoCard(
+                        label = stringResource(R.string.access_message_label),
+                        value = msg
+                    )
+                }
             }
         }
     }

@@ -40,7 +40,7 @@ npm.cmd run router:setup -- `
 ## План первого прогона после включения роутера
 
 1. Выполнить `router:setup` с явным IP тестового роутера, `-InstallPublicKey -SaveLuciCredential`. Критерий: повторный SSH-вход проходит в `BatchMode` без prompt.
-2. Запустить `router:readOnly`. Критерий: определены OpenWrt/model/package, обязательные UCI-секции, executable-права, `router-info`, IPv6 status и `fw4 check`; состояние не изменено.
+2. Запустить `router:readOnly`. Критерий: определены OpenWrt/model/package, обязательные UCI-секции, executable-права, `router-info`, IPv6 status и `fw4 check`; отдельный временный UCI probe подтверждает pairing-транзакцию `-t/-p` и отсутствие опасного `-P`; семейный конфиг не изменён (§pairtx1).
 3. Для `writeSafe` недостаточно увидеть запись фиктивного MAC в UCI: тест обязан подтвердить его появление в соответствующем nftables-наборе, а после restore — отсутствие и в UCI, и в runtime. Иначе интерфейс может сообщить об успехе при неприменённом firewall (§uirunfx).
 4. Просмотреть `run.log`. В нём не должно быть токенов, паролей, полного UCI, Wi-Fi credentials или клиентских MAC из конфигурации.
 5. Подготовить пакет требуемого формата и запустить `router:install`. Критерий: внешний backup получен до системного менеджера пакетов, SHA-256 совпал, новая версия установлена, существующий `/etc/config/sheepfold` не потерян, post-install read-only проверки зелёные.
