@@ -29,13 +29,14 @@
 | Архитектурное решение и причины | `docs/architecture/decisions/README.ru.md`, затем профильный документ (§adrproc) |
 | Дефект между UI, API, UCI и runtime | `docs/debugging-and-verification.ru.md` (§debug01) |
 | Области и тесты затронутой правки | `docs/change-impact-review.ru.md`, `npm.cmd run review:impact` (§impact1) |
+| Единый быстрый quality gate | `docs/quality-assistants/README.ru.md`, `npm.cmd run quality:plan`, затем `quality:changed` (§qassist) |
 
 ## Проверки по слоям
 
 1. Во время правки запускать синтаксическую проверку и ближайший целевой тест.
 2. После завершения подсистемы запускать её набор тестов.
 3. После узкой правки запускать категорию из [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat), при пересечении — объединять категории. Полный `npm.cmd test` запускать перед push/PR/merge/release либо раньше, если изменён общий backend/API/UCI/package/security-контракт. Не повторять долгий полный набор после каждой мелкой правки.
-4. Перед итоговым прогоном выполнить `npm.cmd run review:impact`; неизвестный путь разобрать вручную, а общий контракт считать основанием для полного теста (§impact1).
+4. Перед итоговым прогоном выполнить `npm.cmd run quality:plan`; для обычной итерации использовать `quality:changed`, а перед push исполняемого кода `quality:gate`. Неизвестный путь разобрать вручную (§impact1, §qassist).
 5. Android собирать соответствующим wrapper только после Android-изменений: `android\gradlew.bat -p android ...` или `android-child\gradlew.bat -p android-child ...`. Глобальный Gradle не нужен.
 6. Перед коммитом всегда выполнить `git diff --check`, проверить `git diff --stat`, §-теги и отсутствие скачанных SDK, APK, IPK и кэшей в индексе.
 

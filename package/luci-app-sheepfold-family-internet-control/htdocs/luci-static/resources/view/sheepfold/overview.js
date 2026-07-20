@@ -2864,8 +2864,8 @@ function deviceTable(rows, options) {
                         'data-sort-status': device.status || '',
                         'data-search': [device.id, device.mac, device.hostname, device.note, type.label].join(' ')
                 }, [
-                        E('div', { 'class': 'sf-device-index' }, formattedDeviceDisplayId(device)),
-                        E('div', { 'class': 'sf-device-name' }, [
+                        E('div', { 'class': 'sf-device-index', 'data-label': _('ID') }, formattedDeviceDisplayId(device)),
+                        E('div', { 'class': 'sf-device-name', 'data-label': _('Device') }, [
                                          E('strong', {}, [
 						 deviceIdentityIcon(device),
 						 adminDevice ? adminCrownIcon() : '',
@@ -2873,20 +2873,20 @@ function deviceTable(rows, options) {
                                           ]),
                                          E('small', {}, device.note)
                           ]),
-                        E('div', { 'class': 'sf-device-type-cell' }, deviceTypeIcon(displayType)),
-                        E('div', { 'class': 'sf-ip-cell' }, [
+                        E('div', { 'class': 'sf-device-type-cell', 'data-label': _('Type') }, deviceTypeIcon(displayType)),
+                        E('div', { 'class': 'sf-ip-cell', 'data-label': _('IP address') }, [
                                 E('span', {}, device.ip || '-'),
                                 device.staticLease ? staticLeaseIcon() : ''
                         ]),
-                        E('div', { 'class': 'sf-mono' }, device.mac),
-                        E('div', {}, displayGroupName(device.group)),
-                        E('div', { 'class': 'sf-status-stack' }, [
+                        E('div', { 'class': 'sf-mono', 'data-label': _('MAC address') }, device.mac),
+                        E('div', { 'data-label': _('Group') }, displayGroupName(device.group)),
+                        E('div', { 'class': 'sf-status-stack', 'data-label': _('Status') }, [
                                 device.statusBadge ? badge(device.statusBadge) : '',
                                 /* SHEEPFOLD_AI_BEGIN */
                                 device.activityLogEnabled ? badge('journal') : ''
                                 /* SHEEPFOLD_AI_END */
                         ]),
-                        E('div', { 'class': 'sf-row-actions' }, [
+                        E('div', { 'class': 'sf-row-actions', 'data-label': _('Actions') }, [
                                 iconButton(_('Configure'), 'gear', 'neutral', function () {
                                         showDeviceSettingsModal(device);
                                 }),
@@ -5029,6 +5029,7 @@ return view.extend({
 
                 page = E('div', { 'class': 'sf-page' }, [
                         E('link', { 'rel': 'stylesheet', 'href': cssHref }),
+                        deviceTableModel.stylesheet(assetVersion),
                         header,
                         E('div', { 'class': 'sf-metrics' }, [
                                 metric(_('Devices'), String(devices.length), 'neutral', function (button) {

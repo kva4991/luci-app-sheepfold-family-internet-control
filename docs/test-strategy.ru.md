@@ -41,6 +41,15 @@ npm.cmd run review:impact
 
 Она связывает изменённые пути с соседними слоями и вопросами ревью (§impact1), но не запускает тесты и не заменяет ручную оценку неизвестного пути.
 
+Для обычного цикла используйте автоматизированную оболочку (§qassist):
+
+```powershell
+npm.cmd run quality:plan
+npm.cmd run quality:changed
+```
+
+Она запускает `git diff --check`, изменённую документацию, применимый ESLint/Android Lint и объединённый набор test-файлов без дублей. Перед push исполняемого кода `npm.cmd run quality:gate` выполняет строгий полный прогон. Подробная граница и JSON-отчёт описаны в [`quality-assistants/README.ru.md`](quality-assistants/README.ru.md).
+
 ## Статический анализ
 
 <!-- §lint1 -->
@@ -74,7 +83,7 @@ npm.cmd run lint:android
 | `npm.cmd run test:messaging` | Telegram, команды мессенджера и запрос ребёнка на временный доступ |
 | `npm.cmd run test:ai` | Провайдеры, настройки и видимость AI-функций; состав Standard/AI IPK проверяется отдельно категорией `packaging` |
 | `npm.cmd run test:packaging` | Makefile, Standard/AI test-IPK и SDK feed, GitHub Actions IPK/OpenWrt APK matrix, локализация, права, updater и product boundary |
-| `npm.cmd run test:tooling` | Windows-окружение, скрипты сборки, карта категорий и инфраструктура тестов |
+| `npm.cmd run test:tooling` | Быстрые Windows/Node-инструменты, карта категорий и тестовый harness; сборка IPK остаётся в `packaging` |
 
 ## Попарная матрица конфигураций
 
@@ -108,6 +117,7 @@ npm.cmd run test:category -- access sites security
 3. После завершения запустить целую категорию подсистемы.
 4. Если правка пересекла соседний контракт, добавить вторую категорию.
 5. Выполнить `git diff --check` независимо от выбранной категории.
+6. Перед push выполнить `npm.cmd run quality:gate` либо доказать эквивалентный полный набор и закрыть перечисленные ручные проверки.
 
 Для backend-правки сначала использовать `test:backendFast`. Полный `test:backend` включает долгие сетевые стенды и глубокие симуляции. На обычном Windows-компьютере один `adguardIntegration.test.mjs` может идти 6–7 минут, а вся `networkIntegration` — заметно дольше. Для этих команд внешнему runner нужен лимит не меньше 15 минут. Изменение классификатора устройств или вычислителя расписаний требует `test:policySimulation`; изменение AdGuard Home, DNS, nftables или загрузки внешних списков — `test:networkIntegration`. Перед PR/слиянием всё равно действует правило полного прогона (§testcat).
 

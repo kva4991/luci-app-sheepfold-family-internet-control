@@ -16,6 +16,7 @@ ADR хранит контекст решения, а профильный док
 | [0008](0008-logs-and-sensitive-export.ru.md) | Обычный журнал живёт в RAM, экспорт маскирует данные | Принято | `§b3nw8vp` |
 | [0009](0009-optional-ai-boundary.ru.md) | ИИ необязателен и не участвует в решении firewall | Принято | `§prodvar`, `§aiexec1` |
 | [0010](0010-native-luci-and-asset-versioning.ru.md) | LuCI остаётся нативным, модульным и версионирует assets из пакета | Принято | `§frontmod`, `§assetv1` |
+| [0011](0011-local-quality-gates.ru.md) | Локальные детерминированные quality gates вместо внешнего AI-score | Принято | `§qassist`, `§impact1`, `§testcat` |
 
 ## Статусы
 

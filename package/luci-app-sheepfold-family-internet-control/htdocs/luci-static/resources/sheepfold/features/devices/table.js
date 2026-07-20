@@ -56,8 +56,16 @@ function filter(table, needle) {
 	});
 }
 
+function stylesheet(assetVersion) {
+	return E('link', {
+		'rel': 'stylesheet',
+		'href': L.resource('sheepfold/features/devices/responsive.css') + '?v=' + encodeURIComponent(assetVersion)
+	});
+}
+
 return baseclass.extend({
 	sort: sort,
 	sortHeader: sortHeader,
-	filter: filter
+	filter: filter,
+	stylesheet: stylesheet
 });

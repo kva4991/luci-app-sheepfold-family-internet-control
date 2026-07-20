@@ -5,7 +5,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { allValidRows, generatePairwise, uncoveredPairs } from '../tools/quality/pairwise.mjs';
+import { allValidRows, coverageSummary, generatePairwise, uncoveredPairs } from '../tools/quality/pairwise.mjs';
 import { expectedRuntime, requiredRuntimeRows, runtimeFactors } from '../tools/quality/runtimeCompatibilityModel.mjs';
 
 const matrix = generatePairwise(runtimeFactors, { requiredRows: requiredRuntimeRows });
@@ -20,6 +20,9 @@ describe('runtime compatibility all-pairs matrix §pairmat', () => {
     assert.deepEqual(uncoveredPairs(runtimeFactors, matrix), []);
     assert.ok(matrix.length < exhaustive.length / 4, `${matrix.length} is not compact against ${exhaustive.length}`);
     assert.deepEqual(matrix, generatePairwise(runtimeFactors, { requiredRows: requiredRuntimeRows }));
+    const coverage = coverageSummary(runtimeFactors, matrix);
+    assert.equal(coverage.coveredPairs, coverage.expectedPairs);
+    assert.deepEqual(coverage.uncoveredPairs, []);
   });
 
   it('preserves explicit security and degraded-state scenarios', () => {

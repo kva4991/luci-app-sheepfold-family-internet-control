@@ -114,7 +114,7 @@ export default [
     rules: commonRules,
   },
   {
-    files: ['tools/router-testing/frontendSmoke.mjs'],
+    files: ['tools/router-testing/frontendAudit.mjs'],
     languageOptions: {
       globals: {
         ...globals.node,

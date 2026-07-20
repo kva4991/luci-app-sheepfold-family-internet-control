@@ -40,5 +40,18 @@ describe('test category map §testcat', () => {
     }
     assert.equal(packageJson.scripts['test:category'], 'node scripts/run-test-category.mjs');
     assert.equal(packageJson.scripts['test:list'], 'node scripts/run-test-category.mjs --list');
+    assert.match(readFileSync(resolve(repoRoot, 'scripts/run-test-category.mjs'), 'utf8'), /--file/);
+  });
+
+  it('keeps Python package builders out of the fast tooling category', () => {
+    for (const heavy of [
+      'openWrtVariantFeed.test.mjs',
+      'productVariants.test.mjs',
+      'testIpkI18n.test.mjs',
+      'testIpkPermissions.test.mjs',
+    ]) {
+      assert.ok(testCategories.packaging.includes(heavy), `${heavy} must stay in packaging`);
+      assert.ok(!testCategories.tooling.includes(heavy), `${heavy} makes tooling slow`);
+    }
   });
 });

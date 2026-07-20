@@ -1,0 +1,182 @@
+/*
+ * Каноническая карта связей между путями Sheepfold и соседними контрактами.
+ * Правила отделены от CLI и Git, чтобы их можно было проверять обычными unit-тестами
+ * и расширять вместе с новой подсистемой без правки исполняющего кода. §impact1
+ */
+
+export const riskLevels = Object.freeze(['low', 'medium', 'high', 'critical']);
+
+export const checkCatalog = Object.freeze({
+  docs: Object.freeze({
+    command: 'npm.cmd run quality:docs',
+    automatic: true,
+    description: 'Относительные ссылки и зарегистрированные §-теги изменённой документации.',
+  }),
+  lintJs: Object.freeze({
+    command: 'npm.cmd run lint:js',
+    automatic: true,
+    description: 'ESLint для LuCI, Node-инструментов и тестов.',
+  }),
+  lintAndroid: Object.freeze({
+    command: 'npm.cmd run lint:android',
+    automatic: true,
+    description: 'Android Lint обоих приложений через их Gradle Wrapper.',
+  }),
+  androidBuild: Object.freeze({
+    command: 'android\\gradlew.bat -p android :app:assembleDebug; android-child\\gradlew.bat -p android-child :app:assembleDebug',
+    automatic: false,
+    description: 'Сборка затронутого Android-приложения после Kotlin/XML-правок.',
+  }),
+  routerFrontend: Object.freeze({
+    command: 'npm.cmd run router:frontend',
+    automatic: false,
+    description: 'Read-only проверка настоящего LuCI на desktop и mobile.',
+  }),
+  routerReadOnly: Object.freeze({
+    command: 'npm.cmd run router:readOnly',
+    automatic: false,
+    description: 'Read-only проверка backend и состояния тестового роутера.',
+  }),
+  routerFullSafe: Object.freeze({
+    command: 'npm.cmd run router:fullSafe',
+    automatic: false,
+    description: 'Backup, безопасные изменения и восстановление тестового роутера.',
+  }),
+  routerRuntimeMatrix: Object.freeze({
+    command: 'npm.cmd run router:runtimeMatrix',
+    automatic: false,
+    description: 'Живая матрица текущих access, DNS и интеграционных режимов.',
+  }),
+  githubPackages: Object.freeze({
+    command: 'gh workflow run "Build OpenWrt packages"',
+    automatic: false,
+    description: 'Настоящая сборка IPK и OpenWrt APK в официальном SDK.',
+  }),
+});
+
+export const impactRules = Object.freeze([
+  Object.freeze({
+    id: 'luciFrontend',
+    area: 'LuCI frontend',
+    pattern: /package\/luci-app-[^/]+\/htdocs\/luci-static\/resources\//,
+    categories: ['luci'],
+    checks: ['lintJs', 'routerFrontend'],
+    risk: 'medium',
+    review: 'Проверить локализацию, mobile overflow, состояния загрузки/ошибки и версию JS/CSS.',
+  }),
+  Object.freeze({
+    id: 'devicePresentation',
+    area: 'Таблица устройств в LuCI',
+    pattern: /features\/devices\/(?:table\.js|responsive\.css)$/,
+    categories: ['luci'],
+    checks: ['lintJs', 'routerFrontend'],
+    risk: 'medium',
+    review: 'Проверить desktop/mobile раскладку, сортировку, фильтр и доступность всех действий.',
+  }),
+  Object.freeze({
+    id: 'devicePassport',
+    area: 'Устройства и их паспорт',
+    pattern: /(?:features\/devices\/(?!(?:table\.js|responsive\.css)$)|(?:^|\/)sheepfold-device-|(?:^|\/)device-(?:mdns|ssdp|ws-discovery)(?:[./-]|$)|^docs\/device-(?:passport|detection)\.ru\.md$)/,
+    categories: ['devices', 'access', 'security'],
+    checks: ['routerReadOnly'],
+    risk: 'high',
+    review: 'Не смешать MAC-карточку, классификацию, trusted baseline и права родителя.',
+  }),
+  Object.freeze({
+    id: 'userManagement',
+    area: 'Группы, расписания и администраторы',
+    pattern: /(?:features\/(?:groups|schedules|administrators)\/|sheepfold-(?:schedule|group|admin|pair))/,
+    categories: ['luci', 'access', 'security'],
+    checks: ['routerReadOnly'],
+    risk: 'high',
+    review: 'Проверить конфликт расписаний, protected groups и границу административного сопряжения.',
+  }),
+  Object.freeze({
+    id: 'routerBackend',
+    area: 'Router backend',
+    pattern: /package\/luci-app-[^/]+\/root\/(?:usr\/libexec\/sheepfold|www\/cgi-bin)\//,
+    categories: ['backendFast'],
+    checks: ['routerReadOnly'],
+    risk: 'high',
+    review: 'Проверить BusyBox-совместимость, validation, lock, exit code и структурированный JSON.',
+  }),
+  Object.freeze({
+    id: 'sharedApi',
+    area: 'Общий API-контракт',
+    pattern: /(?:sheepfold-api|android-openwrt-api|RouterAdminClient|ClientStatusRepository|SecureRouterConnectionManager)/,
+    categories: ['backendFast', 'android', 'security'],
+    checks: ['lintAndroid', 'androidBuild', 'routerReadOnly'],
+    risk: 'critical',
+    review: 'Сверить HTTP status, stable errorCode, старого клиента, auth и неоднозначный повтор команды.',
+    full: true,
+  }),
+  Object.freeze({
+    id: 'uciMigration',
+    area: 'UCI и миграция',
+    pattern: /(?:sheepfold\.uci\.defaults|etc\/uci-defaults|postinst|preinst|uci-config-migration|settings\/save)/,
+    categories: ['backendFast', 'packaging', 'security'],
+    checks: ['routerFullSafe'],
+    risk: 'critical',
+    review: 'Проверить первую установку, upgrade живого конфига, named sections, secrets и повторный запуск.',
+    full: true,
+  }),
+  Object.freeze({
+    id: 'networkPolicy',
+    area: 'Firewall, DNS и списки сайтов',
+    pattern: /(?:firewall|nft|domain-policy|site-list|adguard|dnsmasq|emergency-site)/,
+    categories: ['access', 'sites', 'security', 'networkIntegration'],
+    checks: ['routerFullSafe', 'routerRuntimeMatrix'],
+    risk: 'critical',
+    review: 'Проверить приоритет устройств, последний рабочий cache, транзакционный rollback и чужие объекты интеграций.',
+    full: true,
+  }),
+  Object.freeze({
+    id: 'androidApps',
+    area: 'Android parent/child',
+    pattern: /^(?:android|android-child)\//,
+    categories: ['android', 'security'],
+    checks: ['lintAndroid', 'androidBuild'],
+    risk: 'high',
+    review: 'Проверить оба APK, lifecycle, offline/timeout и сохранение локальной защиты приложения.',
+  }),
+  Object.freeze({
+    id: 'packageReleaseMetadata',
+    area: 'Версия OpenWrt-пакета',
+    pattern: /^package\/[^/]+\/Makefile$/,
+    kinds: ['packageReleaseOnly'],
+    categories: ['packaging', 'tooling'],
+    checks: ['githubPackages'],
+    risk: 'critical',
+    review: 'Проверить имя пакета, cache-busting и SDK-сборку обоих вариантов.',
+    full: true,
+  }),
+  Object.freeze({
+    id: 'packaging',
+    area: 'Пакет, release и updater',
+    pattern: /(?:^package\/[^/]+\/Makefile$|^scripts\/(?:build-test-ipk|sheepfold_variants|prepare-openwrt|collect-openwrt|create-openwrt-release)|(?:^|\/)sheepfold-updater$|^install\.sh$|^uninstall\.sh$|^\.github\/workflows\/)/,
+    excludeKinds: ['packageReleaseOnly'],
+    categories: ['packaging', 'tooling', 'security'],
+    checks: ['githubPackages'],
+    risk: 'critical',
+    review: 'Проверить Standard/AI, IPK/OpenWrt APK, package identity, upgrade и сохранение UCI.',
+    full: true,
+  }),
+  Object.freeze({
+    id: 'architectureDocs',
+    area: 'Архитектура и правила агентов',
+    pattern: /(?:^AGENTS\.md$|^CODING_RULES\.md$|^docs\/(?:architecture|quality-assistants|dev\/tag-map|agent-|developer-task|test-strategy|change-impact|debugging|ui-review|api-contracts))/,
+    categories: ['tooling'],
+    checks: ['docs'],
+    risk: 'low',
+    review: 'Сверить ADR, профильный документ, §-теги и автоматическую проверку контракта.',
+  }),
+  Object.freeze({
+    id: 'testTooling',
+    area: 'Тестовый инструментарий',
+    pattern: /^(?:package\.json$|eslint\.config\.js$|tests\/|tools\/|scripts\/)/,
+    categories: ['tooling'],
+    checks: ['lintJs'],
+    risk: 'medium',
+    review: 'Проверить purpose note, изменяемое состояние, границу доказательства и запуск в Windows/CI.',
+  }),
+]);

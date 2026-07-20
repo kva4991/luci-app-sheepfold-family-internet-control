@@ -8,18 +8,31 @@ import { dirname, resolve } from 'node:path';
 import { run } from 'node:test';
 import { spec } from 'node:test/reporters';
 import { fileURLToPath } from 'node:url';
-import { categoryDescriptions, testCategories } from '../tests/categories.mjs';
+import { categoryRows, selectTestNames } from '../tools/quality/testSelection.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 
 function printCategories() {
-  const categoryWidth = Math.max(...Object.keys(testCategories).map((name) => name.length));
+  const rows = categoryRows();
+  const categoryWidth = Math.max(...rows.map((row) => row.name.length));
   console.log('Доступные категории тестов:');
-  for (const name of Object.keys(testCategories)) {
-    console.log(`  ${name.padEnd(categoryWidth)} ${String(testCategories[name].length).padStart(2)} файлов  ${categoryDescriptions[name]}`);
+  for (const row of rows) {
+    console.log(`  ${row.name.padEnd(categoryWidth)} ${String(row.fileCount).padStart(2)} файлов  ${row.description}`);
   }
   console.log(`  ${'all'.padEnd(categoryWidth)} все tests/*.test.mjs; команда: npm.cmd test`);
+}
+
+function parseSelection(input) {
+  const categories = [];
+  const directTests = [];
+  for (let index = 0; index < input.length; index += 1) {
+    if (input[index] === '--file') {
+      if (!input[index + 1]) throw new Error('После --file требуется имя test-файла.');
+      directTests.push(input[++index]);
+    } else categories.push(input[index]);
+  }
+  return { categories, directTests };
 }
 
 if (args.includes('--list') || args.includes('-l')) {
@@ -33,14 +46,27 @@ if (!args.length) {
   process.exit(2);
 }
 
-const unknown = args.filter((name) => !Object.hasOwn(testCategories, name));
-if (unknown.length) {
-  console.error(`Неизвестные категории: ${unknown.join(', ')}`);
+let selection;
+try {
+  selection = parseSelection(args);
+} catch (error) {
+  console.error(error.message);
   printCategories();
   process.exit(2);
 }
 
-const selectedNames = [...new Set(args.flatMap((name) => testCategories[name]))].sort();
+let selectedNames;
+try {
+  selectedNames = selectTestNames(selection.categories, selection.directTests);
+} catch (error) {
+  console.error(error.message);
+  printCategories();
+  process.exit(2);
+}
+if (!selectedNames.length) {
+  console.error('Не выбраны категории или test-файлы.');
+  process.exit(2);
+}
 const selectedFiles = selectedNames.map((name) => resolve(repoRoot, 'tests', name));
 const missingFiles = selectedFiles.filter((file) => !existsSync(file));
 
@@ -49,7 +75,11 @@ if (missingFiles.length) {
   process.exit(2);
 }
 
-console.log(`Категории: ${args.join(', ')}. Тестовых файлов: ${selectedFiles.length}.`);
+const selectionLabel = [
+  selection.categories.length ? `категории ${selection.categories.join(', ')}` : '',
+  selection.directTests.length ? `файлы ${selection.directTests.join(', ')}` : '',
+].filter(Boolean).join('; ');
+console.log(`Выбор: ${selectionLabel}. Тестовых файлов: ${selectedFiles.length}.`);
 console.log(selectedNames.map((name) => `  tests/${name}`).join('\n'));
 
 let failed = false;

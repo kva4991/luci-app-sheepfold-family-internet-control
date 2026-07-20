@@ -18,7 +18,7 @@ export const categoryDescriptions = Object.freeze({
   messaging: 'Telegram, запросы ребёнка и команды, приходящие через мессенджер.',
   ai: 'Граница Standard/AI Support, провайдеры и видимость AI-функций.',
   packaging: 'IPK, варианты продукта, локализация пакета, версия и обновление.',
-  tooling: 'Инструменты репозитория, Windows-окружение и целостность тестовой карты.',
+  tooling: 'Быстрые инструменты репозитория, Windows-окружение и целостность тестовой карты без сборки пакетов.',
 });
 
 export const testCategories = Object.freeze({
@@ -66,6 +66,7 @@ export const testCategories = Object.freeze({
     'pairingDiagnostics.test.mjs',
     'pairingQrCapacity.test.mjs',
     'personalGroupWatermark.test.mjs',
+    'qualityAssistants.test.mjs',
     'rootPasswordGate.test.mjs',
     'routerBackendAccessRules.test.mjs',
     'routerInfo.test.mjs',
@@ -321,13 +322,10 @@ export const testCategories = Object.freeze({
     'luciAssetVersioning.test.mjs',
     'overviewLocalization.test.mjs',
     'openWrtBuildWorkflow.test.mjs',
-    'openWrtVariantFeed.test.mjs',
-    'productVariants.test.mjs',
+    'qualityAssistants.test.mjs',
     'runtimeCompatibilityMatrix.test.mjs',
     'staticAnalysisTooling.test.mjs',
     'testCategories.test.mjs',
-    'testIpkI18n.test.mjs',
-    'testIpkPermissions.test.mjs',
     'windowsToolchain.test.mjs',
   ],
 });

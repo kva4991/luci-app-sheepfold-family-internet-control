@@ -30,6 +30,14 @@ function rowKey(row, names) {
   return names.map((name) => `${name}=${row[name]}`).join('|');
 }
 
+function preparedRows(rows, names) {
+  return rows.map((row) => ({
+    row,
+    key: rowKey(row, names),
+    tokens: pairTokens(row, names),
+  }));
+}
+
 export function pairTokens(row, names = Object.keys(row)) {
   const tokens = [];
   for (let left = 0; left < names.length; left += 1) {
@@ -41,6 +49,8 @@ export function pairTokens(row, names = Object.keys(row)) {
 }
 
 export function allValidRows(factors, isValid = () => true) {
+  if (Object.keys(factors).length < 2)
+    throw new Error('All-pairs модель должна содержать минимум два фактора.');
   for (const [name, values] of Object.entries(factors)) {
     if (!Array.isArray(values) || values.length < 2)
       throw new Error(`Фактор ${name} должен содержать минимум два значения.`);
@@ -53,42 +63,47 @@ export function generatePairwise(factors, options = {}) {
   const rows = allValidRows(factors, options.isValid);
   if (!rows.length) throw new Error('Модель не содержит допустимых комбинаций.');
 
-  const rowByKey = new Map(rows.map((row) => [rowKey(row, names), row]));
+  // Набор пар строки неизменен. Предварительный расчёт заметно сокращает работу
+  // на больших моделях и оставляет выбор детерминированным при одинаковом score.
+  const candidates = preparedRows(rows, names);
+  const rowByKey = new Map(candidates.map((candidate) => [candidate.key, candidate]));
   const selected = [];
   const selectedKeys = new Set();
-  const uncovered = new Set(rows.flatMap((row) => pairTokens(row, names)));
+  const uncovered = new Set(candidates.flatMap((candidate) => candidate.tokens));
 
   function addRow(row) {
     const key = rowKey(row, names);
     if (selectedKeys.has(key)) return;
-    const canonical = rowByKey.get(key);
-    if (!canonical) throw new Error(`Обязательная комбинация недопустима: ${key}`);
-    selected.push(canonical);
+    const candidate = rowByKey.get(key);
+    if (!candidate) throw new Error(`Обязательная комбинация недопустима: ${key}`);
+    selected.push(candidate.row);
     selectedKeys.add(key);
-    for (const token of pairTokens(canonical, names)) uncovered.delete(token);
+    for (const token of candidate.tokens) uncovered.delete(token);
   }
 
   for (const seed of options.requiredRows || []) addRow(seed);
 
   while (uncovered.size) {
-    let bestRow = null;
+    let bestCandidate = null;
     let bestScore = -1;
     let bestKey = '';
 
-    for (const row of rows) {
-      const key = rowKey(row, names);
-      if (selectedKeys.has(key)) continue;
-      const score = pairTokens(row, names).filter((token) => uncovered.has(token)).length;
-      if (score > bestScore || (score === bestScore && key < bestKey)) {
-        bestRow = row;
+    for (const candidate of candidates) {
+      if (selectedKeys.has(candidate.key)) continue;
+      let score = 0;
+      for (const token of candidate.tokens) {
+        if (uncovered.has(token)) score += 1;
+      }
+      if (score > bestScore || (score === bestScore && candidate.key < bestKey)) {
+        bestCandidate = candidate;
         bestScore = score;
-        bestKey = key;
+        bestKey = candidate.key;
       }
     }
 
-    if (!bestRow || bestScore <= 0)
+    if (!bestCandidate || bestScore <= 0)
       throw new Error(`Не удалось покрыть ${uncovered.size} допустимых пар.`);
-    addRow(bestRow);
+    addRow(bestCandidate.row);
   }
 
   return selected;
@@ -101,4 +116,18 @@ export function uncoveredPairs(factors, rows, isValid = () => true) {
     for (const token of pairTokens(row, names)) expected.delete(token);
   }
   return [...expected].sort();
+}
+
+export function coverageSummary(factors, rows, isValid = () => true) {
+  const names = Object.keys(factors);
+  const expected = new Set(allValidRows(factors, isValid).flatMap((row) => pairTokens(row, names)));
+  const covered = new Set(rows.flatMap((row) => pairTokens(row, names)).filter((token) => expected.has(token)));
+  return {
+    factorCount: names.length,
+    exhaustiveRows: allValidRows(factors, isValid).length,
+    selectedRows: rows.length,
+    expectedPairs: expected.size,
+    coveredPairs: covered.size,
+    uncoveredPairs: [...expected].filter((token) => !covered.has(token)).sort(),
+  };
 }

@@ -13,6 +13,16 @@ node scripts/inspectChangeImpact.mjs package/luci-app-sheepfold-family-internet-
 
 Первая команда сравнивает рабочее дерево с `origin/main`, включая tracked-изменения и новые untracked-файлы. Явный список удобен для точечной гипотезы и в тестах. Советник не запускает тесты и не доказывает полноту: он показывает затронутые области, рекомендуемые категории, обязательный полный прогон и вопросы ревью.
 
+Для выполнения безопасной локальной части плана используется единый gate:
+
+```powershell
+npm.cmd run quality:plan
+npm.cmd run quality:changed
+npm.cmd run quality:gate
+```
+
+Первый только печатает план, второй запускает минимальный объединённый набор, третий добавляет полный suite и запрещает неизвестные карте пути. Живой роутер, Android build и GitHub SDK остаются явно перечисленными ручными проверками. Полный контракт описан в [`quality-assistants/change-impact-and-gate.ru.md`](quality-assistants/change-impact-and-gate.ru.md) (§qassist).
+
 ## Базовая карта
 
 | Изменённая область | Проверить рядом | Минимальные категории |

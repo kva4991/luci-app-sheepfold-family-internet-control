@@ -1,0 +1,85 @@
+@media (max-width: 640px) {
+        /* На телефоне вкладки должны быть доступны без скрытой горизонтальной
+         * прокрутки. Последняя нечётная кнопка занимает всю строку. */
+        .sf-tabs {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                overflow-x: visible;
+        }
+
+        .sf-tab {
+                min-width: 0;
+                padding-right: 6px;
+                padding-left: 6px;
+                overflow-wrap: break-word;
+                word-break: normal;
+                white-space: normal;
+        }
+
+        .sf-tab:last-child:nth-child(odd) {
+                grid-column: 1 / -1;
+        }
+
+        /* Восемь колонок нельзя честно ужать до ширины телефона. Строка
+         * становится вертикальной, но все значения и действия остаются видимыми. */
+        .sf-device-table {
+                display: grid;
+                gap: 8px;
+                border: 0;
+                overflow: visible;
+        }
+
+        .sf-device-row.sf-device-head {
+                display: none;
+        }
+
+        .sf-device-row:not(.sf-device-head) {
+                grid-template-columns: 44px minmax(0, 1fr) 44px;
+                gap: 6px 8px;
+                padding: 10px;
+                border: 1px solid var(--sf-border);
+                border-radius: 8px;
+        }
+
+        .sf-device-row:not(.sf-device-head) > div:nth-child(1) {
+                grid-column: 1;
+                grid-row: 1 / span 2;
+        }
+
+        .sf-device-row:not(.sf-device-head) > div:nth-child(2) {
+                grid-column: 2;
+                grid-row: 1;
+        }
+
+        .sf-device-row:not(.sf-device-head) > div:nth-child(3) {
+                grid-column: 3;
+                grid-row: 1 / span 2;
+                justify-self: center;
+        }
+
+        .sf-device-row:not(.sf-device-head) > div:nth-child(4) {
+                grid-column: 2;
+                grid-row: 2;
+        }
+
+        .sf-device-row:not(.sf-device-head) > div:nth-child(n + 5):nth-child(-n + 7) {
+                display: grid;
+                grid-column: 1 / -1;
+                grid-template-columns: minmax(82px, 0.45fr) minmax(0, 1fr);
+                gap: 8px;
+                align-items: start;
+        }
+
+        .sf-device-row:not(.sf-device-head) > div:nth-child(n + 5):nth-child(-n + 7)::before {
+                content: attr(data-label);
+                color: var(--sf-muted);
+                font-family: inherit;
+                font-size: 11px;
+                font-weight: 600;
+        }
+
+        .sf-device-row:not(.sf-device-head) > div:nth-child(8) {
+                grid-column: 1 / -1;
+                justify-content: flex-end;
+        }
+}

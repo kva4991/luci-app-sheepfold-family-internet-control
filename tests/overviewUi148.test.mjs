@@ -11,6 +11,8 @@ const wifiCardsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfol
 const wifiEditorPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/wifi/editor.js');
 const logPanelPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/logs/panel.js');
 const routerInfoPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/router/info.js');
+const deviceTablePath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/devices/table.js');
+const deviceResponsiveCssPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/devices/responsive.css');
 const cssPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/sheepfold.css');
 const logHelperPath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-log');
 const yandexPath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-yandex-disk');
@@ -101,6 +103,23 @@ describe('overview UI release 148', () => {
     assert.match(css, /@media \(max-width: 900px\)[\s\S]*\.sf-info-table\s*\{[\s\S]*overflow-x: auto;[\s\S]*\.sf-info-table-row\s*\{[\s\S]*min-width: 760px;/);
   });
 
+  it('keeps user-list tabs and every device field reachable on a phone', () => {
+    const css = readFileSync(deviceResponsiveCssPath, 'utf8');
+    const table = readFileSync(deviceTablePath, 'utf8');
+    const overview = readFileSync(overviewPath, 'utf8');
+
+    assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.sf-tabs\s*\{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);[\s\S]*overflow-x: visible;/);
+    assert.match(css, /\.sf-tab\s*\{[\s\S]*overflow-wrap: break-word;[\s\S]*word-break: normal;/);
+    assert.match(css, /\.sf-device-row\.sf-device-head\s*\{[\s\S]*display: none;/);
+    assert.match(css, /\.sf-device-row:not\(\.sf-device-head\)[\s\S]*grid-template-columns: 44px minmax\(0, 1fr\) 44px;/);
+    assert.match(css, /content: attr\(data-label\)/);
+    for (const label of ['IP address', 'MAC address', 'Group', 'Status', 'Actions']) {
+      assert.match(overview, new RegExp(`'data-label': _\\('${label}'\\)`));
+    }
+    assert.match(table, /L\.resource\('sheepfold\/features\/devices\/responsive\.css'\)[\s\S]*encodeURIComponent\(assetVersion\)/);
+    assert.match(overview, /deviceTableModel\.stylesheet\(assetVersion\)/);
+  });
+
   it('keeps current settings labels and package release in sync', () => {
     const overview = readFileSync(overviewPath, 'utf8');
     const po = readFileSync(poPath, 'utf8');
@@ -113,6 +132,6 @@ describe('overview UI release 148', () => {
     assert.match(po, /msgid "Site list update from allowlist and blocklist sources"/);
     assert.match(po, /msgstr "Обновление списков сайтов из белых и чёрных списков"/);
     const release = Number(makefile.match(/PKG_RELEASE:=(\d+)/)?.[1] || 0);
-    assert.ok(release >= 172);
+    assert.ok(release >= 240);
   });
 });

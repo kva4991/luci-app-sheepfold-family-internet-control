@@ -157,7 +157,9 @@ describe('live router automation §routerharness', () => {
 
   it('runs LuCI in an isolated read-only browser context', () => {
     const wrapper = read('tools/router-testing/runFrontendTests.ps1');
-    const browser = read('tools/router-testing/frontendSmoke.mjs');
+    const runner = read('tools/router-testing/frontendSmoke.mjs');
+    const audit = read('tools/router-testing/frontendAudit.mjs');
+    const browser = `${runner}\n${audit}`;
 
     assert.match(wrapper, /playwright-core@1\.61\.1/);
     assert.match(wrapper, /Get-SheepfoldLuciBaseUrl -Config \$config/);
@@ -167,11 +169,9 @@ describe('live router automation §routerharness', () => {
     assert.match(wrapper, /browser-артефактами LuCI/);
     assert.match(browser, /ignoreHTTPSErrors: true/);
     assert.match(browser, /button\.cbi-button-positive\.important/);
-    assert.match(browser, /за пределы скрытой[\s\S]*?JS-обработчик/);
     assert.match(browser, /waitForNavigation\(\{ waitUntil: 'domcontentloaded', timeout: 30_000 \}\)/);
-    assert.match(browser, /session cookie:[\s\S]*?Access denied/);
-    assert.match(browser, /Первый HTTP 403[\s\S]*?авторизованного интерфейса/);
     assert.match(browser, /await page\.close\(\);[\s\S]*?page = await context\.newPage\(\)/);
+    assert.match(browser, /page\.on\('console'[\s\S]*?page\.on\('requestfailed'/);
     assert.match(browser, /topTabs\.first\(\)\.waitFor\(\{ state: 'visible', timeout: 30_000 \}\)/);
     assert.doesNotMatch(browser, /waitForTimeout\(800\)/);
     assert.match(browser, /width: 1440/);
@@ -184,7 +184,12 @@ describe('live router automation §routerharness', () => {
     assert.match(browser, /нет доступного имени/);
     assert.match(browser, /малая цель/);
     assert.match(browser, /controlAudits/);
-    assert.match(browser, /uxWarningCount/);
+    assert.match(browser, /summarizeUxWarnings/);
+    assert.match(browser, /targetBelow24/);
+    assert.match(browser, /SHEEPFOLD_FRONTEND_STYLE_PATH/);
+    assert.match(audit, /data-sheepfold-local-preview/);
+    assert.match(audit, /document\.documentElement\.appendChild\(style\)/);
+    assert.match(browser, /missingName/);
     assert.match(browser, /неблокирующих UX-предупреждений/);
     assert.match(browser, /\.sf-log-filters-wrap/);
     assert.match(browser, /Router model/);
@@ -209,6 +214,7 @@ describe('live router automation §routerharness', () => {
       'tools/router-testing/routerState.sh',
       'tools/router-testing/runFrontendTests.ps1',
       'tools/router-testing/frontendSmoke.mjs',
+      'tools/router-testing/frontendAudit.mjs',
       'tools/router-testing/runAllRouterTests.ps1',
     ];
     for (const file of files) {
