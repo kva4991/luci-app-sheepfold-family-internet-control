@@ -23,6 +23,7 @@ export const categoryDescriptions = Object.freeze({
 
 export const testCategories = Object.freeze({
   smoke: [
+    'architectureDecisions.test.mjs',
     'aiProviderSettings.test.mjs',
     'allowlistUi.test.mjs',
     'androidHttpsSecurity.test.mjs',
@@ -33,6 +34,7 @@ export const testCategories = Object.freeze({
     'childAccessRequest.test.mjs',
     'childAccessStatusTime.test.mjs',
     'childWifiNetworkMonitoring.test.mjs',
+    'changeImpact.test.mjs',
     'countryProfiles.test.mjs',
     'defaultGroups.test.mjs',
     'deprecationGuards.test.mjs',
@@ -68,6 +70,7 @@ export const testCategories = Object.freeze({
     'routerBackendAccessRules.test.mjs',
     'routerInfo.test.mjs',
     'routerIpv6.test.mjs',
+    'runtimeCompatibilityMatrix.test.mjs',
     'settingsBackup.test.mjs',
     'settingsSecondLevelTabs.test.mjs',
     'simChangeMonitoring.test.mjs',
@@ -296,6 +299,7 @@ export const testCategories = Object.freeze({
     'settingsSecondLevelTabs.test.mjs',
   ],
   packaging: [
+    'runtimeCompatibilityMatrix.test.mjs',
     'deprecationGuards.test.mjs',
     'installLanguage.test.mjs',
     'liveRouterHarness.test.mjs',
@@ -310,6 +314,8 @@ export const testCategories = Object.freeze({
     'updateTransportSafety.test.mjs',
   ],
   tooling: [
+    'architectureDecisions.test.mjs',
+    'changeImpact.test.mjs',
     'frontendModules.test.mjs',
     'liveRouterHarness.test.mjs',
     'luciAssetVersioning.test.mjs',
@@ -317,6 +323,7 @@ export const testCategories = Object.freeze({
     'openWrtBuildWorkflow.test.mjs',
     'openWrtVariantFeed.test.mjs',
     'productVariants.test.mjs',
+    'runtimeCompatibilityMatrix.test.mjs',
     'staticAnalysisTooling.test.mjs',
     'testCategories.test.mjs',
     'testIpkI18n.test.mjs',

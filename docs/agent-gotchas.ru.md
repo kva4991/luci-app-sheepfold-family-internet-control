@@ -4,6 +4,8 @@
 
 Правила кодинга, стиль и ревью — в [`CODING_RULES.md`](../CODING_RULES.md). Здесь только то, что не помещается в комментарий кода, но влияет на поведение продукта, сборку или отладку.
 
+Причины устойчивых архитектурных решений находятся в [`docs/architecture/decisions/`](architecture/decisions/README.ru.md), а порядок расследования дефекта и карта соседних проверок — в [`debugging-and-verification.ru.md`](debugging-and-verification.ru.md) и [`change-impact-review.ru.md`](change-impact-review.ru.md) (§adrproc, §debug01, §impact1).
+
 - Две редакции роутерного пакета не означают два репозитория или четыре Android-сборки: Standard физически не содержит AI/activity-backend, а два единых Android APK скрывают ИИ до положительной capability роутера. Каждая редакция отдельно собирается в IPK для 24.10 и apk-tools v3 APK для 25.12 (§prodvar, §owrtci1).
 
 ## Обязательное правило для агентов

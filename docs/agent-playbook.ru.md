@@ -9,10 +9,12 @@
 - `AGENTS.md`;
 - `docs/owner-communication-profile.ru.md` — для терминологии списков и правил общения с владельцем (§usrcomm);
 - `docs/merge-readiness-plan.ru.md`, если готовится коммит или слияние большого набора изменений в `main`;
+- `docs/architecture/decisions/README.ru.md`, если меняется устойчивая архитектурная граница или обсуждается альтернатива уже принятому решению (§adrproc);
 - `docs/developer-task.ru.md`;
 - `docs/product-requirements.md`;
 - этот документ;
 - focused-документы по затронутой зоне: `docs/device-passport-and-control.ru.md` для любого изменения карточки/мониторинга/управления устройством (§devpas1), `docs/security.md`, `docs/privacy.ru.md`, `docs/domain-allowlist.ru.md`, `docs/messaging.ru.md`, `docs/schedules.ru.md`, `docs/integrations.md`, `docs/ai-context-sharing.ru.md`, `docs/luci-cache.ru.md`, `android/README.md`, `bot/README.md`.
+- `docs/debugging-and-verification.ru.md` и `docs/change-impact-review.ru.md`, если задача исправляет дефект либо пересекает UI/API/UCI/runtime (§debug01, §impact1).
 
 Если меняешь пользовательское поведение, обновляй документацию на русском и английском, где это уже заведено.
 

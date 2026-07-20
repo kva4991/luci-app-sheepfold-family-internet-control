@@ -6,6 +6,8 @@
     "lint": "npm run lint:js && npm run lint:android",
     "lint:js": "eslint eslint.config.js \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"tools/**/*.mjs\" \"package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/**/*.js\"",
     "lint:android": "node scripts/runAndroidLint.mjs",
+    "review:impact": "node scripts/inspectChangeImpact.mjs --git origin/main",
+    "quality:matrix": "node tools/quality/printRuntimeMatrix.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:list": "node scripts/run-test-category.mjs --list",
     "test:category": "node scripts/run-test-category.mjs",

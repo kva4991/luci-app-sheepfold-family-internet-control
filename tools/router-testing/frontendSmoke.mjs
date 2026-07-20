@@ -2,7 +2,8 @@
  * Read-only проверка Sheepfold внутри реальной LuCI на desktop и mobile.
  * Отдельный browser context нужен, чтобы принять сертификат тестового роутера,
  * не ослабляя обычный браузер пользователя. Тест не нажимает команды приложения:
- * он ловит ошибки загрузки, консоли, запросов и горизонтальное переполнение.
+ * он ловит ошибки загрузки, консоли, запросов, горизонтальное переполнение и
+ * недоступные интерактивные элементы. Проверка не является pixel baseline. §uxrev01
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -136,6 +137,60 @@ async function validateLogPanel(page) {
   }
 }
 
+async function validatePanelControls(panel, panelName, mobile) {
+  const audit = await panel.evaluate((root, isMobile) => {
+    const controls = [...root.querySelectorAll('button, a[href], [role="button"], input, select, textarea')];
+    const fatal = [];
+    const warnings = [];
+    let visibleCount = 0;
+
+    function isVisible(node) {
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    }
+
+    function accessibleName(node) {
+      const labelledBy = (node.getAttribute('aria-labelledby') || '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent?.trim() || '')
+        .filter(Boolean)
+        .join(' ');
+      return [
+        node.getAttribute('aria-label'),
+        labelledBy,
+        node.getAttribute('title'),
+        node.textContent,
+        node.querySelector('title')?.textContent,
+      ].map((value) => String(value || '').trim()).find(Boolean) || '';
+    }
+
+    for (const [index, node] of controls.entries()) {
+      if (!isVisible(node)) continue;
+      visibleCount += 1;
+      const rect = node.getBoundingClientRect();
+      const command = node.matches('button, a[href], [role="button"]');
+      const name = command ? accessibleName(node) : '';
+      const marker = node.id ? `#${node.id}` : `[${index}]`;
+      const identity = `${node.tagName.toLowerCase()}${marker}${name ? ` "${name.slice(0, 48)}"` : ''}`;
+
+      if (rect.width <= 1 || rect.height <= 1) fatal.push(`${identity}: нулевой размер`);
+      if (command && !name) fatal.push(`${identity}: нет доступного имени`);
+      if (isMobile && command && (rect.width < 32 || rect.height < 32)) {
+        warnings.push(`${identity}: малая цель ${Math.round(rect.width)}x${Math.round(rect.height)}`);
+      }
+    }
+
+    return { visibleCount, fatal, warnings };
+  }, mobile);
+
+  if (audit.fatal.length) {
+    throw new Error(`Панель ${panelName} содержит недоступные элементы: ${audit.fatal.join('; ')}`);
+  }
+  return { panelName, ...audit };
+}
+
 async function checkViewport(browser, target) {
   const context = await browser.newContext({
     viewport: target.viewport,
@@ -194,6 +249,7 @@ async function checkViewport(browser, target) {
 
     const checkedPanels = [];
     const overflowSamples = [];
+    const controlAudits = [];
     let routerInformation = null;
     const checkPageOverflow = async (panelName) => {
       const overflow = await page.evaluate(() => ({
@@ -222,6 +278,7 @@ async function checkViewport(browser, target) {
         await validateLogPanel(page);
       }
       checkedPanels.push(tabName);
+      controlAudits.push(await validatePanelControls(panel, `top:${tabName}`, target.name === 'mobile'));
       await checkPageOverflow(`top:${tabName}`);
     }
 
@@ -243,6 +300,7 @@ async function checkViewport(browser, target) {
         routerInformation = await validateRouterInformation(page);
       }
       checkedPanels.push(`settings:${tabName}`);
+      controlAudits.push(await validatePanelControls(panel, `settings:${tabName}`, target.name === 'mobile'));
       await checkPageOverflow(`settings:${tabName}`);
     }
 
@@ -262,6 +320,7 @@ async function checkViewport(browser, target) {
       translatedTabsFound,
       checkedPanels,
       overflowSamples,
+      controlAudits,
       routerInformation,
     };
   } catch (error) {
@@ -283,9 +342,15 @@ try {
   const results = [];
   results.push(await checkViewport(browser, { name: 'desktop', viewport: { width: 1440, height: 900 } }));
   results.push(await checkViewport(browser, { name: 'mobile', viewport: { width: 390, height: 844 } }));
+  const uxWarningCount = results.reduce((total, result) => (
+    total + result.controlAudits.reduce((sum, audit) => sum + audit.warnings.length, 0)
+  ), 0);
+  if (uxWarningCount) {
+    console.warn(`WARN: найдено ${uxWarningCount} неблокирующих UX-предупреждений; подробности в result.json.`);
+  }
   fs.writeFileSync(
     path.join(reportDir, 'result.json'),
-    `${JSON.stringify({ status: 'pass', checkedAt: new Date().toISOString(), results }, null, 2)}\n`,
+    `${JSON.stringify({ status: 'pass', checkedAt: new Date().toISOString(), uxWarningCount, results }, null, 2)}\n`,
     'utf8',
   );
 } catch (error) {

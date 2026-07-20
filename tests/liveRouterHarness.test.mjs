@@ -180,6 +180,12 @@ describe('live router automation §routerharness', () => {
     assert.match(browser, /RPCError/);
     assert.match(browser, /validateRouterInformation/);
     assert.match(browser, /validateLogPanel/);
+    assert.match(browser, /validatePanelControls/);
+    assert.match(browser, /нет доступного имени/);
+    assert.match(browser, /малая цель/);
+    assert.match(browser, /controlAudits/);
+    assert.match(browser, /uxWarningCount/);
+    assert.match(browser, /неблокирующих UX-предупреждений/);
     assert.match(browser, /\.sf-log-filters-wrap/);
     assert.match(browser, /Router model/);
     assert.match(browser, /-failure\.png/);

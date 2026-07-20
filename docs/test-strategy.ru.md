@@ -33,6 +33,14 @@ npm.cmd run test:list
 
 Каноническая карта находится в `tests/categories.mjs`, runner — в `scripts/run-test-category.mjs`. Тест `tests/testCategories.test.mjs` не позволяет добавить новый `*.test.mjs` без категории или оставить ссылку на удалённый файл.
 
+Перед выбором категорий можно получить консервативную карту влияния:
+
+```powershell
+npm.cmd run review:impact
+```
+
+Она связывает изменённые пути с соседними слоями и вопросами ревью (§impact1), но не запускает тесты и не заменяет ручную оценку неизвестного пути.
+
 ## Статический анализ
 
 <!-- §lint1 -->
@@ -67,6 +75,19 @@ npm.cmd run lint:android
 | `npm.cmd run test:ai` | Провайдеры, настройки и видимость AI-функций; состав Standard/AI IPK проверяется отдельно категорией `packaging` |
 | `npm.cmd run test:packaging` | Makefile, Standard/AI test-IPK и SDK feed, GitHub Actions IPK/OpenWrt APK matrix, локализация, права, updater и product boundary |
 | `npm.cmd run test:tooling` | Windows-окружение, скрипты сборки, карта категорий и инфраструктура тестов |
+
+## Попарная матрица конфигураций
+
+<!-- §pairmat -->
+
+```powershell
+npm.cmd run quality:matrix
+node --test tests/runtimeCompatibilityMatrix.test.mjs
+```
+
+All-pairs генератор выбирает компактный набор, в котором встречается каждая пара значений: формат OpenWrt-пакета, редакция Standard/AI Support, четыре режима интеграций, backend списков сайтов, управление AdGuard Home и режим автоопределения. Обязательные строки сохраняют критические и деградировавшие сценарии, например явный AdGuard при отсутствующем AdGuard Home.
+
+Матрица помогает не забыть сочетания и уменьшает обычный перебор. Она не заменяет исчерпывающие security-инварианты, повреждённый ввод, migration/rollback, установку IPK/OpenWrt APK и живые DNS/nftables/hardware проверки.
 
 Произвольное объединение:
 

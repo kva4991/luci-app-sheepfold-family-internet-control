@@ -16,28 +16,30 @@ Sheepfold — OpenWRT-пакет для семейного управления 
 ## Порядок чтения документации
 
 1. [`docs/agent-fast-start.ru.md`](agent-fast-start.ru.md) — короткий маршрут нового чата: что проверить и читать, не загружая весь проект в контекст. (§fastagt)
-2. [`docs/owner-communication-profile.ru.md`](owner-communication-profile.ru.md) — как понимать итеративные требования владельца, различать виды списков и сообщать результат (§usrcomm).
-3. **Этот файл** — общая ориентация и карта детальных документов.
-4. [`docs/agent-environment.ru.md`](agent-environment.ru.md) — локальное окружение Codex Desktop на Windows, нужные программы, сборка IPK/APK и команды проверок.
-5. [`docs/github-actions-openwrt-build.ru.md`](github-actions-openwrt-build.ru.md) — каноническая сборка Standard/AI Support: IPK для 24.10, настоящий OpenWrt APK для 25.12, артефакты и Release (§owrtci1).
-6. [`docs/agent-gotchas.ru.md`](agent-gotchas.ru.md) — реестр неочевидных мелочей (i18n, группы, детектор, IPK); **обязательно дополнять** при новых находках.
-7. [`docs/troubleshooting.ru.md`](troubleshooting.ru.md) — практический справочник ошибок: симптомы, причины, проверки и безопасные исправления для Windows, тестов, Android, OpenWRT и LuCI. (§trouble)
-8. [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) — детальный плейбук для AI: продуктовые решения, архитектурные ограничения, правила реализации.
-9. [`docs/product-requirements.md`](product-requirements.md) — полные требования к продукту.
-10. [`docs/ai-assistant-development/README.md`](ai-assistant-development/README.md) — точка входа для памяти, модулей, БД и политики диалога ИИ-помощника (§aiarch1).
-11. [`docs/backend-design.ru.md`](backend-design.ru.md) — архитектура бэкенда роутера, API-эндпоинты, UCI-структура.
-12. [`docs/uci-config-migration.ru.md`](uci-config-migration.ru.md) — шаблон UCI, `postinst`, миграции при обновлении роутерного пакета IPK/OpenWrt APK (обязательно при изменении `/etc/config/sheepfold`).
-13. [`docs/default-groups.ru.md`](default-groups.ru.md) — группы `no_restrictions` / `child_1`, язык при установке, миграция алиасов.
-14. [`docs/hidden-settings.ru.md`](hidden-settings.ru.md) — UCI-параметры без поля в LuCI; обновлять при появлении/удалении полей.
-15. [`docs/localization.ru.md`](localization.ru.md) — LuCI gettext, `.lmo`, два параметра языка.
-16. [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента, сопряжение, детский APK.
-17. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
-18. [`docs/child-wifi-network-notifications.ru.md`](child-wifi-network-notifications.ru.md) — уведомления о новых Wi-Fi-сетях детского устройства, геолокация, приватность и границы доверия (§childwifi1).
-19. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
-20. [`docs/test-strategy.ru.md`](test-strategy.ru.md) — категории автоматических тестов, быстрые команды и условия обязательного полного прогона. (§testcat)
-21. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
-22. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (раздел 22 объясняет, куда писать мелочи).
-23. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
+2. [`docs/architecture/decisions/README.ru.md`](architecture/decisions/README.ru.md) — почему приняты ключевые архитектурные решения и когда их пересматривать (§adrproc).
+3. [`docs/owner-communication-profile.ru.md`](owner-communication-profile.ru.md) — как понимать итеративные требования владельца, различать виды списков и сообщать результат (§usrcomm).
+4. **Этот файл** — общая ориентация и карта детальных документов.
+5. [`docs/agent-environment.ru.md`](agent-environment.ru.md) — локальное окружение Codex Desktop на Windows, нужные программы, сборка IPK/APK и команды проверок.
+6. [`docs/github-actions-openwrt-build.ru.md`](github-actions-openwrt-build.ru.md) — каноническая сборка Standard/AI Support: IPK для 24.10, настоящий OpenWrt APK для 25.12, артефакты и Release (§owrtci1).
+7. [`docs/agent-gotchas.ru.md`](agent-gotchas.ru.md) — реестр неочевидных мелочей (i18n, группы, детектор, IPK); **обязательно дополнять** при новых находках.
+8. [`docs/troubleshooting.ru.md`](troubleshooting.ru.md) — практический справочник ошибок: симптомы, причины, проверки и безопасные исправления для Windows, тестов, Android, OpenWRT и LuCI. (§trouble)
+9. [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) — детальный плейбук для AI: продуктовые решения, архитектурные ограничения, правила реализации.
+10. [`docs/product-requirements.md`](product-requirements.md) — полные требования к продукту.
+11. [`docs/ai-assistant-development/README.md`](ai-assistant-development/README.md) — точка входа для памяти, модулей, БД и политики диалога ИИ-помощника (§aiarch1).
+12. [`docs/backend-design.ru.md`](backend-design.ru.md) — архитектура бэкенда роутера, API-эндпоинты, UCI-структура.
+13. [`docs/uci-config-migration.ru.md`](uci-config-migration.ru.md) — шаблон UCI, `postinst`, миграции при обновлении роутерного пакета IPK/OpenWrt APK (обязательно при изменении `/etc/config/sheepfold`).
+14. [`docs/default-groups.ru.md`](default-groups.ru.md) — группы `no_restrictions` / `child_1`, язык при установке, миграция алиасов.
+15. [`docs/hidden-settings.ru.md`](hidden-settings.ru.md) — UCI-параметры без поля в LuCI; обновлять при появлении/удалении полей.
+16. [`docs/localization.ru.md`](localization.ru.md) — LuCI gettext, `.lmo`, два параметра языка.
+17. [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента, сопряжение, детский APK.
+18. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
+19. [`docs/child-wifi-network-notifications.ru.md`](child-wifi-network-notifications.ru.md) — уведомления о новых Wi-Fi-сетях детского устройства, геолокация, приватность и границы доверия (§childwifi1).
+20. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
+21. [`docs/test-strategy.ru.md`](test-strategy.ru.md) — категории автоматических тестов, быстрые команды и условия обязательного полного прогона. (§testcat)
+22. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
+23. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (раздел 22 объясняет, куда писать мелочи).
+24. [`docs/debugging-and-verification.ru.md`](debugging-and-verification.ru.md), [`docs/change-impact-review.ru.md`](change-impact-review.ru.md), [`docs/api-contracts.ru.md`](api-contracts.ru.md) и [`docs/ui-review-contract.ru.md`](ui-review-contract.ru.md) — доказательная диагностика и рабочие контракты ревью (§debug01, §impact1, §apicon1, §uxrev01).
+25. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
 
 ---
 
