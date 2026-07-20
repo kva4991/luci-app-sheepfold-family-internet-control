@@ -10,7 +10,7 @@
 2. Выполнить `git status --short --branch` и посмотреть последние 10 коммитов. Не менять и не откатывать чужие незакоммиченные правки.
 3. На Windows выполнить `powershell -ExecutionPolicy Bypass -File tools\windows\check.ps1`. Если проверка не прошла, использовать полную команду из `tools/README.ru.md` самому; если среда не разрешает установку, дать эту команду пользователю.
 4. Найти код и документацию задачи через установленный общим Windows-скриптом `rg`: `rg -n "ключевое слово|§тег"`. Затем прочитать только найденные focused-документы, связанные вхождения §-тега и действующий ADR из [`architecture/decisions/`](architecture/decisions/README.ru.md), если меняется архитектурная граница (§adrproc).
-5. Перед коммитом или слиянием большого набора изменений дополнительно прочитать `docs/merge-readiness-plan.ru.md`; для обычной узкой задачи весь план не нужен. Сначала проверить настоящее имя ветки и состояние worktree, а не полагаться на старое название из документации.
+5. Перед продолжением общей разработки прочитать [`project-development-roadmap.ru.md`](project-development-roadmap.ru.md) (§roadmap). Перед коммитом или слиянием большого набора изменений дополнительно прочитать `docs/merge-readiness-plan.ru.md`; для обычной узкой задачи весь merge-план не нужен. Сначала проверить настоящее имя ветки и состояние worktree, а не полагаться на старое название из документации.
 
 ## Куда смотреть по типу задачи
 
@@ -30,6 +30,7 @@
 | Дефект между UI, API, UCI и runtime | `docs/debugging-and-verification.ru.md` (§debug01) |
 | Области и тесты затронутой правки | `docs/change-impact-review.ru.md`, `npm.cmd run review:impact` (§impact1) |
 | Единый быстрый quality gate | `docs/quality-assistants/README.ru.md`, `npm.cmd run quality:plan`, затем `quality:changed` (§qassist) |
+| Следующая общая работа | `docs/project-development-roadmap.ru.md`; профильные требования и ADR читать по указанным там §-тегам (§roadmap) |
 
 ## Проверки по слоям
 

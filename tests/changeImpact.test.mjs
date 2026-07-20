@@ -62,9 +62,18 @@ describe('change impact advisor §impact1', () => {
   });
 
   it('recognizes repository entry points instead of reporting avoidable unknown paths', () => {
-    const report = inspectChanges(['package.json', 'docs/developer-task.ru.md']);
+    const report = inspectChanges([
+      'package.json',
+      'README.md',
+      'README.ru.md',
+      'docs/current-implementation-status.md',
+      'docs/developer-task.ru.md',
+      'docs/project-development-roadmap.ru.md',
+    ]);
     assert.deepEqual(report.categories, ['tooling']);
     assert.deepEqual(report.unknown, []);
+    assert.ok(report.areas.some((area) => area.name === 'Архитектура и правила агентов'));
+    assert.ok(recommendedCommands(report).automatic.includes('npm.cmd run quality:docs'));
   });
 
   it('maps PO, POT and client JSON catalogs to localization checks', () => {

@@ -110,6 +110,7 @@ This repository is in active prototype development. Some LuCI/backend pieces alr
 See:
 
 - [Current implementation status](docs/current-implementation-status.md)
+- [Current development roadmap (Russian)](docs/project-development-roadmap.ru.md)
 - [Product requirements](docs/product-requirements.md)
 - [Direct task for AI developers](docs/developer-task.md)
 - [Android/OpenWRT API contract, Russian](docs/android-openwrt-api.ru.md)

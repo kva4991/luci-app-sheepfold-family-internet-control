@@ -173,7 +173,7 @@ export const impactRules = Object.freeze([
   Object.freeze({
     id: 'architectureDocs',
     area: 'Архитектура и правила агентов',
-    pattern: /(?:^AGENTS\.md$|^CODING_RULES\.md$|^docs\/(?:architecture|quality-assistants|dev\/tag-map|agent-|developer-task|test-strategy|change-impact|debugging|ui-review|api-contracts))/,
+    pattern: /(?:^(?:README(?:\.ru)?|AGENTS|CODING_RULES)\.md$|^docs\/(?:current-implementation-status\.md$|project-development-roadmap\.ru\.md$|architecture|quality-assistants|dev\/tag-map|agent-|developer-task|test-strategy|change-impact|debugging|ui-review|api-contracts))/,
     categories: ['tooling'],
     checks: ['docs'],
     risk: 'low',

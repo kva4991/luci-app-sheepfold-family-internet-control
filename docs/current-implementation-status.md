@@ -1,10 +1,12 @@
 # Current Implementation Status
 
-Last checked: 2026-07-19.
+Last checked: 2026-07-21.
 
 Automated tests are grouped into overlapping problem categories (`smoke`, `luci`, `access`, `devices`, `sites`, `backend`, `android`, `security`, `messaging`, `ai`, `packaging`, and `tooling`). See [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat); the category-map test prevents new test files from being left unassigned.
 
 Before committing or pushing the current `main` working tree, follow the evidence-based checklist in [`merge-readiness-plan.ru.md`](merge-readiness-plan.ru.md). It separates locally verified work from scenarios that still require a live OpenWRT router or a real Android device.
+
+The current prioritized order of future work is maintained in [`project-development-roadmap.ru.md`](project-development-roadmap.ru.md) (§roadmap). Historical audits remain evidence, but they do not override that roadmap's current ordering.
 
 The canonical end-to-end contract for device discovery, classification, trusted identity,
 quarantine, automatic groups, notifications and firewall effects is
@@ -14,7 +16,7 @@ device documents supplement that contract instead of redefining it.
 Current local test-package name produced by `scripts/build-test-ipk.py`:
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-234_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-241_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.
@@ -133,3 +135,5 @@ The same-day follow-up extracted Wi-Fi editor registration, dirty state and save
 The integrations follow-up extracted topology selection, site-filter executor controls, AdGuard credentials and the Podkop-linked IPv6 draft rule into `features/integrations/panel.js`. A pure transition test distinguishes automatic `auto_podkop` state from a parent's manual IPv6 choice; runtime application remains in the existing backend. The canonical LuCI category passed 150/150 and the packaging category passed 70/70 (§frontmod, §dompol, §ipv6pod).
 
 The same-day live-router device pass found and fixed two discovery boundaries: an empty DHCP hostname no longer shifts tab-separated fields and hides an online client, and `jshn` MAC keys from `hostapd.* get_clients` are converted back from underscores. A RAM-only DHCP lease fallback, a bounded supplemental OUI entry for `FC671F` Tuya, and a cautious privacy-MAC personal-phone hint were added without treating model, vendor, or owner as trusted identity (§devpas1).
+
+On 2026-07-21 the final `globalTest` pre-merge gate passed with 422 tests: 421 passed, one intentional concurrency test was skipped, and none failed. GitHub Actions run [29784939492](https://github.com/kva4991/luci-app-sheepfold-family-internet-control/actions/runs/29784939492) successfully built and bundled Standard and AI Support packages through the official OpenWrt 24.10.7 IPK and 25.12.5 APK SDKs. The test router reported installed `0.1.0-r241`; read-only checks confirmed package/UCI version, pairing transaction semantics, executable files, discovery, TLS SPKI, router information, IPv6 state, `fw4 check`, and no pending UCI changes. The installed LuCI passed desktop/mobile browser checks without JavaScript/RPC errors or horizontal overflow; 109 non-blocking small-target warnings remain a dedicated mobile UX task (§qassist, §uxrev01, §roadmap).
