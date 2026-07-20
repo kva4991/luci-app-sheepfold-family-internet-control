@@ -86,7 +86,7 @@ def main() -> None:
         sys.exit(1)
     data = compile_po(Path(sys.argv[1]))
     Path(sys.argv[2]).write_text(
-        json.dumps(data, ensure_ascii=False, separators=(',', ':')),
+        json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n',
         encoding='utf-8',
     )
     print(sys.argv[2])

@@ -6,25 +6,34 @@
  * и backend-команды приходят через узкие зависимости от координатора маршрута.
  */
 function create(deps) {
+	function storageStatusText(payload) {
+		var message = payload && payload.message ? String(payload.message) : '';
+
+		// Backend возвращает стабильную английскую строку: так один ответ одинаково
+		// понимают LuCI на любом языке и диагностические инструменты. Переводим её
+		// только на границе интерфейса, не смешивая локаль с backend-протоколом.
+		return message ? _(message) : _('Could not read storage status.');
+	}
+
 	function logStorageStatusView() {
-	        var lamp = E('span', { 'class': 'sf-storage-status-lamp warn' });
-	        var text = E('span', { 'class': 'sf-storage-status-text' }, _('Checking storage status...'));
-	
-	        function applyStatus(payload) {
-	                var state = payload && payload.state ? payload.state : 'error';
-	
-	                lamp.className = 'sf-storage-status-lamp ' + (state === 'ok' ? 'ok' : state === 'warn' ? 'warn' : 'error');
-	                text.textContent = payload && payload.message ? payload.message : _('Could not read storage status.');
-	        }
-	
+		var lamp = E('span', { 'class': 'sf-storage-status-lamp warn' });
+		var text = E('span', { 'class': 'sf-storage-status-text' }, _('Checking storage status...'));
+
+		function applyStatus(payload) {
+			var state = payload && payload.state ? payload.state : 'error';
+
+			lamp.className = 'sf-storage-status-lamp ' + (state === 'ok' ? 'ok' : state === 'warn' ? 'warn' : 'error');
+			text.textContent = storageStatusText(payload);
+		}
+
 	        function refresh() {
 	                text.textContent = _('Checking storage status...');
 	                lamp.className = 'sf-storage-status-lamp warn';
-	
+
 	                return deps.routerControl(['log-storage-status']).then(function (result) {
 	                        var code = Number(result && result.code || 0);
 	                        var payload = null;
-	
+
 	                        if (code === 0) {
 	                                try {
 	                                        payload = JSON.parse(String(result.stdout || '').trim() || '{}');
@@ -32,54 +41,54 @@ function create(deps) {
 	                                        payload = null;
 	                                }
 	                        }
-	
+
 	                        applyStatus(payload || { state: 'error', message: _('Could not read storage status.') });
 	                }, function () {
 	                        applyStatus({ state: 'error', message: _('Could not read storage status.') });
 	                });
 	        }
-	
+
 	        return {
 	                node: E('span', { 'class': 'sf-storage-status' }, [lamp, text]),
 	                refresh: refresh
 	        };
 	}
-	
+
 	function parseRouterJsonOutput(result) {
 	        var code = Number(result && result.code || 0);
-	
+
 	        if (code !== 0)
 	                return null;
-	
+
 	        try {
 	                return JSON.parse(String(result.stdout || '').trim() || '{}');
 	        } catch (error) {
 	                return null;
 	        }
 	}
-	
+
 	function formatSyncAge(at) {
 	        var parsed;
-	
+
 	        if (!at)
 	                return '';
-	
+
 	        parsed = Date.parse(String(at).replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
 	        if (isNaN(parsed))
 	                return String(at);
-	
+
 	        var diffSec = Math.max(0, Math.round((Date.now() - parsed) / 1000));
-	
+
 	        if (diffSec < 60)
 	                return _('just now');
 	        if (diffSec < 3600)
 	                return String(Math.floor(diffSec / 60)) + ' ' + _('min ago');
 	        if (diffSec < 86400)
 	                return String(Math.floor(diffSec / 3600)) + ' ' + _('h ago');
-	
+
 	        return String(Math.floor(diffSec / 86400)) + ' ' + _('d ago');
 	}
-	
+
 	function cloudMaintenancePanel(config) {
 		var classPrefix = config.classPrefix;
 		var statusNode = E('div', { 'class': classPrefix + '-actions-status sf-note' });
@@ -307,20 +316,20 @@ function create(deps) {
 			listFailed: _('Could not read Google Drive file list.')
 		});
 	}
-	
+
 	function logStorageLocationField() {
 	        var currentValue = deps.settingValue('log_storage', 'ram');
 	        var statusView = logStorageStatusView();
 	        var yandexBlock = E('div', { 'class': 'sf-yandex-disk-settings' });
 	        var googleBlock = E('div', { 'class': 'sf-google-drive-settings' });
 	        var select;
-	
+
 	        function syncVisibility() {
 	                yandexBlock.hidden = select.value === 'yandex_disk' ? null : 'hidden';
 	                googleBlock.hidden = select.value === 'google_drive' ? null : 'hidden';
 	                statusView.refresh();
 	        }
-	
+
 	        select = E('select', {
 	                'class': 'cbi-input-select',
 	                'change': function (ev) {
@@ -338,7 +347,7 @@ function create(deps) {
 	                        'selected': item[0] === currentValue ? 'selected' : null
 	                }, item[1]);
 	        }));
-	
+
 	        yandexBlock.appendChild(deps.divider(_('Yandex Disk settings')));
 	        yandexBlock.appendChild(deps.sectionInputField(
 	                'cloud',
@@ -379,7 +388,7 @@ function create(deps) {
 	                _('Sheepfold uploads journals, rotated archives and configuration backups within this limit.')
 	        ));
 	        yandexBlock.appendChild(yandexDiskMaintenancePanel());
-	
+
 	        googleBlock.appendChild(deps.divider(_('Google Drive settings')));
 	        googleBlock.appendChild(deps.sectionInputField(
 	                'gdrive',
@@ -429,9 +438,9 @@ function create(deps) {
 	                _('Sheepfold uploads journals, rotated archives and configuration backups within this limit.')
 	        ));
 	        googleBlock.appendChild(googleDriveMaintenancePanel());
-	
+
 	        syncVisibility();
-	
+
 	        return E('div', { 'class': 'sf-log-storage-field-wrap' }, [
 	                E('label', { 'class': 'sf-field sf-field-wide sf-log-storage-field' }, [
 	                        E('span', {}, _('Log storage location')),

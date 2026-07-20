@@ -63,6 +63,7 @@ flowchart TD
   S --> Q
   D["documentationAudit"] --> Q
   F["structureAudit"] --> Q
+  T["poCatalog + PO/JSON regression test"] --> Q
   Q --> J[".build/quality/last-run.json"]
   M["pairwise + runtime model"] --> X["Конфигурационная матрица"]
   B["frontendSmoke"] --> A["frontendAudit"]
@@ -103,6 +104,7 @@ flowchart TD
 | `tools/quality/documentationAudit.mjs` | относительные Markdown-ссылки и §-теги |
 | `tools/quality/whitespaceAudit.mjs` | пробелы и окончание строк, включая ещё не добавленные в Git файлы |
 | `tools/quality/structureAudit.mjs` | рост крупных изменённых файлов относительно Git-базы |
+| `tools/quality/poCatalog.mjs` | строгий разбор PO для сверки исходного каталога с клиентским JSON без дочернего Python |
 | `tools/quality/pairwise.mjs` | детерминированное покрытие допустимых пар конфигурации |
 | `tools/router-testing/frontendAudit.mjs` | чистые read-only проверки страницы LuCI |
 | `tools/router-testing/frontendSmoke.mjs` | запуск браузера и запись артефактов |

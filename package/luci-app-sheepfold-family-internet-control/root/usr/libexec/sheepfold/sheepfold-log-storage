@@ -32,14 +32,16 @@ ram_status_json() {
 	state="ok"
 	message="Journals are stored in RAM"
 	free_pct=100
-	if [ "$free_kb" -lt 16384 ]; then
-		state="warn"
-		message="Low router RAM for journals"
-		free_pct=15
-	elif [ "$free_kb" -lt 8192 ]; then
+	# Сначала проверяем критический порог: обратный порядок делал ветку <8 МБ
+	# недостижимой, потому что такое значение уже попадало в условие <16 МБ.
+	if [ "$free_kb" -lt 8192 ]; then
 		state="error"
 		message="Critically low router RAM for journals"
 		free_pct=5
+	elif [ "$free_kb" -lt 16384 ]; then
+		state="warn"
+		message="Low router RAM for journals"
+		free_pct=15
 	fi
 
 	printf '{"backend":"ram","state":"%s","message":"%s","authorized":1,"used_mb":%s,"quota_mb":0,"free_pct":%s,"archive_files":%s}\n' \

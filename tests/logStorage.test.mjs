@@ -6,6 +6,14 @@ import assert from 'node:assert/strict';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
+const storagePanelPath = resolve(
+  packageDir,
+  'htdocs/luci-static/resources/sheepfold/features/storage/panel.js',
+);
+const storageBackendPath = resolve(
+  packageDir,
+  'root/usr/libexec/sheepfold/sheepfold-log-storage',
+);
 
 describe('Log storage backends', () => {
   it('routes unified status and archive push through sheepfold-log-storage', () => {
@@ -21,10 +29,7 @@ describe('Log storage backends', () => {
       resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-google-drive'),
       'utf8',
     );
-    const dispatcher = readFileSync(
-      resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-log-storage'),
-      'utf8',
-    );
+    const dispatcher = readFileSync(storageBackendPath, 'utf8');
 
     assert.match(legacy, /log-storage-status\)/);
     assert.match(dispatcher, /yandex_disk\)/);
@@ -43,6 +48,34 @@ describe('Log storage backends', () => {
     assert.match(legacy, /google-drive-test\)/);
     assert.match(legacy, /google-drive-list\)/);
     assert.match(legacy, /google-drive-restore-config\)/);
+  });
+
+  it('translates backend storage messages at the LuCI boundary', () => {
+    const panel = readFileSync(storagePanelPath, 'utf8');
+    const ru = JSON.parse(readFileSync(
+      resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n/ru.json'),
+      'utf8',
+    ));
+    const zhHans = JSON.parse(readFileSync(
+      resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n/zh_Hans.json'),
+      'utf8',
+    ));
+
+    assert.match(panel, /function storageStatusText\(payload\)/);
+    assert.match(panel, /return message \? _\(message\) : _\('Could not read storage status\.'\)/);
+    assert.doesNotMatch(panel, /text\.textContent = payload && payload\.message \? payload\.message/);
+    assert.equal(ru['Journals are stored in RAM'], 'Журналы хранятся в RAM');
+    assert.equal(zhHans['Journals are stored in RAM'], '日志存储在内存中');
+  });
+
+  it('checks the critical RAM threshold before the warning threshold', () => {
+    const backend = readFileSync(storageBackendPath, 'utf8');
+    const criticalIndex = backend.indexOf('if [ "$free_kb" -lt 8192 ]');
+    const warningIndex = backend.indexOf('elif [ "$free_kb" -lt 16384 ]');
+
+    assert.notEqual(criticalIndex, -1);
+    assert.notEqual(warningIndex, -1);
+    assert.ok(criticalIndex < warningIndex);
   });
 
   it('mirrors live events to external storage backends from sheepfold-log', () => {

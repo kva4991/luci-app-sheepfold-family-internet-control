@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { parsePoEntries, poEntriesObject } from '../tools/quality/poCatalog.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
@@ -17,41 +18,12 @@ const logPanelPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold
 const notificationSettingsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/notifications/settings.js');
 const i18nModulePath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n.js');
 const ruJsonPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n/ru.json');
+const zhHansJsonPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n/zh_Hans.json');
 const poPath = resolve(packageDir, 'po/ru/sheepfold.po');
+const zhHansPoPath = resolve(repoRoot, 'po/zh_Hans/sheepfold.po');
 
 function readProjectFile(path) {
   return readFileSync(resolve(packageDir, path), 'utf8');
-}
-
-function parsePoEntries(source) {
-  const entries = new Map();
-  const blocks = source.split(/(?:\r?\n){2,}/);
-
-  for (const block of blocks) {
-    const msgidMatch = block.match(/^msgid\s+((?:"[^"]*"|""(?:\r?\n"[^"]*")*)+)/m);
-    const msgstrMatch = block.match(/^msgstr\s+((?:"[^"]*"|""(?:\r?\n"[^"]*")*)+)/m);
-    if (!msgidMatch || !msgstrMatch) {
-      continue;
-    }
-
-    const decode = (raw) => raw
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith('"'))
-      .map((line) => line.slice(1, -1))
-      .join('')
-      .replace(/\\n/g, '\n')
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, '\\');
-
-    const msgid = decode(msgidMatch[1]);
-    const msgstr = decode(msgstrMatch[1]);
-    if (msgid) {
-      entries.set(msgid, msgstr);
-    }
-  }
-
-  return entries;
 }
 
 describe('overview localization', () => {
@@ -124,5 +96,17 @@ describe('overview localization', () => {
       catalog['The AdGuard Home filter exists, but its control rules are not confirmed.'],
       'Фильтр Sheepfold существует в AdGuard Home, но его контрольные правила не подтверждены.',
     );
+  });
+
+  it('keeps committed client catalogs reproducible from their PO sources', () => {
+    for (const [sourcePath, jsonPath] of [
+      [poPath, ruJsonPath],
+      [zhHansPoPath, zhHansJsonPath],
+    ]) {
+      const poEntries = poEntriesObject(readFileSync(sourcePath, 'utf8'));
+      const clientEntries = JSON.parse(readFileSync(jsonPath, 'utf8'));
+
+      assert.deepEqual(clientEntries, poEntries, `${jsonPath} differs from ${sourcePath}`);
+    }
   });
 });

@@ -3841,3 +3841,47 @@ msgstr ""
 
 msgid "This backup was created on another router or by an older Sheepfold version. Device numbers, groups, schedules and lists will be kept, but device fingerprints and administrator phone bindings will be rebuilt. Pair administrator phones again after import."
 msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "Journals are stored in RAM"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "Low router RAM for journals"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "Critically low router RAM for journals"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB storage helper is missing"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB flash is not configured"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB flash is almost full"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB flash space is running low"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB flash is mounted and ready"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB flash is enabled but not mounted"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "Yandex Disk helper is missing"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "Google Drive helper is missing"
+msgstr ""

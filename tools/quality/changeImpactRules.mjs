@@ -56,6 +56,15 @@ export const checkCatalog = Object.freeze({
 
 export const impactRules = Object.freeze([
   Object.freeze({
+    id: 'localization',
+    area: 'Локализация интерфейса',
+    pattern: /(?:^po\/[^/]+\/[^/]+\.po$|^package\/luci-app-[^/]+\/po\/(?:[^/]+\/[^/]+\.po|templates\/[^/]+\.pot)$|\/sheepfold\/i18n\/[^/]+\.json$)/,
+    categories: ['luci', 'packaging'],
+    checks: ['routerFrontend', 'githubPackages'],
+    risk: 'medium',
+    review: 'Проверить точный регистр msgid, переводы RU/ZH и синхронизацию PO, JSON и пакетного LMO.',
+  }),
+  Object.freeze({
     id: 'luciFrontend',
     area: 'LuCI frontend',
     pattern: /package\/luci-app-[^/]+\/htdocs\/luci-static\/resources\//,

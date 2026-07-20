@@ -202,5 +202,293 @@ msgstr "网站删除已准备好。请按“保存设置”应用更改。"
 msgid "Some services load maps, sign-in pages, or images from additional technical domains. If a site opens incompletely, add only the domains required for its useful function."
 msgstr "某些服务会从其他技术域名加载地图、登录页面或图片。如果网站打开不完整，请仅添加其实用功能所需的域名。"
 
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "Journals are stored in RAM"
+msgstr "日志存储在内存中"
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "Low router RAM for journals"
+msgstr "路由器用于日志的可用内存不足"
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "Critically low router RAM for journals"
+msgstr "路由器用于日志的内存严重不足"
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB storage helper is missing"
+msgstr "缺少 USB 存储辅助程序"
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB flash is not configured"
+msgstr "USB 闪存盘未配置"
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB flash is almost full"
+msgstr "USB 闪存盘即将存满"
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB flash space is running low"
+msgstr "USB 闪存盘剩余空间不足"
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB flash is mounted and ready"
+msgstr "USB 闪存盘已挂载并可用"
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "USB flash is enabled but not mounted"
+msgstr "USB 闪存盘已启用但未挂载"
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "Yandex Disk helper is missing"
+msgstr "缺少 Yandex Disk 辅助程序"
+
+#: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
+msgid "Google Drive helper is missing"
+msgstr "缺少 Google Drive 辅助程序"
+
++#: migrated from the previously shipped client catalog
+msgid "Could not apply the IPv6 setting."
+msgstr "???? IPv6 ???"
+
+#: migrated from the previously shipped client catalog
+msgid "Network compatibility"
+msgstr "?????"
+
+#: migrated from the previously shipped client catalog
+msgid "Disable IPv6 on the router"
+msgstr "??????? IPv6"
+
+#: migrated from the previously shipped client catalog
+msgid "IPv6 is disabled automatically because the selected integration uses Podkop."
+msgstr "???????? Podkop?IPv6 ??????"
+
+#: migrated from the previously shipped client catalog
+msgid "Current Podkop releases do not provide complete IPv6 support. Enable this manually only when it is needed without Podkop."
+msgstr "?? Podkop ????????? IPv6 ???????? Podkop ??????????????"
+
+#: migrated from the previously shipped client catalog
+msgid "Administrator devices must remain in the allowlist and outside ordinary groups."
+msgstr "管理员设备必须保留在白名单中，且不得加入普通分组。"
+
+#: migrated from the previously shipped client catalog
+msgid "Notifications"
+msgstr "通知"
+
+#: migrated from the previously shipped client catalog
+msgid "The child Android app can notice a change of active SIM subscriptions and report it to this router. Android does not always provide the phone number, so a notification may say that the number is unavailable."
+msgstr "子安卓应用可以检测活动 SIM 卡的变化并报告给此路由器。Android 不一定能提供手机号码，因此通知可能会显示号码不可用。"
+
+#: migrated from the previously shipped client catalog
+msgid "Notify administrators about SIM card changes"
+msgstr "向管理员通知 SIM 卡变化"
+
+#: migrated from the previously shipped client catalog
+msgid "Yes, about every change"
+msgstr "是，通知每次变化"
+
+#: migrated from the previously shipped client catalog
+msgid "Only when changed to a new SIM card (default)"
+msgstr "仅在更换为新 SIM 卡时通知（默认）"
+
+#: migrated from the previously shipped client catalog
+msgid "No"
+msgstr "否"
+
+#: migrated from the previously shipped client catalog
+msgid "The child app needs Android phone-state permission. Sheepfold does not read calls, SMS messages, ICCID, IMSI, or IMEI."
+msgstr "子应用需要 Android 电话状态权限。Sheepfold 不读取通话、短信、ICCID、IMSI 或 IMEI。"
+
+#: migrated from the previously shipped client catalog
+msgid "The first SIM found after child-app installation is also written to the journal and notified in the first two modes. Returning to a previously known SIM creates a phone notification only in the first mode."
+msgstr "安装子应用后首次发现的 SIM 卡也会写入日志，并在前两种模式下发送通知。重新插入已知 SIM 卡时，只有第一种模式会向手机发送通知。"
+
+#: migrated from the previously shipped client catalog
+msgid "The child Android app can report the first connection to each new Wi-Fi network. The router stores a bounded local list and sends an administrator notification."
+msgstr "子 Android 应用可以报告首次连接到每个新的 Wi-Fi 网络。路由器会保存数量受限的本地列表并向管理员发送通知。"
+
+#: migrated from the previously shipped client catalog
+msgid "Notify administrators about new Wi-Fi networks of a child device"
+msgstr "当儿童设备连接到新的 Wi-Fi 网络时通知管理员"
+
+#: migrated from the previously shipped client catalog
+msgid "Yes, with the phone location at connection time"
+msgstr "是，同时包含连接时手机的位置"
+
+#: migrated from the previously shipped client catalog
+msgid "Yes, without location"
+msgstr "是，不包含位置"
+
+#: migrated from the previously shipped client catalog
+msgid "No (default)"
+msgstr "否（默认）"
+
+#: migrated from the previously shipped client catalog
+msgid "Location is the last available phone position, not a verified address of the Wi-Fi access point. If Android cannot provide a recent position, the notification contains only the network name."
+msgstr "此位置是手机最后可用的位置，并非经过验证的 Wi-Fi 接入点地址。如果 Android 无法提供最近的位置，通知将只包含网络名称。"
+
+#: migrated from the previously shipped client catalog
+msgid "SSID is stored locally, while BSSID is converted to a one-way fingerprint on the phone and is not sent to the router. Android location and nearby-Wi-Fi permissions are required."
+msgstr "SSID 保存在本地；BSSID 会在手机上转换为单向指纹，不会发送到路由器。需要 Android 的位置和附近 Wi-Fi 权限。"
+
+#: migrated from the previously shipped client catalog
+msgid "Clear saved Wi-Fi network history"
+msgstr "清除已保存的 Wi-Fi 网络历史记录"
+
+#: migrated from the previously shipped client catalog
+msgid "Delete the saved list of child-device Wi-Fi networks and their locations?"
+msgstr "删除已保存的儿童设备 Wi-Fi 网络及其位置列表吗？"
+
+#: migrated from the previously shipped client catalog
+msgid "Saved Wi-Fi network history cleared."
+msgstr "已清除保存的 Wi-Fi 网络历史记录。"
+
+#: migrated from the previously shipped client catalog
+msgid "Could not clear saved Wi-Fi network history."
+msgstr "无法清除保存的 Wi-Fi 网络历史记录。"
+
+#: migrated from the previously shipped client catalog
+msgid "When the home router is unavailable, the child app keeps up to 100 prepared reports on the phone and sends them after returning home. Android background limits mean that very short connections may be missed."
+msgstr "家庭路由器不可用时，子应用会在手机上保留最多 100 条待发送报告，并在回家后发送。受 Android 后台限制影响，持续时间很短的连接可能无法记录。"
+
+#: migrated from the previously shipped client catalog
+msgid "The group was saved, but internet access rules could not be applied."
+msgstr "分组已保存，但无法应用互联网访问规则。"
+
+#: migrated from the previously shipped client catalog
+msgid "Check the router journal."
+msgstr "请检查路由器日志。"
+
+#: migrated from the previously shipped client catalog
+msgid "Could not read the router TLS public-key fingerprint."
+msgstr "无法读取路由器的 TLS 公钥指纹。"
+
+#: migrated from the previously shipped client catalog
+msgid "The router returned an invalid TLS public-key fingerprint."
+msgstr "路由器返回了无效的 TLS 公钥指纹。"
+
+#: migrated from the previously shipped client catalog
+msgid "Could not prepare secure pairing. Check the TLS configuration and reopen this window."
+msgstr "无法准备安全配对。请检查 TLS 配置并重新打开此窗口。"
+
+#: migrated from the previously shipped client catalog
+msgid "Device monitoring and setup"
+msgstr "设备监控与设置"
+
+#: migrated from the previously shipped client catalog
+msgid "Automatic (recommended)"
+msgstr "自动（推荐）"
+
+#: migrated from the previously shipped client catalog
+msgid "When a known MAC appears with strongly different trusted DHCP, mDNS, or UPnP identifiers, automatic mode temporarily blocks that connection at device-blocklist level. Manual mode restricts it until a parent decides. The saved rights of the original device are not changed."
+msgstr "当已知 MAC 出现与受信任的 DHCP、mDNS 或 UPnP 标识明显不同的特征时，自动模式会暂时按设备黑名单级别阻止该连接；手动模式会限制该连接，等待家长处理。原设备已保存的权限不会改变。"
+
+#: migrated from the previously shipped client catalog
+msgid "Identity quarantine: blocked"
+msgstr "身份隔离：已阻止"
+
+#: migrated from the previously shipped client catalog
+msgid "Identity quarantine: restricted"
+msgstr "身份隔离：受限"
+
+#: migrated from the previously shipped client catalog
+msgid "The current connection does not match this device trusted fingerprint. Its saved rights are preserved until the original device returns or a parent trusts the current connection."
+msgstr "当前连接与此设备的受信任指纹不匹配。在原设备返回或家长信任当前连接之前，已保存的权限保持不变。"
+
+#: migrated from the previously shipped client catalog
+msgid "Identity quarantine"
+msgstr "身份隔离"
+
+#: migrated from the previously shipped client catalog
+msgid "The current connection strongly differs from the trusted fingerprint. The device saved rights are preserved, while this connection is temporarily isolated."
+msgstr "当前连接特征与受信任指纹明显不同。设备已保存的权限会保留，而此连接会被临时隔离。"
+
+#: migrated from the previously shipped client catalog
+msgid "Connection identity check"
+msgstr "连接身份检查"
+
+#: migrated from the previously shipped client catalog
+msgid "Quarantine: blocked"
+msgstr "隔离：已阻止"
+
+#: migrated from the previously shipped client catalog
+msgid "Quarantine: restricted"
+msgstr "隔离：受限"
+
+#: migrated from the previously shipped client catalog
+msgid "Matched or not enough stable evidence"
+msgstr "已匹配，或稳定证据不足"
+
+#: migrated from the previously shipped client catalog
+msgid "The current identifiers do not match the trusted fingerprint. Continue only if you recognize this device. The current fingerprint will become trusted and the quarantine will be removed."
+msgstr "当前标识与受信任指纹不匹配。只有在确认这是您认识的设备时才继续。当前指纹将被设为受信任，并解除隔离。"
+
+#: migrated from the previously shipped client catalog
+msgid "Trust this connection, remove quarantine, and detect the device type again"
+msgstr "信任此连接、解除隔离并重新识别设备类型"
+
+#: migrated from the previously shipped client catalog
+msgid "Trust current connection"
+msgstr "信任当前连接"
+
+#: migrated from the previously shipped client catalog
+msgid "Stable device identity is available"
+msgstr "设备具有稳定的身份识别依据"
+
+#: migrated from the previously shipped client catalog
+msgid "This device is protected mainly by its MAC address; MAC spoofing cannot be reliably detected yet"
+msgstr "此设备目前主要依靠 MAC 地址识别，尚无法可靠检测 MAC 地址冒用"
+
+#: migrated from the previously shipped client catalog
+msgid "This connection may belong to device %s. Sheepfold will not link it or copy access rights without a parent decision."
+msgstr "此连接可能属于设备 %s。未经家长确认，Sheepfold 不会关联记录或复制访问权限。"
+
+#: migrated from the previously shipped client catalog
+msgid "Device name"
+msgstr "设备名称"
+
+#: migrated from the previously shipped client catalog
+msgid "DHCP fingerprint"
+msgstr "DHCP 指纹"
+
+#: migrated from the previously shipped client catalog
+msgid "MAC manufacturer"
+msgstr "MAC 制造商"
+
+#: migrated from the previously shipped client catalog
+msgid "Network services"
+msgstr "网络服务"
+
+#: migrated from the previously shipped client catalog
+msgid "Contradictory device signals"
+msgstr "设备特征存在矛盾"
+
+#: migrated from the previously shipped client catalog
+msgid "Router country"
+msgstr "路由器所在国家"
+
+#: migrated from the previously shipped client catalog
+msgid "Russia"
+msgstr "俄罗斯"
+
+#: migrated from the previously shipped client catalog
+msgid "Belarus"
+msgstr "白俄罗斯"
+
+#: migrated from the previously shipped client catalog
+msgid "China"
+msgstr "中国"
+
+#: migrated from the previously shipped client catalog
+msgid "Selects the country-specific emergency-useful sites. Manually added or edited sites are preserved."
+msgstr "选择适用于所在国家的应急实用网站。手动添加或编辑的网站会被保留。"
+
+#: migrated from the previously shipped client catalog
+msgid "Could not apply the router country profile."
+msgstr "无法应用路由器国家配置。"
+
+#: migrated from the previously shipped client catalog
+msgid "This backup was created on another router or by an older Sheepfold version. Device numbers, groups, schedules and lists will be kept, but device fingerprints and administrator phone bindings will be rebuilt. Pair administrator phones again after import."
+msgstr "此备份来自另一台路由器或较旧版本的 Sheepfold。设备编号、分组、时间表和列表会保留，但设备指纹及管理员手机绑定将重新建立。导入后请重新配对管理员手机。"
+
 # Add more translations as needed. Use msgmerge.sh to update from template.
 # For production, run the i18n scripts and provide high-quality translations for all msgids.

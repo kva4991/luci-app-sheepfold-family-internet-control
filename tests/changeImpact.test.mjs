@@ -67,6 +67,20 @@ describe('change impact advisor §impact1', () => {
     assert.deepEqual(report.unknown, []);
   });
 
+  it('maps PO, POT and client JSON catalogs to localization checks', () => {
+    const report = inspectChanges([
+      'package/luci-app-sheepfold-family-internet-control/po/ru/sheepfold.po',
+      'package/luci-app-sheepfold-family-internet-control/po/templates/sheepfold.pot',
+      'po/zh_Hans/sheepfold.po',
+      'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/i18n/ru.json',
+    ]);
+
+    assert.deepEqual(report.categories, ['luci', 'packaging']);
+    assert.deepEqual(report.unknown, []);
+    assert.ok(report.areas.some((area) => area.name === 'Локализация интерфейса'));
+    assert.ok(recommendedCommands(report).manual.includes('npm.cmd run router:frontend'));
+  });
+
   it('keeps both sides of a rename and runs an edited test directly', () => {
     const parsed = parseNameStatus('R100\0package/app/htdocs/luci-static/resources/features/devices/old.js\0archive/old.js\0M\0tests/changeImpact.test.mjs\0');
     assert.deepEqual(parsed[0], {
