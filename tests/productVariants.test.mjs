@@ -145,6 +145,10 @@ describe('product variant boundary §prodvar', () => {
       assert.match(aiOverview, /require sheepfold\.features\.devices\.editor as deviceEditor/);
       assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/schedules/editor.js'));
       assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/schedules/editor.js'));
+      assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/settings/general.js'));
+      assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/settings/general.js'));
+      assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/settings/persistence.js'));
+      assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/settings/persistence.js'));
       assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/groups/editor.js'));
       assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/groups/editor.js'));
       assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/administrators/editor.js'));

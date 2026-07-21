@@ -13,6 +13,7 @@ const overview = readFileSync('package/luci-app-sheepfold-family-internet-contro
 const scheduleModel = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/model.js', 'utf8');
 const scheduleView = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js', 'utf8');
 const scheduleEditor = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/editor.js', 'utf8');
+const settingsPersistence = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/persistence.js', 'utf8');
 const styles = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/sheepfold.css', 'utf8');
 const defaults = readFileSync('package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/sheepfold.uci.defaults', 'utf8');
 const makefile = readFileSync('package/luci-app-sheepfold-family-internet-control/Makefile', 'utf8');
@@ -103,7 +104,7 @@ describe('Schedule editor and access priority UI', () => {
     assert.match(makefile, new RegExp(`legacy_access_priority='${legacyOrder}'`));
     assert.match(makefile, new RegExp(`safe_access_priority='${defaultOrder}'`));
     assert.match(makefile, /current_access_priority.*sheepfold\.global\.access_priority/);
-    assert.match(overview, /function normalizeAccessOrder\(value\)/);
+    assert.match(settingsPersistence, /function normalizeAccessOrder\(value, accessKeys\)/);
     const priorityField = overview.slice(
       overview.indexOf('function accessPriorityField()'),
       overview.indexOf('function scheduleConflictPolicyField()'),

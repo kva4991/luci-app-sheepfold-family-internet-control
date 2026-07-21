@@ -47,6 +47,8 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.match(overview, /require sheepfold\.features\.settings\.draft as settingsDraftModel/);
     assert.match(overview, /require sheepfold\.features\.settings\.backup as settingsBackupModel/);
     assert.match(overview, /require sheepfold\.features\.settings\.backup-panel as settingsBackupPanelModel/);
+    assert.match(overview, /require sheepfold\.features\.settings\.general as settingsGeneralModel/);
+    assert.match(overview, /require sheepfold\.features\.settings\.persistence as settingsPersistenceModel/);
     assert.match(overview, /require sheepfold\.features\.sites\.status as siteListStatus/);
     assert.match(overview, /require sheepfold\.features\.storage\.panel as storagePanelModel/);
     assert.match(overview, /require sheepfold\.core\.backend\.router as routerBackend/);
@@ -74,6 +76,10 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.doesNotMatch(overview, /function wifiSaveBar/);
     assert.doesNotMatch(overview, /function siteFilteringIntegrationBox/);
     assert.doesNotMatch(overview, /function routerIpv6Field/);
+    assert.doesNotMatch(overview, /function validateSettingsDraft/);
+    assert.doesNotMatch(overview, /function saveGlobalOptions/);
+    assert.doesNotMatch(overview, /function appPortField/);
+    assert.doesNotMatch(overview, /function autoConfigureDevicesField/);
     assert.doesNotMatch(overview, /Math\.random\(\)/);
   });
 
@@ -101,6 +107,8 @@ describe('LuCI frontend modules §frontmod', () => {
     const wifiEditor = moduleSource('sheepfold/features/wifi/editor.js');
     const messenger = moduleSource('sheepfold/features/messenger/settings.js');
     const settingsDraft = moduleSource('sheepfold/features/settings/draft.js');
+    const settingsGeneral = moduleSource('sheepfold/features/settings/general.js');
+    const settingsPersistence = moduleSource('sheepfold/features/settings/persistence.js');
     const settingsBackup = moduleSource('sheepfold/features/settings/backup.js');
     const settingsBackupPanel = moduleSource('sheepfold/features/settings/backup-panel.js');
     const downloads = moduleSource('sheepfold/shared/downloads.js');
@@ -155,6 +163,15 @@ describe('LuCI frontend modules §frontmod', () => {
     assert.doesNotMatch(wifiEditor, /\buci\.(get|set|unset|remove)|\bfs\.|saveUciChanges|overview/);
     assert.match(messenger, /function settingsBox/);
     assert.match(settingsDraft, /function dirtySavers/);
+    assert.match(settingsGeneral, /function automaticSetupDraft/);
+    assert.match(settingsGeneral, /function render\(deps\)/);
+    assert.doesNotMatch(settingsGeneral, /\buci\.|saveUciChanges|routerControl|overview/);
+    assert.match(settingsPersistence, /function validateDraft/);
+    assert.match(settingsPersistence, /function partitionOptions/);
+    assert.match(settingsPersistence, /function stageSection/);
+    assert.doesNotMatch(settingsPersistence, /saveUciChanges|routerControl|overview/);
+    assert.match(overview, /settingsPersistence\.validate\(options\)/);
+    assert.match(overview, /settingsPersistence\.save\(options\)/);
     assert.match(settingsBackup, /function encrypt\(payload, password\)/);
     assert.match(settingsBackup, /function validateAccessLists/);
     assert.match(settingsBackupPanel, /function create\(deps\)/);

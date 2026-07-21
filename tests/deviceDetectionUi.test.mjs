@@ -16,6 +16,10 @@ const overviewPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js',
 );
+const generalSettingsPath = resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/general.js',
+);
 const detectorPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-device-detector',
@@ -114,12 +118,12 @@ describe('Интерфейс автоопределения устройств',
   });
 
   it('показывает режим реакции на подмену и не предлагает переклассификацию чёрного списка устройств', () => {
-    const overview = readFileSync(overviewPath, 'utf8');
+    const generalSettings = readFileSync(generalSettingsPath, 'utf8');
     const personal = readFileSync(viewPath, 'utf8');
 
-    assert.match(overview, /Device monitoring and setup/);
-    assert.match(overview, /device_monitoring_mode/);
-    assert.match(overview, /Automatic \(recommended\)/);
+    assert.match(generalSettings, /Device monitoring and setup/);
+    assert.match(generalSettings, /device_monitoring_mode/);
+    assert.match(generalSettings, /Automatic \(recommended\)/);
     assert.match(personal, /deviceIsBlocklisted/);
     assert.match(personal, /isBlocklisted \? null : E\('button'/);
     assert.match(personal, /_\('Trust current connection'\)/);

@@ -16,6 +16,7 @@ const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/view/shee
 const maintenancePath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/router/maintenance.js');
 const logPanelPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/logs/panel.js');
 const notificationSettingsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/notifications/settings.js');
+const generalSettingsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/settings/general.js');
 const i18nModulePath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n.js');
 const ruJsonPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n/ru.json');
 const zhHansJsonPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/i18n/zh_Hans.json');
@@ -61,12 +62,13 @@ describe('overview localization', () => {
 
   it('loads Sheepfold UI language from sheepfold.global.language without syncing luci.main.lang', () => {
     const source = readFileSync(overviewPath, 'utf8');
+    const generalSettings = readFileSync(generalSettingsPath, 'utf8');
     const i18nModule = readFileSync(i18nModulePath, 'utf8');
 
     assert.match(source, /require sheepfold\.i18n as sheepfoldI18n/);
     assert.match(source, /sheepfoldI18n\.installApplicationTranslator/);
     assert.match(source, /sheepfoldI18n\.normalizeApplicationLanguage/);
-    assert.match(source, /\['zh_Hans',\s*_\('Chinese \(Simplified\)'\)\]/);
+    assert.match(generalSettings, /\['zh_Hans',\s*_\('Chinese \(Simplified\)'\)\]/);
     assert.doesNotMatch(source, /uci\.set\('luci', 'main', 'lang'/);
     assert.match(i18nModule, /installApplicationTranslator/);
     assert.match(i18nModule, /sheepfold\/i18n\//);

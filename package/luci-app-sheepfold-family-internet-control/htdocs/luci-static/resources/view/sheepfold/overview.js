@@ -33,6 +33,8 @@
 'require sheepfold.features.settings.backup as settingsBackupModel';
 'require sheepfold.features.settings.backup-panel as settingsBackupPanelModel';
 'require sheepfold.features.settings.draft as settingsDraftModel';
+'require sheepfold.features.settings.general as settingsGeneralModel';
+'require sheepfold.features.settings.persistence as settingsPersistenceModel';
 'require sheepfold.features.sites.status as siteListStatus';
 'require sheepfold.features.storage.panel as storagePanelModel';
 'require sheepfold.features.wifi.cards as wifiCards';
@@ -67,7 +69,6 @@ var accessSteps = [
         ['group_schedule', 'Group schedule'],
         ['default_access', 'Default access']
 ];
-var defaultOrder = accessSteps.map(function (item) { return item[0]; });
 
 var emergencySites = [];
 var savedEmergencySites = [];
@@ -92,6 +93,20 @@ var rootPasswordCheckFailed = false;
 // Так родитель явно нажимает "Сохранить", получает одно понятное уведомление,
 // а LuCI не копит неожиданную плашку "не принятые изменения" после каждого select/input.
 var settingsDraft = settingsDraftModel.create(updateSettingsSaveButtons);
+var settingsPersistence = settingsPersistenceModel.create({
+	uci: uci,
+	save: saveUciChanges,
+	normalizeLanguage: sheepfoldI18n.normalizeApplicationLanguage,
+	sectionValue: sectionSettingValue,
+	accessKeys: accessSteps.map(function (item) { return item[0]; })
+});
+var generalSettingsUi = {
+	value: settingValue,
+	setOption: setSettingsDraftOption,
+	setOptions: setSettingsDraftOptions,
+	selectField: saveSelectGlobalField,
+	textareaField: globalTextareaOptionField
+};
 var logPanel = logPanelModel.create({
         clear: function () { return fs.write(logCachePath(), ''); },
         download: downloads.textFile,
@@ -202,10 +217,6 @@ function logCachePath() {
         return safeUciGet('sheepfold', 'global', 'log_cache_path', defaultLogCachePath) || defaultLogCachePath;
 }
 
-function validRamCachePath(path) {
-        return /^\/tmp\/[A-Za-z0-9_./-]+$/.test(path || '') && path.indexOf('..') === -1 && path.charAt(path.length - 1) !== '/';
-}
-
 function resetSettingsDraft() {
         settingsDraft.reset();
 }
@@ -276,63 +287,6 @@ function appDiscoveryJson(port) {
                 apiBase: '/cgi-bin/sheepfold-api',
                 version: safeUciGet('sheepfold', 'global', 'ui_asset_version', '0.1.0')
         }, null, 2) + '\n';
-}
-
-function validateSettingsDraft(options) {
-        var portNumber;
-        var adguardUrl;
-        var adguardUrlParts;
-        var adguardUsername;
-        var adguardPassword;
-
-        if (hasOwn(options, 'log_cache_path') && !validRamCachePath(options.log_cache_path))
-                throw new Error(_('Cache file path must start with /tmp/ and contain only letters, numbers, dot, slash, underscore, and hyphen.'));
-
-        if (hasOwn(options, 'app_port')) {
-                portNumber = parseInt(options.app_port, 10);
-                if (!options.app_port || String(portNumber) !== String(options.app_port) || portNumber < 1 || portNumber > 65535)
-                        throw new Error(_('Enter a port from 1 to 65535.'));
-        }
-
-        if (hasOwn(options, 'usb.device') && options['usb.device'] && !/^\/dev\/[A-Za-z0-9._-]+$/.test(options['usb.device']))
-                throw new Error(_('USB partition device path') + ': /dev/...');
-
-        /* SHEEPFOLD_AI_BEGIN */
-        if (hasOwn(options, 'ai_rate_limit_requests')) {
-                portNumber = parseInt(options.ai_rate_limit_requests, 10);
-                if (!options.ai_rate_limit_requests || String(portNumber) !== String(options.ai_rate_limit_requests) || portNumber < 1 || portNumber > 1000)
-                        throw new Error(_('Requests per device') + ': 1–1000');
-        }
-
-        if (hasOwn(options, 'ai_rate_limit_window_seconds')) {
-                portNumber = parseInt(options.ai_rate_limit_window_seconds, 10);
-                if (!options.ai_rate_limit_window_seconds || String(portNumber) !== String(options.ai_rate_limit_window_seconds) || portNumber < 60 || portNumber > 86400)
-                        throw new Error(_('Rate limit window, seconds') + ': 60–86400');
-        }
-        /* SHEEPFOLD_AI_END */
-
-        if (hasOwn(options, 'access_priority') &&
-                normalizeAccessOrder(options.access_priority).join(' ') !== String(options.access_priority).trim())
-                throw new Error(_('Access priority contains an unknown or duplicate rule.'));
-
-        if (hasOwn(options, 'adguard.url')) {
-                adguardUrl = String(options['adguard.url'] || '').trim();
-                adguardUrlParts = adguardUrl.match(/^(https?):\/\/([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(?::([0-9]{1,5}))?\/?$/i);
-                if (!adguardUrlParts)
-                        throw new Error(_('AdGuard Home address must contain only the protocol, host, and optional port.'));
-                if (adguardUrlParts[3] && (parseInt(adguardUrlParts[3], 10) < 1 || parseInt(adguardUrlParts[3], 10) > 65535))
-                        throw new Error(_('AdGuard Home address must contain only the protocol, host, and optional port.'));
-                if (adguardUrlParts[1].toLowerCase() === 'http' &&
-                        !/^(?:127\.0\.0\.1|localhost|\[::1\])$/i.test(adguardUrlParts[2]))
-                        throw new Error(_('Use HTTPS for AdGuard Home on another device. Unencrypted HTTP is allowed only on this router.'));
-        }
-
-        if (hasOwn(options, 'adguard.username') || hasOwn(options, 'adguard.password')) {
-                adguardUsername = String(sectionSettingValue('adguard', 'username', '') || '').trim();
-                adguardPassword = String(sectionSettingValue('adguard', 'password', '') || '');
-                if (Boolean(adguardUsername) !== Boolean(adguardPassword))
-                        throw new Error(_('Enter both the AdGuard Home username and password, or leave both fields empty.'));
-        }
 }
 
 function applySettingsSideEffects(options) {
@@ -451,7 +405,7 @@ function saveSettingsNow() {
         }
 
         try {
-                validateSettingsDraft(options);
+                settingsPersistence.validate(options);
         } catch (error) {
                 notify(error.message, 'warning');
                 return Promise.reject(error);
@@ -463,7 +417,7 @@ function saveSettingsNow() {
         // Сначала сохраняем простые option из вкладок настроек, затем выполняем side effects
         // вроде перезапуска локального API-порта. В обратном порядке UI мог бы показать
         // успешное сохранение, хотя сервис ещё читает старую конфигурацию.
-        return saveGlobalOptions(options).then(function () {
+        return settingsPersistence.save(options).then(function () {
                 return applySettingsSideEffects(options);
         }).then(function () {
                 var chain = Promise.resolve();
@@ -2980,41 +2934,6 @@ function cachePathField() {
         ]);
 }
 
-function blocklistEmergencyAccessField() {
-        var value = settingValue('domain_allowlist_for_blocklist', '1') === '1' ? '1' : '0';
-        var select = E('select', {
-                'class': 'cbi-input-select',
-                'change': function (ev) {
-                        setSettingsDraftOption('domain_allowlist_for_blocklist', ev.currentTarget.value);
-                }
-        }, [
-                E('option', { 'value': '1', 'selected': value === '1' ? 'selected' : null }, _('Yes')),
-                E('option', { 'value': '0', 'selected': value === '0' ? 'selected' : null }, _('No'))
-        ]);
-
-        return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, _('Blocklist emergency-useful sites access')),
-                select,
-                E('small', {}, _('Allows blocklisted devices to access only sites added to the emergency-useful sites list. Router access remains blocked.'))
-        ]);
-}
-
-function normalizeAccessOrder(value) {
-        var known = {};
-        var order = [];
-
-        accessSteps.forEach(function (item) { known[item[0]] = true; });
-        String(value || '').split(/\s+/).filter(Boolean).forEach(function (key) {
-                if (known[key] && order.indexOf(key) === -1)
-                        order.push(key);
-        });
-        defaultOrder.forEach(function (key) {
-                if (order.indexOf(key) === -1)
-                        order.push(key);
-        });
-        return order;
-}
-
 function accessPriorityField() {
         // Редактор нельзя включать раньше backend-поддержки: иначе LuCI обещает
         // пользовательский порядок, а firewall продолжает применять фиксированный.
@@ -3077,151 +2996,6 @@ function siteListsUpdateIntervalField() {
         ], _('Site list update interval saved.'), _('Could not save site list update interval.'), null, function () {
                 return routerControl(['site-lists-cron-apply']);
         });
-}
-
-function autoConfigureDevicesField() {
-        var enabled = settingValue('auto_configure', '1') === '1';
-        var value = !enabled ? 'disabled' :
-                settingValue('detection_mode', 'full') === 'reduced' ? 'reduced' : 'full';
-        var select = E('select', {
-                'class': 'cbi-input-select',
-                'change': function (ev) {
-                        var nextValue = ev.currentTarget.value;
-                        var mode = nextValue === 'reduced' ? 'reduced' : 'full';
-
-                        setSettingsDraftOptions({
-                                auto_configure: nextValue === 'disabled' ? '0' : '1',
-                                detection_mode: mode,
-                                no_restrictions_auto_assign: nextValue === 'disabled' ? '0' : '1'
-                        });
-                }
-        }, [
-                E('option', { 'value': 'disabled', 'selected': value === 'disabled' ? 'selected' : null }, _('Disabled')),
-                E('option', { 'value': 'full', 'selected': value === 'full' ? 'selected' : null }, _('Full automatic setup')),
-                E('option', { 'value': 'reduced', 'selected': value === 'reduced' ? 'selected' : null }, _('Reduced automatic setup'))
-        ]);
-
-        return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, _('New device automatic setup')),
-                select,
-                E('small', {}, _('Full mode can use port checks when available. Reduced mode avoids heavy checks but still can automatically add confidently detected home infrastructure devices to No restrictions.'))
-        ]);
-}
-
-function deviceMonitoringModeField() {
-        return saveSelectGlobalField(_('Device monitoring and setup'), 'device_monitoring_mode', 'automatic', [
-                ['automatic', _('Automatic (recommended)')],
-                ['manual', _('Manual')]
-        ], null, null, _('When a known MAC appears with strongly different trusted DHCP, mDNS, or UPnP identifiers, automatic mode temporarily blocks that connection at device-blocklist level. Manual mode restricts it until a parent decides. The saved rights of the original device are not changed.'));
-}
-
-function updateCheckInstallField() {
-        var value = settingValue('update_check_install_mode', 'weekly');
-        var select = E('select', {
-                'class': 'cbi-input-select',
-                'change': function (ev) {
-                        setSettingsDraftOption('update_check_install_mode', ev.currentTarget.value);
-                }
-        }, [
-                E('option', { 'value': 'daily', 'selected': value === 'daily' ? 'selected' : null }, _('Every day')),
-                E('option', { 'value': 'weekly', 'selected': value === 'weekly' ? 'selected' : null }, _('Every week')),
-                E('option', { 'value': 'monthly', 'selected': value === 'monthly' ? 'selected' : null }, _('Every month')),
-                E('option', { 'value': 'never', 'selected': value === 'never' ? 'selected' : null }, _('Never'))
-        ]);
-
-        return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, _('Update check and installation')),
-                select,
-                E('small', {}, _('Defines how often Sheepfold should check for and install updates after confirmation.'))
-        ]);
-}
-
-function ensureSheepfoldNamedSection(section, type) {
-        try {
-                uci.get('sheepfold', section);
-        } catch (e) {
-                uci.set('sheepfold', section, type);
-        }
-}
-
-function saveGlobalOptions(options) {
-        var globalOptions = {};
-        var usbOptions = {};
-        var cloudOptions = {};
-        var gdriveOptions = {};
-        var adguardOptions = {};
-        var configs = ['sheepfold'];
-
-        Object.keys(options).forEach(function (key) {
-                var usbParts = key.match(/^usb\.(.+)$/);
-                var cloudParts = key.match(/^cloud\.(.+)$/);
-                var gdriveParts = key.match(/^gdrive\.(.+)$/);
-                var adguardParts = key.match(/^adguard\.(.+)$/);
-
-                if (usbParts)
-                        usbOptions[usbParts[1]] = options[key];
-                else if (cloudParts)
-                        cloudOptions[cloudParts[1]] = options[key];
-                else if (gdriveParts)
-                        gdriveOptions[gdriveParts[1]] = options[key];
-                else if (adguardParts)
-                        adguardOptions[adguardParts[1]] = options[key];
-                else
-                        globalOptions[key] = options[key];
-        });
-
-        if (hasOwn(globalOptions, 'language'))
-                globalOptions.language = sheepfoldI18n.normalizeApplicationLanguage(globalOptions.language);
-
-        Object.keys(globalOptions).forEach(function (option) {
-                uci.set('sheepfold', 'global', option, globalOptions[option]);
-        });
-
-        /* SHEEPFOLD_AI_BEGIN */
-        if (hasOwn(globalOptions, 'deepseek_api_key') && String(globalOptions.deepseek_api_key || '').trim())
-                uci.set('sheepfold', 'global', 'ai_enabled', '1');
-
-        if (hasOwn(globalOptions, 'gemini_api_key') && String(globalOptions.gemini_api_key || '').trim())
-                uci.set('sheepfold', 'global', 'ai_enabled', '1');
-
-        if (hasOwn(globalOptions, 'child_ai_parental_consent'))
-                uci.set('sheepfold', 'global', 'child_ai_consent_version', 'child-ai-v1');
-        /* SHEEPFOLD_AI_END */
-
-        if (Object.keys(usbOptions).length) {
-                ensureSheepfoldNamedSection('usb', 'usb');
-                Object.keys(usbOptions).forEach(function (option) {
-                        uci.set('sheepfold', 'usb', option, usbOptions[option]);
-                });
-        }
-
-        if (Object.keys(cloudOptions).length) {
-                ensureSheepfoldNamedSection('cloud', 'yandex_disk');
-                if (hasOwn(cloudOptions, 'login') || hasOwn(cloudOptions, 'password'))
-                        uci.set('sheepfold', 'cloud', 'authorized', '0');
-                Object.keys(cloudOptions).forEach(function (option) {
-                        uci.set('sheepfold', 'cloud', option, cloudOptions[option]);
-                });
-        }
-
-        if (Object.keys(gdriveOptions).length) {
-                ensureSheepfoldNamedSection('gdrive', 'google_drive');
-                if (hasOwn(gdriveOptions, 'client_id') || hasOwn(gdriveOptions, 'client_secret') ||
-                        hasOwn(gdriveOptions, 'refresh_token'))
-                        uci.set('sheepfold', 'gdrive', 'authorized', '0');
-                Object.keys(gdriveOptions).forEach(function (option) {
-                        uci.set('sheepfold', 'gdrive', option, gdriveOptions[option]);
-                });
-        }
-
-        if (Object.keys(adguardOptions).length) {
-                ensureSheepfoldNamedSection('adguard', 'integration');
-                Object.keys(adguardOptions).forEach(function (option) {
-                        uci.set('sheepfold', 'adguard', option, adguardOptions[option]);
-                });
-        }
-
-        return saveUciChanges(configs);
 }
 
 function confirmWifiAutoDisable(timeValue) {
@@ -3653,33 +3427,6 @@ function globalInputOptionField(label, option, defaultValue, placeholder, hint, 
                 E('span', {}, label),
                 fieldControl,
                 hint ? E('small', {}, hint) : ''
-        ]);
-}
-
-function appPortField() {
-        var currentValue = settingValue('app_port', '5201');
-        var input = E('input', {
-                'class': 'cbi-input-text',
-                'type': 'number',
-                'min': '1',
-                'max': '65535',
-                'value': currentValue
-        });
-
-        input.addEventListener('input', function () {
-                setSettingsDraftOption('app_port', String(input.value || '').trim());
-        });
-        input.addEventListener('keydown', function (event) {
-                if (event.key === 'Enter') {
-                        event.preventDefault();
-                        setSettingsDraftOption('app_port', String(input.value || '').trim());
-                }
-        });
-
-        return E('label', { 'class': 'sf-field sf-field-wide' }, [
-                E('span', {}, _('Application HTTPS port')),
-                input,
-                E('small', {}, _('Used by Android app and pairing QR codes.'))
         ]);
 }
 
@@ -4767,39 +4514,6 @@ return view.extend({
                 return logPanel.render();
         },
 
-	renderSettingsGeneral: function () {
-		return E('div', { 'class': 'sf-flat-form' }, [
-			saveSelectGlobalField(_('Application language'), 'language', 'ru', [
-				['ru', _('Russian')],
-				['en', _('English')],
-				['zh_Hans', _('Chinese (Simplified)')]
-			], null, null, _('Applies only to Sheepfold. Does not change the router LuCI language. The page reloads after Save.')),
-			saveSelectGlobalField(_('Router country'), 'country_profile', 'ru', [
-				['ru', _('Russia')],
-				['by', _('Belarus')],
-				['cn', _('China')]
-			], null, null, _('Selects the country-specific emergency-useful sites. Manually added or edited sites are preserved.')),
-			appPortField(),
-                        saveSelectGlobalField(_('New device behavior'), 'new_device_policy', 'allow', [
-                                ['allow', _('Allow internet by default')],
-                                ['restrict_until_configured', _('Restrict until configured')]
-                        ]),
-                        autoConfigureDevicesField(),
-                        deviceMonitoringModeField(),
-                        updateCheckInstallField(),
-                        blocklistEmergencyAccessField(),
-                        globalTextareaOptionField(
-                                _('Blocked internet page text shown instead of websites'),
-                                'blocked_page_text',
-                                _('Internet is temporarily unavailable by family rules.'),
-                                _('Settings saved.'),
-                                _('Could not save settings.'),
-                                null,
-                                2
-                        )
-                ]);
-        },
-
         /* SHEEPFOLD_AI_BEGIN */
         renderSettingsAi: function () {
                 return aiSettingsBox();
@@ -4938,7 +4652,7 @@ return view.extend({
                         E('div', { 'class': 'sf-settings-tabs-separator', 'aria-hidden': 'true' }),
                         settingsSaveBar(true),
                         this.renderSettingsPanel('info', routerInfo.panel()),
-                        this.renderSettingsPanel('general', this.renderSettingsGeneral()),
+                        this.renderSettingsPanel('general', settingsGeneralModel.render(generalSettingsUi)),
                         this.renderSettingsPanel('integrations', this.renderIntegrations()),
                         this.renderSettingsPanel('messenger', this.renderBot()),
                         this.renderSettingsPanel('notifications', this.renderSettingsNotifications()),

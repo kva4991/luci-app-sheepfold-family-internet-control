@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
 const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/view/sheepfold/overview.js');
+const generalSettingsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/settings/general.js');
 const wifiCardsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/wifi/cards.js');
 const wifiEditorPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/wifi/editor.js');
 const logPanelPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/logs/panel.js');
@@ -122,11 +123,12 @@ describe('overview UI release 148', () => {
 
   it('keeps current settings labels and package release in sync', () => {
     const overview = readFileSync(overviewPath, 'utf8');
+    const generalSettings = readFileSync(generalSettingsPath, 'utf8');
     const po = readFileSync(poPath, 'utf8');
     const makefile = readFileSync(makefilePath, 'utf8');
 
     assert.match(overview, /Site list update from allowlist and blocklist sources/);
-    assert.match(overview, /Application HTTPS port/);
+    assert.match(generalSettings, /Application HTTPS port/);
     assert.match(po, /msgid "Application HTTPS port"/);
     assert.match(po, /msgstr "HTTPS-порт приложения"/);
     assert.match(po, /msgid "Site list update from allowlist and blocklist sources"/);

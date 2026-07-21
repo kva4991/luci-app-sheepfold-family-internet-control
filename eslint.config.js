@@ -43,6 +43,8 @@ const luciGlobals = {
   settingsBackupModel: 'readonly',
   settingsBackupPanelModel: 'readonly',
   settingsDraftModel: 'readonly',
+  settingsGeneralModel: 'readonly',
+  settingsPersistenceModel: 'readonly',
   sharedForms: 'readonly',
   sharedIcons: 'readonly',
   sheepfoldI18n: 'readonly',

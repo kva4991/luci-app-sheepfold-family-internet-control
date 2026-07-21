@@ -95,6 +95,96 @@ describe('extracted LuCI domain models §frontmod', () => {
     assert.equal(draft.dirtySavers().length, 1);
   });
 
+  it('maps the general automatic-setup choice to one coherent draft', () => {
+    const general = loadFeature('settings/general.js');
+
+    assert.deepEqual({ ...general.automaticSetupDraft('full') }, {
+      auto_configure: '1',
+      detection_mode: 'full',
+      no_restrictions_auto_assign: '1'
+    });
+    assert.deepEqual({ ...general.automaticSetupDraft('reduced') }, {
+      auto_configure: '1',
+      detection_mode: 'reduced',
+      no_restrictions_auto_assign: '1'
+    });
+    assert.deepEqual({ ...general.automaticSetupDraft('disabled') }, {
+      auto_configure: '0',
+      detection_mode: 'full',
+      no_restrictions_auto_assign: '0'
+    });
+  });
+
+  it('validates and stages one settings draft through the persistence adapter', async () => {
+    const persistence = loadFeature('settings/persistence.js');
+    const accessKeys = ['blocklist', 'allowlist', 'default_access'];
+    const partitioned = persistence.partitionOptions({
+      language: 'RU',
+      'usb.device': '/dev/sda1',
+      'cloud.login': 'owner',
+      'adguard.url': 'https://192.168.1.2:3000'
+    });
+
+    assert.deepEqual(JSON.parse(JSON.stringify(partitioned)), {
+      global: { language: 'RU' },
+      usb: { device: '/dev/sda1' },
+      cloud: { login: 'owner' },
+      gdrive: {},
+      adguard: { url: 'https://192.168.1.2:3000' }
+    });
+    assert.throws(() => persistence.validateDraft({ app_port: '0' }, {
+      accessKeys,
+      sectionValue: () => ''
+    }), /Enter a port from 1 to 65535/);
+    assert.throws(() => persistence.validateDraft({
+      access_priority: 'blocklist unknown allowlist default_access'
+    }, {
+      accessKeys,
+      sectionValue: () => ''
+    }), /Access priority contains an unknown or duplicate rule/);
+    assert.throws(() => persistence.validateDraft({
+      'adguard.url': 'http://192.168.1.2:3000'
+    }, {
+      accessKeys,
+      sectionValue: () => ''
+    }), /Use HTTPS for AdGuard Home on another device/);
+    assert.doesNotThrow(() => persistence.validateDraft({
+      'adguard.url': 'https://192.168.1.2:03000'
+    }, {
+      accessKeys,
+      sectionValue: () => ''
+    }));
+
+    const knownSections = new Set(['global']);
+    const writes = [];
+    const adapter = persistence.create({
+      accessKeys,
+      normalizeLanguage: (value) => value.toLowerCase(),
+      sectionValue: () => '',
+      uci: {
+        get: (config, section) => {
+          if (!knownSections.has(section)) throw new Error('missing');
+          return section;
+        },
+        set: (...args) => {
+          writes.push(args);
+          if (args.length === 3) knownSections.add(args[1]);
+        }
+      },
+      save: async (configs) => configs
+    });
+
+    adapter.validate({ app_port: '5201' });
+    assert.deepEqual([...(await adapter.save({
+      language: 'RU',
+      'usb.device': '/dev/sda1',
+      'cloud.login': 'owner'
+    }))], ['sheepfold']);
+    assert.ok(writes.some((args) => args.join('|') === 'sheepfold|global|language|ru'));
+    assert.ok(writes.some((args) => args.join('|') === 'sheepfold|usb|usb'));
+    assert.ok(writes.some((args) => args.join('|') === 'sheepfold|cloud|authorized|0'));
+  });
+
   it('normalizes Wi-Fi bands from radio mode and channel', () => {
     const wifi = loadFeature('wifi/cards.js');
 
