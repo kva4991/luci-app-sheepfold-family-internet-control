@@ -32,7 +32,7 @@
 
 На момент записи плана:
 
-- рабочая ветка `globalTest` содержит проверенный набор изменений поверх `origin/main` и ещё не слита;
+- этап `globalTest` завершён: PR [#3](https://github.com/kva4991/luci-app-sheepfold-family-internet-control/pull/3) слит fast-forward в `main` на commit `c80cd09`, временная ветка удалена;
 - версия OpenWrt-пакета в ветке — `0.1.0-r241`;
 - локальный строгий quality gate, ESLint, документационный аудит и матрица официальной SDK-сборки прошли;
 - Standard и AI Support успешно собираются в форматах IPK для OpenWrt 24.10 и APK v3 для OpenWrt 25.12;
@@ -66,7 +66,9 @@ flowchart TD
     I --> J["P3: расширение AI Support"]
 ```
 
-## P0. Завершить ветку `globalTest`
+## P0. Завершено: ветка `globalTest`
+
+Статус: **завершено 21 июля 2026 года**. PR #3 слит fast-forward в `main`; локальная и удалённая временные ветки удалены. Полный локальный gate, PR checks, повторные post-merge checks, официальный SDK и живой `r241` прошли.
 
 ### Зачем
 
