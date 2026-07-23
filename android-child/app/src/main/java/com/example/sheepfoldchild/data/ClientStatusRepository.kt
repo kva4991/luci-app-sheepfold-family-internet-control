@@ -38,7 +38,9 @@ class ClientStatusRepository(private val context: Context) {
     suspend fun fetchClientStatus(baseUrl: String): Result<ClientStatusResponse> =
         withContext(Dispatchers.IO) {
             val candidate = preferredBaseUrl(baseUrl)
-            fetchFrom(candidate).onSuccess { saveSelectedBaseUrl(candidate) }
+            val result = fetchFrom(candidate)
+            if (result.isSuccess) saveSelectedBaseUrl(candidate)
+            result
         }
 
     suspend fun requestThirtyMinutes(baseUrl: String): Result<Unit> = withContext(Dispatchers.IO) {
@@ -113,11 +115,14 @@ class ClientStatusRepository(private val context: Context) {
                 if (parsed.ok) {
                     require(parsed.app == "sheepfold") { "Ответ не принадлежит Sheepfold" }
                     ChildRouterHttps.commitCapturedPin(context, url, capturedPin)
-                    // SIM-отчёт вспомогательный: недоступный номер или отказ в
-                    // разрешении не должны ломать основной экран статуса.
-                    runCatching { reportSimSnapshot(baseUrl) }
-                    val wifiEnabled = parsed.data?.wifiNetworkReporting == true
-                    val includeLocation = parsed.data?.wifiLocationReporting == true
+                    val data = parsed.data
+                    // SIM permissions and reporting are used only after the router has
+                    // explicitly enabled the feature for this child device.
+                    if (data?.simChangeReporting == true) {
+                        runCatching { reportSimSnapshot(baseUrl) }
+                    }
+                    val wifiEnabled = data?.wifiNetworkReporting == true
+                    val includeLocation = data?.wifiLocationReporting == true
                     WifiReportQueue.updatePolicy(context, wifiEnabled, includeLocation)
                     if (wifiEnabled) {
                         runCatching {
@@ -253,11 +258,11 @@ class ClientStatusRepository(private val context: Context) {
                 isAdministrator = value.optBoolean("isAdministrator", false),
                 clientRole = value.optString("clientRole", "child"),
                 canRequestAccessExtension = value.optBoolean("canRequestAccessExtension", false),
+                simChangeReporting = value.optBoolean("simChangeReporting", false),
                 wifiNetworkReporting = value.optBoolean("wifiNetworkReporting", false),
                 wifiLocationReporting = value.optBoolean("wifiLocationReporting", false),
                 productStatus = parseProductStatus(value),
                 internetState = value.optString("internetState", "unknown"),
-                accessMode = value.optString("accessMode").takeIf { it.isNotBlank() },
                 accessEndsAt = value.optString("accessEndsAt").takeIf { it.isNotBlank() },
                 minutesRemaining = if (value.has("minutesRemaining") && !value.isNull("minutesRemaining")) {
                     value.optInt("minutesRemaining")

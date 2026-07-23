@@ -76,7 +76,7 @@ function button(title, icon, tone, handler) {
 		'aria-label': title,
 		'click': function (event) {
 			event.preventDefault();
-			handler();
+			handler(event);
 		}
 	}, named(icon));
 }

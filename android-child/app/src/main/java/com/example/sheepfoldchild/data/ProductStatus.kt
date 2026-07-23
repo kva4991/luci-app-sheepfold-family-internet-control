@@ -6,10 +6,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import org.json.JSONObject
 
-/** Серверные поля допуска к AI-чату; отсутствие любого флага безопасно даёт false. §prodvar */
+/** Server capability flags only; the child API does not expose a family-group name. §prodvar */
 data class ProductStatus(
     val aiAvailable: Boolean,
-    val personalGroupName: String?,
     val childAiAllowed: Boolean,
     val personalGroupRequired: Boolean
 )
@@ -19,7 +18,6 @@ private val routerUrlKey = stringPreferencesKey("router_base_url")
 
 fun parseProductStatus(value: JSONObject): ProductStatus = ProductStatus(
     aiAvailable = value.optBoolean("childAiAvailable", false),
-    personalGroupName = value.optString("personalGroupName").takeIf { it.isNotBlank() },
     childAiAllowed = value.optBoolean("childAiAllowed", false),
     personalGroupRequired = value.optBoolean("personalGroupRequired", false)
 )

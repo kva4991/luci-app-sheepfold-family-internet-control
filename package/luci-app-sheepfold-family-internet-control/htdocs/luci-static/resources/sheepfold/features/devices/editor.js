@@ -2,9 +2,9 @@
 'require baseclass';
 'require ui';
 
-/* §frontmod §devmut
+/* §frontmod §devmut §persist1
  * Редактор владеет только полями одной карточки устройства. Конфликты списков,
- * права администратора, UCI, DHCP и применение firewall проверяет координатор.
+ * права администратора, UCI, DHCP и применение firewall проверяет persistence-адаптер.
  */
 function open(deps, device) {
 	var knownGroupValues = deps.groups.map(function (item) { return item[0]; });
@@ -37,8 +37,7 @@ function open(deps, device) {
 	var staticLeaseField = deps.checkboxControl(
 		device.staticLease ? _('Permanent DHCP lease') : _('Create permanent DHCP lease'),
 		device.staticLease,
-		device.staticLease ? _('Existing permanent DHCP lease will be updated, not removed.') : '',
-		device.staticLease ? { 'disabled': 'disabled' } : null
+		device.staticLease ? _('Uncheck to remove the existing permanent DHCP lease.') : ''
 	);
 	/* SHEEPFOLD_AI_BEGIN */
 	var activityLogField = deps.checkboxControl(
@@ -48,12 +47,13 @@ function open(deps, device) {
 	);
 	/* SHEEPFOLD_AI_END */
 	var errorNode = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
+	var saveButton;
 
 	function updateCustomGroupVisibility() {
 		customGroupField.node.hidden = groupField.input.value === '__custom' ? null : 'hidden';
 	}
 
-	function save() {
+	function save(event) {
 		var group = groupField.input.value === '__custom' ? customGroupField.input.value.trim() : groupField.input.value;
 		var payload = {
 			name: nameField.input.value.trim() || device.name,
@@ -76,13 +76,11 @@ function open(deps, device) {
 			errorNode.hidden = false;
 			return;
 		}
-		deps.persist(payload);
+		deps.persist(payload, event && event.currentTarget || saveButton);
 	}
 
 	groupField.input.addEventListener('change', updateCustomGroupVisibility);
 	if (device.adminDevice) {
-		// Админская карточка остаётся информативной, но обычная форма не может
-		// вернуть устройство в детскую группу или под ограничивающий статус.
 		groupField.input.disabled = true;
 		customGroupField.input.disabled = true;
 		statusField.input.disabled = true;
@@ -111,6 +109,7 @@ function open(deps, device) {
 			linkedInterfaces
 		));
 
+	saveButton = E('button', { 'class': 'btn cbi-button cbi-button-positive', 'click': save }, _('Save'));
 	ui.showModal(_('Device settings'), [
 		E('div', { 'class': 'sf-device-editor' }, [
 			E('div', { 'class': 'sf-device-info-lines' }, deviceInfoLines),
@@ -130,7 +129,7 @@ function open(deps, device) {
 		]),
 		E('div', { 'class': 'right sf-modal-actions' }, [
 			E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
-			E('button', { 'class': 'btn cbi-button cbi-button-positive', 'click': save }, _('Save'))
+			saveButton
 		])
 	]);
 }

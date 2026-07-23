@@ -95,7 +95,7 @@ text() {
                         update_completed) printf '%s' "Обновление завершено." ;;
                         already_running) printf 'Обновление уже выполняется. PID: %s' "$1" ;;
                         started_background) printf 'Обновление запущено в фоне. PID: %s' "$1" ;;
-                        usage) printf '%s' "Использование: sheepfold-updater [check|start|status|log|install]" ;;
+                        usage) printf '%s' "Использование: sheepfold-updater [check|probe|start|status|log|install]" ;;
                         *) printf '%s' "$key" ;;
                 esac
                 return
@@ -131,7 +131,7 @@ text() {
                 update_completed) printf '%s' "Update completed." ;;
                 already_running) printf 'Update is already running. PID: %s' "$1" ;;
                 started_background) printf 'Update started in background. PID: %s' "$1" ;;
-                usage) printf '%s' "Usage: sheepfold-updater [check|start|status|log|install]" ;;
+                usage) printf '%s' "Usage: sheepfold-updater [check|probe|start|status|log|install]" ;;
                 *) printf '%s' "$key" ;;
         esac
 }
@@ -547,6 +547,19 @@ print_check() {
         fi
 }
 
+print_probe() {
+        # Machine-readable check for the periodic maintenance job. It reuses the
+        # updater's trusted release parsing but never downloads or installs a package.
+        read_release_info >/dev/null
+        CURRENT_VERSION="$(current_version || true)"
+        available=0
+        version_is_newer "$LATEST_VERSION" "$CURRENT_VERSION" && available=1
+        printf 'available=%s\n' "$available"
+        printf 'current_version=%s\n' "${CURRENT_VERSION:-unknown}"
+        printf 'latest_version=%s\n' "$LATEST_VERSION"
+        printf 'tag=%s\n' "$TAG"
+}
+
 install_update() {
         say updater_title
         read_release_info
@@ -674,6 +687,9 @@ print_log() {
 case "$COMMAND" in
         check)
                 print_check
+                ;;
+        probe)
+                print_probe
                 ;;
         start)
                 start_update

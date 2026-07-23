@@ -1,7 +1,16 @@
 import org.gradle.api.tasks.Copy
 
-val sheepfoldVersionCode = 48
-val sheepfoldVersionName = "0.1.47"
+val sheepfoldVersionCode = 50
+val sheepfoldVersionName = "0.1.49"
+
+
+val releaseSigningEnvironment = mapOf(
+    "SHEEPFOLD_ANDROID_KEYSTORE" to providers.environmentVariable("SHEEPFOLD_ANDROID_KEYSTORE").orNull,
+    "SHEEPFOLD_ANDROID_KEY_ALIAS" to providers.environmentVariable("SHEEPFOLD_ANDROID_KEY_ALIAS").orNull,
+    "SHEEPFOLD_ANDROID_STORE_PASSWORD" to providers.environmentVariable("SHEEPFOLD_ANDROID_STORE_PASSWORD").orNull,
+    "SHEEPFOLD_ANDROID_KEY_PASSWORD" to providers.environmentVariable("SHEEPFOLD_ANDROID_KEY_PASSWORD").orNull,
+)
+val releaseSigningConfigured = releaseSigningEnvironment.values.all { !it.isNullOrBlank() }
 
 plugins {
     id("com.android.application")
@@ -21,8 +30,20 @@ android {
         versionName = sheepfoldVersionName
     }
 
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = file(releaseSigningEnvironment.getValue("SHEEPFOLD_ANDROID_KEYSTORE")!!)
+                keyAlias = releaseSigningEnvironment.getValue("SHEEPFOLD_ANDROID_KEY_ALIAS")!!
+                storePassword = releaseSigningEnvironment.getValue("SHEEPFOLD_ANDROID_STORE_PASSWORD")!!
+                keyPassword = releaseSigningEnvironment.getValue("SHEEPFOLD_ANDROID_KEY_PASSWORD")!!
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseSigningConfigured) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -43,6 +64,30 @@ android {
     buildFeatures {
         compose = true
     }
+}
+
+
+val verifyReleaseSigning by tasks.registering {
+    group = "verification"
+    description = "Fails release packaging unless all external Sheepfold signing secrets are present."
+    doLast {
+        val missing = releaseSigningEnvironment.filterValues { it.isNullOrBlank() }.keys.sorted()
+        if (missing.isNotEmpty()) {
+            throw org.gradle.api.GradleException(
+                "Missing Android release-signing environment variables: ${missing.joinToString(", ")}"
+            )
+        }
+        val keystore = file(requireNotNull(releaseSigningEnvironment["SHEEPFOLD_ANDROID_KEYSTORE"]))
+        if (!keystore.isFile) {
+            throw org.gradle.api.GradleException("Android release keystore does not exist: $keystore")
+        }
+    }
+}
+
+tasks.matching {
+    it.name in setOf("assembleRelease", "bundleRelease", "packageRelease", "installRelease")
+}.configureEach {
+    dependsOn(verifyReleaseSigning)
 }
 
 dependencies {

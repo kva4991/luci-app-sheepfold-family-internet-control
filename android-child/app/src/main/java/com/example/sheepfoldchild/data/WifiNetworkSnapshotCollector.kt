@@ -18,7 +18,9 @@ import kotlin.math.roundToInt
 
 /**
  * Формирует сигнал о текущей Wi-Fi сети. BSSID участвует только в локальном
- * отпечатке и никогда не покидает телефон в открытом виде. §childwifi1
+ * отпечатке и никогда не покидает телефон в открытом виде. Разрешение точного
+ * местоположения не требуется для network-only режима Android 13+, где доступ
+ * к Wi-Fi даёт отдельное NEARBY_WIFI_DEVICES. §childwifi1
  */
 object WifiNetworkSnapshotCollector {
 
@@ -26,11 +28,13 @@ object WifiNetworkSnapshotCollector {
     private const val UNKNOWN_SSID = "<unknown ssid>"
 
     fun payload(context: Context, includeLocation: Boolean): String? {
-        if (!hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)) return null
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !hasPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES)
-        ) return null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (!hasPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES)) return null
+            if (includeLocation && !hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)) return null
+        } else if (!hasPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)) {
+            // Android 9–12 expose SSID/BSSID to apps through location permission.
+            return null
+        }
 
         val wifiInfo = currentWifiInfo(context) ?: return null
         val ssid = wifiInfo.ssid

@@ -189,6 +189,14 @@
 - Быстрый `scripts/build-test-ipk.py` доказывает состав/права тестового архива, но не совместимость Makefile с feeds/luci и package format целевой версии. Перед Release обязателен Actions matrix и живой роутер (§owrtci1).
 - Standard/AI-фильтрацию нельзя копировать в YAML: один источник истины — `scripts/sheepfold_variants.py`. Иначе тестовый IPK и SDK release могут незаметно получить разный payload (§prodvar, §owrtci1).
 
+### Многоступенчатые пакеты обновлений от внешнего агента
+
+- До применения сверяйте SHA-256 каждого архива и распаковывайте его в отдельный временный каталог. ZIP и `tar.gz` с одинаковым содержимым не обязаны иметь одинаковый хеш.
+- Проверяйте cumulative overlay на чистом клоне базового коммита. Установщик нельзя считать источником истины только потому, что он завершает ранние стадии: в r252 один слой проверял файлы, которые появлялись лишь в следующем слое, а ранний валидатор ожидал уже изменённый хвост backend-файла.
+- Обычный `node --check` неприменим к LuCI-модулям с верхнеуровневым `return`. Используйте LuCI-aware loader или временную функцию-обёртку, иначе корректный модуль будет объявлен синтаксически ошибочным.
+- На русской Windows Python-валидатор архива запускайте с UTF-8 (`PYTHONUTF8=1` или `python -X utf8`), если он печатает кириллицу. Ошибка кодировки консоли не доказывает ошибку payload.
+- После ручного восстановления слоёв обязательны проверки финального дерева, а не только тесты из архива: `git diff --check`, проектные категории тестов, ESLint, Android Lint, сборка вариантов пакета и проверка документации. (§patchov1)
+
 ### Внешние списки сайтов
 
 - URL страницы проекта не является URL списка. Заводские значения должны вести на plain/hosts/Adblock/archive-файл; HTML-ответ никогда не заменяет рабочий кэш (§slstres).
@@ -223,3 +231,10 @@
 - Сообщение `opkg: Malformed package file` приходит слишком поздно. Updater до `opkg` обязан проверить официальный URL asset, `debian-binary`, единственные `control.tar.gz`/`data.tar.gz`, безопасные пути, имя пакета, версию и `Architecture: all`.
 - `postinst` не удаляет временную копию `/tmp/sheepfold/update/sheepfold-config-before-update`: updater удаляет её только после получения и проверки результата `opkg`. Иначе ошибка `postinst` уничтожит единственную оперативную копию до попытки восстановления.
 - Восстановление UCI-конфига не равно откату бинарного пакета. Updater не должен обещать полный rollback, пока предыдущий IPK действительно не сохранён и не проверен.
+- `§maintjob1`: фоновые задания запускаются только через `sheepfold-maintenance`; запрещено вызывать `updater start/install` из расписания или удалять offline-карточку без проверки списков, DHCP, расписаний, группы, административной привязки и `user_configured`.
+- `§country1`: country profile не имеет права молча заменять уже настроенный `system.@system[0].zonename`; внешняя IP-геолокация запрещена.
+- `§devpas1`: выбор полного режима не устанавливает `nmap`; optional package action всегда отдельный, подтверждённый и ограниченный именованным пакетом.
+- `§apicon1`: изменяющая LuCI-команда не должна вручную дублировать `button.disabled`, toast и reload. Составная UCI/runtime-операция получает стабильный action key; после post-commit runtime failure UI перечитывает фактический UCI, а не откатывает интерфейс предположением.
+- `§persist1`: ошибка runtime после успешного UCI commit не является rollback. Адаптер ставит `persisted=true`, UI перечитывает фактический конфиг и сообщает о частичном результате. DOM и toast запрещены внутри persistence-модулей.
+- `§coordclean1`: schedule/group persistence и settings side effects не возвращать в `overview.js`. Coordinator может подтверждать действие и обновлять DOM, но UCI-list, membership staging, runtime ordering и discovery payload принадлежат отдельным модулям.
+- `§settingview1`: поля Settings, Misc/Storage/AI composition и device-type listbox не возвращать в `overview.js`. Presentation-модуль получает draft callbacks; UCI/backend/runtime остаются отдельными adapters.

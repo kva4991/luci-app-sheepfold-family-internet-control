@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
-const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/view/sheepfold/overview.js');
+const overviewPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/overview/application.js');
 const poPath = resolve(packageDir, 'po/ru/sheepfold.po');
 const potPath = resolve(packageDir, 'po/templates/sheepfold.pot');
 
@@ -167,7 +167,7 @@ function buildPoFile(header, entries, references) {
   const blocks = [header.trimEnd()];
 
   for (const msgid of sorted) {
-    const refs = references.get(msgid) || ['htdocs/luci-static/resources/view/sheepfold/overview.js'];
+    const refs = references.get(msgid) || ['htdocs/luci-static/resources/sheepfold/features/overview/application.js'];
     const refLines = refs.map((ref) => `#: ${ref}`);
     blocks.push([
       ...refLines,
@@ -202,7 +202,7 @@ function buildPotFile(entries, references) {
   const blocks = [header];
 
   for (const msgid of sorted) {
-    const refs = references.get(msgid) || ['htdocs/luci-static/resources/view/sheepfold/overview.js'];
+    const refs = references.get(msgid) || ['htdocs/luci-static/resources/sheepfold/features/overview/application.js'];
     const refLines = refs.map((ref) => `#: ${ref}`);
     blocks.push([
       ...refLines,
@@ -240,7 +240,7 @@ for (const [msgid, msgstr] of translations) {
 
 const references = new Map();
 for (const msgid of literalMsgids) {
-  references.set(msgid, ['htdocs/luci-static/resources/view/sheepfold/overview.js']);
+  references.set(msgid, ['htdocs/luci-static/resources/sheepfold/features/overview/application.js']);
 }
 for (const msgid of existingEntries.keys()) {
   if (!references.has(msgid)) {

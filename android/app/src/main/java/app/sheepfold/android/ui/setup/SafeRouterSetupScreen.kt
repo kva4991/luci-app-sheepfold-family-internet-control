@@ -427,7 +427,7 @@ private fun ProtectionStep(onComplete: () -> Unit) {
             else -> true
         }
         Button(enabled = validSecret, onClick = {
-            if (mode == AppProtectionMode.FACE || mode == AppProtectionMode.FINGERPRINT) {
+            if (mode == AppProtectionMode.BIOMETRIC) {
                 val available = BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
                 if (available != BiometricManager.BIOMETRIC_SUCCESS) {
                     error = context.getString(R.string.unlock_biometric_unavailable)
@@ -537,7 +537,6 @@ private fun contextStartWifiSettings(context: android.content.Context) {
 private fun modeLabel(mode: AppProtectionMode): String = stringResource(when (mode) {
     AppProtectionMode.PASSWORD -> R.string.protection_password
     AppProtectionMode.PIN -> R.string.protection_pin
-    AppProtectionMode.FACE -> R.string.protection_face
-    AppProtectionMode.FINGERPRINT -> R.string.protection_fingerprint
+    AppProtectionMode.BIOMETRIC -> R.string.protection_biometric
     AppProtectionMode.NONE -> R.string.protection_none
 })

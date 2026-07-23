@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="protection_biometric">Android biometrics</string>
+    <string name="settings_security_title">App protection</string>
+    <string name="settings_relock_description">After the selected time in the background, Sheepfold asks for the password, PIN, or system biometric check again.</string>
+    <string name="settings_relock_immediate">Lock immediately</string>
+    <string name="settings_relock_one_minute">Lock after 1 minute</string>
+    <string name="settings_relock_five_minutes">Lock after 5 minutes</string>
+    <string name="settings_relock_fifteen_minutes">Lock after 15 minutes</string>
+    <string name="settings_lock_now">Lock the app now</string>
+    <string name="settings_widget_disable_title">Disable internet from a widget</string>
+    <string name="settings_widget_disable_safe">Safe mode: open the app, unlock it, and confirm the shutdown.</string>
+    <string name="settings_widget_disable_instant">Advanced mode: disable internet immediately from the home screen without unlocking.</string>
+    <string name="settings_widget_disable_warning_title">Allow instant shutdown?</string>
+    <string name="settings_widget_disable_warning_body">Anyone with access to the unlocked phone home screen will be able to disable the family internet. Enabling internet remains a quick emergency action in either mode.</string>
+    <string name="settings_widget_disable_warning_confirm">Allow instant shutdown</string>
+    <string name="unlock_retry_after_seconds">Too many incorrect attempts. Try again in %1$d seconds.</string>
+    <string name="widget_disable_confirmation_title">Disable family internet?</string>
+    <string name="widget_disable_confirmation_body">The command will be sent directly to the home OpenWrt router. Devices covered by allowed exceptions continue to follow their configured rules.</string>
+    <string name="widget_disable_confirm_action">Disable internet</string>
+    <string name="widget_disable_failed">Could not disable internet on the router.</string>
+</resources>

@@ -9,6 +9,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { describe, it } from 'node:test';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
@@ -24,7 +25,8 @@ function loadModel() {
   return context.module.exports;
 }
 
-const overview = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js');
+const overview = readOverviewApplication(resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js'));
+const panel = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/emergency/panel.js');
 const defaults = read('package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/sheepfold.uci.defaults');
 const makefile = read('package/luci-app-sheepfold-family-internet-control/Makefile');
 const helper = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-emergency-sites');
@@ -105,10 +107,11 @@ describe('emergency-useful sites persistence and enforcement §emerg1', () => {
   });
 
   it('keeps changes in the settings draft until the shared Save action', () => {
-    assert.match(overview, /registerEmergencySitesSaver/);
-    assert.match(overview, /emergencySiteModel\.stage\(uci, 'sheepfold', emergencySites\)/);
-    assert.match(overview, /routerControl\(\['emergency-sites-apply'\]\)/);
-    assert.match(overview, /Press Save settings to apply it/);
+    assert.match(overview, /require sheepfold\.features\.emergency\.panel as emergencyPanelModel/);
+    assert.match(panel, /function registerSaver\(\)/);
+    assert.match(panel, /deps\.model\.stage\(deps\.uci, 'sheepfold', sites\)/);
+    assert.match(panel, /deps\.run\(\['emergency-sites-apply'\]\)/);
+    assert.match(panel, /Press Save settings to apply it/);
     assert.doesNotMatch(overview, /var emergencySites = \[\s*\['gosuslugi\.ru'/);
   });
 

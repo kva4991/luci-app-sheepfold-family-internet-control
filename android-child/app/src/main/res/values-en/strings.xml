@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Status -->
+    <string name="status_enabled">Internet is on</string>
+    <string name="status_disabled">Internet is off</string>
+    <string name="status_unknown">Status unknown</string>
+    <string name="status_no_connection">Cannot reach the router</string>
+
+    <!-- Access modes -->
+    <string name="access_mode_allowlist">Allowlist</string>
+    <string name="access_mode_blocked">Parental control</string>
+    <string name="access_mode_scheduled">Scheduled</string>
+    <string name="access_mode_temporary">Temporary access</string>
+    <string name="access_mode_restricted">Restricted access</string>
+    <string name="access_mode_default">New-device rule</string>
+    <string name="access_mode_unknown">Mode unknown</string>
+
+    <!-- Timer and time -->
+    <string name="time_remaining">%1$d min remaining</string>
+    <string name="ends_at">Access until %1$s</string>
+    <string name="last_updated">Updated: %1$s</string>
+
+    <!-- Buttons -->
+    <string name="btn_refresh">Refresh\ndata</string>
+
+    <!-- Initial setup -->
+    <string name="setup_title">Setup</string>
+    <string name="setup_hint">Enter the router address, for example 192.168.1.1</string>
+    <string name="setup_transport_hint">Uses HTTPS with certificate pinning for the home router.</string>
+    <string name="setup_server_search">Find Sheepfold server automatically</string>
+    <string name="setup_searching_hint">Looking for Sheepfold on the current local network. This may take up to 30 seconds.</string>
+    <string name="setup_not_found_manual">Perhaps you are connected to the wrong Wi-Fi network? You can enter the server IP address manually.</string>
+    <string name="setup_retry">Search again</string>
+    <string name="setup_save">Save</string>
+
+    <!-- Notifications -->
+    <string name="notif_channel_name">Access ending</string>
+    <string name="notif_channel_desc">Notification 5 minutes before internet access ends</string>
+    <string name="notif_title">Internet access will end soon</string>
+    <string name="notif_text">Save anything important.</string>
+    <string name="notif_text_with_time">About %1$d min remaining. Save anything important.</string>
+
+    <!-- Errors -->
+    <string name="error_device_unknown">The router could not identify your device. Check that you are connected to the home Wi-Fi.</string>
+    <string name="error_network">No network connection.</string>
+    <string name="error_generic">Could not retrieve the status. Try refreshing.</string>
+
+    <!-- Navigation -->
+    <string name="tab_status">Status</string>
+    <string name="tab_access">My access</string>
+
+    <!-- My access screen -->
+    <string name="access_screen_title">My access</string>
+    <string name="access_device_label">Device</string>
+    <string name="access_internet_label">Internet</string>
+    <string name="access_mode_label">Mode</string>
+    <string name="access_time_label">Time remaining</string>
+    <string name="access_next_change_label">Next access change</string>
+    <string name="access_message_label">Message</string>
+    <string name="access_request_30_minutes">Request 30 minutes of internet access</string>
+    <string name="access_request_sent">The request was sent to your parent. Internet access will start only after approval.</string>
+    <string name="access_request_failed">Could not send the request.</string>
+    <string name="app_name">Sheepfold Child</string>
+    <string name="tab_ai">AI assistant</string>
+    <string name="ai_chat_title">AI assistant</string>
+    <string name="ai_input_hint">Ask a question…</string>
+    <string name="ai_personal_group_required">Ask your parent to put this device in your personal group in Sheepfold settings. The AI assistant will then become available.</string>
+</resources>

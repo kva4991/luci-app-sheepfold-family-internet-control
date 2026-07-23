@@ -16,7 +16,7 @@ describe('Secure overview wrapper', () => {
 
     assert.match(source, /require view\.sheepfold\.overview as overview/);
     assert.match(source, /var renderSettings = overview\.renderSettings/);
-    assert.match(source, /overview\.renderSettings = function\(/);
+    assert.match(source, /overview\.renderSettings = function\s*\(/);
     assert.match(source, /return view\.extend\(/);
     assert.doesNotMatch(source, /BaseView\.extend\(/);
     assert.doesNotMatch(source, /this\.super\(/);

@@ -6,9 +6,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const read = (path) => readFileSync(path, 'utf8');
-const overview = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js');
+const overview = readOverviewApplication('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js');
 const administratorEditor = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/administrators/editor.js');
 const accessRequest = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-access-request');
 const api = read('package/luci-app-sheepfold-family-internet-control/root/www/cgi-bin/sheepfold-api');

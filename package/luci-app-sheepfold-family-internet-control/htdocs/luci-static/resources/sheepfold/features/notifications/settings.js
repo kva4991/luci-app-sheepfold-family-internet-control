@@ -45,7 +45,11 @@ function render(deps) {
 		E('button', {
 			'type': 'button',
 			'class': 'sf-action sf-action-danger',
-			'click': function () { deps.clearWifiHistory(); }
+			'data-sf-action-key': 'child-wifi-history-clear',
+			'click': function (event) {
+				event.preventDefault();
+				deps.clearWifiHistory(event.currentTarget);
+			}
 		}, _('Clear saved Wi-Fi network history'))
 	]);
 }

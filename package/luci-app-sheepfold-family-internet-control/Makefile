@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=241
+PKG_RELEASE:=252
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -195,6 +195,9 @@ ensure_global_option router_ntp_client_auto_configure '1'
 ensure_global_option router_timezone_name 'Europe/Moscow'
 ensure_global_option router_timezone 'MSK-3'
 ensure_global_option router_ntp_servers 'ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org'
+ensure_global_option router_time_configured '0'
+ensure_global_option router_time_country_profile ''
+ensure_global_option router_time_configured_at '0'
 ensure_global_option wps_short_press_action 'router_default'
 ensure_global_option wps_long_press_action 'router_default'
 ensure_global_option router_led_control 'router_default'

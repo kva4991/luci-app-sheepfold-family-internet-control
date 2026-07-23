@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
@@ -13,12 +14,14 @@ function readProjectFile(path) {
 
 describe('Default Sheepfold groups', () => {
   it('keeps singleton default groups in UCI and does not inject gettext duplicates in LuCI', () => {
-    const overview = readProjectFile('htdocs/luci-static/resources/view/sheepfold/overview.js');
+    const overview = readOverviewApplication(resolve(packageDir, 'htdocs/luci-static/resources/view/sheepfold/overview.js'));
+    const naming = readProjectFile('htdocs/luci-static/resources/sheepfold/features/groups/naming.js');
 
-    assert.match(overview, /DEFAULT_GROUP_SECTION_IDS = \['no_restrictions', 'child_1', 'personal_devices'\]/);
-    assert.match(overview, /LEGACY_GROUP_ALIASES/);
-    assert.match(overview, /ensureDefaultGroupSections\(/);
-    assert.match(overview, /defaultGroupDisplayName\('no_restrictions'/);
+    assert.match(naming, /DEFAULT_SECTION_IDS = \['no_restrictions', 'child_1', 'personal_devices'\]/);
+    assert.match(naming, /LEGACY_ALIASES/);
+    assert.match(naming, /function ensureDefaultSections\(/);
+    assert.match(naming, /defaultDisplayName\('no_restrictions'/);
+    assert.match(overview, /groupNamingModel\.create/);
     assert.doesNotMatch(overview, /ensureVisibleDefaultGroup\(_\('No restrictions'\)/);
     assert.doesNotMatch(overview, /ensureVisibleDefaultGroup\(_\('Child number 1'\)/);
   });

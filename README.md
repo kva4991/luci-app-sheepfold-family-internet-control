@@ -65,7 +65,7 @@ sh /tmp/sheepfold-uninstall.sh
 
 ## Target Android Scope
 
-The Android companion app targets Android 9.0 Pie / API 28 and newer.
+Both Android applications target Android 9.0 Pie / API 28 and newer.
 
 Older Android versions are intentionally out of scope.
 
@@ -105,7 +105,7 @@ uninstall.sh                                         Router uninstaller that pre
 
 ## Status
 
-This repository is in active prototype development. Some LuCI/backend pieces already work, while firewall enforcement, schedules, full Android pairing, and messenger bots are still target features.
+This repository is in active experimental development. LuCI uses one guarded runner for mutating router commands; duplicate clicks coalesce and the global internet toggle is confirmed by the backend. UCI, device/DHCP/firewall, Wi-Fi reload, backup rollback, and pairing are split into narrow persistence adapters. The final cleanup removes duplicate forwarding functions from the coordinator without changing runtime ordering. Schedules, groups, settings side effects, and discovery payloads are also separated from the LuCI coordinator. LuCI/backend, nftables enforcement, schedules, secure Android pairing, and a basic Telegram adapter are implemented; stable release still requires the documented live OpenWrt/integration matrix, physical Android validation, production signing, and roadmap limitations.
 
 See:
 
@@ -141,3 +141,9 @@ If you find Sheepfold useful and want to support development, see [Donation](doc
 ## License
 
 MIT License.
+
+LuCI `r249` additionally moves shared settings fields, the full Misc/Storage composition, AI presentation, and the device-type selector out of `overview.js`; the coordinator remains the composition root rather than owning those DOM trees.
+
+LuCI `r250` completes the `overview.js` decomposition: the public file is a four-line bootstrap, the explicit composition root lives in `features/overview/application.js`, and domain behavior is owned by focused controllers.
+
+LuCI `r252` is the re-audited finalization of the `overview.js` decomposition: a four-line bootstrap, strict require/dependency/UCI auditing, and honest partial-persistence/refresh outcomes. The hardware firewall/DNS/Wi-Fi matrix remains mandatory before release. §ovaudit5

@@ -180,3 +180,8 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 | [`docs/messaging.ru.md`](messaging.ru.md) | Интеграция мессенджеров |
 | [`docs/privacy.ru.md`](privacy.ru.md) | Политика конфиденциальности |
 | [`docs/ai-assistant-development/README.md`](ai-assistant-development/README.md) | Архитектура будущего ИИ-помощника и карта модулей |
+- [Фоновые задания обслуживания](maintenance-jobs.ru.md) — ротация RAM-журнала, консервативная очистка offline-карточек и только уведомительная проверка обновлений (§maintjob1).
+- [Время и необязательный nmap](time-and-detection-setup.ru.md) — сохранение системного timezone, country recommendations без IP-геолокации и явная optional-tool граница (§country1, §devpas1).
+- [Единый запуск LuCI-команд](luci-command-actions.ru.md) — stable action key, duplicate-click coalescing, structured errorCode и локальная перерисовка (§apicon1).
+- [Persistence-адаптеры LuCI](luci-persistence-adapters.ru.md) — UCI apply, device/DHCP/runtime, Wi-Fi reload, backup rollback и pairing (§persist1).
+- [Финальная зачистка LuCI coordinator](luci-coordinator-cleanup.ru.md) — удалённые forwarding helpers и допустимая оставшаяся orchestration-граница (§coordclean1).

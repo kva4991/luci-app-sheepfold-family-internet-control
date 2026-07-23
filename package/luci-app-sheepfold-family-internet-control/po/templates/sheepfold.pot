@@ -3885,3 +3885,219 @@ msgstr ""
 #: htdocs/luci-static/resources/sheepfold/features/storage/panel.js
 msgid "Google Drive helper is missing"
 msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "Full mode without port checks. Device detection still works, but server, camera and printer hints may be less accurate."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "Install optional nmap"
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "Install the optional nmap package? The router will update package indexes, check free flash space, and install only nmap."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "nmap installation started on the router."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "Could not start nmap installation."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "Could not check optional nmap support."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Could not read router time status."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "Reduced mode intentionally skips port checks; nmap is not required."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "Checking optional port-scan support…"
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "Full mode includes bounded local port checks through nmap."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "Installing optional nmap package. Full mode continues without port checks until installation finishes."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "Free space:"
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "required:"
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "No supported OpenWrt package manager is available."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-tools.js
+msgid "The last installation attempt failed; review the router system log before retrying."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Use country recommendation"
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "The current OpenWrt timezone is preserved. The country profile below is only a recommendation."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Router timezone is not configured. Select a region or apply the country recommendation, then save settings."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Router clock is not synchronized. Schedules and TLS checks may be inaccurate until NTP succeeds."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Finish router time setup in Settings → Misc → Router time and NTP before relying on schedules."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Router clock is not synchronized. Check timezone and NTP settings before relying on schedules."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "No public-IP geolocation is used. Choose another region when the router is located in a different timezone."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Recommended for the selected country:"
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Minsk time"
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "China Standard Time"
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Current router timezone"
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Sheepfold writes the selected NTP servers only after the parent saves this section."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "One hostname per line. Invalid values are rejected instead of silently resetting the router to Moscow time."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Choose a timezone and at least one valid NTP server."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Selects emergency-useful sites and country recommendations. Existing OpenWrt timezone settings are never overwritten automatically."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/settings/time.js
+msgid "Defines how often Sheepfold checks for a stable release. Installation still requires an explicit confirmation."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/core/backend/actions.js
+msgid "Another request for this action is already running."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/core/backend/actions.js
+msgid "Administrator devices cannot be blocked or restricted."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/core/backend/actions.js
+msgid "Remove the device from the allowlist first."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/core/backend/actions.js
+msgid "Remove the device from the blocklist first."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/core/backend/actions.js
+msgid "This device already has unrestricted access."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/core/backend/actions.js
+msgid "Confirmation is required for this action."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/core/backend/actions.js
+msgid "The requested item was not found."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/core/backend/actions.js
+msgid "The router rejected invalid action data."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Disable internet for all devices except allowlist?"
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Enable internet according to the normal family rules?"
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Internet enabled on the router."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Global internet block enabled on the router."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not change global internet state."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The schedule was saved, but runtime access rules could not be applied."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The schedule was deleted, but runtime access rules could not be applied."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device settings were saved, but internet access rules could not be applied."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/wifi/editor.js
+msgid "Wi-Fi settings were saved, but Wi-Fi could not be reloaded."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Administrator was saved, but internet access rules could not be applied."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Device bindings were saved, but internet access rules could not be applied."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "The device list was saved, but internet access rules could not be applied."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview.js
+msgid "Could not check administrator pairing status."
+msgstr ""
+#: htdocs/luci-static/resources/view/sheepfold/overview-secure.js
+msgid "Creating..."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/overview/application.js
+msgid "Could not update application discovery after changing the application port."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/schedules/controller.js
+msgid "The saved schedule could not be refreshed in LuCI."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/editor.js
+msgid "Uncheck to remove the existing permanent DHCP lease."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/overview/application.js
+msgid "This device is already assigned to another administrator."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/controller.js
+msgid "All selected devices were saved, but internet access rules could not be applied."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/controller.js
+msgid "All selected devices were saved, but the device list could not be refreshed. Reopen the page before making another change."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/controller.js
+msgid "Only part of the selected device list was saved: %s of %s devices."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/controller.js
+msgid "The devices were saved, but the device list could not be refreshed."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/controller.js
+msgid "The saved device state could not be refreshed in LuCI. Reopen the page before making another change."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/devices/controller.js
+msgid "The saved state could not be refreshed in LuCI; reopen the page before making another change."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/groups/controller.js
+msgid "Administrator devices cannot be assigned to ordinary groups."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/groups/controller.js
+msgid "The group cannot be deleted while a schedule still targets it."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/groups/controller.js
+msgid "The saved group could not be refreshed in LuCI."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/administrators/editor.js
+msgid "Login may contain only Latin letters, digits, and . _ - @ + symbols."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/administrators/controller.js
+msgid "Device bindings were saved, but the device list could not be refreshed. Reopen the page before making another change."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/administrators/controller.js
+msgid "The administrator was saved, but the device list could not be refreshed. Reopen the page before making another change."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/administrators/controller.js
+msgid "The phone was paired, but the device list could not be refreshed."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/administrators/controller.js
+msgid "The phone was paired, but the router has not published the device card yet. Retrying."
+msgstr ""
+#: htdocs/luci-static/resources/sheepfold/features/administrators/controller.js
+msgid "The saved administrator state could not be refreshed in LuCI."
+msgstr ""

@@ -22,6 +22,7 @@
         "/usr/libexec/sheepfold/sheepfold-yandex-disk": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-google-drive": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-log-storage": [ "exec" ],
+        "/usr/libexec/sheepfold/sheepfold-luci-action": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-router-control": [ "exec" ],
         "/usr/libexec/sheepfold/sheepfold-openssl-ensure": [ "exec" ]
       }

@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const overviewPath = resolve(
@@ -22,18 +23,23 @@ const telegramBotPath = resolve(
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-telegram-bot',
 );
 
-const overview = readFileSync(overviewPath, 'utf8');
+const overview = readOverviewApplication(overviewPath);
+const deviceController = readFileSync(resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js',
+), 'utf8');
 const routerControl = readFileSync(routerControlPath, 'utf8');
 const service = readFileSync(servicePath, 'utf8');
 const telegramBot = readFileSync(telegramBotPath, 'utf8');
 
 describe('Temporary access UI', () => {
   it('grants temporary access through router-control from the device table', () => {
-    assert.match(overview, /function grantDeviceTemporaryAccess/);
-    assert.match(overview, /device-temp-access/);
-    assert.match(overview, /grantDeviceTemporaryAccess\(device, 30\)/);
+    assert.match(overview, /require sheepfold\.features\.devices\.controller as deviceControllerModel/);
+    assert.match(deviceController, /function grantTemporaryAccess\(device, minutes, button\)/);
+    assert.match(deviceController, /device-temp-access/);
+    assert.match(deviceController, /grantTemporaryAccess\(device, 30, event\.currentTarget\)/);
     assert.doesNotMatch(
-      overview,
+      deviceController,
       /actionButton\(_\('\+30 min'\), 'positive', _\('Temporary access would require confirmation\.'\)\)/,
     );
   });

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_data_notice">Your question and up to eight recent messages are sent through the home router to the configured external AI provider. The router adds the verified device ID, child role, and a brief access status. Full diagnostics, MAC and IP addresses, activity logs, and the parent account are not sent in child mode. This feature works only after a parent enables it in Sheepfold.</string>
+</resources>

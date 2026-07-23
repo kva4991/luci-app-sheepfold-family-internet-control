@@ -11,6 +11,7 @@ DETECTOR="/usr/libexec/sheepfold/sheepfold-device-detector"
 PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
 SCAN_LOCK="/tmp/sheepfold/device-detection.flock"
 UPDATER="/usr/libexec/sheepfold/sheepfold-updater"
+MAINTENANCE_HELPER="/usr/libexec/sheepfold/sheepfold-maintenance"
 ROUTER_CONTROL="/usr/libexec/sheepfold/sheepfold-router-control"
 FIREWALL_HELPER="/usr/libexec/sheepfold/sheepfold-firewall"
 DOMAIN_POLICY_HELPER="/usr/libexec/sheepfold/sheepfold-domain-policy"
@@ -24,6 +25,7 @@ REBOOT_REQUEST_FILE="/tmp/sheepfold/reboot.request"
 LED_ALERT_ACK_FILE="/tmp/sheepfold/new-device-alert.ack"
 LAST_CONTROL_TICK=0
 LAST_ADGUARD_HEALTH_TICK=0
+LAST_MAINTENANCE_TICK=0
 
 init_ram_log() {
         RAM_LOG="$(uci -q get sheepfold.global.log_cache_path 2>/dev/null || printf '%s' "$DEFAULT_RAM_LOG")"
@@ -83,6 +85,21 @@ handle_router_control() {
         # Проверка дешёвая: при неизменном checksum helper не пишет nft. После
         # чужого firewall reload она восстанавливает только Sheepfold sets. §v7x2k9p
         [ -x "$FIREWALL_HELPER" ] && "$FIREWALL_HELPER" sync >/dev/null 2>&1 || true
+}
+
+handle_maintenance() {
+        local mode now interval
+        mode="${1:-periodic}"
+        [ -x "$MAINTENANCE_HELPER" ] || return 0
+        now="$(date +%s)"
+        # The service wakes the helper on a fixed, cheap cadence. Per-task state
+        # below decides whether hourly/daily/weekly work is actually due; this is
+        # intentionally not another hidden UCI setting. §maintjob1
+        interval=300
+        if [ "$mode" = force ] || [ $((now - LAST_MAINTENANCE_TICK)) -ge "$interval" ]; then
+                "$MAINTENANCE_HELPER" run >/dev/null 2>&1 || true
+                LAST_MAINTENANCE_TICK="$now"
+        fi
 }
 
 run_detector() (
@@ -303,6 +320,7 @@ case "$COMMAND" in
                         handle_update_request
                         handle_reboot_request
 					handle_router_control periodic
+                        handle_maintenance periodic
 					handle_adguard_health
 
                         DETECTION_MODE="$(uci -q get sheepfold.global.detection_mode 2>/dev/null || printf full)"
@@ -373,6 +391,7 @@ case "$COMMAND" in
                 handle_update_request
                 handle_reboot_request
                 handle_router_control force
+                handle_maintenance force
                 [ -x "$DETECTOR" ] && run_detector scan >/dev/null 2>&1 || true
                 # Ручной reload также может обнаружить новый IP клиента, поэтому управляемая
                 # лента AdGuard Home должна получить те же данные, что и фоновый цикл. §dompol

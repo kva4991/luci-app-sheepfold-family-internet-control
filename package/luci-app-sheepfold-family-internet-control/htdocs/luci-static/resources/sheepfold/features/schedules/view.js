@@ -10,7 +10,8 @@ function render(deps, embedded) {
 		var toggle = E('input', {
 			'type': 'checkbox',
 			'checked': enabled ? 'checked' : null,
-			'change': function (event) { deps.setEnabled(section, event.currentTarget.checked); }
+			'data-sf-action-key': 'schedule-toggle:' + section['.name'],
+			'change': function (event) { deps.setEnabled(section, event.currentTarget.checked, event.currentTarget); }
 		});
 
 		return E('div', { 'class': 'sf-schedule-card sf-schedule-' + action + (enabled ? '' : ' is-disabled') }, [
@@ -30,7 +31,12 @@ function render(deps, embedded) {
 			E('div', { 'class': 'sf-card-actions' }, [
 				E('button', { 'class': 'sf-icon-btn', 'title': _('Edit schedule'), 'click': function (event) { event.preventDefault(); deps.edit(section, false); } }, '⚙'),
 				E('button', { 'class': 'sf-icon-btn', 'title': _('Duplicate schedule'), 'click': function (event) { event.preventDefault(); deps.edit(section, true); } }, '⧉'),
-				E('button', { 'class': 'sf-icon-btn sf-icon-danger', 'title': _('Delete schedule'), 'click': function (event) { event.preventDefault(); deps.remove(section); } }, '×')
+				E('button', {
+					'class': 'sf-icon-btn sf-icon-danger',
+					'title': _('Delete schedule'),
+					'data-sf-action-key': 'schedule-delete:' + section['.name'],
+					'click': function (event) { event.preventDefault(); deps.remove(section, event.currentTarget); }
+				}, '×')
 			])
 		]);
 	}

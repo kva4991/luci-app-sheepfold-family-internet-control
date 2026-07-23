@@ -1,7 +1,16 @@
 import org.gradle.api.tasks.Copy
 
-val sheepfoldChildVersionCode = 12
-val sheepfoldChildVersionName = "1.11"
+val sheepfoldChildVersionCode = 13
+val sheepfoldChildVersionName = "1.12"
+
+
+val childReleaseSigningEnvironment = mapOf(
+    "SHEEPFOLD_CHILD_ANDROID_KEYSTORE" to providers.environmentVariable("SHEEPFOLD_CHILD_ANDROID_KEYSTORE").orNull,
+    "SHEEPFOLD_CHILD_ANDROID_KEY_ALIAS" to providers.environmentVariable("SHEEPFOLD_CHILD_ANDROID_KEY_ALIAS").orNull,
+    "SHEEPFOLD_CHILD_ANDROID_STORE_PASSWORD" to providers.environmentVariable("SHEEPFOLD_CHILD_ANDROID_STORE_PASSWORD").orNull,
+    "SHEEPFOLD_CHILD_ANDROID_KEY_PASSWORD" to providers.environmentVariable("SHEEPFOLD_CHILD_ANDROID_KEY_PASSWORD").orNull,
+)
+val childReleaseSigningConfigured = childReleaseSigningEnvironment.values.all { !it.isNullOrBlank() }
 
 plugins {
     alias(libs.plugins.android.application)
@@ -15,13 +24,25 @@ android {
 
     defaultConfig {
         applicationId = "app.sheepfold.child"
-        minSdk = 21
+        minSdk = 28
         targetSdk = 35
         versionCode = sheepfoldChildVersionCode
         versionName = sheepfoldChildVersionName
     }
+    signingConfigs {
+        if (childReleaseSigningConfigured) {
+            create("release") {
+                storeFile = file(childReleaseSigningEnvironment.getValue("SHEEPFOLD_CHILD_ANDROID_KEYSTORE")!!)
+                keyAlias = childReleaseSigningEnvironment.getValue("SHEEPFOLD_CHILD_ANDROID_KEY_ALIAS")!!
+                storePassword = childReleaseSigningEnvironment.getValue("SHEEPFOLD_CHILD_ANDROID_STORE_PASSWORD")!!
+                keyPassword = childReleaseSigningEnvironment.getValue("SHEEPFOLD_CHILD_ANDROID_KEY_PASSWORD")!!
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (childReleaseSigningConfigured) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -33,6 +54,30 @@ android {
     }
     kotlinOptions { jvmTarget = "11" }
     buildFeatures { compose = true }
+}
+
+
+val verifyChildReleaseSigning by tasks.registering {
+    group = "verification"
+    description = "Fails child release packaging unless all external Sheepfold signing secrets are present."
+    doLast {
+        val missing = childReleaseSigningEnvironment.filterValues { it.isNullOrBlank() }.keys.sorted()
+        if (missing.isNotEmpty()) {
+            throw org.gradle.api.GradleException(
+                "Missing child Android release-signing environment variables: ${missing.joinToString(", ")}"
+            )
+        }
+        val keystore = file(requireNotNull(childReleaseSigningEnvironment["SHEEPFOLD_CHILD_ANDROID_KEYSTORE"]))
+        if (!keystore.isFile) {
+            throw org.gradle.api.GradleException("Child Android release keystore does not exist: $keystore")
+        }
+    }
+}
+
+tasks.matching {
+    it.name in setOf("assembleRelease", "bundleRelease", "packageRelease", "installRelease")
+}.configureEach {
+    dependsOn(verifyChildReleaseSigning)
 }
 
 dependencies {

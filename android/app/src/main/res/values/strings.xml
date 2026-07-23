@@ -97,7 +97,7 @@
     <string name="setup_port">HTTPS-порт</string>
 
     <string name="protection_title">Защита приложения</string>
-    <string name="protection_description">Пароль рекомендуется. Face и Fingerprint можно выбрать, но Sheepfold полагается на системную блокировку телефона и не считает эти режимы усиленной защитой.</string>
+    <string name="protection_description">Пароль или PIN обеспечивают отдельную защиту Sheepfold. Биометрия использует системную проверку Android; конкретный датчик выбирает сама система.</string>
     <string name="protection_password">Пароль — рекомендуется</string>
     <string name="protection_pin">PIN-код</string>
     <string name="protection_face">Face — не рекомендуется</string>

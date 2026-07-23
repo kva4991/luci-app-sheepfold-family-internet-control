@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
@@ -25,7 +26,8 @@ const api = read('package/luci-app-sheepfold-family-internet-control/root/www/cg
 const monitorPath = 'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-sim-monitor';
 const monitor = read(monitorPath);
 const settings = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/notifications/settings.js');
-const overview = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js');
+const settingsController = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/controller.js');
+const overview = readOverviewApplication(resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js'));
 const defaults = read('package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/sheepfold.uci.defaults');
 const makefile = read('package/luci-app-sheepfold-family-internet-control/Makefile');
 const notificationQueue = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-admin-notification');
@@ -194,7 +196,8 @@ describe('SIM change monitoring contract', () => {
     assert.match(settings, /\['all',[\s\S]*\['new_only',[\s\S]*\['off'/);
     assert.match(settings, /first SIM found after child-app installation/);
     assert.match(overview, /\['notifications', 'Notifications'\]/);
-    assert.match(overview, /renderSettingsNotifications/);
+    assert.match(settingsController, /function renderNotifications\(\)/);
+    assert.match(settingsController, /panel\('notifications', renderNotifications\(\), active\)/);
     assert.match(defaults, /option sim_change_notifications 'new_only'/);
     assert.match(makefile, /ensure_global_option sim_change_notifications 'new_only'/);
   });

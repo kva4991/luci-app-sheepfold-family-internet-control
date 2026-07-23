@@ -1,9 +1,19 @@
 package com.example.sheepfoldchild.ui
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,9 +25,9 @@ import com.example.sheepfoldchild.R
 import com.example.sheepfoldchild.data.ClientStatusData
 
 /**
- * Экран «Мой доступ» — показывает ребёнку понятную информацию
- * о текущем режиме, времени и расписании.
- * Отображает только то, что безопасно показывать: без MAC и без токенов.
+ * Экран «Мой доступ» показывает только итоговый доступ и время следующего
+ * изменения. Внутренний режим, конфликт и разрешившее правило публичный API
+ * больше не передаёт; при ограничении допустимо короткое безопасное объяснение.
  */
 @Composable
 fun AccessInfoScreen(status: ClientStatusData?) {
@@ -27,7 +37,7 @@ fun AccessInfoScreen(status: ClientStatusData?) {
         }
         return
     }
-    val showPolicyDetails = status.internetState != "enabled"
+    val showExplanation = status.internetState != "enabled"
 
     LazyColumn(
         modifier = Modifier
@@ -43,7 +53,6 @@ fun AccessInfoScreen(status: ClientStatusData?) {
             )
         }
 
-        // Имя устройства
         status.deviceName?.let { name ->
             item {
                 InfoCard(
@@ -53,12 +62,11 @@ fun AccessInfoScreen(status: ClientStatusData?) {
             }
         }
 
-        // Статус интернета
         item {
             val label = when (status.internetState) {
-                "enabled"  -> stringResource(R.string.status_enabled)
+                "enabled" -> stringResource(R.string.status_enabled)
                 "disabled" -> stringResource(R.string.status_disabled)
-                else       -> stringResource(R.string.status_unknown)
+                else -> stringResource(R.string.status_unknown)
             }
             InfoCard(
                 label = stringResource(R.string.access_internet_label),
@@ -67,46 +75,21 @@ fun AccessInfoScreen(status: ClientStatusData?) {
             )
         }
 
-        // Настройка, которая дала доступ, не нужна ребёнку: при enabled интерфейс
-        // сообщает только, что интернет разрешён, и при наличии показывает время.
-        if (showPolicyDetails) {
-            status.accessMode?.let { mode ->
-                item {
-                    val modeStr = when (mode) {
-                        "allowlist"  -> stringResource(R.string.access_mode_allowlist)
-                        "blocked"    -> stringResource(R.string.access_mode_blocked)
-                        "scheduled"  -> stringResource(R.string.access_mode_scheduled)
-                        "temporary"  -> stringResource(R.string.access_mode_temporary)
-                        "restricted" -> stringResource(R.string.access_mode_restricted)
-                        "default"    -> stringResource(R.string.access_mode_default)
-                        else         -> stringResource(R.string.access_mode_unknown)
-                    }
-                    InfoCard(
-                        label = stringResource(R.string.access_mode_label),
-                        value = modeStr
-                    )
-                }
-            }
-        }
-
-        // Показываем только время по часам роутера: ребёнку не нужен технический
-        // тип границы расписания или лишнее обещание, включится ли интернет.
-        if (status.nextAccessChangeTime != null) {
+        status.nextAccessChangeTime?.let { changeTime ->
             item {
                 InfoCard(
                     label = stringResource(R.string.access_next_change_label),
-                    value = status.nextAccessChangeTime
+                    value = changeTime
                 )
             }
         }
 
-        // Сообщение с причиной относится только к ограниченному доступу.
-        if (showPolicyDetails) {
-            status.message?.let { msg ->
+        if (showExplanation) {
+            status.message?.let { message ->
                 item {
                     InfoCard(
                         label = stringResource(R.string.access_message_label),
-                        value = msg
+                        value = message
                     )
                 }
             }
@@ -116,15 +99,16 @@ fun AccessInfoScreen(status: ClientStatusData?) {
 
 @Composable
 private fun InfoCard(label: String, value: String, highlight: Boolean = false) {
-    val bgColor = if (highlight)
+    val background = if (highlight) {
         MaterialTheme.colorScheme.primaryContainer
-    else
+    } else {
         MaterialTheme.colorScheme.surfaceVariant
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = bgColor)
+        colors = CardDefaults.cardColors(containerColor = background)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(

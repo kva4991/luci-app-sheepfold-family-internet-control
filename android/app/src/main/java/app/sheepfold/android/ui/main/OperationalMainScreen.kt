@@ -3,6 +3,7 @@ package app.sheepfold.android.ui.main
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -11,7 +12,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,10 +32,12 @@ import androidx.compose.ui.unit.dp
 import app.sheepfold.android.R
 import app.sheepfold.android.router.bearerToken
 import app.sheepfold.android.router.RouterAdminClient
+import app.sheepfold.android.router.RouterAdminConfig
 import app.sheepfold.android.router.RouterConnectionRequest
 import app.sheepfold.android.router.RouterDevice
 import app.sheepfold.android.router.RouterSnapshot
 import app.sheepfold.android.notifications.SheepfoldNotifications
+import app.sheepfold.android.security.AppProtectionStore
 import app.sheepfold.android.ui.theme.ThemeMode
 import app.sheepfold.android.widget.SheepfoldWidgetRenderer
 import kotlinx.coroutines.launch
@@ -43,6 +48,7 @@ fun OperationalMainScreen(
     connection: RouterConnectionRequest,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onLockNow: () -> Unit,
     onDisconnect: () -> Unit
 ) {
     val context = LocalContext.current
@@ -54,6 +60,7 @@ fun OperationalMainScreen(
     val blockEnabledText = stringResource(R.string.router_global_block_enabled)
     val internetEnabledText = stringResource(R.string.router_internet_enabled)
     var devices by remember { mutableStateOf<List<RouterDevice>>(emptyList()) }
+    var adminConfig by remember { mutableStateOf(RouterAdminConfig()) }
     var snapshot by remember { mutableStateOf<RouterSnapshot?>(null) }
     // APK один для обоих IPK: вкладка появляется только после подтверждения
     // capability от уже авторизованного роутера. §prodvar
@@ -86,6 +93,7 @@ fun OperationalMainScreen(
         scope.launch {
             runCatching {
                 devices = client.loadDevices()
+                adminConfig = client.loadAdminConfig()
                 snapshot = client.loadRouterInfo().also {
                     SheepfoldWidgetRenderer.storeState(context, it.globalBlocked)
                 }
@@ -146,15 +154,29 @@ fun OperationalMainScreen(
                 }
             }
             2 -> DeviceListsTab(devices)
-            3 -> PlaceholderTab(stringResource(R.string.tab_schedule))
-            4 -> PlaceholderTab(stringResource(R.string.tab_groups))
-            5 -> PlaceholderTab(stringResource(R.string.tab_administrators))
-            6 -> PlaceholderTab(stringResource(R.string.tab_wifi))
+            3 -> SchedulesTab(
+                client = client,
+                config = adminConfig,
+                devices = devices,
+                isLoading = isLoading,
+                onConfigChanged = { adminConfig = it },
+                onRefresh = ::refresh
+            )
+            4 -> GroupsTab(
+                client = client,
+                config = adminConfig,
+                devices = devices,
+                isLoading = isLoading,
+                onConfigChanged = { adminConfig = it },
+                onRefresh = ::refresh
+            )
+            5 -> AdministratorsTab(adminConfig.administrators, devices, isLoading, ::refresh)
+            6 -> WifiTab(client, adminConfig, snapshot?.wifiModules.orEmpty(), isLoading, ::refresh)
             featureIndex -> productTab?.content?.invoke()
-            logsIndex -> PlaceholderTab(stringResource(R.string.tab_logs))
+            logsIndex -> LogsTab(client, adminConfig)
             infoIndex -> RouterInfoTab(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh)
             feedbackIndex -> FeedbackTab(client)
-            else -> SettingsTab(themeMode, onThemeModeChange, onDisconnect)
+            else -> SettingsTab(themeMode, onThemeModeChange, onLockNow, onDisconnect)
         }
     }
 }
@@ -287,14 +309,6 @@ private fun DeviceListsTab(devices: List<RouterDevice>) {
 }
 
 @Composable
-private fun PlaceholderTab(title: String) {
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall)
-        Text(stringResource(R.string.section_router_managed))
-    }
-}
-
-@Composable
 private fun RouterInfoTab(snapshot: RouterSnapshot?, isLoading: Boolean, onRefresh: () -> Unit) {
     val emptyValue = stringResource(R.string.value_empty)
     LazyColumn(
@@ -327,14 +341,90 @@ private fun RouterInfoTab(snapshot: RouterSnapshot?, isLoading: Boolean, onRefre
 private fun SettingsTab(
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onLockNow: () -> Unit,
     onDisconnect: () -> Unit
 ) {
-    Column(
-        modifier = Modifier.padding(20.dp),
+    val context = LocalContext.current
+    var relockDelaySeconds by remember {
+        mutableIntStateOf(AppProtectionStore.relockDelaySeconds(context))
+    }
+    var allowInstantWidgetDisable by remember {
+        mutableStateOf(AppProtectionStore.allowInstantWidgetDisable(context))
+    }
+    var showWidgetWarning by remember { mutableStateOf(false) }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall)
-        ThemeMode.entries.forEach { mode ->
+        item {
+            Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.settings_security_title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_relock_description))
+        }
+        items(AppProtectionStore.supportedRelockDelaysSeconds) { seconds ->
+            OutlinedButton(
+                onClick = {
+                    AppProtectionStore.setRelockDelaySeconds(context, seconds)
+                    relockDelaySeconds = seconds
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    (if (relockDelaySeconds == seconds) "✓ " else "") +
+                        relockDelayLabel(seconds)
+                )
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.settings_widget_disable_title))
+                            Text(
+                                stringResource(
+                                    if (allowInstantWidgetDisable) {
+                                        R.string.settings_widget_disable_instant
+                                    } else {
+                                        R.string.settings_widget_disable_safe
+                                    }
+                                )
+                            )
+                        }
+                        Switch(
+                            checked = allowInstantWidgetDisable,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    showWidgetWarning = true
+                                } else {
+                                    allowInstantWidgetDisable = false
+                                    AppProtectionStore.setAllowInstantWidgetDisable(context, false)
+                                    SheepfoldWidgetRenderer.updateAllWidgets(context)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            if (AppProtectionStore.requiresAuthentication(context)) {
+                OutlinedButton(onClick = onLockNow, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.settings_lock_now))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.settings_theme), style = MaterialTheme.typography.titleMedium)
+        }
+        items(ThemeMode.entries) { mode ->
             OutlinedButton(
                 onClick = { onThemeModeChange(mode) },
                 modifier = Modifier.fillMaxWidth()
@@ -342,11 +432,46 @@ private fun SettingsTab(
                 Text((if (themeMode == mode) "✓ " else "") + themeModeLabel(mode))
             }
         }
-        Button(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.settings_disconnect))
+        item {
+            Button(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.settings_disconnect))
+            }
         }
     }
+
+    if (showWidgetWarning) {
+        AlertDialog(
+            onDismissRequest = { showWidgetWarning = false },
+            title = { Text(stringResource(R.string.settings_widget_disable_warning_title)) },
+            text = { Text(stringResource(R.string.settings_widget_disable_warning_body)) },
+            confirmButton = {
+                Button(onClick = {
+                    allowInstantWidgetDisable = true
+                    AppProtectionStore.setAllowInstantWidgetDisable(context, true)
+                    SheepfoldWidgetRenderer.updateAllWidgets(context)
+                    showWidgetWarning = false
+                }) {
+                    Text(stringResource(R.string.settings_widget_disable_warning_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWidgetWarning = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
+    }
 }
+
+@Composable
+private fun relockDelayLabel(seconds: Int): String = stringResource(
+    when (seconds) {
+        0 -> R.string.settings_relock_immediate
+        300 -> R.string.settings_relock_five_minutes
+        900 -> R.string.settings_relock_fifteen_minutes
+        else -> R.string.settings_relock_one_minute
+    }
+)
 
 @Composable
 private fun themeModeLabel(mode: ThemeMode): String = stringResource(

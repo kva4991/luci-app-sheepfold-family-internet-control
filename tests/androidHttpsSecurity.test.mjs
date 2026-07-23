@@ -42,8 +42,8 @@ describe('Android HTTPS hardening', () => {
     const connectionStore = readRepoFile(
       'android/app/src/main/java/app/sheepfold/android/router/SheepfoldConnectionStore.kt',
     );
-    const overview = readRepoFile(
-      'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js',
+    const discovery = readRepoFile(
+      'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/router/discovery.js',
     );
     const fingerprintHelper = readRepoFile(
       'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-tls-fingerprint',
@@ -60,8 +60,8 @@ describe('Android HTTPS hardening', () => {
     assert.match(connectionManager, /tlsSpkiSha256 = request\.tlsSpkiSha256/);
     assert.match(connectionManager, /Публичный TLS-ключ роутера не совпал с QR-кодом/);
     assert.match(connectionStore, /routerTlsSpkiSha256/);
-    assert.match(overview, /'SF2\|h='/);
-    assert.match(overview, /tls-public-key-fingerprint/);
+    assert.match(discovery, /'SF2\|h='/);
+    assert.match(discovery, /function pairingPayload/);
     assert.match(fingerprintHelper, /openssl pkey -pubin/);
     assert.match(fingerprintHelper, /algorithm=sha256-spki/);
     assert.match(routerControl, /tls-public-key-fingerprint/);

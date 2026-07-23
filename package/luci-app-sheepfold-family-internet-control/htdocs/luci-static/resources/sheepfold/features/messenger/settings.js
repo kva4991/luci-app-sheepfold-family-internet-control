@@ -188,15 +188,22 @@ function settingsBox(deps) {
 				select.value = 'telegram';
 				setVisibility('telegram');
 				setStatus('checking', _('Checking messenger connection...'));
-				saveOptions().then(function () {
-					return fs.exec('/usr/libexec/sheepfold/sheepfold-telegram-bot', ['send-test']);
-				}).then(function () {
-					setStatus('ok', _('Telegram connected.'));
-					deps.notify(_('Test Telegram message sent.'), 'info');
-				}, function (error) {
-					setStatus('warning', _('No response from Telegram server.'));
-					deps.notify(_('Could not send test Telegram message. Check bot token, chat ID, internet access on the router, and that Telegram is selected as the active messenger.') + ' ' + deps.errorText(error, ''), 'warning');
-				});
+				deps.command({
+					key: 'messenger-telegram-test',
+					button: event.currentTarget,
+					task: function () {
+						return saveOptions().then(function () {
+							return fs.exec('/usr/libexec/sheepfold/sheepfold-telegram-bot', ['send-test']);
+						}).then(function (result) {
+							if (Number(result && result.code || 0) !== 0)
+								throw result;
+						});
+					},
+					successMessage: _('Test Telegram message sent.'),
+					errorMessage: _('Could not send test Telegram message. Check bot token, chat ID, internet access on the router, and that Telegram is selected as the active messenger.'),
+					onSuccess: function () { setStatus('ok', _('Telegram connected.')); },
+					onError: function () { setStatus('warning', _('No response from Telegram server.')); }
+				}).catch(function () { return null; });
 			}
 		}, _('Send test Telegram message')),
 		E('div', { 'class': 'sf-messenger-command-box' }, [E('h4', {}, _('Commands')), commandList()])

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="permission_notifications_title">Уведомления об изменении доступа</string>
+    <string name="permission_notifications_description">Разрешение нужно только для предупреждения перед ближайшим изменением доступа. Основной экран работает и без уведомлений.</string>
+    <string name="permission_sim_title">Уведомления родителю о SIM-карте</string>
+    <string name="permission_sim_description">Родитель включил эту функцию на домашнем роутере. Sheepfold отправляет только ограниченный снимок активных SIM при подключении к домашней сети; ICCID, IMSI и IMEI не собираются.</string>
+    <string name="permission_wifi_title">Уведомления родителю о новых Wi-Fi-сетях</string>
+    <string name="permission_wifi_description">Родитель включил журнал новых Wi-Fi-сетей. Разрешение используется для имени сети и локального отпечатка точки; открытый BSSID на роутер не передаётся.</string>
+    <string name="permission_wifi_location_title">Новая Wi-Fi-сеть и последнее положение телефона</string>
+    <string name="permission_wifi_location_description">Родитель отдельно включил добавление последнего доступного положения телефона к событию новой Wi-Fi-сети. Это не подтверждённый адрес точки и не фоновый облачный трекинг.</string>
+    <string name="permission_allow">Разрешить</string>
+    <string name="permission_later">Позже</string>
+    <string name="router_unavailable_title">Домашний роутер недоступен</string>
+    <string name="router_unavailable_body">Sheepfold сейчас не может связаться с домашним роутером. Это не означает, что интернет отключён: подключитесь к домашней Wi-Fi-сети или повторите попытку позже.</string>
+</resources>

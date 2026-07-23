@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { join } from 'node:path';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const root = process.cwd();
 const overviewPath = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js');
@@ -11,21 +12,30 @@ const aclPath = join(root, 'package/luci-app-sheepfold-family-internet-control/r
 const defaultsPath = join(root, 'package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/sheepfold.uci.defaults');
 const makefilePath = join(root, 'package/luci-app-sheepfold-family-internet-control/Makefile');
 const storagePanelPath = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/storage/panel.js');
+const settingsStoragePath = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/storage.js');
+const settingsControllerPath = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/controller.js');
+const navigationStatePath = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js');
+const applicationPath = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/application.js');
 
-const overview = readFileSync(overviewPath, 'utf8');
+const overview = readOverviewApplication(overviewPath);
 const secure = readFileSync(securePath, 'utf8');
 const acl = readFileSync(aclPath, 'utf8');
 const defaults = readFileSync(defaultsPath, 'utf8');
 const makefile = readFileSync(makefilePath, 'utf8');
 const storagePanel = readFileSync(storagePanelPath, 'utf8');
+const settingsStorage = readFileSync(settingsStoragePath, 'utf8');
+const settingsController = readFileSync(settingsControllerPath, 'utf8');
+const navigationState = readFileSync(navigationStatePath, 'utf8');
+const application = readFileSync(applicationPath, 'utf8');
 
 test('AI assistant and router memory live in settings second-level tabs', () => {
-  assert.match(overview, /settingsTabsSecondary/);
-  assert.match(overview, /\['ai',\s*'AI assistant'\]/);
-  assert.match(overview, /\['storage',\s*'Router memory management'\]/);
-  assert.match(overview, /renderSettingsPanel\('ai',\s*this\.renderSettingsAi\(\)\)/);
-  assert.match(overview, /renderSettingsPanel\('storage',\s*this\.renderSettingsStorage\(\)\)/);
-  assert.match(overview, /sf-settings-tabs-secondary/);
+  assert.match(overview, /require sheepfold\.features\.settings\.controller as settingsControllerModel/);
+  assert.match(settingsController, /settingsSecondaryTabs/);
+  assert.match(navigationState, /\['ai',\s*'AI assistant'\]/);
+  assert.match(navigationState, /\['storage',\s*'Router memory management'\]/);
+  assert.match(settingsController, /panel\('ai', aiView\.render\(\), active\)/);
+  assert.match(settingsController, /panel\('storage', storageView\.render\(\), active\)/);
+  assert.match(settingsController, /sf-settings-tabs-secondary/);
 });
 
 test('separate AI LuCI menu entry is disabled', () => {
@@ -52,8 +62,9 @@ test('storage backends are reachable from LuCI ACL and have default UCI sections
 
 test('storage tab exposes cloud storage backends and storage status UI', () => {
   assert.match(overview, /require sheepfold\.features\.storage\.panel as storagePanelModel/);
-  assert.match(overview, /storagePanel\.render\(\)/);
-  assert.doesNotMatch(overview, /function logStorageLocationField|function yandexDiskMaintenancePanel|function googleDriveMaintenancePanel/);
+  assert.match(settingsController, /panel\('storage', storageView\.render\(\), active\)/);
+  assert.match(settingsStorage, /deps\.storagePanel\(\)/);
+  assert.doesNotMatch(application, /function logStorageLocationField|function yandexDiskMaintenancePanel|function googleDriveMaintenancePanel/);
   assert.match(storagePanel, /function logStorageLocationField/);
   assert.match(storagePanel, /yandex_disk/);
   assert.match(storagePanel, /google_drive/);

@@ -1,5 +1,4 @@
 # Security Model
-
 ## Principles
 
 - Do not store the router root password in the Android app.
@@ -171,3 +170,26 @@ Mask sensitive values in exported logs by default:
 - always replace tokens, API keys, passwords, and session IDs with `[secret]`.
 
 LuCI and Android must include a `Clear log` action with confirmation. Log export should default to masked export.
+
+## Локальная защита родительского Android-приложения
+
+- пароль и PIN хранятся только как PBKDF2-HMAC-SHA256 с индивидуальной солью;
+- после пяти неверных попыток действует возрастающая задержка 30, 60, 120, 240 и максимум 300 секунд;
+- задержка использует `SystemClock.elapsedRealtime()` и сбрасывается после перезагрузки телефона, чтобы изменение часов не создавало вечную блокировку;
+- приложение повторно блокируется после ухода в фон: заводское значение 1 минута, варианты сразу, 1, 5 и 15 минут;
+- Face и Fingerprint представлены одним честным способом `Биометрия`, потому что конкретный системный датчик выбирает Android;
+- включение интернета из виджета остаётся быстрым восстановительным действием;
+- отключение интернета из виджета по умолчанию открывает `MainActivity`, заново требует локальную защиту и отдельное подтверждение;
+- мгновенное отключение без разблокировки доступно только после явного предупреждения и повторно проверяется receiver-ом при выполнении;
+- release APK не собирается без внешнего keystore и четырёх environment secrets; ключи и пароли запрещены в Git.
+
+## Минимизация детского API и разрешений
+
+- публичный `/client-status` v3 не раскрывает `accessMode`, конфликт расписаний, разрешившее правило или имя личной группы;
+- при разрешённом доступе `message=null`; при отключённом/неизвестном состоянии допускается только короткое безопасное объяснение;
+- child AI получает тот же минимизированный публичный контекст, а более подробная оценка остаётся внутри router-side gate;
+- notification permission предлагается только после успешного подключения к Sheepfold;
+- READ_PHONE_STATE/READ_PHONE_NUMBERS предлагаются только при `simChangeReporting=true`;
+- nearby Wi-Fi и location предлагаются только при соответствующих `wifiNetworkReporting`/`wifiLocationReporting`;
+- системный диалог открывается только после явного нажатия на объяснённую кнопку, отказ не блокирует статус;
+- release APK ребёнка требует внешний owner-controlled keystore и не использует ключ из Git.

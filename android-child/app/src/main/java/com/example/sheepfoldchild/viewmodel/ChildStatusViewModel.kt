@@ -8,17 +8,23 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.sheepfoldchild.R
 import com.example.sheepfoldchild.data.ClientStatusData
 import com.example.sheepfoldchild.data.ClientStatusRepository
 import com.example.sheepfoldchild.notification.AccessEndingScheduler
-import kotlinx.coroutines.launch
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 sealed class ChildUiState {
     object Loading : ChildUiState()
     data class Success(val status: ClientStatusData) : ChildUiState()
+    data class RouterUnavailable(val message: String) : ChildUiState()
     data class Error(val message: String) : ChildUiState()
     object NoRouter : ChildUiState()
 }
@@ -50,7 +56,7 @@ class ChildStatusViewModel(
     var accessRequestMessage: String? by mutableStateOf(null)
         private set
 
-    /** Последний полученный статус используется экранами выбранного варианта продукта. */
+    /** Последний подтверждённый статус не сохраняется как текущий при потере роутера. */
     var latestStatus: ClientStatusData? by mutableStateOf(null)
         private set
 
@@ -69,6 +75,7 @@ class ChildStatusViewModel(
         discoveryJob?.cancel()
         setupState = ChildSetupState.Searching
         uiState = ChildUiState.Loading
+        latestStatus = null
         discoveryJob = viewModelScope.launch {
             val deadline = SystemClock.elapsedRealtime() + 30_000L
             while (SystemClock.elapsedRealtime() < deadline) {
@@ -85,8 +92,7 @@ class ChildStatusViewModel(
                         .onFailure { error ->
                             setupState = ChildSetupState.ManualEntry
                             uiState = ChildUiState.Error(
-                                error.message
-                                    ?: context.getString(com.example.sheepfoldchild.R.string.error_generic)
+                                error.message ?: context.getString(R.string.error_generic)
                             )
                         }
                     return@launch
@@ -109,7 +115,7 @@ class ChildStatusViewModel(
                 .onFailure { error ->
                     setupState = ChildSetupState.ManualEntry
                     uiState = ChildUiState.Error(
-                        error.message ?: context.getString(com.example.sheepfoldchild.R.string.error_generic)
+                        error.message ?: context.getString(R.string.error_generic)
                     )
                 }
         }
@@ -123,7 +129,7 @@ class ChildStatusViewModel(
                 if (response.ok && response.data != null) {
                     latestStatus = response.data
                     uiState = ChildUiState.Success(response.data)
-                    lastUpdated = response.serverTime?.let { formatTime(it) }
+                    lastUpdated = response.serverTime?.let(::formatTime)
                     AccessEndingScheduler.schedule(
                         context,
                         response.data.accessEndsAt,
@@ -131,21 +137,20 @@ class ChildStatusViewModel(
                         response.data.minutesRemaining
                     )
                 } else {
-                    val msg = response.error?.message
-                        ?: context.getString(com.example.sheepfoldchild.R.string.error_generic)
-                    uiState = ChildUiState.Error(msg)
+                    latestStatus = null
+                    lastUpdated = null
+                    val message = response.error?.message ?: context.getString(R.string.error_generic)
+                    uiState = ChildUiState.Error(message)
                     AccessEndingScheduler.cancel(context)
                 }
-            }.onFailure { e ->
-                val msg = when {
-                    e.message?.contains("Unable to resolve", ignoreCase = true) == true ||
-                    e.message?.contains("failed to connect", ignoreCase = true) == true ||
-                    e.message?.contains("Cleartext HTTP traffic", ignoreCase = true) == true ->
-                        context.getString(com.example.sheepfoldchild.R.string.error_network)
-                    else -> e.message
-                        ?: context.getString(com.example.sheepfoldchild.R.string.error_generic)
+            }.onFailure { error ->
+                latestStatus = null
+                lastUpdated = null
+                uiState = if (isRouterUnavailable(error)) {
+                    ChildUiState.RouterUnavailable(context.getString(R.string.router_unavailable_body))
+                } else {
+                    ChildUiState.Error(error.message ?: context.getString(R.string.error_generic))
                 }
-                uiState = ChildUiState.Error(msg)
                 AccessEndingScheduler.cancel(context)
             }
         }
@@ -157,17 +162,29 @@ class ChildStatusViewModel(
         viewModelScope.launch {
             repository.requestThirtyMinutes(url)
                 .onSuccess {
-                    accessRequestMessage = context.getString(com.example.sheepfoldchild.R.string.access_request_sent)
+                    accessRequestMessage = context.getString(R.string.access_request_sent)
                 }
                 .onFailure { error ->
                     accessRequestMessage = error.message
-                        ?: context.getString(com.example.sheepfoldchild.R.string.access_request_failed)
+                        ?: context.getString(R.string.access_request_failed)
                 }
         }
     }
 
+    private fun isRouterUnavailable(error: Throwable): Boolean =
+        generateSequence(error) { it.cause }.any { cause ->
+            cause is ConnectException ||
+                cause is NoRouteToHostException ||
+                cause is SocketTimeoutException ||
+                cause is UnknownHostException
+        }
+
     private fun formatTime(iso: String): String =
-        try { iso.substring(11, 16) } catch (_: Exception) { iso }
+        try {
+            iso.substring(11, 16)
+        } catch (_: Exception) {
+            iso
+        }
 }
 
 class ChildStatusViewModelFactory(

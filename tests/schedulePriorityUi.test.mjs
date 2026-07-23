@@ -8,12 +8,21 @@ import { describe, it } from 'node:test';
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
-const overview = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js', 'utf8');
+const overview = readOverviewApplication('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js');
 const scheduleModel = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/model.js', 'utf8');
 const scheduleView = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js', 'utf8');
 const scheduleEditor = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/editor.js', 'utf8');
+const scheduleController = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/controller.js', 'utf8');
+const groupController = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/groups/controller.js', 'utf8');
+const deviceController = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js', 'utf8');
+const schedulePersistence = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/persistence.js', 'utf8');
+const groupPersistence = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/groups/persistence.js', 'utf8');
 const settingsPersistence = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/persistence.js', 'utf8');
+const settingsMisc = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/misc.js', 'utf8');
+const settingsSideEffects = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/side-effects.js', 'utf8');
+const devicePersistence = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/persistence.js', 'utf8');
 const styles = readFileSync('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/sheepfold.css', 'utf8');
 const defaults = readFileSync('package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/sheepfold.uci.defaults', 'utf8');
 const makefile = readFileSync('package/luci-app-sheepfold-family-internet-control/Makefile', 'utf8');
@@ -105,25 +114,25 @@ describe('Schedule editor and access priority UI', () => {
     assert.match(makefile, new RegExp(`safe_access_priority='${defaultOrder}'`));
     assert.match(makefile, /current_access_priority.*sheepfold\.global\.access_priority/);
     assert.match(settingsPersistence, /function normalizeAccessOrder\(value, accessKeys\)/);
-    const priorityField = overview.slice(
-      overview.indexOf('function accessPriorityField()'),
-      overview.indexOf('function scheduleConflictPolicyField()'),
+    const priorityField = settingsMisc.slice(
+      settingsMisc.indexOf('function accessPriorityField()'),
+      settingsMisc.indexOf('function scheduleConflictPolicyField()'),
     );
-    assert.match(overview, /var accessSteps = \[\s*\['blocklist', 'Blocklist'\],\s*\['admin_devices', 'Admin devices'\]/);
-    assert.match(priorityField, /var enforcedOrder = accessSteps/);
+    assert.match(overview, /var ACCESS_STEPS = \[\s*\['blocklist', 'Blocklist'\],\s*\['admin_devices', 'Admin devices'\]/);
+    assert.match(priorityField, /deps\.accessSteps\.map/);
     assert.match(priorityField, /The order is temporarily fixed/);
     assert.doesNotMatch(priorityField, /setSettingsDraftOption\('access_priority'/);
     assert.doesNotMatch(priorityField, /moveStep|Move up|Move down|Reset order/);
   });
 
   it('edits and persists recurring rules without forcing deletion', () => {
-    assert.match(overview, /function showScheduleEditor\(section, copyMode\)[\s\S]*scheduleEditor\.open/);
+    assert.match(scheduleController, /function openEditor\(section, copyMode\)[\s\S]*deps\.editor\.open/);
     assert.match(scheduleEditor, /function open\(deps, section, copyMode\)/);
-    assert.match(overview, /setUciList\(secName, 'time_ranges', draft\.timeRanges\.map/);
-    assert.match(overview, /uci\.set\('sheepfold', section, option, values\)/);
-    assert.match(overview, /uci\.set\('sheepfold', secName, 'enabled', draft\.enabled \? '1' : '0'\)/);
-    assert.match(overview, /function setScheduleEnabled\(section, enabled\)/);
-    assert.match(overview, /function deleteSchedule\(section\)/);
+    assert.match(scheduleController, /deps\.persistence\.persistDraft\(draft, ownName\)/);
+    assert.match(schedulePersistence, /persistence\.replaceList\('sheepfold', sectionName, 'time_ranges'/);
+    assert.match(schedulePersistence, /uci\.set\('sheepfold', sectionName, 'enabled', draft\.enabled \? '1' : '0'\)/);
+    assert.match(scheduleController, /function setEnabled\(section, enabled, button\)/);
+    assert.match(scheduleController, /function remove\(section, button\)/);
     assert.match(scheduleView, /Disable without deleting/);
     assert.doesNotMatch(overview, /\['school_days', _\('School days'\)\]/);
   });
@@ -132,22 +141,22 @@ describe('Schedule editor and access priority UI', () => {
     assert.match(scheduleModel, /function windows\(days, runs, dayDefinitions\)/);
     assert.match(scheduleModel, /if \(end < start\)\s+end \+= 1440/);
     assert.match(scheduleModel, /\[-week, 0, week\]/);
-    assert.match(overview, /scheduleModel\.windowsOverlap/);
+    assert.match(scheduleController, /deps\.model\.windowsOverlap/);
     assert.match(scheduleEditor, /dayBox\.querySelectorAll\('\[data-schedule-day\]:checked'\)/);
     assert.doesNotMatch(scheduleEditor, /document\.querySelectorAll\('\[data-schedule-day\]:checked'\)/);
-    assert.match(overview, /timeToMinutes: scheduleModel\.timeToMinutes/);
-    assert.doesNotMatch(overview, /(^|[^.])\btimeToMinutes\(/m);
-    assert.doesNotMatch(overview, /\bscheduleRanges\(/);
+    assert.match(scheduleEditor, /deps\.timeToMinutes/);
+    assert.doesNotMatch(scheduleController, /(^|[^.])\btimeToMinutes\(/m);
+    assert.doesNotMatch(scheduleController, /\bscheduleRanges\(/);
   });
 
   it('persists and enforces the selected schedule conflict outcome', () => {
     assert.match(defaults, /option schedule_conflict_internet 'off'/);
     assert.match(makefile, /ensure_global_option schedule_conflict_internet 'off'/);
-    assert.match(overview, /function scheduleConflictPolicyField\(\)/);
-    assert.match(overview, /setSettingsDraftOption\('schedule_conflict_internet', item\[0\]\)/);
-    assert.match(overview, /function scheduleConflictResultText\(\)[\s\S]*return savedScheduleConflictInternetValue\(\) === 'on'/);
-    assert.match(overview, /routerControl\(\['schedule-sync'\]\)/);
-    assert.match(overview, /The conflict will still be shown in the interface and written to the journal/);
+    assert.match(settingsMisc, /function scheduleConflictPolicyField\(\)/);
+    assert.match(settingsMisc, /deps\.setOption\('schedule_conflict_internet', item\[0\]\)/);
+    assert.match(scheduleController, /function conflictResultText\(\)[\s\S]*deps\.conflictValue\(\) === 'on'/);
+    assert.match(settingsSideEffects, /schedule_conflict_internet[\s\S]*schedule-sync/);
+    assert.match(settingsMisc, /The conflict will still be shown in the interface and written to the journal/);
 
     assert.match(evaluator, /evaluate_scope device/);
     assert.match(evaluator, /evaluate_scope group/);
@@ -157,17 +166,20 @@ describe('Schedule editor and access priority UI', () => {
     assert.match(evaluator, /Конфликт расписаний для устройства/);
     assert.match(firewall, /sheepfold-schedule-evaluator/);
     assert.match(clientStatus, /evaluate_schedule/);
-    assert.match(publicClientStatus, /"scheduleConflict":%s/);
+    assert.doesNotMatch(publicClientStatus, /"scheduleConflict":/);
+    assert.match(publicClientStatus, /"nextAccessChangeTime":/);
     assert.match(publicClientStatus, /Расписания конфликтуют/);
     assert.match(makefile, /\* \* \* \* \* \/usr\/libexec\/sheepfold\/sheepfold-firewall sync/);
   });
 
   it('applies access-affecting LuCI changes immediately after save', () => {
-    assert.match(overview, /hasOwn\(options, 'new_device_policy'\)[\s\S]*routerControl\(\['schedule-sync'\]\)/);
-    assert.match(overview, /saveUciChanges\(configs\.filter[\s\S]*Could not apply internet access rules/);
-    assert.match(overview, /saveUciChanges\(\['sheepfold'\]\)\.then\(function \(\) \{[\s\S]*applySheepfoldAccessRuntime\(\)\.then/);
-    assert.match(overview, /applySheepfoldAccessRuntime\(\)\.then\(function \(\) \{[\s\S]*Group saved/);
-    assert.match(overview, /The group was saved, but internet access rules could not be applied/);
+    assert.match(settingsSideEffects, /hasOwn\(options, 'new_device_policy'\)[\s\S]*checkedRun\(\['schedule-sync'\]/);
+    assert.match(deviceController, /deps\.persistence\.persistSettings\(device, payload\)/);
+    assert.match(devicePersistence, /function applyRuntime\(\)[\s\S]*schedule-sync[\s\S]*site-lists-apply/);
+    assert.match(scheduleController, /deps\.persistence\.persistDraft/);
+    assert.match(groupController, /deps\.persistence\.persistSettings/);
+    assert.match(groupPersistence, /devicePersistence\.applyRuntime\(\)/);
+    assert.match(groupController, /The group was saved, but internet access rules could not be applied/);
   });
 
   it('resolves real evaluator fixtures for off, on, specificity, and overnight windows', () => {

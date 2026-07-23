@@ -30,6 +30,16 @@ includeDiagnostics=0|1
 
 Детский APK не получает административный QR и поэтому не разрешает сетевые имена вообще: автопоиск использует IP шлюза активной Wi-Fi/Ethernet-сети, а ручное поле принимает только локальный IP. Та же проверка стоит в общем `ChildRouterHttps`, поэтому status, просьба о времени, SIM/Wi-Fi-отчёты и детский ИИ не могут уйти на публичный адрес (§dnsbind1).
 
+
+
+### Родительский `/api/v1/admin-config`
+
+Авторизованный `GET /cgi-bin/sheepfold-api/api/v1/admin-config` возвращает `schemaVersion`, `revision`, расписания, группы, безопасные поля администраторов и итоговое состояние Wi-Fi. `password_hash`, pairing-коды, Bearer-токены, Wi-Fi-ключи и секреты интеграций в ответ не входят.
+
+Запись выполняют POST-подмаршруты `schedule/save`, `schedule/delete`, `group/save`, `group/delete` и `wifi-control`. Каждый UCI payload передаёт `schemaVersion` и `expectedRevision`; устаревший снимок получает `409 revision_conflict`. Backend сериализует изменение одним `flock`, пишет в изолированный `uci -t/-p` savedir, хранит снимок `/etc/config/sheepfold`, проверяет committed state и сохраняет возможность отката при ошибке. Администраторские устройства запрещены как цели расписаний и участники семейных групп.
+
+APK не выпускает административный QR и не редактирует Wi-Fi-пароли: эти операции остаются в защищённом LuCI (§pairsec, §apicon1).
+
 ### Server-driven доступность ИИ (§prodvar)
 
 Единый родительский APK читает из авторизованного `GET /router-info`:
@@ -41,6 +51,14 @@ includeDiagnostics=0|1
 `true` означает, что на роутере установлена редакция AI Support, ИИ включён, выбран поддерживаемый провайдер и для него сохранён ключ. Формат роутерного пакета IPK/OpenWrt APK значения не имеет. Поле не раскрывает провайдера или ключ. При отсутствии поля Android использует `false`.
 
 Детский `GET /client-status` дополнительно может вернуть `aiAssistantAvailable`, `childAiAvailable`, `childAiAllowed` и `personalGroupRequired`. Вкладка показывается только при `childAiAvailable=true`; без личной группы она остаётся заблокированной с понятным баннером. Каждый POST к ИИ всё равно повторно проверяет разрешение на роутере.
+
+
+
+### Минимизированный детский status API v3
+
+`GET /cgi-bin/sheepfold-api/client-status` использует `apiVersion=3`. Публичный ответ не содержит `accessMode`, имени разрешившего правила, `scheduleConflict` или имени личной группы. При `internetState=enabled` поле `message` равно `null`; приложение показывает только факт доступа и `nextAccessChangeTime`. При `disabled` или `unknown` разрешено короткое безопасное объяснение без раскрытия внутреннего порядка семейных правил.
+
+Политика функций передаётся отдельными булевыми полями `simChangeReporting`, `wifiNetworkReporting` и `wifiLocationReporting`. Детский APK показывает объяснение и запрашивает соответствующие Android-разрешения только после получения `true`; отказ не ломает основной статус. Подробный AI-контекст при необходимости должен готовиться внутри защищённого router-side gate, а не восстанавливаться из публичного child response (§b5wkq2e, §simchg1, §childwifi1).
 
 ### Время следующего изменения доступа
 

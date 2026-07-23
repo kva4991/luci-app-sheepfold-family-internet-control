@@ -41,3 +41,6 @@ tools/local/
 *.env
 *.local
 secrets/
+# Android signing keys must stay outside Git
+*.jks
+*.keystore

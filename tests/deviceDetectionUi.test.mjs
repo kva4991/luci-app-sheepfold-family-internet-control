@@ -12,10 +12,6 @@ const viewPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview-personal.js',
 );
-const overviewPath = resolve(
-  repoRoot,
-  'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js',
-);
 const generalSettingsPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/general.js',
@@ -81,14 +77,17 @@ describe('Интерфейс автоопределения устройств',
   });
 
   it('показывает диапазон Wi-Fi значком, а не текстом в скобках', () => {
-    const overview = readFileSync(overviewPath, 'utf8');
+    const wifiController = readFileSync(resolve(
+      repoRoot,
+      'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/wifi/controller.js',
+    ), 'utf8');
     const css = readFileSync(sheepfoldCssPath, 'utf8');
 
-    assert.match(overview, /function wifiBandBadge/);
-    assert.match(overview, /function wifiNetworkTitle/);
-    assert.doesNotMatch(overview, /ssid \+ ' \(' \+ \(band/);
-    assert.match(overview, /'sf-wifi-band sf-wifi-band-' \+ kind/);
-    assert.match(overview, /wifiNetworkTitle\(network, powerControl\)/);
+    assert.match(wifiController, /function bandBadge/);
+    assert.match(wifiController, /function title\(network, powerControl\)/);
+    assert.doesNotMatch(wifiController, /ssid \+ ' \(' \+ \(band/);
+    assert.match(wifiController, /'sf-wifi-band sf-wifi-band-' \+ kind/);
+    assert.match(wifiController, /title: title/);
     assert.match(css, /\.sf-wifi-band-2g/);
     assert.match(css, /\.sf-wifi-band-5g/);
     assert.match(css, /\.sf-wifi-band svg[\s\S]*width: 28px/);
@@ -96,12 +95,15 @@ describe('Интерфейс автоопределения устройств',
   });
 
   it('показывает плашку «Новое» только в течение суток после первого обнаружения', () => {
-    const overview = readFileSync(overviewPath, 'utf8');
+    const deviceController = readFileSync(resolve(
+      repoRoot,
+      'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js',
+    ), 'utf8');
     const detector = readFileSync(detectorPath, 'utf8');
 
-    assert.match(overview, /NEW_DEVICE_BADGE_SECONDS = 86400/);
-    assert.match(overview, /function deviceShowsNewBadge/);
-    assert.match(overview, /device\.statusBadge \? badge\(device\.statusBadge\)/);
+    assert.match(deviceController, /NEW_DEVICE_BADGE_SECONDS = 86400/);
+    assert.match(deviceController, /function statusBadge/);
+    assert.match(deviceController, /device\.statusBadge \? badge\(device\.statusBadge\)/);
     assert.match(detector, /first_seen_at/);
     assert.match(detector, /backfill_first_seen_at/);
   });
@@ -130,7 +132,6 @@ describe('Интерфейс автоопределения устройств',
   });
 
   it('показывает одинаковый индикатор устойчивой идентификации во всех списках устройств', () => {
-	const overview = readFileSync(overviewPath, 'utf8');
 	const personal = readFileSync(viewPath, 'utf8');
 	const inventory = readFileSync(resolve(
 		repoRoot,
@@ -148,6 +149,10 @@ describe('Интерфейс автоопределения устройств',
 		repoRoot,
 		'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/groups/view.js',
 	), 'utf8');
+	const environment = readFileSync(resolve(
+		repoRoot,
+		'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/environment.js',
+	), 'utf8');
 
 	assert.match(inventory, /identityProtectionLevel/);
 	assert.match(inventory, /function effectiveDeviceType/);
@@ -155,7 +160,8 @@ describe('Интерфейс автоопределения устройств',
 	assert.match(inventory, /upnp_uuid/);
 	assert.match(inventory, /mdns_serial/);
 	assert.match(icons, /function deviceIdentity/);
-	assert.match(overview, /deviceIdentityIcon\(device\)/);
+	assert.match(environment, /function identityIcon\(device\)/);
+	assert.match(environment, /icons\.deviceIdentity\(protectedIdentity, title\)/);
 	assert.match(selection, /identityIcon\(device\)/);
 	assert.match(groups, /identityIcon\(device\)/);
   });

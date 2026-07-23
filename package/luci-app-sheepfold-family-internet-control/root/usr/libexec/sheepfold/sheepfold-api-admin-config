@@ -1,0 +1,916 @@
+#!/bin/sh
+set -eu
+
+# Authenticated parent-Android configuration API. The public CGI entrypoint
+# authenticates the bound administrator device before invoking this helper.
+# Writes use one optimistic revision and an isolated UCI delta so a stale APK
+# cannot silently overwrite a newer LuCI or administrator change. §apicon1
+
+ACTION="${1:-get}"
+UCI_BIN="${SHEEPFOLD_UCI_BIN:-uci}"
+ROUTER_CONTROL="${SHEEPFOLD_ROUTER_CONTROL:-/usr/libexec/sheepfold/sheepfold-router-control}"
+LOG_HELPER="${SHEEPFOLD_LOG_HELPER:-/usr/libexec/sheepfold/sheepfold-log}"
+ADMIN_LOGIN="${SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN:-}"
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-/usr/libexec/sheepfold/sheepfold-lock-common}"
+LOCK_FILE="${SHEEPFOLD_ADMIN_CONFIG_LOCK:-/var/lock/sheepfold-admin-config.flock}"
+TRANSACTION_ROOT="${SHEEPFOLD_ADMIN_CONFIG_TX_ROOT:-/tmp/sheepfold/admin-config-transactions}"
+CONFIG_FILE="${SHEEPFOLD_CONFIG_FILE:-/etc/config/sheepfold}"
+NOT_CONFIGURED_GROUP="${SHEEPFOLD_NOT_CONFIGURED_GROUP:-Not configured}"
+SCHEMA_VERSION=1
+
+[ -n "$ADMIN_LOGIN" ] || {
+    printf '%s\n' auth_required >&2
+    exit 71
+}
+
+[ -r "$LOCK_COMMON" ] || {
+    printf '%s\n' lock_backend_unavailable >&2
+    exit 70
+}
+. "$LOCK_COMMON"
+
+uci_read() {
+    "$UCI_BIN" "$@"
+}
+
+uci_get() {
+    uci_read -q get "$1" 2>/dev/null || true
+}
+
+sections_of_type() {
+    local type
+    type="$1"
+    uci_read -q show sheepfold 2>/dev/null |
+        sed -n "s/^sheepfold\.\([^.=]*\)=$type$/\1/p"
+}
+
+json_escape() {
+    printf '%s' "${1:-}" |
+        tr '\r\n\t' '   ' |
+        sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+json_string() {
+    printf '"%s"' "$(json_escape "${1:-}")"
+}
+
+json_bool() {
+    [ "${1:-0}" = 1 ] && printf true || printf false
+}
+
+json_word_array() {
+    local values first value
+    values="${1:-}"
+    first=1
+    printf '['
+    for value in $values; do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_string "$value"
+    done
+    printf ']'
+}
+
+json_time_ranges() {
+    local section values start end first range
+    section="$1"
+    values="$(uci_get "sheepfold.$section.time_ranges")"
+    if [ -z "$values" ]; then
+        start="$(uci_get "sheepfold.$section.start_time")"
+        end="$(uci_get "sheepfold.$section.end_time")"
+        [ -z "$start" ] || [ -z "$end" ] || values="$start-$end"
+    fi
+
+    first=1
+    printf '['
+    for range in $values; do
+        start="${range%%-*}"
+        end="${range#*-}"
+        [ "$first" = 1 ] || printf ','
+        first=0
+        printf '{"start":'
+        json_string "$start"
+        printf ',"end":'
+        json_string "$end"
+        printf '}'
+    done
+    printf ']'
+}
+
+config_revision() {
+    local state
+    state="$(uci_read -q show sheepfold 2>/dev/null || true)"
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$state" | sha256sum | awk '{ print $1 }'
+    elif command -v openssl >/dev/null 2>&1; then
+        printf '%s' "$state" | openssl dgst -sha256 | awk '{ print $NF }'
+    else
+        printf '%s\n' revision_hash_unavailable >&2
+        return 1
+    fi
+}
+
+json_schedule() {
+    local section target_type
+    section="$1"
+    printf '{"section":'
+    json_string "$section"
+    printf ',"name":'
+    json_string "$(uci_get "sheepfold.$section.name")"
+    printf ',"description":'
+    json_string "$(uci_get "sheepfold.$section.description")"
+    printf ',"enabled":'
+    [ "$(uci_get "sheepfold.$section.enabled")" = 0 ] && printf false || printf true
+    printf ',"action":'
+    json_string "$(uci_get "sheepfold.$section.action")"
+    printf ',"targetType":'
+    target_type="$(uci_get "sheepfold.$section.target_type")"
+    [ -n "$target_type" ] || target_type=group
+    json_string "$target_type"
+    printf ',"targets":'
+    json_word_array "$(uci_get "sheepfold.$section.targets")"
+    printf ',"weekdays":'
+    json_word_array "$(uci_get "sheepfold.$section.weekdays")"
+    printf ',"timeRanges":'
+    json_time_ranges "$section"
+    printf '}'
+}
+
+json_group_device_ids() {
+    local section group_name first device_section device_group device_id
+    section="$1"
+    group_name="$(uci_get "sheepfold.$section.name")"
+    first=1
+    printf '['
+    for device_section in $(sections_of_type device); do
+        device_group="$(uci_get "sheepfold.$device_section.group")"
+        [ "$device_group" = "$group_name" ] || [ "$device_group" = "$section" ] || continue
+        device_id="$(uci_get "sheepfold.$device_section.id")"
+        [ -n "$device_id" ] || continue
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_string "$device_id"
+    done
+    printf ']'
+}
+
+json_group() {
+    local section
+    section="$1"
+    printf '{"section":'
+    json_string "$section"
+    printf ',"name":'
+    json_string "$(uci_get "sheepfold.$section.name")"
+    printf ',"description":'
+    json_string "$(uci_get "sheepfold.$section.description")"
+    printf ',"color":'
+    json_string "$(uci_get "sheepfold.$section.color")"
+    printf ',"personal":'
+    json_bool "$(uci_get "sheepfold.$section.personal")"
+    printf ',"protected":'
+    json_bool "$(uci_get "sheepfold.$section.protected")"
+    printf ',"autoAssignable":'
+    json_bool "$(uci_get "sheepfold.$section.auto_assignable")"
+    printf ',"allowlistOnly":'
+    json_bool "$(uci_get "sheepfold.$section.allowlist_only")"
+    printf ',"deviceIds":'
+    json_group_device_ids "$section"
+    printf '}'
+}
+
+json_administrator() {
+    local section
+    section="$1"
+    # Deliberately expose only display metadata. Sensitive credentials and
+    # one-time authorization state never cross the router API boundary.
+    printf '{"section":'
+    json_string "$section"
+    printf ',"id":'
+    json_string "$(uci_get "sheepfold.$section.id")"
+    printf ',"displayName":'
+    json_string "$(uci_get "sheepfold.$section.display_name")"
+    printf ',"login":'
+    json_string "$(uci_get "sheepfold.$section.login")"
+    printf ',"role":'
+    json_string "$(uci_get "sheepfold.$section.role")"
+    printf ',"allowChildAccessRequests":'
+    json_bool "$(uci_get "sheepfold.$section.allow_child_access_requests")"
+    printf '}'
+}
+
+wifi_enabled() {
+    local found radio
+    found=0
+    for radio in $(uci_read -q show wireless 2>/dev/null | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\1/p'); do
+        found=1
+        [ "$(uci_read -q get "wireless.$radio.disabled" 2>/dev/null || printf 0)" = 1 ] || return 0
+    done
+    [ "$found" = 0 ] && return 1
+    return 1
+}
+
+admin_config_json() {
+    local mutation_kind runtime_applied revision bedtime first section
+    mutation_kind="${1:-}"
+    runtime_applied="${2:-1}"
+    revision="$(config_revision)" || exit 70
+
+    printf '{"app":"sheepfold","ok":true,"schemaVersion":%s,"revision":' "$SCHEMA_VERSION"
+    json_string "$revision"
+    printf ',"bedtime":'
+    bedtime="$(uci_get sheepfold.global.bedtime)"
+    [ -n "$bedtime" ] || bedtime=21:00
+    json_string "$bedtime"
+    printf ',"wifiEnabled":'
+    wifi_enabled && printf true || printf false
+    printf ',"capabilities":{"scheduleWrite":true,"groupWrite":true,"wifiControl":true,"administratorRead":true,"logRead":true,"logClear":true}'
+    if [ -n "$mutation_kind" ]; then
+        printf ',"mutation":{"kind":'
+        json_string "$mutation_kind"
+        printf ',"runtimeApplied":'
+        [ "$runtime_applied" = 1 ] && printf true || printf false
+        printf '}'
+    fi
+
+    printf ',"schedules":['
+    first=1
+    for section in $(sections_of_type schedule); do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_schedule "$section"
+    done
+    printf '],"groups":['
+    first=1
+    for section in $(sections_of_type group); do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_group "$section"
+    done
+    printf '],"administrators":['
+    first=1
+    for section in $(sections_of_type administrator); do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_administrator "$section"
+    done
+    printf ']}\n'
+}
+
+url_decode() {
+    local value
+    value="$(printf '%s' "${1:-}" | sed 's/+/ /g; s/%/\\x/g')"
+    printf '%b' "$value"
+}
+
+form_get() {
+    local key body item_key item_value
+    key="$1"
+    body="$2"
+    printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
+        [ "$item_key" = "$key" ] || continue
+        url_decode "$item_value"
+        break
+    done
+}
+
+trim_text() {
+    printf '%s' "${1:-}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+valid_plain_text() {
+    local value max_length
+    value="${1:-}"
+    max_length="$2"
+    [ "${#value}" -le "$max_length" ] || return 1
+    # Keep UTF-8 text, but reject all control bytes (newline, tab, NUL, DEL, etc.).
+    # LC_ALL=C makes the class byte-stable on BusyBox and does not reject UTF-8 bytes.
+    ! printf '%s' "$value" | LC_ALL=C grep -q '[[:cntrl:]]'
+}
+
+valid_section_name() {
+    printf '%s' "${1:-}" | grep -Eq '^[A-Za-z0-9_]+$'
+}
+
+valid_flag() {
+    [ "${1:-}" = 0 ] || [ "${1:-}" = 1 ]
+}
+
+valid_time() {
+    local value hours
+    value="${1:-}"
+    case "$value" in [0-2][0-9]:[0-5][0-9]) ;; *) return 1 ;; esac
+    hours="${value%%:*}"
+    hours="${hours#0}"
+    [ -n "$hours" ] || hours=0
+    [ "$hours" -le 23 ]
+}
+
+section_is_type() {
+    [ "$(uci_get "sheepfold.$1")" = "$2" ]
+}
+
+device_section_by_id() {
+    local wanted section
+    wanted="$1"
+    for section in $(sections_of_type device); do
+        [ "$(uci_get "sheepfold.$section.id")" = "$wanted" ] || continue
+        printf '%s\n' "$section"
+        return 0
+    done
+    return 1
+}
+
+csv_words() {
+    printf '%s' "${1:-}" | tr ',' ' '
+}
+
+word_count() {
+    local count unused
+    count=0
+    for unused in ${1:-}; do count=$((count + 1)); done
+    printf '%s\n' "$count"
+}
+
+validate_expected_revision() {
+    local schema_version expected_revision current_revision
+    schema_version="$1"
+    expected_revision="$2"
+    [ "$schema_version" = "$SCHEMA_VERSION" ] || {
+        printf '%s\n' unsupported_schema >&2
+        return 2
+    }
+    [ -n "$expected_revision" ] || {
+        printf '%s\n' revision_required >&2
+        return 2
+    }
+    current_revision="$(config_revision)" || return 70
+    [ "$expected_revision" = "$current_revision" ] || {
+        printf '%s\n' revision_conflict >&2
+        return 3
+    }
+}
+
+TX_DIR=""
+TX_UCI_DIR=""
+TX_SNAPSHOT=""
+TX_RESTORE=0
+TX_ACTIVE=0
+
+restore_snapshot() {
+    local restore_file
+    restore_file="${CONFIG_FILE}.android-restore.$$"
+    [ -r "$TX_SNAPSHOT" ] || return 1
+    cp -p "$TX_SNAPSHOT" "$restore_file" || return 1
+    mv -f "$restore_file" "$CONFIG_FILE" || {
+        rm -f "$restore_file" 2>/dev/null || true
+        return 1
+    }
+}
+
+transaction_cleanup() {
+    local status="${1:-1}"
+    trap - EXIT HUP INT TERM
+    if [ "$TX_RESTORE" = 1 ]; then
+        restore_snapshot || logger -t sheepfold "Android admin-config transaction rollback failed"
+    fi
+    [ -z "$TX_DIR" ] || rm -rf "$TX_DIR" 2>/dev/null || true
+    [ "$TX_ACTIVE" = 0 ] || sheepfold_lock_release
+    exit "$status"
+}
+
+begin_transaction() {
+    local expected_revision schema_version
+    expected_revision="$1"
+    schema_version="$2"
+
+    if ! sheepfold_lock_acquire "$LOCK_FILE" 30; then
+        printf '%s\n' config_busy >&2
+        return 4
+    fi
+    TX_ACTIVE=1
+    # Install cleanup immediately after acquiring the kernel lock. Validation or
+    # allocation failures must not leave FD 9 locked until the CGI process exits.
+    trap 'transaction_cleanup $?' EXIT
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    validate_expected_revision "$schema_version" "$expected_revision" || return "$?"
+
+    mkdir -p "$TRANSACTION_ROOT"
+    chmod 700 "$TRANSACTION_ROOT" 2>/dev/null || true
+    TX_DIR="$TRANSACTION_ROOT/tx.$$"
+    TX_UCI_DIR="$TX_DIR/uci"
+    TX_SNAPSHOT="$TX_DIR/sheepfold.before"
+    (umask 077; mkdir "$TX_DIR" && mkdir "$TX_UCI_DIR") || return 70
+    cp -p "$CONFIG_FILE" "$TX_SNAPSHOT" || return 70
+}
+
+tx_uci() {
+    "$UCI_BIN" -t "$TX_UCI_DIR" -p "$TX_UCI_DIR" "$@"
+}
+
+set_tx_list() {
+    local section option values value
+    section="$1"
+    option="$2"
+    values="${3:-}"
+    tx_uci -q delete "sheepfold.$section.$option" 2>/dev/null || true
+    for value in $values; do
+        tx_uci -q add_list "sheepfold.$section.$option=$value"
+    done
+}
+
+commit_transaction() {
+    # Keep rollback armed until the caller has verified the main UCI view. A
+    # successful `uci commit` with a wrong save/search path is not proof that
+    # the persistent config changed (§debug01, §pairtx1).
+    TX_RESTORE=1
+    tx_uci -q commit sheepfold
+}
+
+confirm_transaction() {
+    TX_RESTORE=0
+}
+
+normalize_words() {
+    printf '%s\n' "${1:-}" | awk '{$1=$1; print}'
+}
+
+words_equal() {
+    [ "$(normalize_words "${1:-}")" = "$(normalize_words "${2:-}")" ]
+}
+
+audit_event() {
+    [ -x "$LOG_HELPER" ] || return 0
+    "$LOG_HELPER" "Android ($ADMIN_LOGIN): $*" >/dev/null 2>&1 || true
+}
+
+schedule_payload() {
+    local body target_count target device_section seen_targets weekday_count seen_days day range_count seen_ranges range start end
+    body="$1"
+    section="$(form_get section "$body")"
+    name="$(trim_text "$(form_get name "$body")")"
+    description="$(trim_text "$(form_get description "$body")")"
+    enabled="$(form_get enabled "$body")"
+    action="$(form_get action "$body")"
+    target_type="$(form_get targetType "$body")"
+    targets="$(csv_words "$(form_get targets "$body")")"
+    weekdays="$(csv_words "$(form_get weekdays "$body")")"
+    time_ranges="$(csv_words "$(form_get timeRanges "$body")")"
+
+    [ -z "$section" ] || { valid_section_name "$section" && section_is_type "$section" schedule; } || {
+        printf '%s\n' schedule_not_found >&2
+        return 2
+    }
+    [ -n "$name" ] && valid_plain_text "$name" 80 || {
+        printf '%s\n' invalid_schedule_name >&2
+        return 2
+    }
+    valid_plain_text "$description" 240 || {
+        printf '%s\n' invalid_schedule_description >&2
+        return 2
+    }
+    valid_flag "$enabled" || {
+        printf '%s\n' invalid_schedule_enabled >&2
+        return 2
+    }
+    case "$action" in allow|block) ;; *) printf '%s\n' invalid_schedule_action >&2; return 2 ;; esac
+    case "$target_type" in group|device) ;; *) printf '%s\n' invalid_schedule_target_type >&2; return 2 ;; esac
+
+    target_count="$(word_count "$targets")"
+    [ "$target_count" -ge 1 ] && [ "$target_count" -le 128 ] || {
+        printf '%s\n' invalid_schedule_targets >&2
+        return 2
+    }
+    seen_targets=""
+    for target in $targets; do
+        case " $seen_targets " in *" $target "*) printf '%s\n' duplicate_schedule_target >&2; return 2 ;; esac
+        seen_targets="$seen_targets $target"
+        case "$target_type" in
+            group) valid_section_name "$target" && section_is_type "$target" group || {
+                printf '%s\n' invalid_schedule_target >&2
+                return 2
+            } ;;
+            device)
+                printf '%s' "$target" | grep -Eq '^[0-9]+$' || {
+                    printf '%s\n' invalid_schedule_target >&2
+                    return 2
+                }
+                device_section="$(device_section_by_id "$target" 2>/dev/null || true)"
+                [ -n "$device_section" ] || {
+                    printf '%s\n' invalid_schedule_target >&2
+                    return 2
+                }
+                [ "$(uci_get "sheepfold.$device_section.admin_device")" != 1 ] || {
+                    printf '%s\n' administrator_schedule_forbidden >&2
+                    return 2
+                }
+                ;;
+        esac
+    done
+
+    weekday_count="$(word_count "$weekdays")"
+    [ "$weekday_count" -ge 1 ] && [ "$weekday_count" -le 7 ] || {
+        printf '%s\n' invalid_schedule_weekdays >&2
+        return 2
+    }
+    seen_days=""
+    for day in $weekdays; do
+        case "$day" in mon|tue|wed|thu|fri|sat|sun) ;; *) printf '%s\n' invalid_schedule_weekdays >&2; return 2 ;; esac
+        case " $seen_days " in *" $day "*) printf '%s\n' duplicate_schedule_weekday >&2; return 2 ;; esac
+        seen_days="$seen_days $day"
+    done
+
+    range_count="$(word_count "$time_ranges")"
+    [ "$range_count" -ge 1 ] && [ "$range_count" -le 8 ] || {
+        printf '%s\n' invalid_schedule_time_ranges >&2
+        return 2
+    }
+    seen_ranges=""
+    for range in $time_ranges; do
+        case " $seen_ranges " in *" $range "*) printf '%s\n' duplicate_schedule_time_range >&2; return 2 ;; esac
+        seen_ranges="$seen_ranges $range"
+        start="${range%%-*}"
+        end="${range#*-}"
+        [ "$start" != "$range" ] && valid_time "$start" && valid_time "$end" && [ "$start" != "$end" ] || {
+            printf '%s\n' invalid_schedule_time_range >&2
+            return 2
+        }
+    done
+}
+
+schedule_state_is_valid() {
+    section_is_type "$section" schedule &&
+        [ "$(uci_get "sheepfold.$section.name")" = "$name" ] &&
+        [ "$(uci_get "sheepfold.$section.description")" = "$description" ] &&
+        [ "$(uci_get "sheepfold.$section.enabled")" = "$enabled" ] &&
+        [ "$(uci_get "sheepfold.$section.action")" = "$action" ] &&
+        [ "$(uci_get "sheepfold.$section.target_type")" = "$target_type" ] &&
+        words_equal "$(uci_get "sheepfold.$section.targets")" "$targets" &&
+        words_equal "$(uci_get "sheepfold.$section.weekdays")" "$weekdays" &&
+        words_equal "$(uci_get "sheepfold.$section.time_ranges")" "$time_ranges"
+}
+
+schedule_delete_is_valid() {
+    local group_section schedule_reference
+    ! section_is_type "$section" schedule || return 1
+    for group_section in $(sections_of_type group); do
+        for schedule_reference in $(uci_get "sheepfold.$group_section.schedules"); do
+            [ "$schedule_reference" != "$section" ] || return 1
+        done
+    done
+    return 0
+}
+
+schedule_save() {
+    body="$(cat)"
+    expected_revision="$(form_get expectedRevision "$body")"
+    schema_version="$(form_get schemaVersion "$body")"
+    begin_transaction "$expected_revision" "$schema_version" || return "$?"
+    schedule_payload "$body" || return "$?"
+
+    if [ -z "$section" ]; then
+        section="schedule_android_$(date +%s)_$$"
+        tx_uci -q set "sheepfold.$section=schedule"
+    fi
+    tx_uci -q set "sheepfold.$section.name=$name"
+    tx_uci -q set "sheepfold.$section.description=$description"
+    tx_uci -q set "sheepfold.$section.enabled=$enabled"
+    tx_uci -q set "sheepfold.$section.action=$action"
+    tx_uci -q set "sheepfold.$section.target_type=$target_type"
+    set_tx_list "$section" targets "$targets"
+    set_tx_list "$section" weekdays "$weekdays"
+    set_tx_list "$section" time_ranges "$time_ranges"
+    tx_uci -q delete "sheepfold.$section.start_time" 2>/dev/null || true
+    tx_uci -q delete "sheepfold.$section.end_time" 2>/dev/null || true
+
+    commit_transaction || {
+        printf '%s\n' config_commit_failed >&2
+        return 70
+    }
+    schedule_state_is_valid || {
+        printf '%s\n' config_verify_failed >&2
+        return 70
+    }
+    confirm_transaction
+    runtime_applied=1
+    "$ROUTER_CONTROL" schedule-sync >/dev/null 2>&1 || runtime_applied=0
+    audit_event "расписание сохранено: $name"
+    admin_config_json schedule-save "$runtime_applied"
+}
+
+schedule_delete() {
+    body="$(cat)"
+    section="$(form_get section "$body")"
+    expected_revision="$(form_get expectedRevision "$body")"
+    schema_version="$(form_get schemaVersion "$body")"
+    begin_transaction "$expected_revision" "$schema_version" || return "$?"
+    valid_section_name "$section" && section_is_type "$section" schedule || {
+        printf '%s\n' schedule_not_found >&2
+        return 2
+    }
+
+    tx_uci -q delete "sheepfold.$section"
+    for group_section in $(sections_of_type group); do
+        kept=""
+        for schedule in $(uci_get "sheepfold.$group_section.schedules"); do
+            [ "$schedule" = "$section" ] && continue
+            kept="$kept $schedule"
+        done
+        set_tx_list "$group_section" schedules "$kept"
+    done
+    commit_transaction || {
+        printf '%s\n' config_commit_failed >&2
+        return 70
+    }
+    schedule_delete_is_valid || {
+        printf '%s\n' config_verify_failed >&2
+        return 70
+    }
+    confirm_transaction
+    runtime_applied=1
+    "$ROUTER_CONTROL" schedule-sync >/dev/null 2>&1 || runtime_applied=0
+    audit_event "расписание удалено: $section"
+    admin_config_json schedule-delete "$runtime_applied"
+}
+
+group_payload() {
+    local body candidate device_count seen_ids device_id device_section previous_device_section previous_group previous_id
+    body="$1"
+    section="$(form_get section "$body")"
+    name="$(trim_text "$(form_get name "$body")")"
+    description="$(trim_text "$(form_get description "$body")")"
+    color="$(form_get color "$body")"
+    personal="$(form_get personal "$body")"
+    allowlist_only="$(form_get allowlistOnly "$body")"
+    device_ids="$(csv_words "$(form_get deviceIds "$body")")"
+
+    [ -z "$section" ] || { valid_section_name "$section" && section_is_type "$section" group; } || {
+        printf '%s\n' group_not_found >&2
+        return 2
+    }
+    [ -n "$name" ] && valid_plain_text "$name" 80 || {
+        printf '%s\n' invalid_group_name >&2
+        return 2
+    }
+    [ "$name" != "$NOT_CONFIGURED_GROUP" ] || {
+        printf '%s\n' reserved_group_name >&2
+        return 2
+    }
+    valid_plain_text "$description" 240 || {
+        printf '%s\n' invalid_group_description >&2
+        return 2
+    }
+    printf '%s' "$color" | grep -Eq '^#[0-9A-Fa-f]{6}$' || {
+        printf '%s\n' invalid_group_color >&2
+        return 2
+    }
+    valid_flag "$personal" && valid_flag "$allowlist_only" || {
+        printf '%s\n' invalid_group_flags >&2
+        return 2
+    }
+
+    old_name=""
+    protected_group=0
+    previous_device_ids=""
+    if [ -n "$section" ]; then
+        old_name="$(uci_get "sheepfold.$section.name")"
+        protected_group="$(uci_get "sheepfold.$section.protected")"
+        [ "$protected_group" != 1 ] || [ "$name" = "$old_name" ] || {
+            printf '%s\n' protected_group_name >&2
+            return 2
+        }
+    fi
+
+    if [ -n "$section" ]; then
+        for previous_device_section in $(sections_of_type device); do
+            previous_group="$(uci_get "sheepfold.$previous_device_section.group")"
+            [ "$previous_group" = "$old_name" ] || [ "$previous_group" = "$section" ] || continue
+            previous_id="$(uci_get "sheepfold.$previous_device_section.id")"
+            [ -z "$previous_id" ] || previous_device_ids="$previous_device_ids $previous_id"
+        done
+    fi
+
+    for candidate in $(sections_of_type group); do
+        [ "$candidate" = "$section" ] && continue
+        [ "$(uci_get "sheepfold.$candidate.name")" != "$name" ] || {
+            printf '%s\n' duplicate_group_name >&2
+            return 2
+        }
+    done
+
+    device_count="$(word_count "$device_ids")"
+    [ "$device_count" -le 256 ] || {
+        printf '%s\n' too_many_group_devices >&2
+        return 2
+    }
+    seen_ids=""
+    for device_id in $device_ids; do
+        printf '%s' "$device_id" | grep -Eq '^[0-9]+$' || {
+            printf '%s\n' invalid_group_device >&2
+            return 2
+        }
+        case " $seen_ids " in *" $device_id "*) printf '%s\n' duplicate_group_device >&2; return 2 ;; esac
+        seen_ids="$seen_ids $device_id"
+        device_section="$(device_section_by_id "$device_id" 2>/dev/null || true)"
+        [ -n "$device_section" ] || {
+            printf '%s\n' invalid_group_device >&2
+            return 2
+        }
+        [ "$(uci_get "sheepfold.$device_section.admin_device")" != 1 ] || {
+            printf '%s\n' administrator_group_forbidden >&2
+            return 2
+        }
+    done
+}
+
+id_selected() {
+    local wanted selected
+    wanted="$1"
+    for selected in $device_ids; do [ "$selected" = "$wanted" ] && return 0; done
+    return 1
+}
+
+group_state_is_valid() {
+    local selected_id selected_section previous_id previous_section
+    section_is_type "$section" group &&
+        [ "$(uci_get "sheepfold.$section.name")" = "$name" ] &&
+        [ "$(uci_get "sheepfold.$section.description")" = "$description" ] &&
+        [ "$(uci_get "sheepfold.$section.color")" = "$color" ] &&
+        [ "$(uci_get "sheepfold.$section.allowlist_only")" = "$allowlist_only" ] || return 1
+    if [ "$protected_group" != 1 ]; then
+        [ "$(uci_get "sheepfold.$section.personal")" = "$personal" ] || return 1
+    fi
+    for selected_id in $device_ids; do
+        selected_section="$(device_section_by_id "$selected_id" 2>/dev/null || true)"
+        [ -n "$selected_section" ] || return 1
+        [ "$(uci_get "sheepfold.$selected_section.group")" = "$name" ] || return 1
+    done
+    for previous_id in $previous_device_ids; do
+        id_selected "$previous_id" && continue
+        previous_section="$(device_section_by_id "$previous_id" 2>/dev/null || true)"
+        [ -n "$previous_section" ] || continue
+        [ "$(uci_get "sheepfold.$previous_section.group")" = "$NOT_CONFIGURED_GROUP" ] || return 1
+    done
+    return 0
+}
+
+group_delete_is_valid() {
+    ! section_is_type "$section" group
+}
+
+group_save() {
+    body="$(cat)"
+    expected_revision="$(form_get expectedRevision "$body")"
+    schema_version="$(form_get schemaVersion "$body")"
+    begin_transaction "$expected_revision" "$schema_version" || return "$?"
+    group_payload "$body" || return "$?"
+
+    if [ -z "$section" ]; then
+        section="group_android_$(date +%s)_$$"
+        tx_uci -q set "sheepfold.$section=group"
+        tx_uci -q set "sheepfold.$section.protected=0"
+        tx_uci -q set "sheepfold.$section.auto_assignable=0"
+    fi
+    [ -n "$old_name" ] || old_name="$name"
+    tx_uci -q set "sheepfold.$section.name=$name"
+    tx_uci -q set "sheepfold.$section.description=$description"
+    tx_uci -q set "sheepfold.$section.color=$color"
+    if [ "$protected_group" != 1 ]; then
+        tx_uci -q set "sheepfold.$section.personal=$personal"
+    fi
+    tx_uci -q set "sheepfold.$section.allowlist_only=$allowlist_only"
+
+    no_restrictions_name="$(uci_get sheepfold.no_restrictions.name)"
+    personal_devices_name="$(uci_get sheepfold.personal_devices.name)"
+    for device_section in $(sections_of_type device); do
+        device_id="$(uci_get "sheepfold.$device_section.id")"
+        [ -n "$device_id" ] || continue
+        current_group="$(uci_get "sheepfold.$device_section.group")"
+        if id_selected "$device_id"; then
+            [ "$(uci_get "sheepfold.$device_section.admin_device")" != 1 ] || continue
+            if [ "$current_group" = "$no_restrictions_name" ] && [ "$name" != "$no_restrictions_name" ]; then
+                tx_uci -q set "sheepfold.$device_section.no_restrictions_auto_excluded=1"
+                tx_uci -q set "sheepfold.$device_section.auto_group_assigned=0"
+            fi
+            if [ "$current_group" = "$personal_devices_name" ] && [ "$name" != "$personal_devices_name" ]; then
+                tx_uci -q set "sheepfold.$device_section.personal_devices_auto_excluded=1"
+                tx_uci -q set "sheepfold.$device_section.auto_group_assigned=0"
+            fi
+            tx_uci -q set "sheepfold.$device_section.group=$name"
+            tx_uci -q set "sheepfold.$device_section.group_source=user"
+            tx_uci -q set "sheepfold.$device_section.user_configured=1"
+        elif [ "$current_group" = "$old_name" ] || [ "$current_group" = "$section" ]; then
+            if [ "$section" = no_restrictions ]; then
+                tx_uci -q set "sheepfold.$device_section.no_restrictions_auto_excluded=1"
+                tx_uci -q set "sheepfold.$device_section.auto_group_assigned=0"
+            fi
+            if [ "$section" = personal_devices ]; then
+                tx_uci -q set "sheepfold.$device_section.personal_devices_auto_excluded=1"
+                tx_uci -q set "sheepfold.$device_section.auto_group_assigned=0"
+            fi
+            tx_uci -q set "sheepfold.$device_section.group=$NOT_CONFIGURED_GROUP"
+            tx_uci -q set "sheepfold.$device_section.group_source=user"
+            tx_uci -q set "sheepfold.$device_section.user_configured=1"
+        fi
+    done
+
+    commit_transaction || {
+        printf '%s\n' config_commit_failed >&2
+        return 70
+    }
+    group_state_is_valid || {
+        printf '%s\n' config_verify_failed >&2
+        return 70
+    }
+    confirm_transaction
+    runtime_applied=1
+    "$ROUTER_CONTROL" schedule-sync >/dev/null 2>&1 || runtime_applied=0
+    "$ROUTER_CONTROL" site-lists-apply >/dev/null 2>&1 || runtime_applied=0
+    audit_event "группа сохранена: $name"
+    admin_config_json group-save "$runtime_applied"
+}
+
+group_delete() {
+    body="$(cat)"
+    section="$(form_get section "$body")"
+    expected_revision="$(form_get expectedRevision "$body")"
+    schema_version="$(form_get schemaVersion "$body")"
+    begin_transaction "$expected_revision" "$schema_version" || return "$?"
+    valid_section_name "$section" && section_is_type "$section" group || {
+        printf '%s\n' group_not_found >&2
+        return 2
+    }
+    [ "$(uci_get "sheepfold.$section.protected")" != 1 ] || {
+        printf '%s\n' protected_group >&2
+        return 2
+    }
+    group_name="$(uci_get "sheepfold.$section.name")"
+    for device_section in $(sections_of_type device); do
+        device_group="$(uci_get "sheepfold.$device_section.group")"
+        [ "$device_group" != "$group_name" ] && [ "$device_group" != "$section" ] || {
+            printf '%s\n' group_has_devices >&2
+            return 2
+        }
+    done
+    for schedule_section in $(sections_of_type schedule); do
+        [ "$(uci_get "sheepfold.$schedule_section.target_type")" = group ] || continue
+        for target in $(uci_get "sheepfold.$schedule_section.targets"); do
+            [ "$target" != "$section" ] && [ "$target" != "$group_name" ] || {
+                printf '%s\n' group_has_schedules >&2
+                return 2
+            }
+        done
+    done
+
+    tx_uci -q delete "sheepfold.$section"
+    commit_transaction || {
+        printf '%s\n' config_commit_failed >&2
+        return 70
+    }
+    group_delete_is_valid || {
+        printf '%s\n' config_verify_failed >&2
+        return 70
+    }
+    confirm_transaction
+    runtime_applied=1
+    "$ROUTER_CONTROL" schedule-sync >/dev/null 2>&1 || runtime_applied=0
+    "$ROUTER_CONTROL" site-lists-apply >/dev/null 2>&1 || runtime_applied=0
+    audit_event "группа удалена: $group_name"
+    admin_config_json group-delete "$runtime_applied"
+}
+
+wifi_control() {
+    local body enable confirm
+    body="$(cat)"
+    enable="$(form_get enable "$body")"
+    confirm="$(form_get confirm "$body")"
+    valid_flag "$enable" && [ "$confirm" = 1 ] || {
+        printf '%s\n' confirmation_required >&2
+        return 2
+    }
+    if [ "$enable" = 1 ]; then
+        SHEEPFOLD_ACTION_ACTOR="Android ($ADMIN_LOGIN)" "$ROUTER_CONTROL" wifi-enable >/dev/null 2>&1 || {
+            printf '%s\n' wifi_control_failed >&2
+            return 5
+        }
+    else
+        SHEEPFOLD_ACTION_ACTOR="Android ($ADMIN_LOGIN)" "$ROUTER_CONTROL" wifi-disable >/dev/null 2>&1 || {
+            printf '%s\n' wifi_control_failed >&2
+            return 5
+        }
+    fi
+    printf '{"app":"sheepfold","ok":true,"enabled":'
+    [ "$enable" = 1 ] && printf true || printf false
+    printf '}\n'
+}
+
+case "$ACTION" in
+    get) admin_config_json ;;
+    schedule-save) schedule_save ;;
+    schedule-delete) schedule_delete ;;
+    group-save) group_save ;;
+    group-delete) group_delete ;;
+    wifi-control) wifi_control ;;
+    *) printf '%s\n' unknown_admin_config_action >&2; exit 2 ;;
+esac

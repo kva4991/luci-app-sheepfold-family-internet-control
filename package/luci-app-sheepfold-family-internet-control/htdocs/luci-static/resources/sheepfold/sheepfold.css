@@ -2577,3 +2577,13 @@
                 grid-template-columns: 1fr;
         }
 }
+
+/* Shared router-command progress state. §apicon1 */
+.sf-command-busy,
+[aria-busy="true"].sf-action,
+[aria-busy="true"].sf-icon-action,
+[aria-busy="true"].sf-icon-btn,
+[aria-busy="true"].btn {
+        cursor: progress;
+        opacity: 0.72;
+}

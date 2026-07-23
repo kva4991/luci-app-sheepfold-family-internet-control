@@ -2,31 +2,52 @@
 'require baseclass';
 'require ui';
 
-/* §frontmod §pairsec
- * Этот модуль отвечает только за поля и локальное состояние модальных окон.
- * Одноразовый пароль, QR payload, UCI и права устройств создаёт и применяет
- * координатор: визуальный слой не должен уметь самостоятельно выдать админский доступ.
+/* §frontmod §pairsec §persist1 §ovaudit3
+ * Modal fields are presentation-only. Duplicate top/bottom Save controls share one
+ * local guard, so a fast double click cannot create or bind an administrator twice.
  */
 function errorNote() {
 	var node = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
-
 	return {
 		node: node,
-		show: function (message) {
-			node.textContent = message;
-			node.hidden = false;
-		},
-		clear: function () {
-			node.textContent = '';
-			node.hidden = true;
+		show: function (message) { node.textContent = message; node.hidden = false; },
+		clear: function () { node.textContent = ''; node.hidden = true; }
+	};
+}
+
+function saveState() {
+	return {
+		saving: false,
+		buttons: [],
+		setSaving: function (value) {
+			this.saving = !!value;
+			this.buttons.forEach(function (button) {
+				button.disabled = !!value;
+				button.setAttribute('aria-busy', value ? 'true' : 'false');
+			});
 		}
 	};
 }
 
-function modalActions(onSave) {
+function modalActions(onSave, state, label) {
+	var button = E('button', {
+		'class': 'btn cbi-button cbi-button-positive',
+		'click': function (event) {
+			var result;
+			event.preventDefault();
+			if (state.saving)
+				return;
+			try { result = onSave(event.currentTarget); } catch (error) { result = Promise.reject(error); }
+			if (!result || typeof result.then !== 'function')
+				return;
+			state.setSaving(true);
+			Promise.resolve(result).catch(function () { return null; }).finally(function () { state.setSaving(false); });
+		}
+	}, label || _('Save'));
+	state.buttons.push(button);
 	return E('div', { 'class': 'right sf-modal-actions' }, [
 		E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
-		E('button', { 'class': 'btn cbi-button cbi-button-positive', 'click': onSave }, _('Save'))
+		button
 	]);
 }
 
@@ -35,50 +56,44 @@ function openAdd(deps, onSave) {
 	var loginField = deps.inputControl(_('Login'), '', { 'autocomplete': 'username' });
 	var selector = deps.createDeviceSelector();
 	var error = errorNote();
+	var state = saveState();
 
-	function save() {
+	function save(button) {
 		var name = nameField.input.value.trim();
 		var login = loginField.input.value.trim();
-
 		error.clear();
-		if (!name || !login) {
-			error.show(_('Name and login are required.'));
-			return;
+		if (!name || !login) { error.show(_('Name and login are required.')); return null; }
+		if (!deps.validateLogin(login)) {
+			error.show(_('Login may contain only Latin letters, digits, and . _ - @ + symbols.'));
+			return null;
 		}
-		if (deps.loginExists(login)) {
-			error.show(_('This login is already used.'));
-			return;
-		}
-
-		onSave({
+		if (deps.loginExists(login)) { error.show(_('This login is already used.')); return null; }
+		return onSave({
 			name: name,
 			login: login,
 			selectedDevices: selector.selectedDevices(),
 			selectedIds: selector.selectedIds()
-		});
+		}, button);
 	}
 
 	ui.showModal(_('Add administrator'), [
 		E('div', { 'class': 'sf-device-editor' }, [
 			error.node,
 			E('div', { 'class': 'sf-grid two' }, [nameField.node, loginField.node]),
-			modalActions(save),
+			modalActions(save, state),
 			E('strong', {}, _('Assigned devices')),
 			selector.node
 		]),
-		modalActions(save)
+		modalActions(save, state)
 	]);
 }
 
 function openBinding(deps, admin, onSave) {
 	var selector = deps.createDeviceSelector(admin.deviceIds || []);
-	var save = function () {
-		onSave({
-			selectedDevices: selector.selectedDevices(),
-			selectedIds: selector.selectedIds()
-		});
-	};
-
+	var state = saveState();
+	function save(button) {
+		return onSave({ selectedDevices: selector.selectedDevices(), selectedIds: selector.selectedIds() }, button);
+	}
 	ui.showModal(_('Assign devices to administrator') + ' ' + admin.name, [
 		E('div', { 'class': 'sf-binding-modal' }, [
 			E('div', { 'class': 'sf-section-intro' }, [
@@ -89,10 +104,10 @@ function openBinding(deps, admin, onSave) {
 				/* SHEEPFOLD_AI_END */
 				E('p', {}, _('Administrator devices are removed from ordinary groups and schedules and added to the allowlist.'))
 			]),
-			modalActions(save),
+			modalActions(save, state),
 			selector.node
 		]),
-		modalActions(save)
+		modalActions(save, state)
 	]);
 }
 
@@ -102,21 +117,31 @@ function openSettings(deps, admin, pairing, callbacks) {
 		!!admin.allowChildAccessRequests,
 		_('Disabled by default. A request only notifies the parent and never grants internet automatically.')
 	);
-
-	function close() {
-		callbacks.close();
+	var state = saveState();
+	function save(button) {
+		return callbacks.save({ allowChildAccessRequests: accessRequests.input.checked }, button);
 	}
-
-	function save() {
-		callbacks.save({ allowChildAccessRequests: accessRequests.input.checked });
-	}
-
+	var actions = E('div', { 'class': 'right sf-modal-actions' }, [
+		E('button', { 'class': 'btn cbi-button', 'click': callbacks.close }, _('Close')),
+		(function () {
+			var button = E('button', {
+				'class': 'btn cbi-button cbi-button-positive',
+				'click': function (event) {
+					var result;
+					event.preventDefault();
+					if (state.saving) return;
+					try { result = save(event.currentTarget); } catch (error) { result = Promise.reject(error); }
+					state.setSaving(true);
+					Promise.resolve(result).catch(function () { return null; }).finally(function () { state.setSaving(false); });
+				}
+			}, _('Save'));
+			state.buttons.push(button);
+			return button;
+		})()
+	]);
 	ui.showModal(_('Administrator settings'), [
 		E('div', { 'class': 'sf-modal-pairing' }, [
-			E('div', { 'class': 'sf-qr-wrap' }, [
-				pairing.qrNode,
-				E('p', {}, _('Scan this QR code in the Android app for quick setup.'))
-			]),
+			E('div', { 'class': 'sf-qr-wrap' }, [pairing.qrNode, E('p', {}, _('Scan this QR code in the Android app for quick setup.'))]),
 			E('div', { 'class': 'sf-manual-settings' }, [
 				deps.inputControl(_('Admin name'), admin.name, { 'readonly': 'readonly' }).node,
 				deps.inputControl(_('Login'), admin.login, { 'readonly': 'readonly' }).node,
@@ -127,15 +152,8 @@ function openSettings(deps, admin, pairing, callbacks) {
 				accessRequests.node
 			])
 		]),
-		E('div', { 'class': 'right sf-modal-actions' }, [
-			E('button', { 'class': 'btn cbi-button', 'click': close }, _('Close')),
-			E('button', { 'class': 'btn cbi-button cbi-button-positive', 'click': save }, _('Save'))
-		])
+		actions
 	]);
 }
 
-return baseclass.extend({
-	openAdd: openAdd,
-	openBinding: openBinding,
-	openSettings: openSettings
-});
+return baseclass.extend({ openAdd: openAdd, openBinding: openBinding, openSettings: openSettings });

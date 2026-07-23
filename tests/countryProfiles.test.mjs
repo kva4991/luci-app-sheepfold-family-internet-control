@@ -78,15 +78,16 @@ describe('country-specific emergency-useful sites §country1', () => {
   });
 
   it('applies the country after emergency drafts and exposes the choice in install and LuCI', () => {
-    const overview = readPackage('htdocs/luci-static/resources/view/sheepfold/overview.js');
     const generalSettings = readPackage('htdocs/luci-static/resources/sheepfold/features/settings/general.js');
+    const saveFlow = readPackage('htdocs/luci-static/resources/sheepfold/features/settings/save-flow.js');
+    const sideEffects = readPackage('htdocs/luci-static/resources/sheepfold/features/settings/side-effects.js');
     const installer = read('install.sh');
     const routerControl = readPackage('root/usr/libexec/sheepfold/sheepfold-router-control-legacy');
-    const specialSave = overview.indexOf('return saver.save()');
-    const countryApply = overview.indexOf('return applyPostSaveSideEffects(options)');
+    const specialSave = saveFlow.indexOf('result = saver.save()');
+    const countryApply = saveFlow.indexOf('return deps.applyPostSave(options)');
 
     assert.match(generalSettings, /Router country/);
-    assert.match(overview, /country-profile-apply/);
+    assert.match(sideEffects, /country-profile-apply/);
     assert.ok(specialSave >= 0 && countryApply > specialSave);
     assert.match(installer, /Choose router country/);
     assert.match(installer, /country_profile="\$\{ROUTER_COUNTRY\}"/);

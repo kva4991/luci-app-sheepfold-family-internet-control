@@ -1,0 +1,111 @@
+#!/bin/sh
+set -u
+umask 077
+
+CONTROL="${SHEEPFOLD_ROUTER_CONTROL:-/usr/libexec/sheepfold/sheepfold-router-control}"
+RUNTIME_DIR="${SHEEPFOLD_LUCI_ACTION_RUNTIME_DIR:-/tmp/sheepfold/luci-actions}"
+command_name="${1:-}"
+out_file=""
+err_file=""
+
+safe_value() {
+	printf '%s' "${1:-}" | tr '\r\n\t' '   ' | cut -c1-1000
+}
+
+emit_metadata() {
+	printf 'actionStatus=%s\n' "$(safe_value "${1:-error}")" >&2
+	printf 'actionCommand=%s\n' "$(safe_value "$command_name")" >&2
+	printf 'actionErrorCode=%s\n' "$(safe_value "${2-}")" >&2
+	printf 'actionExitCode=%s\n' "${3:-1}" >&2
+	printf 'actionMessage=%s\n' "$(safe_value "${4-}")" >&2
+}
+
+cleanup() {
+	[ -z "$out_file" ] || rm -f "$out_file" 2>/dev/null || true
+	[ -z "$err_file" ] || rm -f "$err_file" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+case "$command_name" in
+	''|*[!A-Za-z0-9_.-]*)
+		emit_metadata error invalid_request 2 'Router action command is invalid.'
+		exit 2
+		;;
+esac
+
+if [ ! -x "$CONTROL" ]; then
+	emit_metadata error runtime_unavailable 127 'Router action runtime is unavailable.'
+	exit 127
+fi
+if ! mkdir -p "$RUNTIME_DIR"; then
+	emit_metadata error runtime_unavailable 1 'Could not prepare router action runtime.'
+	exit 1
+fi
+chmod 700 "$RUNTIME_DIR" 2>/dev/null || true
+out_file="$RUNTIME_DIR/action.$$.out"
+err_file="$RUNTIME_DIR/action.$$.err"
+: > "$out_file"
+: > "$err_file"
+chmod 600 "$out_file" "$err_file" 2>/dev/null || true
+
+if "$CONTROL" --luci "$@" >"$out_file" 2>"$err_file"; then
+	exit_code=0
+else
+	exit_code=$?
+fi
+
+classify_error() {
+	text="$1"
+	case "$exit_code:$text" in
+		124:*) printf 'action_timeout' ;;
+		*:*)
+			case "$text" in
+				*"Invalid MAC"*|*"valid MAC address"*) printf 'invalid_mac' ;;
+				*"Administrator device cannot be blocked"*) printf 'administrator_device' ;;
+				*"Blocklisted device cannot become an administrator"*) printf 'device_blocklisted' ;;
+				*"Device is in allowlist"*|*"device is in the allowlist"*) printf 'device_allowlisted' ;;
+				*"Device is in blocklist"*|*"device is in the blocklist"*|*"Temporary access cannot override blocklist"*) printf 'device_blocklisted' ;;
+				*"already has unrestricted access"*) printf 'already_unrestricted' ;;
+				*"confirmation_required"*|*"Confirmation is required"*) printf 'confirmation_required' ;;
+				*"pairing_busy"*|*"already running"*|*"Could not acquire"*|*"busy"*) printf 'action_busy' ;;
+				*"not found"*|*"was not found"*) printf 'not_found' ;;
+				*"invalid"*|*"Invalid"*) printf 'invalid_request' ;;
+				*) printf 'backend_exit_%s' "$exit_code" ;;
+			esac
+			;;
+	esac
+}
+
+if [ "$exit_code" -eq 0 ]; then
+	action_status=ok
+	error_code=
+	message=
+else
+	action_status=error
+	combined="$(head -c 8192 "$err_file" 2>/dev/null; printf '\n'; head -c 8192 "$out_file" 2>/dev/null)"
+	error_code="$(classify_error "$combined")"
+	case "$error_code" in
+		invalid_mac) message='The MAC address is invalid.' ;;
+		administrator_device) message='Administrator devices cannot use this action.' ;;
+		device_allowlisted) message='The device is in the allowlist.' ;;
+		device_blocklisted) message='The device is in the blocklist.' ;;
+		already_unrestricted) message='The device already has unrestricted access.' ;;
+		confirmation_required) message='Confirmation is required.' ;;
+		action_busy) message='Another router action is already running.' ;;
+		action_timeout) message='The router action timed out.' ;;
+		not_found) message='The requested router object was not found.' ;;
+		invalid_request) message='The router action request is invalid.' ;;
+		*) message='The router action failed.' ;;
+	esac
+fi
+
+emit_metadata "$action_status" "$error_code" "$exit_code" "$message"
+
+# Preserve legacy stdout/stderr contracts. Existing LuCI readers still parse raw
+# key=value or JSON stdout; the new runner consumes only the prefixed metadata.
+cat "$out_file"
+cat "$err_file" >&2
+exit "$exit_code"

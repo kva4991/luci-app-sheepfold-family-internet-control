@@ -9,6 +9,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const legacyPath = resolve(
@@ -76,7 +77,7 @@ describe('Router information panel', () => {
   });
 
   it('renders storage and tolerates empty router-info output in LuCI', () => {
-    const overview = readProjectFile(overviewPath);
+    const overview = readOverviewApplication(overviewPath);
     const source = readProjectFile(infoModulePath);
 
     assert.match(source, /function formatPingMs/);
@@ -113,7 +114,7 @@ describe('Router information panel', () => {
 
   it('reports Podkop package freshness for the information panel', () => {
     const legacy = readProjectFile(legacyPath);
-    const overview = readProjectFile(overviewPath);
+    const overview = readOverviewApplication(overviewPath);
     const infoModule = readProjectFile(infoModulePath);
 
     assert.match(legacy, /package_upgradable_any/);

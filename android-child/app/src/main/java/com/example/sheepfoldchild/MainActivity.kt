@@ -1,29 +1,27 @@
 package com.example.sheepfoldchild
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.core.content.ContextCompat
+import androidx.compose.ui.Modifier
 import com.example.sheepfoldchild.data.ClientStatusRepository
 import com.example.sheepfoldchild.notification.AccessEndingScheduler
 import com.example.sheepfoldchild.polling.PollingScheduler
+import com.example.sheepfoldchild.ui.ChildPermissionBanner
 import com.example.sheepfoldchild.ui.MainNavigation
 import com.example.sheepfoldchild.ui.SetupScreen
+import com.example.sheepfoldchild.viewmodel.ChildSetupState
 import com.example.sheepfoldchild.viewmodel.ChildStatusViewModel
 import com.example.sheepfoldchild.viewmodel.ChildUiState
-import com.example.sheepfoldchild.viewmodel.ChildSetupState
 
 class MainActivity : ComponentActivity() {
 
@@ -31,59 +29,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val permissionLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.RequestMultiplePermissions()
-            ) {
-                // Отказ не блокирует приложение: уведомления и точные события деградируют мягко.
-            }
-
-            LaunchedEffect(Unit) {
-                val missingPermissions = buildList {
-                    if (
-                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        ContextCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.POST_NOTIFICATIONS
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        add(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                    if (ContextCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.READ_PHONE_STATE
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        add(Manifest.permission.READ_PHONE_STATE)
-                    }
-                    if (ContextCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.READ_PHONE_NUMBERS
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        add(Manifest.permission.READ_PHONE_NUMBERS)
-                    }
-                    if (ContextCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.ACCESS_FINE_LOCATION
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        add(Manifest.permission.ACCESS_FINE_LOCATION)
-                    }
-                    if (
-                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        ContextCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.NEARBY_WIFI_DEVICES
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        add(Manifest.permission.NEARBY_WIFI_DEVICES)
-                    }
-                }
-                if (missingPermissions.isNotEmpty()) {
-                    permissionLauncher.launch(missingPermissions.toTypedArray())
-                }
-            }
-
             MaterialTheme(
                 colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
             ) {
@@ -99,10 +44,21 @@ class MainActivity : ComponentActivity() {
                         isSearching = viewModel.setupState is ChildSetupState.Searching,
                         errorMessage = (viewModel.uiState as? ChildUiState.Error)?.message,
                         onRetry = viewModel::searchForRouter,
-                        onSave = { url -> viewModel.saveRouterUrl(url) }
+                        onSave = viewModel::saveRouterUrl
                     )
                 } else {
-                    MainNavigation(statusViewModel = viewModel, appContext = appContext)
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // The banner appears only after a successful router status has
+                        // supplied the parent-controlled feature policy. No sensitive
+                        // permission dialog is launched during the first app start.
+                        ChildPermissionBanner(
+                            status = viewModel.latestStatus,
+                            onPermissionsChanged = viewModel::refresh
+                        )
+                        Box(modifier = Modifier.weight(1f)) {
+                            MainNavigation(statusViewModel = viewModel, appContext = appContext)
+                        }
+                    }
                 }
             }
         }

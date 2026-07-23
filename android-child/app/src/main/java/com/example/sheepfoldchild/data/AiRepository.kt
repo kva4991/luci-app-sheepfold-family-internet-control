@@ -2,14 +2,14 @@ package com.example.sheepfoldchild.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.stringPreferencesKey
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.URL
 import java.net.URLEncoder
 import javax.net.ssl.HttpsURLConnection
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 /** Отправляет детский запрос на AI backend Sheepfold через роутер. */
 class AiRepository(private val context: Context) {
@@ -193,13 +193,18 @@ class AiRepository(private val context: Context) {
         json.takeIf { it.isNotBlank() } ?: "HTTP $code"
     }
 
+    /**
+     * The child request carries only the already-public result and time. Detailed
+     * rule evaluation, if ever needed by AI, must be prepared inside the router gate.
+     */
     private fun buildClientContext(status: ClientStatusData): String = buildString {
         append("идентификатор ").append(status.deviceId).append("; ")
         append("роль ").append(status.clientRole).append("; ")
         append("интернет ").append(status.internetState).append("; ")
-        status.accessMode?.let { append("режим ").append(it).append("; ") }
-        status.minutesRemaining?.let { append("осталось ").append(it).append(" мин.; ") }
-        status.message?.let { append(it) }
+        status.nextAccessChangeTime?.let { append("следующее изменение ").append(it).append("; ") }
+        if (status.internetState != "enabled") {
+            status.message?.let { append(it) }
+        }
     }.trim().trimEnd(';')
 }
 

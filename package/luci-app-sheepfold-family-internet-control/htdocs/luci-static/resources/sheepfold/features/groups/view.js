@@ -22,7 +22,6 @@ function render(deps, embedded) {
 		if (name && !grouped[name]) grouped[name] = [];
 		if (name) groupSections[name] = section;
 	});
-
 	deps.ensureDefaults(grouped, groupSections);
 	deps.devices.forEach(function (device) {
 		var name;
@@ -37,12 +36,10 @@ function render(deps, embedded) {
 
 	function refresh() {
 		var replacement = render(deps, embedded);
-
-		if (root && root.parentNode)
-			root.replaceWith(replacement);
+		if (root && root.parentNode) root.replaceWith(replacement);
 	}
 
-	function removeGroup(name) {
+	function removeGroup(name, button) {
 		var section = groupSections[name];
 		var sectionName = section && section['.name'];
 		var reason = deps.deletionBlockReason({
@@ -52,31 +49,16 @@ function render(deps, embedded) {
 			hasSection: !!sectionName
 		});
 
-		if (reason === 'protected') {
-			deps.notify(_('Protected group cannot be deleted.'), 'warning');
-			return;
-		}
-		if (reason === 'assigned') {
-			deps.notify(_('This group cannot be deleted while devices are assigned to it.'), 'warning');
-			return;
-		}
-		if (reason === 'missing-section') {
-			deps.notify(_('Could not delete group.'), 'warning');
-			return;
-		}
+		if (reason === 'protected') { deps.notify(_('Protected group cannot be deleted.'), 'warning'); return; }
+		if (reason === 'assigned') { deps.notify(_('This group cannot be deleted while devices are assigned to it.'), 'warning'); return; }
+		if (reason === 'missing-section') { deps.notify(_('Could not delete group.'), 'warning'); return; }
 		if (!window.confirm(_('Delete group') + ': ' + name + '?')) return;
-
-		deps.removeSection(sectionName);
-		deps.save().then(function () {
-			deps.notify(_('Group deleted.'), 'info');
-			refresh();
-		}, function () { deps.notify(_('Could not delete group.'), 'warning'); });
+		deps.remove(sectionName, button).then(refresh).catch(function () { return null; });
 	}
 
 	function cardColor(name, section) {
 		var color = section && deps.validColor(section.color) ? section.color : '';
 		var palette = deps.palette();
-
 		if (!color) {
 			palette.some(function (candidate) {
 				if (usedColors[candidate.toLowerCase()]) return false;
@@ -100,7 +82,7 @@ function render(deps, embedded) {
 				E('div', {}, [E('h4', { 'class': 'sf-group-title' }, deps.displayName(name)), E('strong', { 'class': 'sf-group-count' }, groupDevices.length + ' ' + _('Devices'))]),
 				E('div', { 'class': 'sf-row-actions' }, [
 					deps.iconButton(_('Configure group'), 'gear', 'neutral', function () { deps.configure(name, section, refresh); }),
-					deps.iconButton(_('Delete group'), 'trash', 'danger', function () { removeGroup(name); })
+					deps.iconButton(_('Delete group'), 'trash', 'danger', function (event) { removeGroup(name, event.currentTarget); })
 				])
 			]),
 			visible.length ? E('div', { 'class': 'sf-group-device-list' }, visible.map(function (device) {

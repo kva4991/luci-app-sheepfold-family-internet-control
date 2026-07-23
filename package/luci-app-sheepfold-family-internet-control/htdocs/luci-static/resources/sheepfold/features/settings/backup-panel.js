@@ -4,9 +4,9 @@
 'require sheepfold.features.settings.backup as backupModel';
 'require sheepfold.shared.downloads as downloads';
 
-/* §frontmod §cfgbak1
+/* §frontmod §cfgbak1 §persist1
  * Этот модуль владеет только файлами и диалогами backup. Снимок UCI,
- * транзакционное применение и rollback остаются у overview-координатора.
+ * транзакционное применение и rollback выполняет backup-persistence adapter.
  */
 function errorMessage(error) {
 	var code = error && error.message || '';
@@ -128,7 +128,7 @@ function create(deps) {
 			'click': function () {
 				applyButton.disabled = true;
 				status.textContent = _('Applying backup...');
-				deps.apply(payload).then(function (result) {
+				deps.apply(payload, applyButton).then(function (result) {
 					deps.resetDraft();
 					ui.hideModal();
 					deps.notifyCentered(_('Settings imported successfully. The page will reload.'));

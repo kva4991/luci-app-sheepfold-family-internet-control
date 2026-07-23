@@ -35,6 +35,8 @@ TOKEN_DIR="$RUNTIME_DIR/tokens"
 LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
 FIREWALL_HELPER="/usr/libexec/sheepfold/sheepfold-firewall"
 PACKAGE_MANAGER_HELPER="/usr/libexec/sheepfold/sheepfold-package-manager"
+TIME_CONTROL="/usr/libexec/sheepfold/sheepfold-time-control"
+DETECTION_TOOLS="/usr/libexec/sheepfold/sheepfold-device-detection-tools"
 
 [ ! -r "$PACKAGE_MANAGER_HELPER" ] || . "$PACKAGE_MANAGER_HELPER"
 
@@ -965,6 +967,7 @@ set_device_status() {
         uci -q set "sheepfold.$device_section.group=$device_group"
         uci -q set "sheepfold.$device_section.device_type=$device_type"
         uci -q set "sheepfold.$device_section.status=$device_status"
+        uci -q set "sheepfold.$device_section.user_configured=1"
 
         if [ "$device_status" = "allow" ]; then
                 add_mac_to_list allowlist "$device_mac"
@@ -1338,56 +1341,12 @@ messenger_check() {
 # Время и NTP
 # -----------------------------------------------------------------------------
 
-ensure_system_time_sections() {
-        uci -q get system.@system[0] >/dev/null 2>&1 || uci -q add system system >/dev/null
-        if [ "$(uci -q get system.ntp 2>/dev/null || true)" != "timeserver" ]; then
-                uci -q delete system.ntp 2>/dev/null || true
-                uci -q set system.ntp='timeserver'
-        fi
+time_save() {
+	"$TIME_CONTROL" save "$@"
 }
 
-time_save() {
-        local ntp_server_enabled="${1:-1}"
-        local ntp_client_enabled="${2:-1}"
-        local zonename="${3:-Europe/Moscow}"
-        local timezone="${4:-MSK-3}"
-        local servers="${5:-ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org}"
-        local normalized_servers=""
-
-        case "$ntp_server_enabled" in 0|1) ;; *) ntp_server_enabled=1 ;; esac
-        case "$ntp_client_enabled" in 0|1) ;; *) ntp_client_enabled=1 ;; esac
-        valid_timezone_name "$zonename" || zonename="Europe/Moscow"
-        valid_posix_timezone "$timezone" || timezone="MSK-3"
-
-        for server in $servers; do
-                valid_hostname "$server" || continue
-                normalized_servers="${normalized_servers}${normalized_servers:+ }$server"
-        done
-        [ -n "$normalized_servers" ] || normalized_servers="ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org"
-
-        repair_sheepfold_uci_sections
-        ensure_system_time_sections
-
-        uci -q set "system.@system[0].zonename=$zonename"
-        uci -q set "system.@system[0].timezone=$timezone"
-        uci -q set "system.ntp.enabled=$ntp_client_enabled"
-        uci -q set "system.ntp.enable_server=$ntp_server_enabled"
-        uci -q delete system.ntp.server 2>/dev/null || true
-        for server in $normalized_servers; do
-                uci -q add_list "system.ntp.server=$server"
-        done
-        uci -q commit system
-
-        uci -q set sheepfold.global.router_ntp_server_enabled="$ntp_server_enabled"
-        uci -q set sheepfold.global.router_ntp_client_auto_configure="$ntp_client_enabled"
-        uci -q set sheepfold.global.router_timezone_name="$zonename"
-        uci -q set sheepfold.global.router_timezone="$timezone"
-        uci -q set sheepfold.global.router_ntp_servers="$normalized_servers"
-        uci -q commit sheepfold
-
-        [ -x /etc/init.d/sysntpd ] && /etc/init.d/sysntpd restart >/dev/null 2>&1 || true
-        log_event "Настройки времени сохранены: timezone $zonename, NTP $normalized_servers"
-        printf 'OK\n'
+time_status() {
+	"$TIME_CONTROL" status
 }
 
 # -----------------------------------------------------------------------------
@@ -2010,9 +1969,20 @@ case "$COMMAND" in
                 messenger_check
                 ;;
 
+        # --- Дополнительные инструменты определения устройств ----------------
+        device-detection-capabilities)
+                "$DETECTION_TOOLS" status
+                ;;
+        device-detection-install-nmap)
+                "$DETECTION_TOOLS" start
+                ;;
+
         # --- Время и NTP -----------------------------------------------------
         time-save)
-                time_save "${2:-1}" "${3:-1}" "${4:-Europe/Moscow}" "${5:-MSK-3}" "${6:-ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org}"
+                time_save "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}"
+                ;;
+        time-status)
+                time_status
                 ;;
 
         # --- Списки сайтов ---------------------------------------------------
@@ -2146,11 +2116,12 @@ case "$COMMAND" in
                 echo "Токены:           check-token <bearer>  |  revoke-tokens <login>" >&2
                 echo "Клиент (APK):     client-status <ip>" >&2
                 echo "Устройства:       list-devices  |  device-allow <mac>  |  device-block <mac>  |  device-temp-access <mac> [min]  |  expire-temp-access" >&2
+                echo "Определение:       device-detection-capabilities  |  device-detection-install-nmap" >&2
                 echo "Блокировка:       global-block-on  |  global-block-off  |  internet-enable  |  internet-disable  |  internet-status  |  schedule-sync" >&2
                 echo "Сопряжение:       pair-admin-device  |  activate-admin-pairing-code  |  admin-pairing-status" >&2
                 echo "Wi-Fi:            wifi-enable  |  wifi-disable  |  wifi-automation-tick" >&2
                 echo "Мессенджеры:      messenger-disable  |  messenger-save-telegram  |  messenger-save-vk  |  messenger-status  |  messenger-check" >&2
-                echo "Время:            time-save" >&2
+                echo "Время:            time-save  |  time-status" >&2
                 echo "Списки сайтов:    site-lists-update  |  site-lists-accept-shrink  |  site-lists-cron-apply  |  site-lists-status  |  site-lists-apply  |  emergency-sites-apply  |  emergency-sites-status" >&2
                 echo "Диагностика:      router-info  |  wan-status-tick  |  status" >&2
                 echo "WPS:              wps-button  |  wps-allowlist-window" >&2

@@ -7,16 +7,18 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const resources = resolve(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources');
-const overview = readFileSync(resolve(resources, 'view/sheepfold/overview.js'), 'utf8');
+const overview = readOverviewApplication(resolve(resources, 'view/sheepfold/overview.js'));
 const panel = readFileSync(resolve(resources, 'sheepfold/features/integrations/panel.js'), 'utf8');
+const settingsController = readFileSync(resolve(resources, 'sheepfold/features/settings/controller.js'), 'utf8');
 
 describe('Integration settings panel §frontmod §dompol §ipv6pod', () => {
   it('owns integration and site-filter UI outside the overview composer', () => {
     assert.match(overview, /require sheepfold\.features\.integrations\.panel as integrationPanel/);
-    assert.match(overview, /return integrationPanel\.render\(integrationUi\)/);
+    assert.match(settingsController, /panel\('integrations', deps\.integrationPanel\.render\(integrationUi\), active\)/);
     assert.match(panel, /Use together with/);
     assert.match(panel, /Site filtering is performed through/);
     assert.match(panel, /Automatic AdGuard Home management/);

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="permission_notifications_title">Access-change notifications</string>
+    <string name="permission_notifications_description">This permission is used only to warn before the next access change. The main status screen works without notifications.</string>
+    <string name="permission_sim_title">SIM notifications for a parent</string>
+    <string name="permission_sim_description">A parent enabled this feature on the home router. Sheepfold sends only a limited active-SIM snapshot while connected at home; ICCID, IMSI, and IMEI are not collected.</string>
+    <string name="permission_wifi_title">New Wi-Fi network notifications for a parent</string>
+    <string name="permission_wifi_description">A parent enabled the new-network journal. The permission is used for the network name and a local access-point fingerprint; the raw BSSID is not sent to the router.</string>
+    <string name="permission_wifi_location_title">New Wi-Fi network and the phone’s last location</string>
+    <string name="permission_wifi_location_description">A parent separately enabled adding the phone’s last available location to a new-network event. It is not a verified access-point address or background cloud tracking.</string>
+    <string name="permission_allow">Allow</string>
+    <string name="permission_later">Later</string>
+    <string name="router_unavailable_title">Home router unavailable</string>
+    <string name="router_unavailable_body">Sheepfold cannot reach the home router right now. This does not mean that internet access is disabled; connect to the home Wi-Fi or try again later.</string>
+</resources>

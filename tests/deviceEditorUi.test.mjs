@@ -6,10 +6,13 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const root = 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/';
-const overview = readFileSync(root + 'view/sheepfold/overview.js', 'utf8');
+const overview = readOverviewApplication(root + 'view/sheepfold/overview.js');
 const editor = readFileSync(root + 'sheepfold/features/devices/editor.js', 'utf8');
+const controller = readFileSync(root + 'sheepfold/features/devices/controller.js', 'utf8');
+const devicePersistence = readFileSync(root + 'sheepfold/features/devices/persistence.js', 'utf8');
 const ru = JSON.parse(readFileSync(root + 'sheepfold/i18n/ru.json', 'utf8'));
 const zhHans = JSON.parse(readFileSync(root + 'sheepfold/i18n/zh_Hans.json', 'utf8'));
 
@@ -23,43 +26,45 @@ function functionBody(source, name, nextName) {
 describe('Device editor module §frontmod §devmut', () => {
   it('owns fields but delegates validation and persistence', () => {
     assert.match(overview, /require sheepfold\.features\.devices\.editor as deviceEditor/);
-    assert.match(overview, /function showDeviceSettingsModal[\s\S]*deviceEditor\.open/);
+    assert.match(overview, /require sheepfold\.features\.devices\.controller as deviceControllerModel/);
+    assert.match(controller, /function showSettings\(device\)[\s\S]*deps\.editor\.open/);
     assert.match(editor, /function open\(deps, device\)/);
     assert.match(editor, /error = deps\.validate\(payload\)/);
-    assert.match(editor, /deps\.persist\(payload\)/);
+    assert.match(editor, /deps\.persist\(payload, event && event\.currentTarget/);
     assert.doesNotMatch(editor, /uci\.(?:get|set|unset|remove)|routerControl|saveUciChanges|applySheepfoldAccessRuntime/);
   });
 
   it('protects administrator devices and explicit access-list conflicts', () => {
-    const validation = functionBody(overview, 'validateDeviceSettings', 'persistDeviceSettings');
+    const validation = functionBody(controller, 'validateSettings', 'applyLocalResult');
 
     assert.match(validation, /isAdminDevice\(device\)/);
     assert.match(validation, /payload\.status !== 'allow'/);
-    assert.match(validation, /macInSheepfoldList\('blocklist'/);
-    assert.match(validation, /macInSheepfoldList\('allowlist'/);
+    assert.match(validation, /macInList\('blocklist'/);
+    assert.match(validation, /macInList\('allowlist'/);
     assert.match(validation, /Static lease requires an IP address/);
     assert.match(editor, /groupField\.input\.disabled = true/);
     assert.match(editor, /statusField\.input\.disabled = true/);
   });
 
-  it('commits router state before refreshing local tables and group cards', () => {
-    const persistence = functionBody(overview, 'persistDeviceSettings', 'showDeviceSettingsModal');
+  it('commits through the device adapter before refreshing local tables and group cards', () => {
+    const coordinator = functionBody(controller, 'persistSettings', 'showSettings');
 
-    assert.match(persistence, /markNoRestrictionsAutoExcluded/);
-    assert.match(persistence, /markPersonalDevicesAutoExcluded/);
-    assert.match(persistence, /updateMacList\('allowlist'/);
-    assert.match(persistence, /updateMacList\('blocklist'/);
-    assert.match(persistence, /saveUciChanges[\s\S]*applySheepfoldAccessRuntime/);
-    assert.ok(persistence.indexOf('applySheepfoldAccessRuntime') < persistence.indexOf('device.name = payload.name'));
-    assert.match(persistence, /refreshUserListsWithoutPageReload\(\)/);
-    assert.match(persistence, /refreshGroupPanel\(\)/);
-    assert.doesNotMatch(persistence, /window\.location\.reload/);
+    assert.match(coordinator, /deps\.persistence\.persistSettings\(device, payload\)/);
+    assert.match(controller, /function persistedFailure\(error, message, closeModal\)[\s\S]*error\.persisted/);
+    assert.match(coordinator, /refreshViews\(\)/);
+    assert.doesNotMatch(coordinator, /uci\.(?:set|unset)|saveUciChanges|window\.location\.reload/);
+    assert.match(devicePersistence, /markNoRestrictionsExcluded/);
+    assert.match(devicePersistence, /markPersonalDevicesExcluded/);
+    assert.match(devicePersistence, /updateMacList\('allowlist'/);
+    assert.match(devicePersistence, /updateMacList\('blocklist'/);
+    assert.match(devicePersistence, /saveAccess\(configs, function \(\) \{ return stageSettings\(device, payload\); \}\)/);
+    assert.match(devicePersistence, /function applyRuntime\(\)[\s\S]*schedule-sync[\s\S]*site-lists-apply/);
   });
 
   it('keeps AI-only activity logging removable from the Standard package', () => {
     assert.match(editor, /SHEEPFOLD_AI_BEGIN/);
     assert.match(editor, /SHEEPFOLD_AI_END/);
-    assert.match(overview, /activityLogEnabled = !isAdminDevice/);
+    assert.match(devicePersistence, /activityLogEnabled = !adminDevice/);
   });
 
   it('translates the administrator-device protection message', () => {

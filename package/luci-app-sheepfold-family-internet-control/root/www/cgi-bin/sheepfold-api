@@ -14,6 +14,7 @@ ACCESS_REQUEST="/usr/libexec/sheepfold/sheepfold-access-request"
 ADMIN_NOTIFICATION="/usr/libexec/sheepfold/sheepfold-admin-notification"
 SIM_MONITOR="/usr/libexec/sheepfold/sheepfold-sim-monitor"
 CHILD_WIFI_MONITOR="/usr/libexec/sheepfold/sheepfold-child-wifi-monitor"
+ADMIN_CONFIG="/usr/libexec/sheepfold/sheepfold-api-admin-config"
 method="${REQUEST_METHOD:-GET}"
 path_info="${PATH_INFO:-}"
 client_ip="${REMOTE_ADDR:-unknown}"
@@ -86,10 +87,86 @@ require_admin() {
         printf '{"app":"sheepfold","ok":false,"error":"token_revoked"}\n'
         exit 0
     fi
+    SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN="$authenticated_admin_login"
+    export SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN
 }
 
 run_legacy() {
     "$LEGACY" | sed '/^Access-Control-Allow-/d'
+}
+
+json_escape_api() {
+    printf '%s' "${1:-}" | tr '\r\n\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+ADMIN_BODY=""
+read_admin_body() {
+    length="${CONTENT_LENGTH:-0}"
+    case "$length" in ''|*[!0-9]*) length=0 ;; esac
+    if [ "$length" -le 0 ] || [ "$length" -gt 16384 ]; then
+        header_json "413 Payload Too Large"
+        printf '{"app":"sheepfold","ok":false,"error":"invalid_admin_config_body"}\n'
+        exit 0
+    fi
+    ADMIN_BODY="$(dd bs=1 count="$length" 2>/dev/null)" || {
+        header_json "400 Bad Request"
+        printf '{"app":"sheepfold","ok":false,"error":"body_read_failed"}\n'
+        exit 0
+    }
+}
+
+admin_config_message() {
+    case "$1" in
+        revision_conflict) printf '%s' 'Configuration changed on the router. Refresh and try again.' ;;
+        config_busy) printf '%s' 'The router is already saving Sheepfold settings. Refresh and try again.' ;;
+        unsupported_schema) printf '%s' 'This management API schema is not supported.' ;;
+        group_has_devices) printf '%s' 'Remove devices from this group before deleting it.' ;;
+        group_has_schedules) printf '%s' 'Remove or reassign schedules before deleting this group.' ;;
+        protected_group|protected_group_name) printf '%s' 'This system group cannot be deleted or renamed.' ;;
+        administrator_group_forbidden) printf '%s' 'Administrator devices cannot be assigned to a family group.' ;;
+        administrator_schedule_forbidden) printf '%s' 'Administrator devices cannot be restricted by a schedule.' ;;
+        confirmation_required) printf '%s' 'Explicit confirmation is required.' ;;
+        wifi_control_failed) printf '%s' 'The router could not apply the Wi-Fi command.' ;;
+        config_commit_failed|config_verify_failed) printf '%s' 'The router did not confirm the write and restored the previous configuration.' ;;
+        *) printf '%s' 'Check the submitted fields and refresh the router state.' ;;
+    esac
+}
+
+run_admin_config() {
+    action="$1"
+    body="${2:-}"
+    [ -x "$ADMIN_CONFIG" ] || {
+        header_json "503 Service Unavailable"
+        printf '{"app":"sheepfold","ok":false,"error":"admin_config_backend_unavailable"}\n'
+        exit 0
+    }
+
+    output=""
+    result=0
+    output="$(printf '%s' "$body" | "$ADMIN_CONFIG" "$action" 2>&1)" || result=$?
+    if [ "$result" = 0 ]; then
+        header_json "200 OK"
+        printf '%s\n' "$output"
+        exit 0
+    fi
+
+    error_code="$(printf '%s\n' "$output" | sed -n '1p')"
+    if ! printf '%s' "$error_code" | grep -Eq '^[a-z0-9_]{1,64}$'; then
+        error_code=admin_config_failed
+    fi
+    retry=""
+    case "$result" in
+        2) status="400 Bad Request" ;;
+        3) status="409 Conflict" ;;
+        4) status="409 Conflict"; retry=2 ;;
+        5) status="502 Bad Gateway" ;;
+        *) status="500 Internal Server Error" ;;
+    esac
+    message="$(admin_config_message "$error_code")"
+    header_json "$status" "$retry"
+    printf '{"app":"sheepfold","ok":false,"error":"%s","message":"%s"}\n' \
+        "$(json_escape_api "$error_code")" "$(json_escape_api "$message")"
+    exit 0
 }
 
 # Постоянный Bearer нельзя передавать в URL: query string попадает в журналы и историю.
@@ -230,6 +307,59 @@ case "$path_info" in
             GET) "$CHILD_WIFI_MONITOR" list ;;
             DELETE) "$CHILD_WIFI_MONITOR" clear ;;
         esac
+        ;;
+    /api/v1/admin-config|/admin-config)
+        [ "$method" = "GET" ] || method_not_allowed
+        enforce_rate_limit admin_read 120 60
+        require_admin
+        run_admin_config get
+        ;;
+    /api/v1/admin-config/schedule/save|/admin-config/schedule/save)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 30 300
+        require_admin
+        read_admin_body
+        run_admin_config schedule-save "$ADMIN_BODY"
+        ;;
+    /api/v1/admin-config/schedule/delete|/admin-config/schedule/delete)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 30 300
+        require_admin
+        read_admin_body
+        run_admin_config schedule-delete "$ADMIN_BODY"
+        ;;
+    /api/v1/admin-config/group/save|/admin-config/group/save)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 30 300
+        require_admin
+        read_admin_body
+        run_admin_config group-save "$ADMIN_BODY"
+        ;;
+    /api/v1/admin-config/group/delete|/admin-config/group/delete)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 30 300
+        require_admin
+        read_admin_body
+        run_admin_config group-delete "$ADMIN_BODY"
+        ;;
+    /api/v1/admin-config/wifi-control|/admin-config/wifi-control)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 12 300
+        require_admin
+        read_admin_body
+        run_admin_config wifi-control "$ADMIN_BODY"
+        ;;
+    /log)
+        [ "$method" = "GET" ] || method_not_allowed
+        enforce_rate_limit admin_read 120 60
+        require_admin
+        run_legacy
+        ;;
+    /log/clear)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 12 300
+        require_admin
+        run_legacy
         ;;
     /router-info|/pair-status)
         [ "$method" = "GET" ] || method_not_allowed

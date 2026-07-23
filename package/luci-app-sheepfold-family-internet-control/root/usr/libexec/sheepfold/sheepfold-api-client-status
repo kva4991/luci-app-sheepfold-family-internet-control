@@ -157,6 +157,12 @@ case "$status" in
         ;;
 esac
 
+case "$internet_state" in
+    enabled) message="" ;;
+    disabled) message="Интернет сейчас отключён семейными правилами." ;;
+    *) message="Роутер пока не определил текущий доступ для этого устройства." ;;
+esac
+
 mac="$(mac_for_ip "$remote_ip")"
 device_section="$(device_section_for_mac "$mac" 2>/dev/null || true)"
 device_id=""
@@ -164,6 +170,7 @@ device_name=""
 is_administrator=0
 client_role=child
 can_request_access_extension=0
+sim_change_reporting=0
 wifi_network_reporting=0
 wifi_location_reporting=0
 # SHEEPFOLD_AI_BEGIN
@@ -180,6 +187,10 @@ if [ -n "$device_section" ]; then
         client_role=parent
     else
         is_administrator=0
+        sim_report_mode="$(uci -q get sheepfold.global.sim_change_notifications 2>/dev/null || printf off)"
+        case "$sim_report_mode" in
+            all|new_only) sim_change_reporting=1 ;;
+        esac
         wifi_report_mode="$(uci -q get sheepfold.global.child_wifi_network_notifications 2>/dev/null || printf off)"
         case "$wifi_report_mode" in
             with_location) wifi_network_reporting=1; wifi_location_reporting=1 ;;
@@ -230,24 +241,22 @@ case "$access_ends_at" in
 esac
 
 header_json "200 OK"
-printf '{"app":"sheepfold","ok":true,"apiVersion":"2","serverTime":"%s","data":{' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf '{"app":"sheepfold","ok":true,"apiVersion":"3","serverTime":"%s","data":{' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '"deviceId":"%s",' "$(json_escape "$device_id")"
 printf '"deviceName":"%s",' "$(json_escape "$device_name")"
 printf '"isAdministrator":%s,' "$([ "$is_administrator" = 1 ] && printf true || printf false)"
 printf '"clientRole":"%s",' "$(json_escape "$client_role")"
 printf '"canRequestAccessExtension":%s,' "$([ "$can_request_access_extension" = 1 ] && printf true || printf false)"
+printf '"simChangeReporting":%s,' "$([ "$sim_change_reporting" = 1 ] && printf true || printf false)"
 printf '"wifiNetworkReporting":%s,' "$([ "$wifi_network_reporting" = 1 ] && printf true || printf false)"
 printf '"wifiLocationReporting":%s,' "$([ "$wifi_location_reporting" = 1 ] && printf true || printf false)"
 # SHEEPFOLD_AI_BEGIN
 printf '"aiAssistantAvailable":%s,' "$([ "$ai_assistant_available" = 1 ] && printf true || printf false)"
 printf '"childAiAvailable":%s,' "$([ "$child_ai_available" = 1 ] && printf true || printf false)"
-printf '"personalGroupName":"%s",' "$(json_escape "$personal_group_name")"
 printf '"childAiAllowed":%s,' "$([ "$child_ai_allowed" = 1 ] && printf true || printf false)"
 printf '"personalGroupRequired":%s,' "$([ "$personal_group_required" = 1 ] && printf true || printf false)"
 # SHEEPFOLD_AI_END
 printf '"internetState":"%s",' "$(json_escape "$internet_state")"
-printf '"accessMode":"%s",' "$(json_escape "$access_mode")"
-printf '"scheduleConflict":%s,' "$([ "$schedule_conflict" = 1 ] && printf true || printf false)"
 if [ -n "$access_ends_at" ]; then
     printf '"accessEndsAt":"%s",' "$(json_escape "$access_ends_at")"
 else
@@ -259,4 +268,9 @@ if [ -n "$next_access_change_time" ]; then
 else
     printf '"nextAccessChangeTime":null,'
 fi
-printf '"message":"%s"},"error":null}\n' "$(json_escape "$message")"
+if [ "$internet_state" = enabled ]; then
+    printf '"message":null'
+else
+    printf '"message":"%s"' "$(json_escape "$message")"
+fi
+printf '},"error":null}\n'

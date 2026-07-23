@@ -46,13 +46,19 @@ function automaticSetupField(deps) {
 	var select = E('select', {
 		'class': 'cbi-input-select',
 		'change': function (event) {
-			deps.setOptions(automaticSetupDraft(event.currentTarget.value));
+			var nextValue = event.currentTarget.value;
+			deps.setOptions(automaticSetupDraft(nextValue));
+			if (deps.detectionTools)
+				deps.detectionTools.setMode(nextValue);
 		}
 	}, [
 		E('option', { 'value': 'disabled', 'selected': value === 'disabled' ? 'selected' : null }, _('Disabled')),
 		E('option', { 'value': 'full', 'selected': value === 'full' ? 'selected' : null }, _('Full automatic setup')),
 		E('option', { 'value': 'reduced', 'selected': value === 'reduced' ? 'selected' : null }, _('Reduced automatic setup'))
 	]);
+
+	if (deps.detectionTools)
+		deps.detectionTools.setMode(value);
 
 	return E('label', { 'class': 'sf-field sf-field-wide' }, [
 		E('span', {}, _('New device automatic setup')),
@@ -61,24 +67,62 @@ function automaticSetupField(deps) {
 	]);
 }
 
+
+function countryProfileField(deps) {
+	var current = deps.value('country_profile', 'ru');
+	var values = [
+		['ru', _('Russia')],
+		['by', _('Belarus')],
+		['cn', _('China')]
+	];
+	var select = E('select', {
+		'class': 'cbi-input-select',
+		'change': function (event) {
+			var nextValue = event.currentTarget.value;
+			deps.setOption('country_profile', nextValue);
+			if (deps.timeSettings)
+				deps.timeSettings.setCountry(nextValue);
+		}
+	}, values.map(function (item) {
+		return E('option', {
+			'value': item[0],
+			'selected': item[0] === current ? 'selected' : null
+		}, item[1]);
+	}));
+
+	if (deps.timeSettings)
+		deps.timeSettings.setCountry(current);
+
+	return E('label', { 'class': 'sf-field sf-field-wide' }, [
+		E('span', {}, _('Router country')),
+		select,
+		E('small', {}, _('Selects emergency-useful sites and country recommendations. Existing OpenWrt timezone settings are never overwritten automatically.'))
+	]);
+}
+
 function render(deps) {
-	return E('div', { 'class': 'sf-flat-form' }, [
+	var fields = [];
+
+	if (deps.timeSetupNotice)
+		fields.push(typeof deps.timeSetupNotice === 'function' ? deps.timeSetupNotice() : deps.timeSetupNotice);
+	fields = fields.concat([
 		deps.selectField(_('Application language'), 'language', 'ru', [
 			['ru', _('Russian')],
 			['en', _('English')],
 			['zh_Hans', _('Chinese (Simplified)')]
 		], null, null, _('Applies only to Sheepfold. Does not change the router LuCI language. The page reloads after Save.')),
-		deps.selectField(_('Router country'), 'country_profile', 'ru', [
-			['ru', _('Russia')],
-			['by', _('Belarus')],
-			['cn', _('China')]
-		], null, null, _('Selects the country-specific emergency-useful sites. Manually added or edited sites are preserved.')),
+		countryProfileField(deps),
 		applicationPortField(deps),
 		deps.selectField(_('New device behavior'), 'new_device_policy', 'allow', [
 			['allow', _('Allow internet by default')],
 			['restrict_until_configured', _('Restrict until configured')]
 		]),
-		automaticSetupField(deps),
+		automaticSetupField(deps)
+	]);
+
+	if (deps.detectionTools)
+		fields.push(deps.detectionTools.render());
+	fields.push(
 		deps.selectField(_('Device monitoring and setup'), 'device_monitoring_mode', 'automatic', [
 			['automatic', _('Automatic (recommended)')],
 			['manual', _('Manual')]
@@ -88,7 +132,7 @@ function render(deps) {
 			['weekly', _('Every week')],
 			['monthly', _('Every month')],
 			['never', _('Never')]
-		], null, null, _('Defines how often Sheepfold should check for and install updates after confirmation.')),
+		], null, null, _('Defines how often Sheepfold checks for a stable release. Installation still requires an explicit confirmation.')),
 		deps.selectField(_('Blocklist emergency-useful sites access'), 'domain_allowlist_for_blocklist', '1', [
 			['1', _('Yes')],
 			['0', _('No')]
@@ -102,7 +146,9 @@ function render(deps) {
 			null,
 			2
 		)
-	]);
+	);
+
+	return E('div', { 'class': 'sf-flat-form' }, fields);
 }
 
 return baseclass.extend({

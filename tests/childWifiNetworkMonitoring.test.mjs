@@ -134,7 +134,7 @@ describe('Child Wi-Fi network notifications §childwifi1', () => {
     assert.match(statusApi, /"wifiNetworkReporting"/);
     assert.match(statusApi, /"wifiLocationReporting"/);
     assert.match(repository, /WIFI_REPORT_ENDPOINT = "\/cgi-bin\/sheepfold-api\/wifi-network-report"/);
-    assert.match(repository, /parsed\.data\?\.wifiNetworkReporting == true/);
+    assert.match(repository, /data\?\.wifiNetworkReporting == true/);
     assert.match(reportQueue, /WifiNetworkSnapshotCollector\.payload\(context, includeLocation\)/);
   });
 

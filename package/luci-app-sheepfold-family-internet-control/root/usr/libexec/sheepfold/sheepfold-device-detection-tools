@@ -1,0 +1,177 @@
+#!/bin/sh
+set -eu
+
+case "$0" in */*) SCRIPT_DIR="${0%/*}" ;; *) SCRIPT_DIR=/usr/libexec/sheepfold ;; esac
+PACKAGE_MANAGER_HELPER="${SHEEPFOLD_PACKAGE_MANAGER_HELPER:-$SCRIPT_DIR/sheepfold-package-manager}"
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-$SCRIPT_DIR/sheepfold-lock-common}"
+[ -r "$PACKAGE_MANAGER_HELPER" ] || PACKAGE_MANAGER_HELPER=/usr/libexec/sheepfold/sheepfold-package-manager
+[ -r "$LOCK_COMMON" ] || LOCK_COMMON=/usr/libexec/sheepfold/sheepfold-lock-common
+. "$PACKAGE_MANAGER_HELPER"
+. "$LOCK_COMMON"
+
+COMMAND="${1:-status}"
+STATE_DIR="${SHEEPFOLD_NMAP_STATE_DIR:-/tmp/sheepfold/nmap-install}"
+STATE_FILE="$STATE_DIR/status"
+PID_FILE="$STATE_DIR/pid"
+LOG_FILE="$STATE_DIR/install.log"
+INSTALL_LOCK="${SHEEPFOLD_NMAP_INSTALL_LOCK:-/tmp/sheepfold/nmap-install.flock}"
+START_LOCK="${SHEEPFOLD_NMAP_START_LOCK:-$STATE_DIR/start.flock}"
+MIN_FREE_KB="${SHEEPFOLD_NMAP_MIN_FREE_KB:-16384}"
+NMAP_BINARY="${SHEEPFOLD_NMAP_BINARY:-}"
+FREE_KB_OVERRIDE="${SHEEPFOLD_NMAP_FREE_KB:-}"
+
+case "$MIN_FREE_KB" in ''|*[!0-9]*) MIN_FREE_KB=16384 ;; esac
+[ "$MIN_FREE_KB" -ge 4096 ] || MIN_FREE_KB=4096
+[ "$MIN_FREE_KB" -le 262144 ] || MIN_FREE_KB=262144
+mkdir -p "$STATE_DIR"
+chmod 700 "$STATE_DIR" 2>/dev/null || true
+
+nmap_available() {
+	if [ -n "$NMAP_BINARY" ]; then [ -x "$NMAP_BINARY" ]; else command -v nmap >/dev/null 2>&1; fi
+}
+
+package_manager_name() {
+	sheepfold_package_manager 2>/dev/null || true
+}
+
+free_kb() {
+	if [ -n "$FREE_KB_OVERRIDE" ]; then
+		case "$FREE_KB_OVERRIDE" in ''|*[!0-9]*) printf '0\n' ;; *) printf '%s\n' "$FREE_KB_OVERRIDE" ;; esac
+		return
+	fi
+	for target in /overlay /; do
+		[ -d "$target" ] || continue
+		value="$(df -Pk "$target" 2>/dev/null | awk 'NR==2 { print $4; exit }')"
+		case "$value" in ''|*[!0-9]*) ;; *) printf '%s\n' "$value"; return ;; esac
+	done
+	printf '0\n'
+}
+
+write_state() {
+	state="$1"
+	reason="${2:-}"
+	tmp="$STATE_FILE.tmp.$$"
+	umask 077
+	{
+		printf 'state=%s\n' "$state"
+		printf 'reason=%s\n' "$reason"
+		printf 'updated_at=%s\n' "$(date +%s)"
+	} > "$tmp"
+	chmod 600 "$tmp" 2>/dev/null || true
+	mv -f "$tmp" "$STATE_FILE"
+}
+
+state_value() {
+	key="$1"
+	sed -n "s/^$key=//p" "$STATE_FILE" 2>/dev/null | sed -n '1p'
+}
+
+pid_running() {
+	pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+	case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+	kill -0 "$pid" 2>/dev/null
+}
+
+preflight_reason() {
+	manager="$(package_manager_name)"
+	[ -n "$manager" ] || { printf 'package_manager_missing\n'; return; }
+	available_kb="$(free_kb)"
+	[ "$available_kb" -ge "$MIN_FREE_KB" ] || { printf 'insufficient_space\n'; return; }
+	printf '\n'
+}
+
+print_status() {
+	available=0
+	nmap_available && available=1
+	manager="$(package_manager_name)"
+	available_kb="$(free_kb)"
+	mode="$(uci -q get sheepfold.global.detection_mode 2>/dev/null || printf full)"
+	state="$(state_value state)"
+	reason="$(state_value reason)"
+	if [ "$available" = 1 ]; then
+		rm -f "$PID_FILE" 2>/dev/null || true
+		state=installed
+		reason=''
+	elif pid_running; then
+		state=running
+		reason=''
+	else
+		rm -f "$PID_FILE" 2>/dev/null || true
+		[ -n "$state" ] || state=idle
+		if [ -z "$manager" ]; then
+			reason=package_manager_missing
+		elif [ "$available_kb" -lt "$MIN_FREE_KB" ]; then
+			reason=insufficient_space
+		elif [ "$state" != failed ]; then
+			reason=optional_tool_missing
+		fi
+	fi
+	can_install=0
+	if [ "$available" = 0 ] && [ -n "$manager" ] && [ "$available_kb" -ge "$MIN_FREE_KB" ] && [ "$state" != running ] && [ "$state" != queued ]; then
+		can_install=1
+	fi
+	printf 'detection_mode=%s\n' "$mode"
+	printf 'nmap_available=%s\n' "$available"
+	printf 'state=%s\n' "$state"
+	printf 'reason=%s\n' "$reason"
+	printf 'can_install=%s\n' "$can_install"
+	printf 'package_manager=%s\n' "$manager"
+	printf 'free_kb=%s\n' "$available_kb"
+	printf 'minimum_free_kb=%s\n' "$MIN_FREE_KB"
+}
+
+run_install() {
+	if nmap_available; then write_state installed ''; return 0; fi
+	reason="$(preflight_reason)"
+	[ -z "$reason" ] || { write_state failed "$reason"; return 2; }
+	sheepfold_lock_acquire "$INSTALL_LOCK" 10 || { write_state failed busy; return 3; }
+	trap 'sheepfold_lock_release' EXIT HUP INT TERM
+	write_state running ''
+	: > "$LOG_FILE"
+	chmod 600 "$LOG_FILE" 2>/dev/null || true
+	if ! sheepfold_package_update_indexes >> "$LOG_FILE" 2>&1; then
+		write_state failed package_index_failed
+		return 4
+	fi
+	if ! sheepfold_package_install_named nmap >> "$LOG_FILE" 2>&1; then
+		write_state failed package_install_failed
+		return 5
+	fi
+	if ! nmap_available; then
+		write_state failed binary_missing_after_install
+		return 6
+	fi
+	write_state installed ''
+	return 0
+}
+
+start_install() (
+	# Serialize only the cheap spawn decision. The long package-manager operation
+	# has its own lock inside run_install and never blocks the LuCI RPC response.
+	sheepfold_lock_acquire "$START_LOCK" 2 || { print_status; return 0; }
+	trap 'sheepfold_lock_release' EXIT HUP INT TERM
+	if nmap_available; then write_state installed ''; print_status; return 0; fi
+	if pid_running; then print_status; return 0; fi
+	reason="$(preflight_reason)"
+	if [ -n "$reason" ]; then
+		write_state failed "$reason"
+		print_status
+		return 2
+	fi
+	write_state queued ''
+	(
+		run_install
+	) </dev/null >/dev/null 2>&1 &
+	pid=$!
+	printf '%s\n' "$pid" > "$PID_FILE"
+	chmod 600 "$PID_FILE" 2>/dev/null || true
+	printf 'started=1\n'
+	printf 'state=queued\n'
+)
+
+case "$COMMAND" in
+	status) print_status ;;
+	start) start_install ;;
+	run-install) run_install ;;
+	*) echo 'Usage: sheepfold-device-detection-tools [status|start|run-install]' >&2; exit 2 ;;
+esac

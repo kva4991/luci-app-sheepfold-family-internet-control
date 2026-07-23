@@ -6,17 +6,19 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const root = 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/';
-const overview = readFileSync(root + 'view/sheepfold/overview.js', 'utf8');
+const overview = readOverviewApplication(root + 'view/sheepfold/overview.js');
 const panel = readFileSync(root + 'sheepfold/features/logs/panel.js', 'utf8');
+const shell = readFileSync(root + 'sheepfold/features/page/shell.js', 'utf8');
 
 describe('Log panel module §frontmod', () => {
   it('owns log presentation state without receiving UCI or filesystem access', () => {
     assert.match(overview, /require sheepfold\.features\.logs\.panel as logPanelModel/);
     assert.match(overview, /var logPanel = logPanelModel\.create/);
-    assert.match(overview, /logPanel\.setText\(results\[2\]\)/);
-    assert.match(overview, /renderLogs:[\s\S]*return logPanel\.render\(\)/);
+    assert.match(shell, /deps\.logPanel\.setText\(values\[1\]\)/);
+    assert.match(shell, /this\.renderPanel\('logs', deps\.logPanel\.render\(\)\)/);
     assert.doesNotMatch(overview, /var logViewFilters|function renderLogRows|function showLogExportModal/);
 
     assert.match(panel, /var filters = emptyFilters\(\)/);

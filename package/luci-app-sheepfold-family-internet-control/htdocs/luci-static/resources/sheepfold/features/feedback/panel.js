@@ -1,7 +1,6 @@
 'use strict';
-/* §feedback */
+/* §feedback §apicon1 */
 'require baseclass';
-'require sheepfold.core.backend.router as routerBackend';
 
 function field(label, input, hint) {
 	return E('label', { 'class': 'sf-field sf-field-wide' }, [
@@ -44,7 +43,6 @@ function render(deps) {
 		'class': 'sf-action sf-action-positive',
 		'disabled': 'disabled',
 		'click': function (event) {
-			var button = event.currentTarget;
 			var subjectValue = subject.value.trim();
 			var messageValue = message.value.trim();
 
@@ -58,26 +56,27 @@ function render(deps) {
 				return;
 			}
 
-			button.disabled = true;
-			button.textContent = _('Sending...');
-			routerBackend.withTimeout([
+			deps.runAction([
 				'feedback-submit', 'luci', category.value, subjectValue, messageValue,
 				contact.value.trim(), diagnostics.checked ? '1' : '0'
-			], 35000, _('The feedback service did not respond in time.')).then(function () {
-				message.value = '';
-				subject.value = '';
-				deps.notify(_('Thank you. Your message was sent to the Sheepfold developer.'), 'info');
-			}, function (error) {
-				deps.notify(deps.errorText(error, _('Could not send the message. Try again later.')), 'warning');
-			}).finally(function () {
-				button.disabled = false;
-				button.textContent = _('Send message');
-			});
+			], {
+				key: 'feedback-submit',
+				button: event.currentTarget,
+				busyText: _('Sending...'),
+				timeoutMs: 35000,
+				timeoutMessage: _('The feedback service did not respond in time.'),
+				successMessage: _('Thank you. Your message was sent to the Sheepfold developer.'),
+				errorMessage: _('Could not send the message. Try again later.'),
+				onSuccess: function () {
+					message.value = '';
+					subject.value = '';
+				}
+			}).catch(function () { return null; });
 		}
 	}, _('Send message'));
 
-	routerBackend.run(['feedback-status']).then(function (result) {
-		var values = routerBackend.parseKeyValues(result.stdout || '');
+	deps.runCommand(['feedback-status'], { key: 'feedback-status', silent: true }).then(function (result) {
+		var values = deps.parseOutput(result.stdout || '');
 		if (values.configured === '1') {
 			status.className = 'sf-note sf-status-ok';
 			status.textContent = _('Feedback sending is available.');

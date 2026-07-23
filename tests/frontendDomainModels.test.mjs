@@ -116,72 +116,65 @@ describe('extracted LuCI domain models §frontmod', () => {
   });
 
   it('validates and stages one settings draft through the persistence adapter', async () => {
-    const persistence = loadFeature('settings/persistence.js');
+    const persistenceModel = loadFeature('settings/persistence.js');
     const accessKeys = ['blocklist', 'allowlist', 'default_access'];
-    const partitioned = persistence.partitionOptions({
+    const knownSections = new Set(['global']);
+    const writes = [];
+    const adapter = persistenceModel.create({
+      accessKeys,
+      normalizeLanguage: (value) => value.toLowerCase(),
+      sectionValue: () => '',
+      uci: {
+        set: (...args) => writes.push(args)
+      },
+      persistence: {
+        ensureSection: (_config, _type, name) => {
+          knownSections.add(name);
+          return name;
+        },
+        mutate: async (configs, stage) => ({ configs, stageResult: stage() })
+      }
+    });
+
+    const partitioned = adapter.partition({
       language: 'RU',
       'usb.device': '/dev/sda1',
       'cloud.login': 'owner',
       'adguard.url': 'https://192.168.1.2:3000'
     });
-
     assert.deepEqual(JSON.parse(JSON.stringify(partitioned)), {
       global: { language: 'RU' },
-      usb: { device: '/dev/sda1' },
-      cloud: { login: 'owner' },
-      gdrive: {},
-      adguard: { url: 'https://192.168.1.2:3000' }
+      sections: {
+        usb: { device: '/dev/sda1' },
+        cloud: { login: 'owner' },
+        adguard: { url: 'https://192.168.1.2:3000' }
+      }
     });
-    assert.throws(() => persistence.validateDraft({ app_port: '0' }, {
-      accessKeys,
-      sectionValue: () => ''
-    }), /Enter a port from 1 to 65535/);
-    assert.throws(() => persistence.validateDraft({
+    assert.throws(() => adapter.validate({ app_port: '0' }), /Application HTTPS port/);
+    assert.throws(() => adapter.validate({
       access_priority: 'blocklist unknown allowlist default_access'
-    }, {
-      accessKeys,
-      sectionValue: () => ''
     }), /Access priority contains an unknown or duplicate rule/);
-    assert.throws(() => persistence.validateDraft({
+    assert.throws(() => adapter.validate({
       'adguard.url': 'http://192.168.1.2:3000'
-    }, {
-      accessKeys,
-      sectionValue: () => ''
     }), /Use HTTPS for AdGuard Home on another device/);
-    assert.doesNotThrow(() => persistence.validateDraft({
+    assert.doesNotThrow(() => adapter.validate({
       'adguard.url': 'https://192.168.1.2:03000'
-    }, {
-      accessKeys,
-      sectionValue: () => ''
     }));
 
-    const knownSections = new Set(['global']);
-    const writes = [];
-    const adapter = persistence.create({
-      accessKeys,
-      normalizeLanguage: (value) => value.toLowerCase(),
-      sectionValue: () => '',
-      uci: {
-        get: (config, section) => {
-          if (!knownSections.has(section)) throw new Error('missing');
-          return section;
-        },
-        set: (...args) => {
-          writes.push(args);
-          if (args.length === 3) knownSections.add(args[1]);
-        }
-      },
-      save: async (configs) => configs
-    });
-
     adapter.validate({ app_port: '5201' });
-    assert.deepEqual([...(await adapter.save({
+    assert.deepEqual(JSON.parse(JSON.stringify(await adapter.save({
       language: 'RU',
       'usb.device': '/dev/sda1',
       'cloud.login': 'owner'
-    }))], ['sheepfold']);
+    }))), {
+      global: { language: 'ru' },
+      sections: {
+        usb: { device: '/dev/sda1' },
+        cloud: { login: 'owner' }
+      }
+    });
     assert.ok(writes.some((args) => args.join('|') === 'sheepfold|global|language|ru'));
-    assert.ok(writes.some((args) => args.join('|') === 'sheepfold|usb|usb'));
+    assert.equal(knownSections.has('usb'), true);
     assert.ok(writes.some((args) => args.join('|') === 'sheepfold|cloud|authorized|0'));
   });
 

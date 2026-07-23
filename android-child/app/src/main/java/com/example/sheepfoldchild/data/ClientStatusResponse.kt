@@ -3,6 +3,8 @@ package com.example.sheepfoldchild.data
 /**
  * Ответ endpoint /cgi-bin/sheepfold-api/client-status.
  * MAC определяется на роутере по REMOTE_ADDR — клиент ничего не передаёт.
+ * Публичная модель не содержит внутренний режим, имя разрешившего правила или
+ * конфликт расписаний; ребёнку нужны итоговый статус и безопасное объяснение.
  */
 data class ClientStatusResponse(
     val app: String?,
@@ -19,11 +21,11 @@ data class ClientStatusData(
     val isAdministrator: Boolean,
     val clientRole: String,
     val canRequestAccessExtension: Boolean,
+    val simChangeReporting: Boolean,
     val wifiNetworkReporting: Boolean,
     val wifiLocationReporting: Boolean,
     val productStatus: ProductStatus,
     val internetState: String,
-    val accessMode: String?,
     val accessEndsAt: String?,
     val minutesRemaining: Int?,
     val nextAccessChangeTime: String?,

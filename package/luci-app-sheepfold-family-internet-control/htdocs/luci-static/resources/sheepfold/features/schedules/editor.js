@@ -2,10 +2,9 @@
 'require baseclass';
 'require ui';
 
-/* §frontmod
- * Редактор изолирует DOM-состояние одного расписания. Он не читает UCI и общий
- * компоновщик страницы напрямую: список целей, проверка конфликтов и сохранение передаются
- * явными callbacks, поэтому окно нельзя случайно связать с чужим черновиком.
+/* §frontmod §apicon1
+ * The editor owns only one schedule draft. The coordinator receives the save
+ * button so one composite UCI/runtime action can lock duplicate submissions.
  */
 function open(deps, section, copyMode) {
 	var ownName = !copyMode && section ? section['.name'] : '';
@@ -95,7 +94,7 @@ function open(deps, section, copyMode) {
 		}));
 	}
 
-	function validateAndSave() {
+	function validateAndSave(button) {
 		var conflict;
 
 		updatePreview();
@@ -107,11 +106,11 @@ function open(deps, section, copyMode) {
 		}
 		conflict = deps.findConflict(draft, ownName);
 		if (conflict) {
-			deps.showConflict(function () { deps.persist(draft, ownName); },
+			deps.showConflict(function () { deps.persist(draft, ownName, button); },
 				_('This rule overlaps the opposite rule:') + ' «' + conflict + '». ' + deps.conflictResultText());
 			return;
 		}
-		deps.persist(draft, ownName);
+		deps.persist(draft, ownName, button);
 	}
 
 	modeSelect = E('select', {
@@ -185,7 +184,11 @@ function open(deps, section, copyMode) {
 		]),
 		E('div', { 'class': 'right sf-modal-actions' }, [
 			E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
-			E('button', { 'class': 'btn cbi-button-positive', 'click': validateAndSave }, _('Save'))
+			E('button', {
+				'class': 'btn cbi-button-positive',
+				'data-sf-action-key': 'schedule-save:' + (ownName || 'new'),
+				'click': function (event) { validateAndSave(event.currentTarget); }
+			}, _('Save'))
 		])
 	]);
 }

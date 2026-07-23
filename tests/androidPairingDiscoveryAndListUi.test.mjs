@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
@@ -24,7 +25,9 @@ const childSetup = read('android-child/app/src/main/java/com/example/sheepfoldch
 const childStatusScreen = read('android-child/app/src/main/java/com/example/sheepfoldchild/ui/ChildStatusScreen.kt');
 const childStrings = read('android-child/app/src/main/res/values/strings.xml');
 const childStatusApi = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-api-client-status');
-const overview = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js');
+const overview = readOverviewApplication(resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js'));
+const deviceController = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js');
+const devicePersistence = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/persistence.js');
 const androidBuild = read('android/app/build.gradle.kts');
 const childBuild = read('android-child/app/build.gradle.kts');
 const makefile = read('package/luci-app-sheepfold-family-internet-control/Makefile');
@@ -114,25 +117,25 @@ describe('Android pairing discovery and access-list UI', () => {
   });
 
   it('updates allowlist and blocklist panels without reloading the browser page', () => {
-    const addModal = functionBody(overview, 'showManualListDeviceModal', 'showManualDeviceModal');
-    const removeAction = functionBody(overview, 'removeDeviceFromAccessList', 'applyAdminDeviceBindings');
+    const addModal = functionBody(deviceController, 'showManualList', 'showManualDevice');
+    const removeAction = functionBody(deviceController, 'removeFromList', 'typeIcon');
 
-    assert.match(addModal, /refreshUserListsWithoutPageReload/);
+    assert.match(addModal, /refreshViews/);
     assert.doesNotMatch(addModal, /window\.location\.reload/);
-    assert.match(removeAction, /refreshUserListsWithoutPageReload/);
+    assert.match(removeAction, /refreshViews/);
     assert.doesNotMatch(removeAction, /window\.location\.reload/);
     assert.match(overview, /data-metric/);
-    assert.match(overview, /function applySheepfoldAccessRuntime[\s\S]*schedule-sync[\s\S]*site-lists-apply/);
-    assert.match(overview, /function saveSheepfoldAccessChanges[\s\S]*applySheepfoldAccessRuntime/);
-    assert.match(addModal, /persistDeviceListMembership/);
+    assert.doesNotMatch(overview, /function applySheepfoldAccessRuntime|function saveSheepfoldAccessChanges/);
+    assert.match(devicePersistence, /function applyRuntime\(\)[\s\S]*schedule-sync[\s\S]*site-lists-apply[\s\S]*function saveAccess\(configs, stage\)/);
+    assert.match(addModal, /persistMembership/);
   });
 
   it('keeps current Android and OpenWrt release versions synchronized', () => {
-    assert.match(androidBuild, /sheepfoldVersionCode = 48/);
-    assert.match(androidBuild, /sheepfoldVersionName = "0\.1\.47"/);
-    assert.match(childBuild, /sheepfoldChildVersionCode = 12/);
-    assert.match(childBuild, /sheepfoldChildVersionName = "1\.11"/);
+    assert.match(androidBuild, /sheepfoldVersionCode = 50/);
+    assert.match(androidBuild, /sheepfoldVersionName = "0\.1\.49"/);
+    assert.match(childBuild, /sheepfoldChildVersionCode = 13/);
+    assert.match(childBuild, /sheepfoldChildVersionName = "1\.12"/);
     const release = Number(makefile.match(/PKG_RELEASE:=(\d+)/)?.[1] || 0);
-    assert.ok(release >= 235);
+    assert.ok(release >= 252);
   });
 });

@@ -2,24 +2,17 @@
 'require baseclass';
 'require ui';
 
-/* §frontmod
- * Модальные окна групп владеют только своими полями и валидацией. Изменение
- * UCI, членства устройств и runtime-правил выполняет переданный координатором
- * callback: визуальный слой не должен самостоятельно менять интернет-доступ.
+/* §frontmod §coordclean1
+ * Modal state stays local. Persistence receives the actual Save button so the
+ * shared action runner can block duplicate submissions without DOM queries.
  */
 function errorNote() {
 	var node = E('div', { 'class': 'sf-note sf-note-danger', 'hidden': 'hidden' });
 
 	return {
 		node: node,
-		show: function (message) {
-			node.textContent = message;
-			node.hidden = false;
-		},
-		clear: function () {
-			node.textContent = '';
-			node.hidden = true;
-		}
+		show: function (message) { node.textContent = message; node.hidden = false; },
+		clear: function () { node.textContent = ''; node.hidden = true; }
 	};
 }
 
@@ -42,7 +35,7 @@ function openSettings(deps, groupName, section, onSave) {
 	/* SHEEPFOLD_AI_END */
 	var error = errorNote();
 
-	function save() {
+	function save(button) {
 		var newName = deps.normalize(nameField.input.value.trim());
 		var color = colorField.input.value;
 		var payload;
@@ -70,7 +63,7 @@ function openSettings(deps, groupName, section, onSave) {
 		/* SHEEPFOLD_AI_BEGIN */
 		payload.activityLogEnabled = activityLogField.input.checked;
 		/* SHEEPFOLD_AI_END */
-		deps.persistSettings(payload, section, onSave);
+		deps.persistSettings(payload, section, onSave, button);
 	}
 
 	ui.showModal(_('Group settings'), [
@@ -90,12 +83,14 @@ function openSettings(deps, groupName, section, onSave) {
 			E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
 			E('button', {
 				'class': 'btn cbi-button cbi-button-positive',
-				'click': function () {
+				'data-sf-action-key': 'group-save:' + String(section && section['.name'] || 'new'),
+				'click': function (event) {
+					var button = event.currentTarget;
 					if (deps.schedulesConflict(scheduleSelector.values())) {
-						deps.showScheduleConflict(save);
+						deps.showScheduleConflict(function () { save(button); });
 						return;
 					}
-					save();
+					save(button);
 				}
 			}, _('Save'))
 		])
@@ -108,7 +103,7 @@ function openAdd(deps, existingNames, onSave) {
 	var personalField = deps.checkboxControl(_('Personal group'), false, _('Only devices belonging to one person can be added to this group.'));
 	var error = errorNote();
 
-	function save() {
+	function save(button) {
 		var groupName = deps.normalize(nameField.input.value.trim());
 		var color = colorField.input.value;
 
@@ -128,7 +123,7 @@ function openAdd(deps, existingNames, onSave) {
 			name: groupName,
 			color: color,
 			personal: personalField.input.checked
-		}, onSave);
+		}, onSave, button);
 	}
 
 	ui.showModal(_('Add group'), [
@@ -139,12 +134,13 @@ function openAdd(deps, existingNames, onSave) {
 		]),
 		E('div', { 'class': 'right sf-modal-actions' }, [
 			E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
-			E('button', { 'class': 'btn cbi-button cbi-button-positive', 'click': save }, _('Save'))
+			E('button', {
+				'class': 'btn cbi-button cbi-button-positive',
+				'data-sf-action-key': 'group-create',
+				'click': function (event) { save(event.currentTarget); }
+			}, _('Save'))
 		])
 	]);
 }
 
-return baseclass.extend({
-	openSettings: openSettings,
-	openAdd: openAdd
-});
+return baseclass.extend({ openSettings: openSettings, openAdd: openAdd });

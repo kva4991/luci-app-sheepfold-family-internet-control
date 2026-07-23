@@ -18,6 +18,10 @@ const routerFrontend = readFileSync(resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/core/backend/router.js',
 ), 'utf8');
+const luciAction = readFileSync(resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-luci-action',
+), 'utf8');
 const clientStatus = readFileSync(
   resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-client-status-effective'),
   'utf8',
@@ -32,7 +36,8 @@ function shellFunction(name, nextName) {
 
 describe('Router backend access rules', () => {
   it('attributes LuCI writes explicitly without relabeling API commands', () => {
-    assert.match(routerFrontend, /\['--luci'\]\.concat/);
+    assert.match(routerFrontend, /ACTION_HELPER[\s\S]*fs\.exec\(ACTION_HELPER, args \|\| \[\]\)/);
+    assert.match(luciAction, /"\$CONTROL" --luci "\$@"/);
     assert.match(routerFacade, /SHEEPFOLD_ACTION_ACTOR='LuCI \(Изменено на роутере\)'/);
     assert.match(routerControl, /message="\${SHEEPFOLD_ACTION_ACTOR}: \$message"/);
     assert.doesNotMatch(routerControl, /log_event "LuCI \(Изменено на роутере\):/);

@@ -10,12 +10,16 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { describe, it } from 'node:test';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const resources = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources');
 const backupPath = join(resources, 'sheepfold/features/settings/backup.js');
-const overview = readFileSync(join(resources, 'view/sheepfold/overview.js'), 'utf8');
+const overview = readOverviewApplication(join(resources, 'view/sheepfold/overview.js'));
+const application = readFileSync(join(resources, 'sheepfold/features/overview/application.js'), 'utf8');
 const backupPanel = readFileSync(join(resources, 'sheepfold/features/settings/backup-panel.js'), 'utf8');
+const backupController = readFileSync(join(resources, 'sheepfold/features/settings/backup-controller.js'), 'utf8');
+const backupPersistence = readFileSync(join(resources, 'sheepfold/features/settings/backup-persistence.js'), 'utf8');
 const routerControl = readFileSync(join(
   root,
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-router-control-legacy'
@@ -211,15 +215,19 @@ describe('settings backup and restore', () => {
   it('applies managed UCI configs, preserves placeholders and refreshes router services', () => {
     assert.match(overview, /require sheepfold\.features\.settings\.backup as settingsBackupModel/);
     assert.match(overview, /require sheepfold\.features\.settings\.backup-panel as settingsBackupPanelModel/);
-    assert.match(overview, /function stageImportedConfig\(config, importedSections, currentSections, managedTypes\)/);
-    assert.match(overview, /value === settingsBackupModel\.secretPlaceholder/);
+    assert.match(overview, /require sheepfold\.features\.settings\.backup-persistence as backupPersistenceModel/);
+    assert.doesNotMatch(application, /function stageImportedConfig|function stageImportedPayload|function importedSectionByName/);
+    assert.match(backupPersistence, /function stageConfig\(config, importedSections, currentSections, managedTypes\)/);
+    assert.match(backupPersistence, /value === deps\.model\.secretPlaceholder/);
     assert.match(backupPanel, /payload\.containsSecrets[\s\S]*unencrypted_secrets_forbidden/);
     assert.match(backupPanel, /backupModel\.prepareRestore\([\s\S]*backupModel\.validate\(deps\.payload\(true\)\)/);
-    assert.match(overview, /settingsBackupModel\.prepareRestore\(payload, previous\)/);
-    assert.match(overview, /saveUciChanges\(\['sheepfold', 'dhcp', 'wireless'\]\)/);
-    assert.match(overview, /routerControl\(\['settings-import-applied'\]\)/);
+    assert.match(backupController, /deps\.persistence\.apply\(imported, payload\(true\)\)/);
+    assert.match(backupPersistence, /deps\.persistence\.mutate\(configs/);
+    assert.match(backupPersistence, /deps\.refreshRuntime\(\)/);
+    assert.match(application, /runCommand\(\['settings-import-applied'\]\)/);
     assert.doesNotMatch(backupPanel, /\buci\.(get|set|unset|remove)|saveUciChanges|routerControl/);
-    assert.doesNotMatch(overview, /Applying imported settings will be added after backend/);
+    assert.doesNotMatch(backupPersistence, /\bdocument\b|\bwindow\b|ui\.showModal|\bE\s*\(/);
+    assert.doesNotMatch(application, /Applying imported settings will be added after backend/);
     assert.match(routerControl, /settings_import_applied\(\)/);
     assert.match(routerControl, /settings-import-applied\)/);
     assert.match(routerControl, /settings_import_applied\(\)[\s\S]*sheepfold-ipv6-control apply/);

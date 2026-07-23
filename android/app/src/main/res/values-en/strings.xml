@@ -106,7 +106,7 @@
     <string name="setup_connection_failed">Could not connect to the router</string>
 
     <string name="protection_title">App Protection</string>
-    <string name="protection_description">A password is recommended. Face and Fingerprint may be selected, but Sheepfold relies on the phone system lock and does not treat these modes as stronger protection.</string>
+    <string name="protection_description">A password or PIN provides separate Sheepfold protection. Biometrics uses the Android system prompt; Android chooses the available sensor.</string>
     <string name="protection_password">Password — recommended</string>
     <string name="protection_pin">PIN</string>
     <string name="protection_face">Face — not recommended</string>

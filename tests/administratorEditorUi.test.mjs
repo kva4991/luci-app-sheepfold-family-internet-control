@@ -6,10 +6,13 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { readOverviewApplication } from '../tools/quality/overviewApplicationSource.mjs';
 
 const root = 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/';
-const overview = readFileSync(root + 'view/sheepfold/overview.js', 'utf8');
+const overview = readOverviewApplication(root + 'view/sheepfold/overview.js');
 const editor = readFileSync(root + 'sheepfold/features/administrators/editor.js', 'utf8');
+const controller = readFileSync(root + 'sheepfold/features/administrators/controller.js', 'utf8');
+const pairingPersistence = readFileSync(root + 'sheepfold/features/pairing/persistence.js', 'utf8');
 
 function functionBody(source, name, nextName) {
   const start = source.indexOf(`function ${name}(`);
@@ -25,39 +28,40 @@ describe('Administrator editor module §frontmod §pairsec', () => {
     assert.match(editor, /function openBinding\(deps, admin, onSave\)/);
     assert.match(editor, /function openSettings\(deps, admin, pairing, callbacks\)/);
     assert.doesNotMatch(editor, /uci\.(?:get|set|unset|remove)|routerControl|generatePairingCode|activateAdministratorPairingCode|pairingPayload\(/);
-    assert.match(overview, /function showAdminSettingsModal[\s\S]*activateAdministratorPairingCode/);
-    assert.match(overview, /function showAdminSettingsModal[\s\S]*startAdminPairingWatcher/);
+    assert.match(overview, /require sheepfold\.features\.administrators\.controller as administratorControllerModel/);
+    assert.match(controller, /function showSettings\(admin\)[\s\S]*deps\.persistence\.activate\(admin, temporaryPassword\)/);
+    assert.match(controller, /function showSettings\(admin\)[\s\S]*startWatcher\(admin/);
   });
 
-  it('keeps blocklist and access cleanup in the protected binding operation', () => {
-    const binding = functionBody(overview, 'applyAdminDeviceBindings', 'ensureStaticDhcpSection');
-
-    assert.match(binding, /adminDeviceCanBeBound/);
-    assert.match(binding, /group', NOT_CONFIGURED_GROUP/);
-    assert.match(binding, /schedules', ''/);
-    assert.match(binding, /status', 'allow'/);
-    assert.match(binding, /admin_device', '1'/);
-    assert.match(binding, /updateMacList\('allowlist', mac, true\)/);
-    assert.match(binding, /updateMacList\('blocklist', mac, false\)/);
-    assert.match(binding, /saveSheepfoldAccessChanges\(\)/);
+  it('keeps blocklist and access cleanup in the protected binding adapter', () => {
+    assert.doesNotMatch(overview, /function applyAdminDeviceBindings/);
+    assert.match(pairingPersistence, /deps\.canBind\(device\)/);
+    assert.match(pairingPersistence, /group', notConfigured/);
+    assert.match(pairingPersistence, /schedules', ''/);
+    assert.match(pairingPersistence, /status', 'allow'/);
+    assert.match(pairingPersistence, /admin_device', '1'/);
+    assert.match(pairingPersistence, /devicePersistence\.updateMacList\('allowlist', mac, true\)/);
+    assert.match(pairingPersistence, /devicePersistence\.updateMacList\('blocklist', mac, false\)/);
+    assert.match(pairingPersistence, /devicePersistence\.saveAccess\(\['sheepfold'\], function/);
+    assert.doesNotMatch(pairingPersistence, /document|window|ui\.showModal|\bE\s*\(/);
   });
 
   it('creates a fresh pairing code for every settings session', () => {
-    const settings = functionBody(overview, 'showAdminSettingsModal', 'pairingButton');
+    const settings = functionBody(controller, 'showSettings', 'createSelector');
 
-    assert.match(settings, /var temporaryPassword = generatePairingCode\(\)/);
+    assert.match(settings, /var temporaryPassword = deps\.random\.pairingCode\(\)/);
     assert.doesNotMatch(settings, /admin\.temporaryPassword/);
-    assert.match(settings, /activateAdministratorPairingCode\(admin, temporaryPassword\)/);
-    assert.match(settings, /loadTlsPublicKeyFingerprint\(\)\.then\(function \(tlsSpkiSha256\) \{[\s\S]*activateAdministratorPairingCode\(admin, temporaryPassword\)\.then\(function \(\) \{[\s\S]*openActivatedSettings\(tlsSpkiSha256\)/);
-    assert.match(settings, /Preparing secure pairing/);
+    assert.match(settings, /deps\.persistence\.activate\(admin, temporaryPassword\)/);
+    assert.match(settings, /loadTlsFingerprint\(\)\.then\(function \(fingerprint\) \{[\s\S]*deps\.persistence\.activate\(admin, temporaryPassword\)\.then\(function \(\) \{ openActivated\(fingerprint\)/);
+    assert.match(settings, /Preparing secure pairing\.\.\./);
   });
 
   it('updates administrator and device views after commit without reloading LuCI', () => {
-    const add = functionBody(overview, 'persistNewAdministrator', 'showAddAdministratorModal');
-    const bind = functionBody(overview, 'persistAdministratorDeviceBindings', 'showAdminDeviceBindingModal');
+    const add = functionBody(controller, 'persistNew', 'showAdd');
+    const bind = functionBody(controller, 'persistBindings', 'showBindings');
 
-    assert.match(add, /applyAdminDeviceBindings[\s\S]*refreshUserListsWithoutPageReload/);
-    assert.match(bind, /applyAdminDeviceBindings[\s\S]*refreshUserListsWithoutPageReload/);
+    assert.match(add, /deps\.persistence\.persistBindings[\s\S]*reloadAndRefreshDevices/);
+    assert.match(bind, /deps\.persistence\.persistBindings[\s\S]*reloadAndRefreshDevices/);
     assert.doesNotMatch(add, /window\.location\.reload/);
     assert.doesNotMatch(bind, /window\.location\.reload/);
     assert.match(editor, /'readonly': 'readonly'/);

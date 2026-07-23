@@ -1,0 +1,689 @@
+#!/bin/sh
+set -eu
+
+COMMAND="${1:-run}"
+RUNTIME_DIR="${SHEEPFOLD_MAINTENANCE_RUNTIME_DIR:-/tmp/sheepfold/maintenance}"
+STATE_DIR="${SHEEPFOLD_MAINTENANCE_STATE_DIR:-/etc/sheepfold/maintenance}"
+CONFIG_FILE="${SHEEPFOLD_MAINTENANCE_CONFIG_FILE:-/etc/config/sheepfold}"
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-${0%/*}/sheepfold-lock-common}"
+[ -r "$LOCK_COMMON" ] || LOCK_COMMON=/usr/libexec/sheepfold/sheepfold-lock-common
+. "$LOCK_COMMON"
+
+UCI_BIN="${SHEEPFOLD_UCI_BIN:-uci}"
+LOG_HELPER="${SHEEPFOLD_LOG_HELPER:-/usr/libexec/sheepfold/sheepfold-log}"
+UPDATER="${SHEEPFOLD_UPDATER:-/usr/libexec/sheepfold/sheepfold-updater}"
+PRESENCE="${SHEEPFOLD_DEVICE_PRESENCE:-/usr/libexec/sheepfold/sheepfold-device-presence}"
+NOTIFIER="${SHEEPFOLD_NOTIFICATION_HELPER:-/usr/libexec/sheepfold/sheepfold-admin-notification}"
+FIREWALL="${SHEEPFOLD_FIREWALL_HELPER:-/usr/libexec/sheepfold/sheepfold-firewall}"
+MAINTENANCE_LOCK="${SHEEPFOLD_MAINTENANCE_LOCK:-/tmp/sheepfold/maintenance.flock}"
+LOG_LOCK="${SHEEPFOLD_LOG_LOCK:-/tmp/sheepfold/log-maintenance.flock}"
+DEFAULT_LOG="${SHEEPFOLD_MAINTENANCE_DEFAULT_LOG:-/tmp/sheepfold/events.log}"
+CHILD_WIFI_HISTORY_DIR="${SHEEPFOLD_CHILD_WIFI_STATE_DIR:-/etc/sheepfold/child-wifi-networks}"
+LOG_ROTATION_INTERVAL=3600
+DEVICE_CLEANUP_INTERVAL=86400
+MAX_DEVICE_SCAN_PER_RUN=512
+MAX_DEVICE_CLEANUP_PER_RUN=32
+
+mkdir -p "$RUNTIME_DIR"
+chmod 700 "$RUNTIME_DIR" 2>/dev/null || true
+if [ ! -d "$STATE_DIR" ]; then
+    umask 077
+    mkdir -p "$STATE_DIR"
+    chmod 700 "$STATE_DIR" 2>/dev/null || true
+fi
+
+uci_cmd() {
+    "$UCI_BIN" "$@"
+}
+
+uci_get() {
+    local key
+    key="$1"
+    uci_cmd -q get "$key" 2>/dev/null || true
+}
+
+sections_of_type() {
+    local config type
+    config="$1"
+    type="$2"
+    uci_cmd -q show "$config" 2>/dev/null | sed -n "s/^${config}\.\([^.=]*\)=${type}$/\1/p"
+}
+
+state_get() {
+    local file key
+    file="$1"
+    key="$2"
+    [ -r "$file" ] || return 0
+    sed -n "s/^${key}=//p" "$file" 2>/dev/null | sed -n '1p'
+}
+
+write_state() {
+    local file tmp
+    file="$1"
+    tmp="${file}.tmp.$$"
+    mkdir -p "${file%/*}"
+    umask 077
+    cat > "$tmp"
+    chmod 600 "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$file"
+}
+
+valid_uint() {
+    case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac
+}
+
+now_epoch() {
+    local value
+    value="${SHEEPFOLD_MAINTENANCE_NOW_EPOCH:-}"
+    if valid_uint "$value" && [ "$value" -gt 0 ]; then
+        printf '%s\n' "$value"
+    else
+        date +%s
+    fi
+}
+
+today_ymd() {
+    local value
+    value="${SHEEPFOLD_MAINTENANCE_TODAY:-}"
+    case "$value" in
+        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) printf '%s\n' "$value" ;;
+        *) date +%Y-%m-%d ;;
+    esac
+}
+
+clock_is_sane() {
+    local today year
+    today="$(today_ymd)"
+    year="${today%%-*}"
+    valid_uint "$year" && [ "$year" -ge 2020 ] && [ "$year" -le 2100 ]
+}
+
+task_due() {
+    local file key interval now last
+    file="$1"
+    key="$2"
+    interval="$3"
+    now="$4"
+    last="$(state_get "$file" "$key")"
+    valid_uint "$last" || return 0
+    [ "$last" -le "$now" ] || return 0
+    [ $((now - last)) -ge "$interval" ]
+}
+
+safe_log_path() {
+    local path
+    path="$(uci_get sheepfold.global.log_cache_path)"
+    [ -n "$path" ] || path="$DEFAULT_LOG"
+    case "$path" in
+        /tmp/sheepfold/*) printf '%s\n' "$path" ;;
+        "$DEFAULT_LOG") printf '%s\n' "$path" ;;
+        *) printf '%s\n' "$DEFAULT_LOG" ;;
+    esac
+}
+
+log_retention_days() {
+    local value
+    value="$(uci_get sheepfold.global.log_retention)"
+    case "$value" in
+        *d) value="${value%d}" ;;
+        *) value=3 ;;
+    esac
+    valid_uint "$value" || value=3
+    [ "$value" -ge 1 ] || value=1
+    [ "$value" -le 3650 ] || value=3650
+    printf '%s\n' "$value"
+}
+
+log_max_bytes() {
+    local value
+    value="$(uci_get sheepfold.global.log_max_size_kb)"
+    valid_uint "$value" || value=1024
+    [ "$value" -ge 64 ] || value=64
+    [ "$value" -le 65536 ] || value=65536
+    printf '%s\n' $((value * 1024))
+}
+
+rotate_log_locked() (
+    sheepfold_lock_acquire "$LOG_LOCK" 10 || return 1
+
+    log_file="$(safe_log_path)"
+    log_dir="${log_file%/*}"
+    retention="$(log_retention_days)"
+    max_bytes="$(log_max_bytes)"
+    today="$(today_ymd)"
+    current_year="${today%%-*}"
+    current_month_day="${today#*-}"
+    current_month="${current_month_day%%-*}"
+    current_day="${current_month_day#*-}"
+    source_file="${log_file}.source.$$"
+    bounded_file="${log_file}.bounded.$$"
+    age_file="${log_file}.age.$$"
+    tail_file="${log_file}.tail.$$"
+    final_file="${log_file}.new.$$"
+    trap 'rm -f "$source_file" "$bounded_file" "$age_file" "$tail_file" "$final_file" 2>/dev/null || true; sheepfold_lock_release' EXIT HUP INT TERM
+
+    mkdir -p "$log_dir"
+    [ -e "$log_file" ] || : > "$log_file"
+    chmod 600 "$log_file" 2>/dev/null || true
+    before_bytes="$(wc -c < "$log_file" | tr -d ' ')"
+    before_lines="$(wc -l < "$log_file" | tr -d ' ')"
+    valid_uint "$before_bytes" || before_bytes=0
+    valid_uint "$before_lines" || before_lines=0
+
+    # A broken producer must not make an hourly task parse an unbounded file.
+    # Only the newest size limit plus one capped-message margin can contribute
+    # to the final log anyway. Drop the first partial line after tail -c.
+    processing_limit=$((max_bytes + 65536))
+    if [ "$before_bytes" -gt "$processing_limit" ]; then
+        tail -c "$processing_limit" "$log_file" > "$source_file" 2>/dev/null || return 1
+        sed '1d' "$source_file" > "$bounded_file" || return 1
+    else
+        cp "$log_file" "$bounded_file"
+    fi
+
+    if clock_is_sane; then
+        awk -v cy="$current_year" -v cm="$current_month" -v cd="$current_day" -v keep="$retention" '
+            function civil_days(y, m, d, era, yoe, doy, doe) {
+                y -= (m <= 2)
+                era = int(y / 400)
+                yoe = y - era * 400
+                doy = int((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1
+                doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy
+                return era * 146097 + doe
+            }
+            BEGIN {
+                cutoff = civil_days(cy + 0, cm + 0, cd + 0) - (keep - 1)
+            }
+            {
+                valid = length($0) >= 19 && substr($0, 3, 1) == "." &&
+                    substr($0, 6, 1) == "." && substr($0, 11, 1) == " " &&
+                    substr($0, 14, 1) == ":" && substr($0, 17, 1) == ":"
+                if (!valid) {
+                    print
+                    next
+                }
+                day = substr($0, 1, 2) + 0
+                month = substr($0, 4, 2) + 0
+                year = substr($0, 7, 4) + 0
+                if (year < 1970 || year > 2200 || month < 1 || month > 12 || day < 1 || day > 31) {
+                    print
+                    next
+                }
+                if (civil_days(year, month, day) >= cutoff) print
+            }
+        ' "$bounded_file" > "$age_file"
+    else
+        cp "$bounded_file" "$age_file"
+    fi
+
+    age_bytes="$(wc -c < "$age_file" | tr -d ' ')"
+    valid_uint "$age_bytes" || age_bytes=0
+    if [ "$age_bytes" -gt "$max_bytes" ]; then
+        tail -c "$max_bytes" "$age_file" > "$tail_file" 2>/dev/null || return 1
+        # tail -c may begin in the middle of a UTF-8 line. Drop that first fragment;
+        # log messages are capped by the writer, so at least the newest lines remain.
+        sed '1d' "$tail_file" > "$final_file"
+    else
+        cp "$age_file" "$final_file"
+    fi
+
+    chmod 600 "$final_file" 2>/dev/null || true
+    mv -f "$final_file" "$log_file"
+    rm -f "$source_file" "$bounded_file" "$age_file" "$tail_file" 2>/dev/null || true
+    after_bytes="$(wc -c < "$log_file" | tr -d ' ')"
+    after_lines="$(wc -l < "$log_file" | tr -d ' ')"
+    valid_uint "$after_bytes" || after_bytes=0
+    valid_uint "$after_lines" || after_lines=0
+    printf '%s\t%s\t%s\t%s\n' "$before_bytes" "$after_bytes" "$before_lines" "$after_lines"
+)
+
+run_log_rotation() {
+    local force state_file now result before_bytes after_bytes before_lines after_lines
+    force="${1:-0}"
+    state_file="$RUNTIME_DIR/log-rotation.state"
+    now="$(now_epoch)"
+    if [ "$force" != 1 ] && ! task_due "$state_file" last_run "$LOG_ROTATION_INTERVAL" "$now"; then
+        return 0
+    fi
+
+    result="$(rotate_log_locked)" || {
+        write_state "$state_file" <<EOF_STATE
+last_run=$now
+last_result=failed
+EOF_STATE
+        logger -t sheepfold-maintenance "Log rotation failed" 2>/dev/null || true
+        return 1
+    }
+    before_bytes="$(printf '%s' "$result" | cut -f1)"
+    after_bytes="$(printf '%s' "$result" | cut -f2)"
+    before_lines="$(printf '%s' "$result" | cut -f3)"
+    after_lines="$(printf '%s' "$result" | cut -f4)"
+    write_state "$state_file" <<EOF_STATE
+last_run=$now
+last_result=ok
+before_bytes=$before_bytes
+after_bytes=$after_bytes
+before_lines=$before_lines
+after_lines=$after_lines
+EOF_STATE
+}
+
+normalize_mac() {
+    printf '%s' "$1" | tr 'a-z' 'A-Z'
+}
+
+valid_mac() {
+    printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'
+}
+
+list_has_mac() {
+    local list_name wanted value
+    list_name="$1"
+    wanted="$(normalize_mac "$2")"
+    valid_mac "$wanted" || return 1
+    for value in $(uci_get "sheepfold.${list_name}.mac"); do
+        [ "$(normalize_mac "$value")" = "$wanted" ] && return 0
+    done
+    return 1
+}
+
+static_dhcp_has_mac() {
+    local wanted section value
+    wanted="$(normalize_mac "$1")"
+    valid_mac "$wanted" || return 1
+    for section in $(sections_of_type dhcp host); do
+        for value in $(uci_get "dhcp.${section}.mac"); do
+            [ "$(normalize_mac "$value")" = "$wanted" ] && return 0
+        done
+    done
+    return 1
+}
+
+schedule_targets_device() {
+    local wanted_section wanted_id schedule target
+    wanted_section="$1"
+    wanted_id="$2"
+    for schedule in $(sections_of_type sheepfold schedule); do
+        [ "$(uci_get "sheepfold.${schedule}.target_type")" = device ] || continue
+        for target in $(uci_get "sheepfold.${schedule}.targets"); do
+            if [ "$target" = "$wanted_section" ] || { [ -n "$wanted_id" ] && [ "$target" = "$wanted_id" ]; }; then
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+
+device_external_history_exists() {
+    local device_id
+    device_id="$1"
+    valid_uint "$device_id" || return 1
+    [ -s "$CHILD_WIFI_HISTORY_DIR/device-${device_id}.networks" ]
+}
+
+device_has_preserved_state() {
+    local section mac device_id group status temp_until
+    section="$1"
+    mac="$2"
+    device_id="$3"
+    group="$(uci_get "sheepfold.${section}.group")"
+    status="$(uci_get "sheepfold.${section}.status")"
+
+    # Cleanup is deliberately narrower than "not online": it may only remove a
+    # card that still has the untouched, unconfigured status. Historical builds
+    # did not persist user_configured, so preserving every other status prevents
+    # an upgrade from deleting an old parent decision. §maintjob1
+    case "$status" in ''|new) ;; *) return 0 ;; esac
+    [ "$(uci_get "sheepfold.${section}.user_configured")" != 1 ] || return 0
+    [ "$(uci_get "sheepfold.${section}.admin_device")" != 1 ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.admin_login")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.admin_owner")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.paired_at")" ] || return 0
+    [ "$(uci_get "sheepfold.${section}.manual_device_type")" != 1 ] || return 0
+    [ "$(uci_get "sheepfold.${section}.activity_log_enabled")" != 1 ] || return 0
+    [ "$(uci_get "sheepfold.${section}.static_lease")" != 1 ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.manual_name")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.name_source")" ] || [ "$(uci_get "sheepfold.${section}.name_source")" != manual ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.note")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.sim_known_fingerprints")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.sim_phone_history")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.sim_snapshot_hash")" ] || return 0
+    device_external_history_exists "$device_id" && return 0
+    [ "$(uci_get "sheepfold.${section}.group_source")" != user ] || return 0
+    [ "$(uci_get "sheepfold.${section}.no_restrictions_auto_excluded")" != 1 ] || return 0
+    [ "$(uci_get "sheepfold.${section}.personal_devices_auto_excluded")" != 1 ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.schedules")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.legacy_ids")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.merged_into")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.merged_from")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.merge_aliases")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.logical_device_id")" ] || return 0
+    [ -z "$(uci_get "sheepfold.${section}.identity_quarantine_mode")" ] || return 0
+
+    case "$group" in
+        ''|'Not configured'|not_configured|none) ;;
+        *) return 0 ;;
+    esac
+    list_has_mac allowlist "$mac" && return 0
+    list_has_mac blocklist "$mac" && return 0
+    static_dhcp_has_mac "$mac" && return 0
+    schedule_targets_device "$section" "$device_id" && return 0
+
+    temp_until="$(uci_get "sheepfold.${section}.temp_access_until")"
+    if valid_uint "$temp_until" && [ "$temp_until" -gt "$(now_epoch)" ]; then
+        return 0
+    fi
+    return 1
+}
+
+presence_field() {
+    local snapshot wanted field
+    snapshot="$1"
+    wanted="$2"
+    field="$3"
+    awk -F '\t' -v wanted="$wanted" -v field="$field" '
+        toupper($1) == wanted { print $field; exit }
+    ' "$snapshot" 2>/dev/null || true
+}
+
+restore_config_snapshot() {
+    local snapshot restore
+    snapshot="$1"
+    restore="${CONFIG_FILE}.maintenance-restore.$$"
+    [ -r "$snapshot" ] || return 1
+    cp -p "$snapshot" "$restore" || return 1
+    mv -f "$restore" "$CONFIG_FILE"
+}
+
+remove_device_runtime_state() {
+    local mac safe
+    mac="$1"
+    safe="$(printf '%s' "$mac" | tr ':' '_')"
+    rm -f \
+        "/tmp/sheepfold/device-presence/${safe}.tsv" \
+        "/tmp/sheepfold/device-state/${safe}.tsv" \
+        "/tmp/sheepfold/device-signals/${safe}.dhcp" \
+        "/tmp/sheepfold/device-signals/${safe}.wifi" 2>/dev/null || true
+}
+
+run_device_cleanup() {
+    local force state_file now retention cutoff snapshot candidates section mac last_seen online device_id
+    local scanned_count candidate_count deleted_count txn snapshot_config transaction_failed deleted_ids
+    force="${1:-0}"
+    state_file="$STATE_DIR/device-cleanup.state"
+    now="$(now_epoch)"
+    if [ "$force" != 1 ] && ! task_due "$state_file" last_run "$DEVICE_CLEANUP_INTERVAL" "$now"; then
+        return 0
+    fi
+    if ! clock_is_sane; then
+        [ "$(state_get "$state_file" last_result)" = clock_invalid ] || write_state "$state_file" <<EOF_STATE
+last_run=0
+last_result=clock_invalid
+deleted_count=0
+EOF_STATE
+        return 0
+    fi
+
+    retention="$(uci_get sheepfold.global.offline_device_retention_days)"
+    valid_uint "$retention" || retention=90
+    [ "$retention" -ge 7 ] || retention=7
+    [ "$retention" -le 3650 ] || retention=3650
+    cutoff=$((now - retention * 86400))
+    snapshot="$RUNTIME_DIR/presence.$$"
+    candidates="$RUNTIME_DIR/device-cleanup.candidates.$$"
+    : > "$candidates"
+    scanned_count=0
+    candidate_count=0
+
+    if [ ! -x "$PRESENCE" ] || ! "$PRESENCE" list 9>&- > "$snapshot" 2>/dev/null; then
+        rm -f "$snapshot" "$candidates"
+        write_state "$state_file" <<EOF_STATE
+last_run=$now
+last_result=presence_failed
+deleted_count=0
+EOF_STATE
+        return 1
+    fi
+
+    for section in $(sections_of_type sheepfold device); do
+        scanned_count=$((scanned_count + 1))
+        [ "$scanned_count" -le "$MAX_DEVICE_SCAN_PER_RUN" ] || break
+        mac="$(normalize_mac "$(uci_get "sheepfold.${section}.mac")")"
+        valid_mac "$mac" || continue
+        last_seen="$(presence_field "$snapshot" "$mac" 2)"
+        online="$(presence_field "$snapshot" "$mac" 3)"
+        valid_uint "$last_seen" || continue
+        [ "$last_seen" -gt 0 ] || continue
+        [ "${online:-0}" != 1 ] || continue
+        [ "$last_seen" -le "$cutoff" ] || continue
+        device_id="$(uci_get "sheepfold.${section}.id")"
+        device_has_preserved_state "$section" "$mac" "$device_id" && continue
+        printf '%s\t%s\t%s\n' "$section" "$mac" "$device_id" >> "$candidates"
+        candidate_count=$((candidate_count + 1))
+        [ "$candidate_count" -lt "$MAX_DEVICE_CLEANUP_PER_RUN" ] || break
+    done
+    rm -f "$snapshot"
+
+    deleted_count="$(wc -l < "$candidates" | tr -d ' ')"
+    valid_uint "$deleted_count" || deleted_count=0
+    if [ "$deleted_count" -eq 0 ]; then
+        rm -f "$candidates"
+        write_state "$state_file" <<EOF_STATE
+last_run=$now
+last_result=ok
+deleted_count=0
+retention_days=$retention
+max_scan_per_run=$MAX_DEVICE_SCAN_PER_RUN
+max_per_run=$MAX_DEVICE_CLEANUP_PER_RUN
+EOF_STATE
+        return 0
+    fi
+
+    txn="$RUNTIME_DIR/uci-cleanup.$$"
+    snapshot_config="$RUNTIME_DIR/sheepfold.before-cleanup.$$"
+    mkdir -p "$txn"
+    chmod 700 "$txn" 2>/dev/null || true
+    cp -p "$CONFIG_FILE" "$snapshot_config" || {
+        rm -rf "$txn" "$candidates"
+        write_state "$state_file" <<EOF_STATE
+last_run=$now
+last_result=snapshot_failed
+deleted_count=0
+EOF_STATE
+        return 1
+    }
+
+    transaction_failed=0
+    while IFS="$(printf '\t')" read -r section mac device_id; do
+        [ -n "$section" ] || continue
+        "$UCI_BIN" -t "$txn" -p "$txn" -q delete "sheepfold.${section}" || transaction_failed=1
+    done < "$candidates"
+    if [ "$transaction_failed" = 0 ]; then
+        "$UCI_BIN" -t "$txn" -p "$txn" -q commit sheepfold || transaction_failed=1
+    fi
+    if [ "$transaction_failed" = 0 ]; then
+        while IFS="$(printf '\t')" read -r section mac device_id; do
+            [ "$(uci_get "sheepfold.${section}")" != device ] || transaction_failed=1
+        done < "$candidates"
+    fi
+
+    if [ "$transaction_failed" != 0 ]; then
+        restore_config_snapshot "$snapshot_config" || true
+        rm -rf "$txn" "$snapshot_config" "$candidates"
+        write_state "$state_file" <<EOF_STATE
+last_run=$now
+last_result=commit_failed
+deleted_count=0
+EOF_STATE
+        return 1
+    fi
+
+    deleted_ids=""
+    while IFS="$(printf '\t')" read -r section mac device_id; do
+        remove_device_runtime_state "$mac"
+        deleted_ids="${deleted_ids}${deleted_ids:+, }#${device_id:-?}"
+    done < "$candidates"
+    rm -rf "$txn" "$snapshot_config" "$candidates"
+    [ -x "$FIREWALL" ] && "$FIREWALL" sync 9>&- >/dev/null 2>&1 || true
+    if [ -x "$LOG_HELPER" ]; then
+        "$LOG_HELPER" "Автоочистка удалила давно offline и полностью ненастроенные карточки устройств: $deleted_ids" 9>&- >/dev/null 2>&1 || true
+    fi
+    write_state "$state_file" <<EOF_STATE
+last_run=$now
+last_result=ok
+deleted_count=$deleted_count
+retention_days=$retention
+max_scan_per_run=$MAX_DEVICE_SCAN_PER_RUN
+max_per_run=$MAX_DEVICE_CLEANUP_PER_RUN
+EOF_STATE
+}
+
+update_interval() {
+    case "$1" in
+        daily) printf '%s\n' 86400 ;;
+        monthly) printf '%s\n' 2592000 ;;
+        weekly|*) printf '%s\n' 604800 ;;
+    esac
+}
+
+safe_state_value() {
+    printf '%s' "$1" | tr '\r\n\t=' '    ' | cut -c1-160
+}
+
+notify_update_available() {
+    local latest tag language title message
+    latest="$1"
+    tag="$2"
+    language="$(uci_get sheepfold.global.language)"
+    [ -x "$NOTIFIER" ] || return 0
+    if [ "$language" = ru ]; then
+        title="Доступно обновление Sheepfold"
+        message="Найдена stable-версия ${latest}. Установка не запускается автоматически: подтвердите её в LuCI или родительском приложении."
+    else
+        title="Sheepfold update available"
+        message="Stable version ${latest} is available. It was not installed automatically; confirm installation in LuCI or the parent app."
+    fi
+    "$NOTIFIER" enqueue update "update:${latest}" "$title" "$message" 9>&- >/dev/null 2>&1 || true
+}
+
+run_update_check() {
+    local force state_file now mode previous interval probe_error probe available current latest tag result
+    local failures error_text
+    force="${1:-0}"
+    state_file="$STATE_DIR/update-check.state"
+    now="$(now_epoch)"
+    mode="$(uci_get sheepfold.global.update_check_install_mode)"
+    case "$mode" in daily|weekly|monthly|never) ;; *) mode=weekly ;; esac
+    if [ "$mode" = never ]; then
+        if [ "$(state_get "$state_file" last_result)" = disabled ] &&
+           [ "$(state_get "$state_file" mode)" = never ]; then
+            return 0
+        fi
+        previous="$(state_get "$state_file" last_check)"
+        valid_uint "$previous" || previous=0
+        write_state "$state_file" <<EOF_STATE
+last_check=$previous
+last_result=disabled
+mode=never
+failure_count=0
+EOF_STATE
+        return 0
+    fi
+    if ! clock_is_sane; then
+        if [ "$(state_get "$state_file" last_result)" = clock_invalid ] &&
+           [ "$(state_get "$state_file" mode)" = "$mode" ]; then
+            return 0
+        fi
+        write_state "$state_file" <<EOF_STATE
+last_check=0
+last_result=clock_invalid
+mode=$mode
+failure_count=0
+EOF_STATE
+        return 0
+    fi
+    interval="$(update_interval "$mode")"
+    if [ "$force" != 1 ] && ! task_due "$state_file" last_check "$interval" "$now"; then
+        return 0
+    fi
+
+    probe_error="$RUNTIME_DIR/update-probe.error.$$"
+    if probe="$("$UPDATER" probe 9>&- 2>"$probe_error")"; then
+        available="$(printf '%s\n' "$probe" | sed -n 's/^available=//p' | sed -n '1p')"
+        current="$(safe_state_value "$(printf '%s\n' "$probe" | sed -n 's/^current_version=//p' | sed -n '1p')")"
+        latest="$(safe_state_value "$(printf '%s\n' "$probe" | sed -n 's/^latest_version=//p' | sed -n '1p')")"
+        tag="$(safe_state_value "$(printf '%s\n' "$probe" | sed -n 's/^tag=//p' | sed -n '1p')")"
+        case "$available" in 0|1) ;; *) available=0 ;; esac
+        [ -n "$latest" ] || latest=unknown
+        [ "$available" != 1 ] || notify_update_available "$latest" "$tag"
+        result=current
+        [ "$available" != 1 ] || result=update_available
+        write_state "$state_file" <<EOF_STATE
+last_check=$now
+last_result=$result
+mode=$mode
+failure_count=0
+current_version=$current
+latest_version=$latest
+tag=$tag
+EOF_STATE
+        rm -f "$probe_error"
+        return 0
+    fi
+
+    failures="$(state_get "$state_file" failure_count)"
+    valid_uint "$failures" || failures=0
+    failures=$((failures + 1))
+    error_text="$(safe_state_value "$(tail -n 1 "$probe_error" 2>/dev/null || true)")"
+    rm -f "$probe_error"
+    write_state "$state_file" <<EOF_STATE
+last_check=$now
+last_result=failed
+mode=$mode
+failure_count=$failures
+last_error=$error_text
+EOF_STATE
+    return 1
+}
+
+print_status() {
+    local pair name file
+    for pair in \
+        "log:$RUNTIME_DIR/log-rotation.state" \
+        "devices:$STATE_DIR/device-cleanup.state" \
+        "updates:$STATE_DIR/update-check.state"; do
+        name="${pair%%:*}"
+        file="${pair#*:}"
+        printf '%s_last_result=%s\n' "$name" "$(state_get "$file" last_result)"
+        printf '%s_last_run=%s\n' "$name" "$(state_get "$file" last_run)"
+        [ "$name" != updates ] || printf 'updates_last_check=%s\n' "$(state_get "$file" last_check)"
+    done
+}
+
+run_all() {
+    local force
+    force="${1:-0}"
+    run_log_rotation "$force" || true
+    run_device_cleanup "$force" || true
+    run_update_check "$force" || true
+}
+
+with_maintenance_lock() (
+    sheepfold_lock_acquire "$MAINTENANCE_LOCK" 5 || return 1
+    trap 'sheepfold_lock_release' EXIT HUP INT TERM
+    "$@"
+)
+
+case "$COMMAND" in
+    run) with_maintenance_lock run_all 0 ;;
+    force) with_maintenance_lock run_all 1 ;;
+    rotate-log) with_maintenance_lock run_log_rotation 1 ;;
+    cleanup-devices) with_maintenance_lock run_device_cleanup 1 ;;
+    check-updates) with_maintenance_lock run_update_check 1 ;;
+    status) print_status ;;
+    *)
+        echo "Usage: sheepfold-maintenance [run|force|rotate-log|cleanup-devices|check-updates|status]" >&2
+        exit 2
+        ;;
+esac

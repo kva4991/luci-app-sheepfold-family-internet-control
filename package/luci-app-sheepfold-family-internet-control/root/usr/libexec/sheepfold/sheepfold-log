@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-${0%/*}/sheepfold-lock-common}"
+[ -r "$LOCK_COMMON" ] || LOCK_COMMON=/usr/libexec/sheepfold/sheepfold-lock-common
+. "$LOCK_COMMON"
+LOG_LOCK="${SHEEPFOLD_LOG_LOCK:-/tmp/sheepfold/log-maintenance.flock}"
+
 DEFAULT_LOG="/tmp/sheepfold/events.log"
 USB_MOUNT_POINT="/mnt/sheepfold-usb"
 USB_LOG_DIR="${USB_MOUNT_POINT}/sheepfold/logs"
@@ -114,11 +119,19 @@ LOG_DIR="${LOG_FILE%/*}"
 mkdir -p "$LOG_DIR"
 chmod 700 "$LOG_DIR" 2>/dev/null || true
 
-LINE="$(printf '%s\t%s' "$(date '+%d.%m.%Y %H:%M:%S')" "$(printf '%s' "$MESSAGE" | tr '\r\n\t' '   ')")"
-printf '%s\n' "$LINE" >> "$LOG_FILE"
-chmod 600 "$LOG_FILE" 2>/dev/null || true
-logger -t sheepfold "$MESSAGE" 2>/dev/null || true
+SAFE_MESSAGE="$(printf '%s' "$MESSAGE" | tr '\r\n\t' '   ' | cut -c1-4096)"
+LINE="$(printf '%s\t%s' "$(date '+%d.%m.%Y %H:%M:%S')" "$SAFE_MESSAGE")"
+append_log_line() (
+        sheepfold_lock_acquire "$LOG_LOCK" 5 || return 1
+        trap 'sheepfold_lock_release' EXIT HUP INT TERM
+        printf '%s\n' "$LINE" >> "$LOG_FILE"
+        chmod 600 "$LOG_FILE" 2>/dev/null || true
+        mirror_to_usb "$LINE"
+)
+if ! append_log_line; then
+        logger -t sheepfold "Could not append Sheepfold event log under lock" 2>/dev/null || true
+fi
+logger -t sheepfold "$SAFE_MESSAGE" 2>/dev/null || true
 
-mirror_to_usb "$LINE"
 schedule_yandex_push
 schedule_google_push

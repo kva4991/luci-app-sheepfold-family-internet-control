@@ -6,9 +6,9 @@ import assert from 'node:assert/strict';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
-const overviewPath = resolve(
+const pageShellPath = resolve(
   packageDir,
-  'htdocs/luci-static/resources/view/sheepfold/overview.js',
+  'htdocs/luci-static/resources/sheepfold/features/page/shell.js',
 );
 const makefilePath = resolve(packageDir, 'Makefile');
 const defaultConfigPath = resolve(packageDir, 'root/usr/share/sheepfold/sheepfold.uci.defaults');
@@ -21,12 +21,12 @@ function readProjectFile(path) {
 
 describe('LuCI asset versioning', () => {
   it('loads Sheepfold CSS with the UCI asset version', () => {
-    const source = readProjectFile(overviewPath);
+    const source = readProjectFile(pageShellPath);
 
     assert.match(
       source,
-      /var\s+assetVersion\s*=\s*safeUciGet\(\s*['"]sheepfold['"]\s*,\s*['"]global['"]\s*,\s*['"]ui_asset_version['"]/,
-      'overview.js должен брать assetVersion из sheepfold.global.ui_asset_version',
+      /var\s+assetVersion\s*=\s*deps\.get\(\s*['"]sheepfold['"]\s*,\s*['"]global['"]\s*,\s*['"]ui_asset_version['"]/,
+      'page shell должен брать assetVersion из sheepfold.global.ui_asset_version',
     );
     assert.match(
       source,
@@ -36,7 +36,7 @@ describe('LuCI asset versioning', () => {
   });
 
   it('does not reintroduce hardcoded per-file asset versions', () => {
-    const source = readProjectFile(overviewPath);
+    const source = readProjectFile(pageShellPath);
 
     assert.doesNotMatch(
       source,

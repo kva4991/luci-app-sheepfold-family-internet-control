@@ -1,5 +1,4 @@
 # Android App
-
 The Android companion app is planned under the public name **Sheepfold**.
 
 - Android package: `app.sheepfold.android`
@@ -150,3 +149,9 @@ C:\Users\User\Documents\pesochnica\sheepfold-parent-v<current-version>.apk
 
 Set `SHEEPFOLD_APK_OUTPUT_DIR` before the export task; an ordinary
 `assembleDebug` keeps its artifact inside the Android project.
+
+## Release signing and local protection
+
+The parent app locks again after the selected background delay (one minute by default), rate-limits wrong password/PIN attempts after the fifth failure, and uses one Android biometric option. Widget shutdown is protected by unlock and confirmation unless the owner explicitly enables the warned instant mode.
+
+Production signing is configured only from the external environment described in [`RELEASE_SIGNING.md`](RELEASE_SIGNING.md). Release packaging fails when the secrets or keystore are absent; debug builds do not use the production key.
