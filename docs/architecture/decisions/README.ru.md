@@ -20,6 +20,7 @@ ADR хранит контекст решения, а профильный док
 | [0012](0012-android-background-work.ru.md) | Периодическая сеть через WorkManager, точное окончание доступа через AlarmManager | Принято | `§andwork1` |
 | [0013](0013-strict-ai-json-boundary.ru.md) | Строгий form-urlencoded и динамический JSON AI backend через общий helper и jshn | Принято | `§jsonio1` |
 | [0014](0014-coalesced-luci-action-subscribers.ru.md) | Одна backend-команда сохраняет callbacks каждого UI-инициатора | Принято | `§actsub1` |
+| [0015](0015-manual-agentic-security-audit.ru.md) | Агентный security-аудит остаётся ручным консультативным слоем | Принято | `§secaudit1` |
 
 ## Статусы
 

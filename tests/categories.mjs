@@ -18,7 +18,7 @@ export const categoryDescriptions = Object.freeze({
   messaging: 'Telegram, запросы ребёнка и команды, приходящие через мессенджер.',
   ai: 'Граница Standard/AI Support, провайдеры и видимость AI-функций.',
   packaging: 'IPK, варианты продукта, локализация пакета, версия и обновление.',
-  tooling: 'Быстрые инструменты репозитория, Windows-окружение и целостность тестовой карты без сборки пакетов.',
+  tooling: 'Инструменты репозитория, Windows-окружение, LuCI-аудит и целостность тестовой карты без сборки пакетов.',
 });
 
 export const testCategories = Object.freeze({
@@ -45,6 +45,7 @@ export const testCategories = Object.freeze({
     'architectureDecisions.test.mjs',
     'aiProviderSettings.test.mjs',
     'aiJsonBoundary.test.mjs',
+    'agenticSecurityAudit.test.mjs',
     'portableShellAndStatus.test.mjs',
     'allowlistUi.test.mjs',
     'androidHttpsSecurity.test.mjs',
@@ -340,6 +341,7 @@ export const testCategories = Object.freeze({
     'tokenDeviceBinding.test.mjs',
   ],
   security: [
+    'agenticSecurityAudit.test.mjs',
     'overviewFinalRefreshSemantics.test.mjs',
     'overviewFinalExperimentalR252.test.mjs',
     'finalAuditHardening.test.mjs',
@@ -422,6 +424,7 @@ export const testCategories = Object.freeze({
     'updateTransportSafety.test.mjs',
   ],
   tooling: [
+    'agenticSecurityAudit.test.mjs',
     'overviewFinalAudit.test.mjs',
     'luciFinalAuditTool.test.mjs',
     'finalAuditHardening.test.mjs',

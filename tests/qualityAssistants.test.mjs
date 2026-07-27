@@ -8,7 +8,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { markdownTargets, registeredTags } from '../tools/quality/documentationAudit.mjs';
+import {
+  auditDocumentation,
+  documentedNpmScripts,
+  documentedTestFiles,
+  markdownTargets,
+  registeredTags,
+} from '../tools/quality/documentationAudit.mjs';
 import { assessStructure } from '../tools/quality/structureAudit.mjs';
 import { selectTestNames } from '../tools/quality/testSelection.mjs';
 import { inspectWhitespace } from '../tools/quality/whitespaceAudit.mjs';
@@ -34,6 +40,36 @@ describe('quality assistant modules §qassist', () => {
     ].join('\n');
     assert.deepEqual(markdownTargets(source), ['architecture/README.ru.md', 'https://example.test', 'docs/help.md']);
     assert.deepEqual([...registeredTags('| `§qassist` | QUALITY |')], ['§qassist']);
+  });
+
+  it('extracts literal test and npm contracts but ignores explanatory placeholders', () => {
+    const source = [
+      '`node --test tests/devicePresence.test.mjs`',
+      '`npm.cmd run test:devices`',
+      '`npm.cmd run test:<category>`',
+    ].join('\n');
+    assert.deepEqual(documentedTestFiles(source), ['devicePresence.test.mjs']);
+    assert.deepEqual(documentedNpmScripts(source), ['test:devices']);
+  });
+
+  it('reports stale test names and npm commands in documentation', () => {
+    const report = auditDocumentation(['docs/example.md'], {
+      cwd: repoRoot,
+      read: () => [
+        '`node --test tests/removedTest.test.mjs`',
+        '`npm.cmd run test:removed`',
+      ].join('\n'),
+      exists: () => true,
+      knownTags: new Set(),
+      knownTestFiles: new Set(['existingTest.test.mjs']),
+      packageScripts: new Set(['test:existing']),
+    });
+    assert.deepEqual(report.missingTestFiles, [
+      { file: 'docs/example.md', testFile: 'removedTest.test.mjs' },
+    ]);
+    assert.deepEqual(report.missingNpmScripts, [
+      { file: 'docs/example.md', script: 'test:removed' },
+    ]);
   });
 
   it('distinguishes growth, unchanged legacy size and an improving split', () => {

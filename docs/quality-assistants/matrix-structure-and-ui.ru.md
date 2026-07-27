@@ -9,13 +9,19 @@ npm.cmd run quality:docs
 npm.cmd run quality:docs:all
 ```
 
-Первая команда проверяет Markdown, изменённый относительно `origin/main`. Вторая проходит `AGENTS.md`, `CODING_RULES.md` и всё дерево `docs/`.
+Первая команда проверяет Markdown, изменённый относительно `origin/main`.
+Вторая проходит все Markdown-файлы Sheepfold: корневые правила/README,
+`docs/`, Android, tests, tools и устанавливаемые notices. Воспроизводимо
+скачиваемые `.cache`, `local`, `build`, `.gradle`, `node_modules` и `.build`
+исключены: их сторонние README не являются документацией Sheepfold.
 
 Проверяется:
 
 - существование относительных ссылок на файлы и каталоги;
 - регистрация конкретных §-тегов в `docs/dev/tag-map.md`;
 - корректная обработка ссылок с anchor/query и путей в угловых скобках.
+- существование каждого буквально названного `*.test.mjs`;
+- наличие каждой буквальной команды `npm run <script>` в `package.json`;
 
 Не проверяется:
 
@@ -30,6 +36,8 @@ npm.cmd run quality:docs:all
 
 - `BROKEN_LINK`: относительная цель отсутствует;
 - `UNKNOWN_TAG`: конкретный §-тег не зарегистрирован.
+- `MISSING_TEST`: Markdown ссылается на отсутствующий test-файл;
+- `MISSING_NPM_SCRIPT`: документированного npm-скрипта нет в `package.json`.
 
 Шаблонный `§xxxxxxx` разрешён только как пример. Прочие реальные теги надо сначала внести в карту с назначением и списком файлов.
 

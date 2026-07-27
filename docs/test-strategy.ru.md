@@ -31,7 +31,7 @@ npm.cmd run test:category -- luci devices
 npm.cmd run test:list
 ```
 
-Каноническая карта находится в `tests/categories.mjs`, runner — в `scripts/run-test-category.mjs`. Тест `tests/testCategories.test.mjs` не позволяет добавить новый `*.test.mjs` без категории или оставить ссылку на удалённый файл.
+Каноническая карта находится в `tests/categories.mjs`, runner — в `scripts/run-test-category.mjs`. Тест `tests/testCategories.test.mjs` не позволяет добавить новый `*.test.mjs` без категории или оставить ссылку на удалённый файл. Команда `quality:docs:all` дополнительно сверяет буквальные имена `*.test.mjs` и `npm run` в Markdown с реальными файлами и `package.json`, поэтому переименование теста должно сопровождаться правкой документации.
 
 Перед выбором категорий можно получить консервативную карту влияния:
 
@@ -83,7 +83,7 @@ npm.cmd run lint:android
 | `npm.cmd run test:messaging` | Telegram, команды мессенджера и запрос ребёнка на временный доступ |
 | `npm.cmd run test:ai` | Провайдеры, настройки и видимость AI-функций; состав Standard/AI IPK проверяется отдельно категорией `packaging` |
 | `npm.cmd run test:packaging` | Makefile, Standard/AI test-IPK и SDK feed, GitHub Actions IPK/OpenWrt APK matrix, локализация, права, updater и product boundary |
-| `npm.cmd run test:tooling` | Быстрые Windows/Node-инструменты, карта категорий и тестовый harness; сборка IPK остаётся в `packaging` |
+| `npm.cmd run test:tooling` | Windows/Node-инструменты, карта категорий, LuCI-аудит и test harness; не собирает IPK, но глубокий LuCI-аудит и shell-fixtures могут занять около минуты |
 
 ## Попарная матрица конфигураций
 
@@ -121,9 +121,17 @@ npm.cmd run test:category -- access sites security
 
 Для backend-правки сначала использовать `test:backendFast`. Полный `test:backend` включает долгие сетевые стенды и глубокие симуляции. На обычном Windows-компьютере один `adguardIntegration.test.mjs` может идти 6–7 минут, а вся `networkIntegration` — заметно дольше. Для этих команд внешнему runner нужен лимит не меньше 15 минут. Изменение классификатора устройств или вычислителя расписаний требует `test:policySimulation`; изменение AdGuard Home, DNS, nftables или загрузки внешних списков — `test:networkIntegration`. Перед PR/слиянием всё равно действует правило полного прогона (§testcat).
 
+Некоторые Node-тесты запускают Git Bash и создают изолированные fixtures в
+`.build/`. В ограниченной Windows-песочнице такой дочерний shell иногда получает
+`mkdir: ... Permission denied` для пути `/c/Users/...`, хотя рабочее дерево
+доступно самому Node. Это относится, например, к runtime-проверкам команд,
+maintenance jobs и настройки времени/nmap. В таком случае повторить неизменный
+файл или категорию вне песочницы. Успешный внешний повтор подтверждает ограничение
+среды; он не даёт права удалить assertion или ослабить production-путь.
+
 Имена файлов `*.test.mjs`, внутренних идентификаторов и категорий тестов оформляются в `camelCase`, как имена переменных. Человекочитаемые заголовки `describe()` и `it()` остаются обычными фразами: они предназначены для отчёта, а не для обращения из кода.
 
-Документация без изменения команд, контрактов и примеров кода обычно не требует Node-тестов. Достаточны проверка ссылок/тегов по месту и `git diff --check`.
+Документация без изменения команд, контрактов и примеров кода обычно не требует предметных Node-тестов. Достаточны `npm.cmd run quality:docs:all` и `git diff --check`. Аудит проверяет локальные ссылки, §-теги, буквальные имена test-файлов и npm-команд, но не подтверждает истинность описанного поведения: существенное изменение тестовой стратегии всё равно требует ручной сверки с `tests/categories.mjs`, runner и реальными границами среды.
 
 ## Когда нужен полный прогон
 
@@ -216,6 +224,26 @@ benchmark подтверждает проблему и целевой бюдже
 проект. Поэтому `uci export`, OkHttp/Retrofit и индекс расписаний получают
 специализированные equivalence/instrumentation тесты только одновременно с
 отдельно одобренной миграцией (§auditopt1).
+
+## Ручной агентный security-аудит
+
+<!-- §secaudit1 -->
+
+Внешний LLM-аудит намеренно не входит в обычный CI и полный Node-suite. Он
+недетерминирован, расходует токены, требует внешней учётной записи и передаёт
+исходный код выбранному провайдеру. Его запускают вручную перед релизом либо после
+изменения критической границы:
+
+```powershell
+npm.cmd run security:audit:manual
+npm.cmd run security:audit:manual -- -RunScan -ConfirmSourceUpload
+```
+
+Первый вызов выполняет только doctor/estimate. Второй создаёт отдельный clone и
+запускает detection-only стадии до S9. Сам runner защищён обычным быстрым тестом
+`agenticSecurityAudit.test.mjs`, который не обращается к сети и не расходует
+токены. Полный порядок описан в
+[ручном агентном аудите](manual-agentic-security-audit.ru.md).
 
 ## Правило поддержки карты
 

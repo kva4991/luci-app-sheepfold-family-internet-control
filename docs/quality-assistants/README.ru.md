@@ -46,7 +46,7 @@ npm.cmd run quality:gate
 | Запустить минимальные проверки | `npm.cmd run quality:changed` | обычно секунды или минуты | только `.build/quality/last-run.json` |
 | Строгий локальный gate | `npm.cmd run quality:gate` | полный suite может идти более 10 минут | только локальный отчёт и test temp |
 | Проверить изменённые документы | `npm.cmd run quality:docs` | секунды | нет |
-| Проверить все документы | `npm.cmd run quality:docs:all` | секунды | нет |
+| Проверить все Markdown-файлы репозитория | `npm.cmd run quality:docs:all` | секунды | нет |
 | Найти рост крупных файлов | `npm.cmd run quality:structure` | секунды | нет |
 | Вывести all-pairs матрицу | `npm.cmd run quality:matrix` | доли секунды | нет |
 | Проверить LuCI на роутере | `npm.cmd run router:frontend` | десятки секунд | read-only сессия LuCI, локальные артефакты |
@@ -101,7 +101,7 @@ flowchart TD
 | `scripts/inspectChangeImpact.mjs` | CLI для просмотра и JSON |
 | `scripts/runQualityChecks.mjs` | последовательный локальный gate и измерение этапов |
 | `tools/quality/testSelection.mjs` | объединение категорий и точечных тестов без дублей |
-| `tools/quality/documentationAudit.mjs` | относительные Markdown-ссылки и §-теги |
+| `tools/quality/documentationAudit.mjs` | относительные Markdown-ссылки, §-теги, буквальные имена test-файлов и npm-команд |
 | `tools/quality/whitespaceAudit.mjs` | пробелы и окончание строк, включая ещё не добавленные в Git файлы |
 | `tools/quality/structureAudit.mjs` | рост крупных изменённых файлов относительно Git-базы |
 | `tools/quality/poCatalog.mjs` | строгий разбор PO для сверки исходного каталога с клиентским JSON без дочернего Python |
@@ -116,3 +116,16 @@ flowchart TD
 Новая подсистема требует обновления `changeImpactRules.mjs`, если её путь не попадает в существующую предметную область или ей нужна особая живая проверка. Новая тестовая категория добавляется только при устойчиво отдельном типе проблем, а не ради одного файла. Новый сканер принимается, только если он ловит конкретный класс ошибок лучше существующего ESLint/test/harness и его стоимость измерена.
 
 Не добавлять целиком внешние коллекции skills, AI-slop scanners и MCP-обёртки «на всякий случай». Репозиторий должен сохранять воспроизводимый локальный контур, понятный без стороннего аккаунта и сетевого сервиса.
+
+## Ручной внешний security-аудит
+
+<!-- §secaudit1 -->
+
+VVAH является исключением только как необязательный консультативный слой перед
+релизом или после изменения критической границы. Он не входит в
+`quality:changed`, `quality:gate` и CI. Автоматически проверяется лишь контракт
+runner: отдельный чистый clone, estimate по умолчанию, два флага согласия,
+`--stop-after s9`, отсутствие автоисправления и manifest происхождения.
+
+Команды и порядок разбора находок:
+[ручной агентный аудит](../manual-agentic-security-audit.ru.md).

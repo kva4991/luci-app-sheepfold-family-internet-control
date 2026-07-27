@@ -120,3 +120,28 @@ android-child\gradlew.bat -p android-child assembleDebug --stacktrace
 - [Android command-line tools и лицензия SDK](https://developer.android.com/studio#command-tools);
 - [sdkmanager](https://developer.android.com/tools/sdkmanager);
 - [Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html).
+
+## Ручной агентный аудит безопасности
+
+<!-- §secaudit1 -->
+
+`tools/security/runVvaharnessAudit.ps1` является безопасной оболочкой для
+необязательного внешнего VVAH. Обычный запуск не отправляет исходники модели, а
+только запускает VVAH `doctor`, создаёт локальный tracked-снимок commit и
+оценивает объём. `doctor` может проверить доступность настроенного внешнего
+провайдера, но исходники Sheepfold для анализа ему не передаются:
+
+```powershell
+npm.cmd run security:audit:manual
+```
+
+Detection-only анализ требует двух явных флагов:
+
+```powershell
+npm.cmd run security:audit:manual -- -RunScan -ConfirmSourceUpload
+```
+
+Runner принимает только чистый commit, создаёт отдельный clone в `pesochnica`,
+сохраняет manifest и всегда останавливает VVAH после S9. Подробная модель данных,
+установка, ограничения и разбор находок описаны в
+[`../docs/manual-agentic-security-audit.ru.md`](../docs/manual-agentic-security-audit.ru.md).

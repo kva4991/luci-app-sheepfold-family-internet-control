@@ -299,7 +299,7 @@ Backend должен помнить, добавлял ли он MAC во вре�
 
 ### `factory yields invalid constructor`
 
-LuCI view wrapper вернул объект или применил неподходящий способ наследования вместо допустимого view constructor. Не используйте устаревший `BaseView.extend` для текущей обёртки Sheepfold. После исправления запустите `secureOverviewWrapper.test.mjs` и проверьте страницу на роутере.
+LuCI view wrapper вернул объект или применил неподходящий способ наследования вместо допустимого view constructor. Не используйте устаревший `BaseView.extend` для текущей обёртки Sheepfold. После исправления запустите `overviewSecureView.test.mjs` и проверьте страницу на роутере.
 
 ### Иконки отсутствуют
 

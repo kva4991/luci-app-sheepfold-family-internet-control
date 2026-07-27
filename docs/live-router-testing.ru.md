@@ -22,31 +22,33 @@
 
 Не использовать живой семейный роутер для write/hardware-тестов, если через него прямо сейчас работают работа, учёба, камеры, умный дом или мессенджер-бот.
 
-## Переменные окружения
+## Профиль подключения
 
-Тесты должны читать настройки подключения из переменных окружения, а не хранить адреса, пароли и токены в репозитории.
+Исполняемый harness не хранит адрес, пароль или токены в репозитории. Команда
+`npm.cmd run router:setup` создаёт несекретный профиль
+`%LOCALAPPDATA%\Sheepfold\routerTest.json`, отдельный SSH-ключ и, по явному
+параметру, защищённую Windows DPAPI копию учётных данных LuCI. Точная команда
+первоначальной настройки приведена в
+[`live-router-automation.ru.md`](live-router-automation.ru.md).
 
-Пример для Windows PowerShell:
+Переменные `SHEEPFOLD_ROUTER_HOST`, `SHEEPFOLD_ROUTER_USER`,
+`SHEEPFOLD_ROUTER_SSH_PORT` и `SHEEPFOLD_ROUTER_IDENTITY_FILE` могут временно
+переопределить SSH-поля готового профиля. Они не заменяют `router:setup`.
+Переменной `SHEEPFOLD_ROUTER_API_URL` исполняемый harness не использует: URL LuCI
+и порт Sheepfold берутся из профиля.
 
-```powershell
-$env:SHEEPFOLD_ROUTER_HOST="192.168.2.1"
-$env:SHEEPFOLD_ROUTER_USER="root"
-$env:SHEEPFOLD_ROUTER_SSH_PORT="22"
-$env:SHEEPFOLD_ROUTER_API_URL="https://192.168.2.1:5201/cgi-bin/sheepfold-api"
-```
-
-Для опасных тестов нужны отдельные флаги:
-
-```powershell
-$env:SHEEPFOLD_ROUTER_WRITE_TESTS="1"
-$env:SHEEPFOLD_ROUTER_HARDWARE_TESTS="1"
-```
-
-Без этих флагов тесты не должны менять UCI, Wi-Fi, firewall, списки устройств, мессенджеры, LED, WPS или установленные пакеты.
+Разрешением изменять тестовый роутер служит сама явно выбранная команда
+`router:install`, `router:writeSafe`, `router:runtimeMatrix` или
+`router:fullSafe`. Старый флаг `SHEEPFOLD_ROUTER_WRITE_TESTS` текущему runner не
+нужен. Hardware-in-loop сценарии пока не автоматизированы и не входят ни в один
+из этих профилей.
 
 ## Уровень 1: read-only тесты
 
-Эти тесты можно запускать чаще всего. Они ничего не меняют на роутере.
+Эти тесты можно запускать чаще всего. Они не меняют постоянный UCI-конфиг,
+установленные пакеты и runtime-политику Sheepfold. Harness создаёт только
+изолированный временный каталог `/tmp/sheepfold-live-test-*`, копирует туда
+проверяющие скрипты и удаляет каталог после прохода.
 
 Если установлен helper QR v2, профиль сверяет `sheepfold-router-control tls-public-key-fingerprint` с независимым SHA-256 DER SubjectPublicKeyInfo из `/etc/uhttpd.crt`. Проверка пишет только временные файлы публичного ключа в `/tmp` и удаляет их; приватный ключ не копируется и не выводится (§tlspinv2).
 
@@ -74,25 +76,25 @@ Read-only тесты должны падать с понятной ошибко�
 
 ## Уровень 2: осторожные write-тесты
 
-Эти тесты можно запускать только при `SHEEPFOLD_ROUTER_WRITE_TESTS=1`. Перед запуском они обязаны сохранить бэкап:
+Исполняемый профиль запускается только явной командой:
 
-```sh
-uci export sheepfold > /tmp/sheepfold-test-backup.uci
+```powershell
+npm.cmd run router:writeSafe
 ```
 
-После теста они должны восстановить настройки:
+Перед первым изменением harness вызывает `routerState.sh backup`, сохраняет
+известные UCI-конфиги в архиве, копирует архив на Windows и сверяет SHA-256.
+`routerState.sh restore` возвращает точные файлы `sheepfold`, `dhcp`, `wireless`
+и `firewall` и побайтово сверяет их с backup. Сам `writeSafe` дополнительно
+держит внутренний снимок Sheepfold, восстанавливает его и nftables runtime даже
+при ошибке. Это шире простого `uci export sheepfold`, но не является резервной
+копией всей системы.
 
-```sh
-uci import sheepfold < /tmp/sheepfold-test-backup.uci
-uci commit sheepfold
-```
+Текущий `writeSafe` автоматически проверяет белый и чёрный списки устройств,
+конфликт списков, блокирующие/разрешающие/ночные расписания, оба исхода конфликта
+расписаний, группу «Без ограничений», приоритет чёрного списка устройств и
+временный доступ. Ниже остаются дополнительные сценарии для расширения harness:
 
-Что проверять:
-
-- добавить тестовый MAC в белый список и удалить обратно;
-- добавить тестовый MAC в чёрный список и удалить обратно;
-- проверить, что один MAC нельзя одновременно добавить в белый и чёрный список;
-- проверить, что админское устройство нельзя добавить в чёрный список;
 - создать тестовую группу, поменять цвет, привязать тестовое устройство, удалить группу;
 - проверить, что группу с устройствами нельзя удалить без понятного предупреждения;
 - сохранить настройки мессенджера с тестовыми значениями без реального токена;
@@ -162,17 +164,31 @@ Write-тесты не должны:
 
 Эти тесты проверяют оба полных пути: `.ipk -> opkg -> LuCI/backend` и `OpenWrt .apk -> apk v3 -> LuCI/backend` (§pkgmgr1).
 
-Запускать только на тестовом роутере:
+Для роутера с `opkg` harness по умолчанию собирает тестовый IPK. Можно явно
+передать уже проверенный файл:
 
 ```powershell
-$env:SHEEPFOLD_ROUTER_WRITE_TESTS="1"
-node --test tests/router-install/*.test.mjs
+npm.cmd run router:install
+npm.cmd run router:install -- -IpkPath C:\path\to\sheepfold.ipk
 ```
 
-Что проверять:
+Для OpenWrt с `apk` требуется пакет, собранный официальным SDK в GitHub Actions:
 
-- определить менеджер пакетов и скопировать свежий IPK либо SDK-собранный OpenWrt APK в отдельный каталог `/tmp`;
-- выполнить `opkg install` либо `apk add --allow-untrusted` через тестовый harness;
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File tools\router-testing\runRouterTests.ps1 `
+  -Profile install `
+  -ApkPath C:\path\to\sheepfold.apk
+```
+
+Набора `tests/router-install/*.test.mjs` в проекте нет: реальную установку
+выполняет PowerShell harness, а `tests/liveRouterHarness.test.mjs` статически
+защищает его стоп-правила и команды, не устанавливая пакет.
+
+Автоматически проверяются выбор системного менеджера пакетов, внешний backup,
+SHA-256 переданного пакета, установка и post-install профиль `readOnly`.
+Следующие сценарии остаются отдельными ручными либо будущими тестами:
+
 - проверить, что менеджер пакетов принимает контейнер, а внутренние имя, версия и архитектура совпадают;
 - проверить, что `postinst` исполняемый и завершается без `Permission denied`;
 - проверить, что default config создан, если его не было;
@@ -212,7 +228,10 @@ node --test tests/router-install/*.test.mjs
 
 ## Уровень 5: hardware-in-loop
 
-Это самые рискованные тесты. Они трогают физическое состояние роутера и сети. Запускать только при `SHEEPFOLD_ROUTER_HARDWARE_TESTS=1`.
+Это самые рискованные тесты. Они трогают физическое состояние роутера и сети.
+Автоматического runner для них пока нет. Будущий runner должен требовать
+отдельное явное согласие, например `SHEEPFOLD_ROUTER_HARDWARE_TESTS=1`, но
+сегодня установка этой переменной сама по себе ничего не запускает.
 
 Что можно проверять:
 
@@ -261,7 +280,7 @@ Android-тесты с живым роутером стоит делать отд
 - роутер не отвечает по SSH;
 - не удаётся создать backup UCI;
 - router host не похож на ожидаемый тестовый адрес;
-- в окружении не выставлен флаг для write/hardware-тестов;
+- изменяющий профиль не был выбран явно либо для будущего hardware-теста не дано отдельное согласие;
 - текущий default gateway компьютера совпадает с тестовым роутером, а тест собирается выключать Wi-Fi или перезагружать сеть;
 - в `/etc/config/sheepfold` найдены реальные токены Telegram/VK/AI, а тест не read-only;
 - невозможно восстановить backup после write-теста.
@@ -283,10 +302,12 @@ tools/router-testing/
   routerTestCommon.ps1
   setupRouterTest.ps1
   runRouterTests.ps1
+  runCurrentRuntimeMatrix.ps1
   remoteChecks.sh
   routerState.sh
   runFrontendTests.ps1
   frontendSmoke.mjs
+  frontendAudit.mjs
   runAllRouterTests.ps1
 tests/liveRouterHarness.test.mjs
 ```
@@ -295,7 +316,7 @@ tests/liveRouterHarness.test.mjs
 
 1. Готово: read-only тесты SSH/UCI/backend, права файлов и структура установленного пакета.
 2. Готово: установка IPK с внешним backup, SHA-256 и post-install проверкой.
-3. Готово: write-тесты белого и чёрного списков устройств с фиктивным MAC и backup/restore.
+3. Готово: восстанавливаемые write-тесты списков устройств, расписаний, временного доступа и группы «Без ограничений» с фиктивным MAC.
 4. Готово: read-only Playwright smoke-тест LuCI на desktop/mobile.
 5. Следующий этап: pairing Android с одноразовым кодом и тестовым телефоном/эмулятором.
 6. После отдельной разработки стоп-правил: hardware-in-loop тесты Wi-Fi/WPS/LED.

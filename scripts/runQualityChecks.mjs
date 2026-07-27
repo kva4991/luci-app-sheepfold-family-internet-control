@@ -162,7 +162,12 @@ export async function main(args = process.argv.slice(2)) {
   console.log(formatDocumentationAudit(docs));
   steps.push({
     id: 'documentation',
-    status: docs.brokenLinks.length || docs.unknownTags.length ? 'failed' : 'passed',
+    status: docs.brokenLinks.length
+      || docs.unknownTags.length
+      || docs.missingTestFiles.length
+      || docs.missingNpmScripts.length
+      ? 'failed'
+      : 'passed',
     durationMs: elapsed(docsStartedAt),
     ...docs,
   });
