@@ -23,7 +23,7 @@ const manifest = read('android-child/app/src/main/AndroidManifest.xml');
 const collector = read('android-child/app/src/main/java/com/example/sheepfoldchild/data/WifiNetworkSnapshotCollector.kt');
 const reportQueue = read('android-child/app/src/main/java/com/example/sheepfoldchild/data/WifiReportQueue.kt');
 const repository = read('android-child/app/src/main/java/com/example/sheepfoldchild/data/ClientStatusRepository.kt');
-const pollReceiver = read('android-child/app/src/main/java/com/example/sheepfoldchild/polling/StatusPollWorker.kt');
+const pollWorker = read('android-child/app/src/main/java/com/example/sheepfoldchild/polling/StatusPollWorker.kt');
 
 function posix(path) {
   return relative(process.cwd(), path).replace(/\\/g, '/');
@@ -139,7 +139,7 @@ describe('Child Wi-Fi network notifications §childwifi1', () => {
   });
 
   it('queues reports while the home router is unavailable and flushes them after returning home', () => {
-    assert.match(pollReceiver, /repo\.fetchClientStatus\(url\)/);
+    assert.match(pollWorker, /repository\.fetchClientStatus\(routerUrl\)/);
     assert.match(repository, /private fun fetchFrom[\s\S]*WifiReportQueue\.captureWithSavedPolicy\(context\)/);
     assert.match(repository, /WifiReportQueue\.updatePolicy\(context, wifiEnabled, includeLocation\)/);
     assert.match(repository, /flushWifiReports\(baseUrl\)/);

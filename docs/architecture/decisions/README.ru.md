@@ -17,6 +17,9 @@ ADR хранит контекст решения, а профильный док
 | [0009](0009-optional-ai-boundary.ru.md) | ИИ необязателен и не участвует в решении firewall | Принято | `§prodvar`, `§aiexec1` |
 | [0010](0010-native-luci-and-asset-versioning.ru.md) | LuCI остаётся нативным, модульным и версионирует assets из пакета | Принято | `§frontmod`, `§assetv1` |
 | [0011](0011-local-quality-gates.ru.md) | Локальные детерминированные quality gates вместо внешнего AI-score | Принято | `§qassist`, `§impact1`, `§testcat` |
+| [0012](0012-android-background-work.ru.md) | Периодическая сеть через WorkManager, точное окончание доступа через AlarmManager | Принято | `§andwork1` |
+| [0013](0013-strict-ai-json-boundary.ru.md) | Строгий form-urlencoded и динамический JSON AI backend через общий helper и jshn | Принято | `§jsonio1` |
+| [0014](0014-coalesced-luci-action-subscribers.ru.md) | Одна backend-команда сохраняет callbacks каждого UI-инициатора | Принято | `§actsub1` |
 
 ## Статусы
 

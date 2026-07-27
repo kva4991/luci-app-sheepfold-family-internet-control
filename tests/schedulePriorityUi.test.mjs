@@ -149,6 +149,13 @@ describe('Schedule editor and access priority UI', () => {
     assert.doesNotMatch(scheduleController, /\bscheduleRanges\(/);
   });
 
+  it('stops the schedule-conflict timer on every owned and external close path', () => {
+    assert.match(scheduleController, /function stopTimer\(\)/);
+    assert.match(scheduleController, /if \(!countdown\.isConnected\)[\s\S]*stopTimer\(\)/);
+    assert.match(scheduleController, /'click': function \(\) \{[\s\S]*stopTimer\(\);[\s\S]*onContinue\(\)/);
+    assert.match(scheduleController, /'click': function \(\) \{ stopTimer\(\); ui\.hideModal\(\); \}/);
+  });
+
   it('persists and enforces the selected schedule conflict outcome', () => {
     assert.match(defaults, /option schedule_conflict_internet 'off'/);
     assert.match(makefile, /ensure_global_option schedule_conflict_internet 'off'/);
@@ -168,7 +175,7 @@ describe('Schedule editor and access priority UI', () => {
     assert.match(clientStatus, /evaluate_schedule/);
     assert.doesNotMatch(publicClientStatus, /"scheduleConflict":/);
     assert.match(publicClientStatus, /"nextAccessChangeTime":/);
-    assert.match(publicClientStatus, /Расписания конфликтуют/);
+    assert.doesNotMatch(publicClientStatus, /Расписания конфликтуют|schedule_conflict_internet/);
     assert.match(makefile, /\* \* \* \* \* \/usr\/libexec\/sheepfold\/sheepfold-firewall sync/);
   });
 

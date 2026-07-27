@@ -139,7 +139,14 @@ merge_phone_history() {
 		printf '%s\n' "$known" | tr ';' '\n'
 		awk -F '|' -v now="$now" '$3 != "" { print $2 "|" $3 "|" $4 "|" $5 "|" now }' "$current_file"
 	} | awk -F '|' '
-		NF == 5 && length($1) == 64 && $1 ~ /^[0-9a-f]+$/ && $2 ~ /^\+?[0-9]{3,20}$/ {
+		function valid_phone(value, digits) {
+			digits = value
+			if (substr(digits, 1, 1) == "+")
+				digits = substr(digits, 2)
+			return length(digits) >= 3 && length(digits) <= 20 && digits ~ /^[0-9]+$/
+		}
+		# Длина проверяется явно: mawk и BusyBox awk расходятся на {n,m}. §awkport1
+		NF == 5 && length($1) == 64 && $1 ~ /^[0-9a-f]+$/ && valid_phone($2) {
 			key = $1 "|" $2
 			if (!seen[key]++) print
 		}

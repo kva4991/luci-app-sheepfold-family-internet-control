@@ -517,6 +517,8 @@ printf '%s\\n' "$section"
     assert.match(detector, /detector_low_confidence_retry_seconds 86400/);
     assert.match(detector, /detection_ports_scanned_at/);
     assert.match(detector, /--max-retries 1/);
+    assert.match(detector, /nice -n 19 nmap/);
+    assert.match(detector, /command -v nice/);
     assert.match(detector, /priority_mac/);
     assert.match(reclassify, /scan full "\$mac"/);
   });

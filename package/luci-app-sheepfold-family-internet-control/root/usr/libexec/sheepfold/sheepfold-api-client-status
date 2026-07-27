@@ -91,63 +91,35 @@ remote_ip="${REMOTE_ADDR:-${1:-}}"
 output="$(/usr/libexec/sheepfold/sheepfold-router-control client-status "$remote_ip" 2>/dev/null || true)"
 status="$(kv_get status "$output")"
 reason="$(kv_get reason "$output")"
-schedule_conflict="$(kv_get schedule_conflict "$output")"
 access_ends_at="$(kv_get next_change_at "$output")"
 next_access_change_time="$(kv_get next_change_time "$output")"
 [ -n "$status" ] || status=unknown
-[ "$schedule_conflict" = 1 ] || schedule_conflict=0
 
 case "$status" in
     allow|allowed|enabled|online)
         internet_state=enabled
-        access_mode=allowlist
-        if [ "$reason" = schedule_conflict_internet_on ]; then
-            access_mode=scheduled
-            message="Расписания конфликтуют; согласно настройке интернет оставлен включённым."
-        elif [ "$reason" = schedule_allow ]; then
-            access_mode=scheduled
-            message="Интернет разрешён действующим расписанием."
-        elif [ "$reason" = new_device_policy_allow ]; then
-            access_mode=default
-            message="Интернет разрешён настройкой для новых устройств."
-        else
-            message="Интернет доступен."
-        fi
+        message=""
         ;;
     block|blocked|deny|denied|disabled|offline)
         internet_state=disabled
-        access_mode=blocked
-        case "$reason" in schedule_block|schedule_conflict_internet_off) access_mode=scheduled ;; esac
-        case "$reason" in
-            global_block) message="Интернет отключён общей семейной блокировкой." ;;
-            blocklist) message="Устройство находится в чёрном списке устройств." ;;
-            schedule_conflict_internet_off) message="Расписания конфликтуют; согласно настройке интернет оставлен выключенным." ;;
-            *) message="Интернет ограничен правилами Sheepfold." ;;
-        esac
+        message="Интернет сейчас отключён семейными правилами."
         ;;
     temporary|temp-access|temp_access|temporary_access)
         internet_state=enabled
-        access_mode=temporary
-        message="Действует временный доступ."
+        message=""
         ;;
     scheduled)
-        # Пока вычислитель расписания не вернул фактический результат, нельзя
-        # сообщать ребёнку, что интернет подтверждённо включён.
         internet_state=unknown
-        access_mode=scheduled
-        message="Доступ определяется расписанием. Обновите статус после применения правила."
+        message="Роутер пока не определил текущий доступ для этого устройства."
         ;;
     restricted)
         internet_state=unknown
-        access_mode=restricted
-        case "$reason" in
-            temporary_access_expired) message="Временный доступ закончился; роутер применяет обычные правила." ;;
-            *) message="Доступ ограничен отдельными правилами; полный статус пока не подтверждён." ;;
-        esac
+        message="Роутер пока не определил текущий доступ для этого устройства."
         ;;
     *)
         internet_state=unknown
-        access_mode=unknown
+        # Эти сообщения объясняют состояние регистрации, но не раскрывают ребёнку
+        # семейное правило, список или расписание, определившее доступ.
         case "$reason" in
             mac_not_found) message="Роутер пока не определил это устройство." ;;
             device_not_registered) message="Устройство ещё не зарегистрировано в Sheepfold." ;;
@@ -155,12 +127,6 @@ case "$status" in
             *) message="Статус доступа пока неизвестен." ;;
         esac
         ;;
-esac
-
-case "$internet_state" in
-    enabled) message="" ;;
-    disabled) message="Интернет сейчас отключён семейными правилами." ;;
-    *) message="Роутер пока не определил текущий доступ для этого устройства." ;;
 esac
 
 mac="$(mac_for_ip "$remote_ip")"

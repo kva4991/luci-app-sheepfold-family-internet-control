@@ -1,29 +1,24 @@
 #!/bin/sh
 set -eu
 
-json_escape() {
-    printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
-
-url_decode() {
-    value="$(printf '%s' "$1" | sed 's/+/ /g; s/%/\\x/g')"
-    printf '%b' "$value"
-}
-
-form_get() {
-    key="$1"
-    body="$2"
-    printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
-        [ "$item_key" = "$key" ] || continue
-        url_decode "$item_value"
-        break
-    done
-}
+JSON_COMMON="${SHEEPFOLD_JSON_COMMON:-/usr/libexec/sheepfold/sheepfold-lib-json}"
 
 header_json() {
     printf 'Status: %s\r\n' "$1"
     printf 'Content-Type: application/json; charset=utf-8\r\n'
     printf 'Cache-Control: no-store\r\n\r\n'
+}
+
+[ -r "$JSON_COMMON" ] || {
+    header_json '500 Internal Server Error'
+    printf '{"app":"sheepfold","ok":false,"error":"json_helper_missing"}\n'
+    exit 0
+}
+. "$JSON_COMMON"
+sheepfold_json_require || {
+    header_json '500 Internal Server Error'
+    printf '{"app":"sheepfold","ok":false,"error":"json_parser_unavailable"}\n'
+    exit 0
 }
 
 mask_sensitive() {
@@ -110,7 +105,13 @@ http_post_json() {
 
     if [ "$status" != 0 ]; then
         header_json '502 Bad Gateway'
-        printf '{"app":"sheepfold","ok":false,"error":"provider_request_failed","message":"%s"}\n' "$(json_escape "$response")"
+        json_init
+        json_add_string app sheepfold
+        json_add_boolean ok 0
+        json_add_string error provider_request_failed
+        json_add_string message "$response"
+        json_dump
+        printf '\n'
         return 0
     fi
 
@@ -118,13 +119,19 @@ http_post_json() {
     printf '%s\n' "$response"
 }
 
+invalid_form_encoding() {
+    header_json '400 Bad Request'
+    printf '{"app":"sheepfold","ok":false,"error":"invalid_form_encoding"}\n'
+    exit 0
+}
+
 body="$(cat)"
-message="$(form_get message "$body")"
-device_id="$(form_get deviceId "$body")"
-client_role="$(form_get clientRole "$body")"
-include_info="$(form_get includeInfo "$body")"
-include_logs="$(form_get includeLogs "$body")"
-google_account="$(form_get googleAccount "$body")"
+message="$(sheepfold_form_get message "$body")" || invalid_form_encoding
+device_id="$(sheepfold_form_get deviceId "$body")" || invalid_form_encoding
+client_role="$(sheepfold_form_get clientRole "$body")" || invalid_form_encoding
+include_info="$(sheepfold_form_get includeInfo "$body")" || invalid_form_encoding
+include_logs="$(sheepfold_form_get includeLogs "$body")" || invalid_form_encoding
+google_account="$(sheepfold_form_get googleAccount "$body")" || invalid_form_encoding
 
 if [ -z "$message" ]; then
     header_json '400 Bad Request'
@@ -162,8 +169,7 @@ case "$provider" in
         api_url="$(uci -q get sheepfold.global.gemini_api_url 2>/dev/null || printf 'https://generativelanguage.googleapis.com/v1beta/models')"
         [ -n "$api_key" ] || { header_json '400 Bad Request'; printf '{"app":"sheepfold","ok":false,"error":"gemini_api_key_missing"}\n'; exit 0; }
         case "$api_url" in *:generateContent*) ;; *) api_url="${api_url%/}/$model:generateContent" ;; esac
-        payload="$(printf '{"systemInstruction":{"parts":[{"text":"%s"}]},"contents":[{"role":"user","parts":[{"text":"%s"}]}],"generationConfig":{"temperature":0.4}}' \
-            "$(json_escape "$system_prompt")" "$(json_escape "$user_text")")"
+        payload="$(sheepfold_gemini_payload "$system_prompt" "$user_text")"
         http_post_json "$api_url" "$api_key" google "$payload"
         ;;
     deepseek)
@@ -171,8 +177,7 @@ case "$provider" in
         api_key="$(uci -q get sheepfold.global.deepseek_api_key 2>/dev/null || true)"
         api_url="$(uci -q get sheepfold.global.deepseek_api_url 2>/dev/null || printf 'https://api.deepseek.com/chat/completions')"
         [ -n "$api_key" ] || { header_json '400 Bad Request'; printf '{"app":"sheepfold","ok":false,"error":"deepseek_api_key_missing"}\n'; exit 0; }
-        payload="$(printf '{"model":"%s","messages":[{"role":"system","content":"%s"},{"role":"user","content":"%s"}],"temperature":0.4}' \
-            "$(json_escape "$model")" "$(json_escape "$system_prompt")" "$(json_escape "$user_text")")"
+        payload="$(sheepfold_chat_payload "$model" "$system_prompt" "$user_text")"
         http_post_json "$api_url" "$api_key" bearer "$payload"
         ;;
     grok)
@@ -180,8 +185,7 @@ case "$provider" in
         api_key="$(uci -q get sheepfold.global.grok_api_key 2>/dev/null || true)"
         api_url="$(uci -q get sheepfold.global.grok_api_url 2>/dev/null || printf 'https://api.x.ai/v1/chat/completions')"
         [ -n "$api_key" ] || { header_json '400 Bad Request'; printf '{"app":"sheepfold","ok":false,"error":"grok_api_key_missing"}\n'; exit 0; }
-        payload="$(printf '{"model":"%s","messages":[{"role":"system","content":"%s"},{"role":"user","content":"%s"}],"temperature":0.4}' \
-            "$(json_escape "$model")" "$(json_escape "$system_prompt")" "$(json_escape "$user_text")")"
+        payload="$(sheepfold_chat_payload "$model" "$system_prompt" "$user_text")"
         http_post_json "$api_url" "$api_key" bearer "$payload"
         ;;
     *)

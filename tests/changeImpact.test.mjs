@@ -63,17 +63,32 @@ describe('change impact advisor §impact1', () => {
 
   it('recognizes repository entry points instead of reporting avoidable unknown paths', () => {
     const report = inspectChanges([
+      '.gitignore',
       'package.json',
       'README.md',
       'README.ru.md',
       'docs/current-implementation-status.md',
       'docs/developer-task.ru.md',
       'docs/project-development-roadmap.ru.md',
+      'docs/new-profile-document.ru.md',
     ]);
     assert.deepEqual(report.categories, ['tooling']);
     assert.deepEqual(report.unknown, []);
     assert.ok(report.areas.some((area) => area.name === 'Архитектура и правила агентов'));
     assert.ok(recommendedCommands(report).automatic.includes('npm.cmd run quality:docs'));
+  });
+
+  it('treats rpcd ACL changes as a critical LuCI security boundary', () => {
+    const report = inspectChanges([
+      'package/luci-app-sheepfold-family-internet-control/root/usr/share/rpcd/acl.d/luci-app-sheepfold-family-internet-control.json',
+    ]);
+
+    assert.deepEqual(report.categories, ['backendFast', 'luci', 'security']);
+    assert.deepEqual(report.unknown, []);
+    assert.equal(report.risk, 'critical');
+    assert.equal(report.fullTest, true);
+    assert.ok(recommendedCommands(report).manual.includes('npm.cmd run router:frontend'));
+    assert.ok(recommendedCommands(report).manual.includes('npm.cmd run router:readOnly'));
   });
 
   it('maps PO, POT and client JSON catalogs to localization checks', () => {

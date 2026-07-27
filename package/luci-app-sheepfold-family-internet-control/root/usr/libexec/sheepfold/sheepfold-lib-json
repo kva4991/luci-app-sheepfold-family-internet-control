@@ -1,0 +1,155 @@
+#!/bin/sh
+
+# Общая граница JSON/form для CGI Sheepfold. JSON строится штатным jshn, а
+# percent-decoder отклоняет повреждённые %XX вместо передачи двусмысленного ввода. §jsonio1
+
+SHEEPFOLD_JSHN_LIB="${SHEEPFOLD_JSHN_LIB:-/usr/share/libubox/jshn.sh}"
+
+sheepfold_json_require() {
+	[ -r "$SHEEPFOLD_JSHN_LIB" ] || return 1
+	# shellcheck source=/usr/share/libubox/jshn.sh
+	. "$SHEEPFOLD_JSHN_LIB"
+	command -v json_init >/dev/null 2>&1 &&
+		command -v json_add_string >/dev/null 2>&1 &&
+		command -v json_add_boolean >/dev/null 2>&1 &&
+		command -v json_add_object >/dev/null 2>&1 &&
+		command -v json_add_array >/dev/null 2>&1 &&
+		command -v json_close_object >/dev/null 2>&1 &&
+		command -v json_close_array >/dev/null 2>&1 &&
+		command -v json_add_double >/dev/null 2>&1 &&
+		command -v json_dump >/dev/null 2>&1
+}
+
+sheepfold_form_get() {
+	local wanted body
+	wanted="$1"
+	body="$2"
+
+	printf '%s' "$body" | awk -v wanted="$wanted" '
+	function hex_value(char) {
+		if (char >= "0" && char <= "9")
+			return char + 0
+		char = toupper(char)
+		if (char >= "A" && char <= "F")
+			return index("ABCDEF", char) + 9
+		return -1
+	}
+
+	function decode(value, result, index_value, char, high, low, byte_value) {
+		result = ""
+		for (index_value = 1; index_value <= length(value); index_value++) {
+			char = substr(value, index_value, 1)
+			if (char == "+") {
+				result = result " "
+				continue
+			}
+			if (char != "%") {
+				result = result char
+				continue
+			}
+			if (index_value + 2 > length(value)) {
+				decode_error = 1
+				return ""
+			}
+			high = hex_value(substr(value, index_value + 1, 1))
+			low = hex_value(substr(value, index_value + 2, 1))
+			if (high < 0 || low < 0) {
+				decode_error = 1
+				return ""
+			}
+			byte_value = high * 16 + low
+			# NUL нельзя представить в POSIX shell-переменной без потери данных.
+			if (byte_value == 0) {
+				decode_error = 1
+				return ""
+			}
+			result = result sprintf("%c", byte_value)
+			index_value += 2
+		}
+		return result
+	}
+
+	{
+		remaining = $0
+		while (length(remaining)) {
+			separator = index(remaining, "&")
+			if (separator) {
+				item = substr(remaining, 1, separator - 1)
+				remaining = substr(remaining, separator + 1)
+			} else {
+				item = remaining
+				remaining = ""
+			}
+
+			equals = index(item, "=")
+			if (equals) {
+				raw_key = substr(item, 1, equals - 1)
+				raw_value = substr(item, equals + 1)
+			} else {
+				raw_key = item
+				raw_value = ""
+			}
+
+			key = decode(raw_key)
+			if (decode_error)
+				exit 2
+			if (key != wanted)
+				continue
+
+			value = decode(raw_value)
+			if (decode_error)
+				exit 2
+			printf "%s", value
+			found = 1
+			exit 0
+		}
+	}
+
+	END {
+		if (decode_error)
+			exit 2
+	}
+	'
+}
+
+sheepfold_gemini_payload() {
+	json_init
+	json_add_object systemInstruction
+	json_add_array parts
+	json_add_object ""
+	json_add_string text "$1"
+	json_close_object
+	json_close_array
+	json_close_object
+	json_add_array contents
+	json_add_object ""
+	json_add_string role user
+	json_add_array parts
+	json_add_object ""
+	json_add_string text "$2"
+	json_close_object
+	json_close_array
+	json_close_object
+	json_close_array
+	json_add_object generationConfig
+	json_add_double temperature 0.4
+	json_close_object
+	json_dump
+}
+
+sheepfold_chat_payload() {
+	json_init
+	json_add_string model "$1"
+	json_add_array messages
+	json_add_object ""
+	json_add_string role system
+	json_add_string content "$2"
+	json_close_object
+	json_add_object ""
+	json_add_string role user
+	json_add_string content "$3"
+	json_close_object
+	json_close_array
+	json_add_double temperature 0.4
+	json_dump
+}

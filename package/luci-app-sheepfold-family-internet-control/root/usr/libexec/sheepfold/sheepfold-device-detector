@@ -854,8 +854,17 @@ scan_ports() {
         [ "${#ports}" -le 256 ] || ports="$DEFAULT_SCAN_PORTS"
         case "$ip" in -*|*[!0-9A-Fa-f:.]*) return 0 ;; esac
 
-        nmap -n -Pn -T2 --max-retries 1 --host-timeout "${max_seconds}s" -p "$ports" "$ip" 2>/dev/null |
-                awk -F/ '/open/ { ports = ports (ports == "" ? "" : ",") $1 } END { print ports }'
+        {
+                # Общий lock исключает параллельные проходы, а nice не даёт
+                # необязательной классификации конкурировать с маршрутизацией. §detload
+                if command -v nice >/dev/null 2>&1; then
+                        nice -n 19 nmap -n -Pn -T2 --max-retries 1 \
+                                --host-timeout "${max_seconds}s" -p "$ports" "$ip" 2>/dev/null
+                else
+                        nmap -n -Pn -T2 --max-retries 1 \
+                                --host-timeout "${max_seconds}s" -p "$ports" "$ip" 2>/dev/null
+                fi
+        } | awk -F/ '/open/ { ports = ports (ports == "" ? "" : ",") $1 } END { print ports }'
 }
 
 set_auto_group_status() {

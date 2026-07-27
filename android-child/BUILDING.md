@@ -40,7 +40,7 @@ Content-Type: application/x-www-form-urlencoded
 
 ## Фоновая работа
 
-WorkManager не используется. `PollingScheduler` создаёт неточные AlarmManager-события с интервалом 15 минут в активном режиме и 30 минут в фоне. `SafeBootReceiver` восстанавливает расписание после загрузки и всегда завершает асинхронный BroadcastReceiver через `PendingResult.finish()`.
+`PollingScheduler` создаёт одну уникальную периодическую задачу WorkManager с интервалом 15 минут в активном режиме и 30 минут в фоне. После загрузки `SafeBootReceiver` только ставит безопасную разовую синхронизацию в WorkManager. Точный AlarmManager используется отдельно и только для уведомления о завершении доступа (§andwork1).
 
 ## Хранилища
 

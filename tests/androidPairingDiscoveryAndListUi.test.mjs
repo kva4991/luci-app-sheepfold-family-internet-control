@@ -133,9 +133,9 @@ describe('Android pairing discovery and access-list UI', () => {
   it('keeps current Android and OpenWrt release versions synchronized', () => {
     assert.match(androidBuild, /sheepfoldVersionCode = 50/);
     assert.match(androidBuild, /sheepfoldVersionName = "0\.1\.49"/);
-    assert.match(childBuild, /sheepfoldChildVersionCode = 13/);
-    assert.match(childBuild, /sheepfoldChildVersionName = "1\.12"/);
+    assert.match(childBuild, /sheepfoldChildVersionCode = 14/);
+    assert.match(childBuild, /sheepfoldChildVersionName = "1\.13"/);
     const release = Number(makefile.match(/PKG_RELEASE:=(\d+)/)?.[1] || 0);
-    assert.ok(release >= 252);
+    assert.ok(release >= 253);
   });
 });

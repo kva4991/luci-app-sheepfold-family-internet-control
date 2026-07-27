@@ -71,7 +71,7 @@ classify_error() {
 				*"already has unrestricted access"*) printf 'already_unrestricted' ;;
 				*"confirmation_required"*|*"Confirmation is required"*) printf 'confirmation_required' ;;
 				*"pairing_busy"*|*"already running"*|*"Could not acquire"*|*"busy"*) printf 'action_busy' ;;
-				*"not found"*|*"was not found"*) printf 'not_found' ;;
+				*"not found"*) printf 'not_found' ;;
 				*"invalid"*|*"Invalid"*) printf 'invalid_request' ;;
 				*) printf 'backend_exit_%s' "$exit_code" ;;
 			esac

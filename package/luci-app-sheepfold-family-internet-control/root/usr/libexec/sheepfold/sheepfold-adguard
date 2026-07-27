@@ -873,10 +873,12 @@ emit_domain_rules() {
 	modifier="$3"
 	output="$4"
 	[ -s "$domains" ] || return 0
+	# Проверяем формат grep ERE до awk: interval-выражения {n,m} по-разному
+	# работают в mawk на CI и BusyBox awk на роутере. §awkport1
+	grep -E '^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$' "$domains" |
 	awk -v prefix="$prefix" -v modifier="$modifier" '
-	/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/ {
-		print prefix $0 "^" modifier
-	}' "$domains" >> "$output"
+	{ print prefix $0 "^" modifier }
+	' >> "$output"
 }
 
 generate_feed() {

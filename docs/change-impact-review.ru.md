@@ -30,6 +30,7 @@ npm.cmd run quality:gate
 | LuCI view/core/shared | переводы, cache version, mobile layout, сохранение состояния | `luci` |
 | LuCI устройства/группы/расписания/администраторы | backend-команду, UCI, списки и access evaluator | `luci devices access` |
 | CGI или общий API helper | Android-клиенты, status/error codes, auth, timeout | `backendFast android security` |
+| rpcd ACL LuCI | минимальность UCI/exec-прав, фактические вызовы экрана | `backendFast luci security` |
 | UCI defaults/postinst/migration | старая установка, upgrade, secrets, named sections | `backendFast packaging security` |
 | firewall/nftables/schedules | приоритет, lock, rollback, Podkop/AdGuard | `access sites security networkIntegration` |
 | AdGuard/DNS/site lists | последний рабочий cache, fallback, чужие объекты | `sites security networkIntegration` |

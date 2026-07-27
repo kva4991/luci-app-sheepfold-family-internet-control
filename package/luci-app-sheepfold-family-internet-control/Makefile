@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=252
+PKG_RELEASE:=253
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -462,6 +462,15 @@ uci -q commit sheepfold
 [ -x /usr/libexec/sheepfold/sheepfold-country-profile ] && \
 	/usr/libexec/sheepfold/sheepfold-country-profile migrate >/dev/null 2>&1 || true
 find /usr/libexec/sheepfold -type f -exec chmod 0755 {} + 2>/dev/null || true
+# Общие библиотеки только подключаются через точку и не являются самостоятельными командами.
+for library in \
+	/usr/libexec/sheepfold/sheepfold-pair-common \
+	/usr/libexec/sheepfold/sheepfold-token-common \
+	/usr/libexec/sheepfold/sheepfold-hash-common \
+	/usr/libexec/sheepfold/sheepfold-lock-common \
+	/usr/libexec/sheepfold/sheepfold-lib-json; do
+	[ -f "$$library" ] && chmod 0644 "$$library" 2>/dev/null || true
+done
 [ -x /usr/libexec/sheepfold/sheepfold-ipv6-control ] && \
 	/usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || true
 for helper in \

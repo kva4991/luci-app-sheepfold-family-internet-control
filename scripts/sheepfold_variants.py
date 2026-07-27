@@ -34,6 +34,7 @@ AI_ONLY_PATHS = {
     "root/usr/libexec/sheepfold/sheepfold-activity-log",
     "root/usr/libexec/sheepfold/sheepfold-ai-gate",
     "root/usr/libexec/sheepfold/sheepfold-ai-handler",
+    "root/usr/libexec/sheepfold/sheepfold-lib-json",
     "root/usr/libexec/sheepfold/sheepfold-openssl-ensure",
     "htdocs/luci-static/resources/view/sheepfold/ai.js",
 }

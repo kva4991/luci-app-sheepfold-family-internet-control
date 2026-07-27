@@ -166,3 +166,23 @@ On 2026-07-21 the cumulative `chatGPT` pass replaced the remaining parent-screen
 On 2026-07-22 the next cumulative `chatGPT` pass minimized `/client-status` to API v3, removed child-visible access-mode/conflict/group-name fields, gated SIM and Wi-Fi reporting behind the latest router policy, replaced startup-wide permission prompts with explained just-in-time requests, raised the child minimum to Android 9 and added fail-closed external release signing. A lost router now has a separate UI state and never masquerades as disabled internet. Physical Android and live-router evidence is still pending.
 
 - The audited `r252` pass keeps `overview.js` as a four-line bootstrap, adds strict local-module/dependency/UCI-contract checks, and fixes partial persistence, pairing refresh, administrator refresh and LuCI UCI transaction semantics. Model tests do not replace the installed-router/browser matrix (§ovaudit5).
+
+- The `r253` hardening pass centralizes strict AI form decoding and dynamic `jshn` JSON construction in an AI-only shared library, keeps malformed encoding away from providers, moves child periodic/boot network refresh to constrained WorkManager while retaining exact access-ending alarms, stops abandoned schedule-conflict timers, and lowers bounded `nmap` CPU priority when `nice` is available. The complete Node suite passed with 592 tests (591 passed and one intentional concurrency skip), and child `lintDebug` plus `assembleDebug` passed. This evidence still does not replace physical Android timing or installed-router verification (§jsonio1, §andwork1, §frontmod, §detload).
+
+- The follow-up archive review removes dialect-dependent interval expressions from
+  `awk`, keeps child status free of the rule that granted access, attributes time
+  changes through the common log actor, and preserves every LuCI caller's refresh
+  when identical backend mutations are coalesced. File-size warnings were recorded
+  as reasoned refactoring candidates rather than used as permission to split
+  transactions mechanically. The strict quality gate passed with 597 tests:
+  596 passed, one intentional concurrency test was skipped, and none failed;
+  ESLint, both Android Lint projects, documentation and change-impact coverage also
+  passed (§awkport1, §actsub1, §auditopt1).
+
+- The test-coverage audit added a behavioral modal-timer lifecycle test and moved
+  provider payload builders into the AI-only JSON helper. AI Support live-router
+  read-only checks now round-trip complex chat and Gemini text through the target
+  OpenWrt `jshn` without an API key or provider request. Proposed UCI batch export,
+  OkHttp migration and schedule indexing remain conditional on a measured problem
+  and an approved implementation, so tests do not silently choose architecture
+  (§jsonio1, §frontmod, §auditopt1).

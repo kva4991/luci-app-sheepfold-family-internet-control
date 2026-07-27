@@ -211,8 +211,8 @@ describe('SIM change monitoring contract', () => {
 
   it('reports allowed new devices as enabled and never paints unknown as disabled', () => {
     assert.match(clientStatus, /status=allow[\s\S]*reason=new_device_policy_allow/);
-    assert.match(clientStatusApi, /internet_state=enabled[\s\S]*new_device_policy_allow/);
-    assert.match(clientStatusApi, /access_mode=default/);
+    assert.match(clientStatusApi, /allow\|allowed\|enabled\|online\)[\s\S]*internet_state=enabled/);
+    assert.doesNotMatch(clientStatusApi, /new_device_policy_allow|access_mode=/);
     assert.match(childStatusScreen, /isDisabled = status\.internetState == "disabled"/);
     assert.match(childStatusScreen, /else -> stringResource\(R\.string\.status_unknown\)/);
   });

@@ -45,9 +45,5 @@
             android:name=".notification.AccessEndingAlarmReceiver"
             android:exported="false" />
 
-        <receiver
-            android:name=".polling.StatusPollReceiver"
-            android:exported="false" />
-
     </application>
 </manifest>

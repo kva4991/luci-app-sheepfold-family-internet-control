@@ -2,12 +2,9 @@
 set -eu
 
 RATE_DIR="/tmp/sheepfold/ai-rate"
+JSON_COMMON="${SHEEPFOLD_JSON_COMMON:-/usr/libexec/sheepfold/sheepfold-lib-json}"
 mkdir -p "$RATE_DIR"
 chmod 700 "$RATE_DIR" 2>/dev/null || true
-
-json_escape() {
-    printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
 
 header_json() {
     printf 'Status: %s\r\n' "$1"
@@ -19,24 +16,26 @@ header_json() {
 
 reject() {
     header_json "$1" "${4:-}"
-    printf '{"app":"sheepfold","ok":false,"error":"%s","message":"%s"}\n' \
-        "$(json_escape "$2")" "$(json_escape "$3")"
+    json_init
+    json_add_string app sheepfold
+    json_add_boolean ok 0
+    json_add_string error "$2"
+    json_add_string message "$3"
+    json_dump
+    printf '\n'
     exit 1
 }
 
-url_decode() {
-    value="$(printf '%s' "$1" | sed 's/+/ /g; s/%/\\x/g')"
-    printf '%b' "$value"
+[ -r "$JSON_COMMON" ] || {
+    header_json "500 Internal Server Error"
+    printf '{"app":"sheepfold","ok":false,"error":"json_helper_missing"}\n'
+    exit 1
 }
-
-form_get() {
-    key="$1"
-    body="$2"
-    printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
-        [ "$item_key" = "$key" ] || continue
-        url_decode "$item_value"
-        break
-    done
+. "$JSON_COMMON"
+sheepfold_json_require || {
+    header_json "500 Internal Server Error"
+    printf '{"app":"sheepfold","ok":false,"error":"json_parser_unavailable"}\n'
+    exit 1
 }
 
 normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
@@ -158,10 +157,14 @@ body="$(cat)"
 [ "$(uci -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)" = 1 ] || \
     reject "503 Service Unavailable" ai_disabled "AI assistant is disabled on the router."
 
-requested_device_id="$(form_get deviceId "$body")"
-requested_role="$(form_get clientRole "$body")"
-requested_admin="$(form_get isAdministrator "$body")"
-consent_version="$(form_get consentVersion "$body")"
+requested_device_id="$(sheepfold_form_get deviceId "$body")" || \
+    reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
+requested_role="$(sheepfold_form_get clientRole "$body")" || \
+    reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
+requested_admin="$(sheepfold_form_get isAdministrator "$body")" || \
+    reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
+consent_version="$(sheepfold_form_get consentVersion "$body")" || \
+    reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
 [ -n "$requested_device_id" ] || reject "400 Bad Request" device_id_required "Device id is required."
 [ -n "$requested_role" ] || reject "400 Bad Request" client_role_required "Client role is required."
 

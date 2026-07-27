@@ -100,22 +100,36 @@ function create(deps) {
 	function showConflict(onContinue, details) {
 		var seconds = 10;
 		var countdown = E('strong', {}, String(seconds));
-		var timer;
+		var timer = null;
+
+		function stopTimer() {
+			if (timer === null)
+				return;
+			window.clearInterval(timer);
+			timer = null;
+		}
+
 		var button = E('button', {
 			'class': 'btn cbi-button cbi-button-positive',
 			'disabled': 'disabled',
 			'click': function () {
-				window.clearInterval(timer);
+				stopTimer();
 				ui.hideModal();
 				onContinue();
 			}
 		}, _('I understand the risk, continue'));
 
 		timer = window.setInterval(function () {
+			// LuCI может закрыть модалку не только её кнопками. Проверка DOM даёт
+			// тому же модулю явный dispose-путь без тяжёлого MutationObserver. §frontmod
+			if (!countdown.isConnected) {
+				stopTimer();
+				return;
+			}
 			seconds--;
 			countdown.textContent = String(Math.max(0, seconds));
 			if (seconds <= 0) {
-				window.clearInterval(timer);
+				stopTimer();
 				button.disabled = false;
 			}
 		}, 1000);
@@ -129,7 +143,7 @@ function create(deps) {
 			E('div', { 'class': 'right sf-modal-actions' }, [
 				E('button', {
 					'class': 'btn cbi-button',
-					'click': function () { window.clearInterval(timer); ui.hideModal(); }
+					'click': function () { stopTimer(); ui.hideModal(); }
 				}, _('Cancel')),
 				button
 			])

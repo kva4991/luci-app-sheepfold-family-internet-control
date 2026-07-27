@@ -496,7 +496,7 @@ cmd_download() {
 	}
 
 	case "$local_path" in
-		/tmp/*|/tmp/sheepfold/*) ;;
+		/tmp/*) ;;
 		*)
 			printf '{"ok":false,"error":"local_path_not_allowed"}\n'
 			return 1

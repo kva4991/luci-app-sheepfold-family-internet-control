@@ -259,6 +259,64 @@ function create(deps) {
 		};
 	}
 
+	function handleSuccess(spec, response) {
+		var chain = Promise.resolve();
+
+		if (spec.onSuccess)
+			chain = chain.then(function () { return spec.onSuccess(response); });
+		if (spec.refresh && spec.refresh !== spec.onSuccess)
+			chain = chain.then(function () { return spec.refresh(response); });
+
+		return chain.then(function () {
+			var successMessage = typeof spec.successMessage === 'function' ?
+				spec.successMessage(response) : spec.successMessage;
+			if (!spec.silent && successMessage && deps.notify)
+				deps.notify(successMessage, spec.successLevel || 'info');
+			return response;
+		});
+	}
+
+	function handleFailure(spec, value) {
+		var fallback = typeof spec.errorMessage === 'function' ? spec.errorMessage(value) : spec.errorMessage;
+		var error = asError(value, fallback || 'Action failed.');
+		var message = errorText(error, fallback || 'Action failed.');
+		var chain = Promise.resolve();
+
+		if (spec.refreshOnError && spec.refresh)
+			chain = chain.then(function () {
+				return Promise.resolve(spec.refresh()).catch(function (refreshError) {
+					error.refreshError = refreshError;
+				});
+			});
+		if (spec.onError)
+			chain = chain.then(function () { return spec.onError(error, message); });
+		return chain.then(function () {
+			if (!spec.silent && spec.notifyError !== false && deps.notify)
+				deps.notify(message, spec.errorLevel || 'warning');
+			throw error;
+		});
+	}
+
+	function finishEntry(key, entry) {
+		if (!entry.operationDone || entry.subscribers !== 0)
+			return;
+		unlockControls(entry);
+		if (inFlight[key] === entry)
+			delete inFlight[key];
+	}
+
+	function subscribe(key, entry, spec) {
+		entry.subscribers++;
+		return entry.operation.then(function (response) {
+			return handleSuccess(spec, response);
+		}).catch(function (error) {
+			return handleFailure(spec, error);
+		}).finally(function () {
+			entry.subscribers--;
+			finishEntry(key, entry);
+		});
+	}
+
 	function execute(spec) {
 		spec = spec || {};
 		var key = stableKey(spec);
@@ -267,14 +325,14 @@ function create(deps) {
 
 		if (existing) {
 			lockControls(existing, buttonList(spec, key), spec.busyText);
-			return existing.promise;
+			return subscribe(key, existing, spec);
 		}
 
-		entry = { states: [], promise: null };
+		entry = { states: [], operation: null, operationDone: false, subscribers: 0 };
 		inFlight[key] = entry;
 		lockControls(entry, buttonList(spec, key), spec.busyText);
 
-		entry.promise = Promise.resolve().then(function () {
+		entry.operation = Promise.resolve().then(function () {
 			if (spec.task)
 				return spec.task();
 			if (spec.timeoutMs && deps.withTimeout)
@@ -282,47 +340,22 @@ function create(deps) {
 			return deps.run(spec.args || []);
 		}).then(function (value) {
 			var response = successResponse(value, spec.parse);
-			var chain = Promise.resolve();
 
 			if (!response.ok)
 				throw actionError(response, spec.errorMessage);
-			if (spec.onSuccess)
-				chain = chain.then(function () { return spec.onSuccess(response); });
-			if (spec.refresh && spec.refresh !== spec.onSuccess)
-				chain = chain.then(function () { return spec.refresh(response); });
-
-			return chain.then(function () {
-				var successMessage = typeof spec.successMessage === 'function' ?
-					spec.successMessage(response) : spec.successMessage;
-				if (!spec.silent && successMessage && deps.notify)
-					deps.notify(successMessage, spec.successLevel || 'info');
-				return response;
-			});
-		}).catch(function (error) {
-			var fallback = typeof spec.errorMessage === 'function' ? spec.errorMessage(error) : spec.errorMessage;
-			error = asError(error, fallback || 'Action failed.');
-			var message = errorText(error, fallback || 'Action failed.');
-			var chain = Promise.resolve();
-
-			if (spec.refreshOnError && spec.refresh)
-				chain = chain.then(function () {
-					return Promise.resolve(spec.refresh()).catch(function (refreshError) {
-						error.refreshError = refreshError;
-					});
-				});
-			if (spec.onError)
-				chain = chain.then(function () { return spec.onError(error, message); });
-			return chain.then(function () {
-				if (!spec.silent && spec.notifyError !== false && deps.notify)
-					deps.notify(message, spec.errorLevel || 'warning');
-				throw error;
-			});
-		}).finally(function () {
-			unlockControls(entry);
-			delete inFlight[key];
+			return response;
+		});
+		// Один backend-вызов обслуживает несколько UI-подписчиков. Запись остаётся
+		// занятой, пока каждый подписчик не завершит собственный refresh/callback.
+		entry.operation.then(function () {
+			entry.operationDone = true;
+			finishEntry(key, entry);
+		}, function () {
+			entry.operationDone = true;
+			finishEntry(key, entry);
 		});
 
-		return entry.promise;
+		return subscribe(key, entry, spec);
 	}
 
 	function run(args, options) {

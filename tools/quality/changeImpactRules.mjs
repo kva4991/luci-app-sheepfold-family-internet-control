@@ -110,6 +110,16 @@ export const impactRules = Object.freeze([
     review: 'Проверить BusyBox-совместимость, validation, lock, exit code и структурированный JSON.',
   }),
   Object.freeze({
+    id: 'rpcAcl',
+    area: 'LuCI rpcd ACL',
+    pattern: /package\/luci-app-[^/]+\/root\/usr\/share\/rpcd\/acl\.d\/[^/]+\.json$/,
+    categories: ['backendFast', 'luci', 'security'],
+    checks: ['routerReadOnly', 'routerFrontend'],
+    risk: 'critical',
+    review: 'Сверить минимальные rpcd-права с фактическими LuCI-вызовами и не расширять exec/UCI-доступ ради одного экрана.',
+    full: true,
+  }),
+  Object.freeze({
     id: 'sharedApi',
     area: 'Общий API-контракт',
     pattern: /(?:sheepfold-api|android-openwrt-api|RouterAdminClient|ClientStatusRepository|SecureRouterConnectionManager)/,
@@ -173,7 +183,7 @@ export const impactRules = Object.freeze([
   Object.freeze({
     id: 'architectureDocs',
     area: 'Архитектура и правила агентов',
-    pattern: /(?:^(?:README(?:\.ru)?|AGENTS|CODING_RULES)\.md$|^docs\/(?:current-implementation-status\.md$|project-development-roadmap\.ru\.md$|architecture|quality-assistants|dev\/tag-map|agent-|developer-task|test-strategy|change-impact|debugging|ui-review|api-contracts))/,
+    pattern: /(?:^(?:README(?:\.ru)?|AGENTS|CODING_RULES)\.md$|^docs\/)/,
     categories: ['tooling'],
     checks: ['docs'],
     risk: 'low',
@@ -182,7 +192,7 @@ export const impactRules = Object.freeze([
   Object.freeze({
     id: 'testTooling',
     area: 'Тестовый инструментарий',
-    pattern: /^(?:package\.json$|eslint\.config\.js$|tests\/|tools\/|scripts\/)/,
+    pattern: /^(?:\.gitignore$|package\.json$|eslint\.config\.js$|tests\/|tools\/|scripts\/)/,
     categories: ['tooling'],
     checks: ['lintJs'],
     risk: 'medium',

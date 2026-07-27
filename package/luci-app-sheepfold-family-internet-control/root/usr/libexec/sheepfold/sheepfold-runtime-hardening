@@ -60,10 +60,11 @@ VARIANT_EXECUTABLES=""
 # SHEEPFOLD_AI_BEGIN
 AI_GATE="$(path /usr/libexec/sheepfold/sheepfold-ai-gate)"
 AI_HANDLER="$(path /usr/libexec/sheepfold/sheepfold-ai-handler)"
+JSON_COMMON="$(path /usr/libexec/sheepfold/sheepfold-lib-json)"
 ACTIVITY_LOG="$(path /usr/libexec/sheepfold/sheepfold-activity-log)"
 OPENSSL_ENSURE="$(path /usr/libexec/sheepfold/sheepfold-openssl-ensure)"
-VARIANT_REQUIRED="$AI_GATE $AI_HANDLER $ACTIVITY_LOG $OPENSSL_ENSURE"
-VARIANT_EXECUTABLES="$VARIANT_REQUIRED"
+VARIANT_REQUIRED="$AI_GATE $AI_HANDLER $JSON_COMMON $ACTIVITY_LOG $OPENSSL_ENSURE"
+VARIANT_EXECUTABLES="$AI_GATE $AI_HANDLER $ACTIVITY_LOG $OPENSSL_ENSURE"
 # SHEEPFOLD_AI_END
 MAINTENANCE_WINDOW="$(path /usr/libexec/sheepfold/sheepfold-maintenance-window)"
 KEY_DERIVE="$(path /usr/libexec/sheepfold/sheepfold-key-derive)"
@@ -107,7 +108,7 @@ for executable in \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
-chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$ACL" "$PRIVACY_NOTICE" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
+chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" ${JSON_COMMON:+"$JSON_COMMON"} "$ACL" "$PRIVACY_NOTICE" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
     "$COUNTRY_PROFILE_RU" "$COUNTRY_PROFILE_BY" "$COUNTRY_PROFILE_CN" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND"
 
 mkdir -p "$(path /etc/sheepfold/tokens)"

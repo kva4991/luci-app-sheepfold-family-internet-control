@@ -177,6 +177,65 @@ read_only_checks() {
     require_executable /www/cgi-bin/sheepfold-api
     pass executableFiles 'Основные backend и CGI-файлы исполняемые'
 
+    ai_json_common='/usr/libexec/sheepfold/sheepfold-lib-json'
+    if [ -r "$ai_json_common" ]; then
+        # Проверяем реальный jshn целевого OpenWrt без API-ключа и сетевого запроса.
+        # Локальный fake serializer не доказывает совпадение с libubox на роутере. §jsonio1
+        . "$ai_json_common"
+        sheepfold_json_require ||
+            fail aiJsonPayload 'AI JSON helper не загрузил штатный jshn'
+        ai_probe_system='Система "Sheepfold": путь C:\router
+новая строка'
+        ai_probe_user='Родитель	спросил: «как дела?»'
+        ai_chat_payload="$(sheepfold_chat_payload probe-model "$ai_probe_system" "$ai_probe_user")" ||
+            fail aiJsonPayload 'Не удалось построить chat payload'
+        json_load "$ai_chat_payload" ||
+            fail aiJsonPayload 'Chat payload не разбирается штатным jshn'
+        json_get_var ai_probe_model model ||
+            fail aiJsonPayload 'В chat payload нет model'
+        json_select messages &&
+            json_select 1 ||
+            fail aiJsonPayload 'В chat payload нет system message'
+        json_get_var ai_probe_system_read content ||
+            fail aiJsonPayload 'В chat payload нет system content'
+        json_select ..
+        json_select 2 ||
+            fail aiJsonPayload 'В chat payload нет user message'
+        json_get_var ai_probe_user_read content ||
+            fail aiJsonPayload 'В chat payload нет user content'
+        [ "$ai_probe_model" = probe-model ] &&
+            [ "$ai_probe_system_read" = "$ai_probe_system" ] &&
+            [ "$ai_probe_user_read" = "$ai_probe_user" ] ||
+            fail aiJsonPayload 'Chat payload изменил сложные символы'
+
+        ai_gemini_payload="$(sheepfold_gemini_payload "$ai_probe_system" "$ai_probe_user")" ||
+            fail aiJsonPayload 'Не удалось построить Gemini payload'
+        json_load "$ai_gemini_payload" ||
+            fail aiJsonPayload 'Gemini payload не разбирается штатным jshn'
+        json_select systemInstruction &&
+            json_select parts &&
+            json_select 1 ||
+            fail aiJsonPayload 'Gemini payload не содержит systemInstruction.parts'
+        json_get_var ai_probe_system_read text ||
+            fail aiJsonPayload 'В Gemini payload нет system text'
+        json_select ..
+        json_select ..
+        json_select ..
+        json_select contents &&
+            json_select 1 &&
+            json_select parts &&
+            json_select 1 ||
+            fail aiJsonPayload 'Gemini payload не содержит contents.parts'
+        json_get_var ai_probe_user_read text ||
+            fail aiJsonPayload 'В Gemini payload нет user text'
+        [ "$ai_probe_system_read" = "$ai_probe_system" ] &&
+            [ "$ai_probe_user_read" = "$ai_probe_user" ] ||
+            fail aiJsonPayload 'Gemini payload изменил сложные символы'
+        pass aiJsonPayload 'Штатный jshn сохраняет сложные символы в AI payload'
+    else
+        pass aiJsonPayload 'Standard-пакет не содержит AI JSON helper; проверка неприменима'
+    fi
+
     # Вызываем discovery тем же CGI, который использует Android. Так тест ловит не только
     # неверный маршрут, но и ошибки BusyBox helper-ов, попавшие в stderr вроде `now: not found`.
     api_ping_output="$(REQUEST_METHOD=GET PATH_INFO=/ping REMOTE_ADDR=127.0.0.1 /www/cgi-bin/sheepfold-api 2>&1)" ||

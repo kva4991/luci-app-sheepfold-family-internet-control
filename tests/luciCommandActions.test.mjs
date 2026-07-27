@@ -90,6 +90,7 @@ describe('LuCI command actions §apicon1', () => {
     const firstButton = fakeButton('Apply');
     const secondButton = fakeButton('Apply elsewhere', true);
     const linkedButton = fakeButton('Linked action');
+    const subscriberRefreshes = [];
     linkedButton.setAttribute('data-sf-action-key', 'device:7:block');
     const model = loadActions({ querySelectorAll: () => [linkedButton] }).create({
       run: (args) => {
@@ -105,6 +106,7 @@ describe('LuCI command actions §apicon1', () => {
       button: firstButton,
       busyText: 'Applying…',
       silent: true,
+      refresh: async () => { subscriberRefreshes.push('first'); },
     });
     const second = model.execute({
       key: 'device:7:block',
@@ -112,9 +114,10 @@ describe('LuCI command actions §apicon1', () => {
       button: secondButton,
       busyText: 'Applying…',
       silent: true,
+      refresh: async () => { subscriberRefreshes.push('second'); },
     });
 
-    assert.strictEqual(first, second);
+    assert.notStrictEqual(first, second, 'each UI subscriber owns its callback promise');
     assert.equal(calls.length, 0, 'execution starts in a microtask');
     assert.equal(firstButton.disabled, true);
     assert.equal(secondButton.disabled, true);
@@ -126,8 +129,9 @@ describe('LuCI command actions §apicon1', () => {
     await Promise.resolve();
     assert.equal(calls.length, 1);
     pending.resolve({ code: 0, stdout: 'OK\n', stderr: '' });
-    await first;
+    await Promise.all([first, second]);
 
+    assert.deepEqual(subscriberRefreshes, ['first', 'second']);
     assert.equal(firstButton.disabled, false);
     assert.equal(secondButton.disabled, true, 'pre-existing disabled state is restored');
     assert.equal(firstButton.textContent, 'Apply');

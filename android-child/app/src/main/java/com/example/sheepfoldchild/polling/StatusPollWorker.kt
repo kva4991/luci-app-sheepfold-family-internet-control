@@ -1,44 +1,38 @@
 package com.example.sheepfoldchild.polling
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
+import androidx.work.CoroutineWorker
+import androidx.work.WorkerParameters
 import com.example.sheepfoldchild.data.ClientStatusRepository
 import com.example.sheepfoldchild.notification.AccessEndingScheduler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
-/** Фоновый опрос статуса, запускаемый AlarmManager. */
-class StatusPollReceiver : BroadcastReceiver() {
+/**
+ * Выполняет отложенный сетевой опрос вне короткого жизненного цикла BroadcastReceiver.
+ *
+ * Точный момент окончания доступа по-прежнему обслуживает AccessEndingScheduler:
+ * WorkManager подходит для периодической синхронизации, но не для точного времени. §andwork1
+ */
+class StatusPollWorker(
+    appContext: Context,
+    workerParams: WorkerParameters
+) : CoroutineWorker(appContext, workerParams) {
 
-    override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION_POLL) return
-        val pendingResult = goAsync()
-        val appContext = context.applicationContext
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val repo = ClientStatusRepository(appContext)
-                val url = repo.getRouterBaseUrl() ?: return@launch
-                repo.fetchClientStatus(url).onSuccess { response ->
-                    val data = response.data ?: return@onSuccess
-                    if (!AccessEndingScheduler.isAppInForeground) {
-                        AccessEndingScheduler.schedule(
-                            appContext,
-                            data.accessEndsAt,
-                            response.serverTime,
-                            data.minutesRemaining
-                        )
-                    }
-                }
-            } finally {
-                pendingResult.finish()
+    override suspend fun doWork(): Result {
+        val repository = ClientStatusRepository(applicationContext)
+        val routerUrl = repository.getRouterBaseUrl() ?: return Result.success()
+        repository.fetchClientStatus(routerUrl).onSuccess { response ->
+            val status = response.data ?: return@onSuccess
+            if (!AccessEndingScheduler.isAppInForeground) {
+                AccessEndingScheduler.schedule(
+                    applicationContext,
+                    status.accessEndsAt,
+                    response.serverTime,
+                    status.minutesRemaining
+                )
             }
         }
-    }
-
-    companion object {
-        const val ACTION_POLL = "com.example.sheepfoldchild.action.POLL_STATUS"
+        // Ошибка локальной сети не должна создавать плотный retry-цикл. Периодическая
+        // работа попробует снова в следующем окне, а экран имеет ручное обновление.
+        return Result.success()
     }
 }

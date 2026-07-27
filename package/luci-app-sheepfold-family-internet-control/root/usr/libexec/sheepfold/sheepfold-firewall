@@ -12,7 +12,6 @@ COMMAND="${1:-sync}"
 STATE_DIR="${SHEEPFOLD_FIREWALL_STATE_DIR:-/tmp/sheepfold/firewall}"
 STATE_HASH="$STATE_DIR/state.hash"
 FIREWALL_LOCK="${SHEEPFOLD_FIREWALL_LOCK:-/tmp/sheepfold/firewall-sync.flock}"
-NFT_TABLE="inet fw4"
 SCHEDULE_EVALUATOR="${SHEEPFOLD_SCHEDULE_EVALUATOR:-/usr/libexec/sheepfold/sheepfold-schedule-evaluator}"
 DOMAIN_POLICY_ACTIVE="${SHEEPFOLD_DOMAIN_POLICY_ACTIVE:-/tmp/sheepfold/domain-policy/active}"
 
