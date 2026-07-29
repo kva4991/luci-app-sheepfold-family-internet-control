@@ -43,7 +43,8 @@ test('navigation state owns tab definitions and pure transitions', () => {
 test('overview composes navigation and page shell preserves selected child tabs', () => {
   assert.match(overview, /require sheepfold\.features\.navigation\.state as navigationStateModel/);
   assert.match(overview, /var navigation = navigationStateModel\.create\(\)/);
-  assert.match(overview, /return pageShellModel\.create\(/);
+  assert.match(overview, /var overviewView = pageShellModel\.create\(/);
+  assert.match(overview, /return baseclass\.extend\(/);
   assert.match(shell, /deps\.navigation\.selectTop\(tab\)/);
   assert.match(settingsController, /deps\.navigation\.selectSettings\(tab\)/);
   assert.match(shell, /deps\.navigation\.selectUserList\(tab\)/);

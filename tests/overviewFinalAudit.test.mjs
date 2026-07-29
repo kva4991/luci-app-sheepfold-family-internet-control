@@ -54,8 +54,18 @@ describe('final overview architecture audit §ovaudit3', () => {
       "'use strict';",
       "'require sheepfold.features.overview.application as overviewApplication';",
       '',
-      'return overviewApplication;',
+      'return overviewApplication.create();',
     ]);
+  });
+
+  it('returns a constructor from the bootstrap instead of a required module instance', () => {
+    const overview = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview.js');
+    const application = read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/application.js');
+
+    assert.doesNotMatch(overview, /return\s+overviewApplication\s*;/);
+    assert.match(overview, /return\s+overviewApplication\.create\(\)\s*;/);
+    assert.match(application, /^'require baseclass';$/m);
+    assert.match(application, /return\s+baseclass\.extend\(\{\s*create:/s);
   });
 
   it('ships every new local require and recognizes only original repository modules as external to the overlay', () => {

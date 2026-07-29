@@ -299,7 +299,9 @@ Backend должен помнить, добавлял ли он MAC во вре�
 
 ### `factory yields invalid constructor`
 
-LuCI view wrapper вернул объект или применил неподходящий способ наследования вместо допустимого view constructor. Не используйте устаревший `BaseView.extend` для текущей обёртки Sheepfold. После исправления запустите `overviewSecureView.test.mjs` и проверьте страницу на роутере.
+LuCI требует, чтобы фабрика каждого view-модуля вернула конструктор, унаследованный от `view`. При этом зависимости из строк `'require ... as alias';` загрузчик передаёт уже созданными экземплярами. Поэтому короткий entrypoint вида `return alias;` ошибочен: LuCI пытается принять экземпляр за новый конструктор и показывает `factory yields invalid constructor`.
+
+Для Sheepfold `application.js` экспортирует фабрику на `baseclass`, а `view/sheepfold/overview.js` возвращает результат `overviewApplication.create()`, то есть настоящий view constructor. Не заменяйте этот вызов прямым возвратом зависимости. После исправления запустите `overviewFinalAudit.test.mjs`, `overviewFinalDecomposition.test.mjs`, `overviewSecureView.test.mjs` и обязательно откройте страницу на настоящем роутере: упрощённый тестовый loader может не воспроизвести точную семантику LuCI. (§ovfinal1)
 
 ### Иконки отсутствуют
 

@@ -1,4 +1,5 @@
 'use strict';
+'require baseclass';
 'require uci';
 'require ui';
 'require fs';
@@ -599,7 +600,7 @@ settingsController = settingsControllerModel.create({
 	confirm: window.confirm.bind(window)
 });
 
-return pageShellModel.create({
+var overviewView = pageShellModel.create({
 	store: store,
 	navigation: navigation,
 	navigationModel: navigationStateModel,
@@ -625,4 +626,14 @@ return pageShellModel.create({
 	siteListStatus: siteListStatus,
 	tableStylesheet: deviceTableModel.stylesheet,
 	defaultLogCachePath: DEFAULT_LOG_CACHE_PATH
+});
+
+/*
+ * LuCI передаёт require-зависимости как уже созданные экземпляры. Поэтому
+ * entrypoint получает фабрику, а не пытается вернуть этот экземпляр как класс.
+ */
+return baseclass.extend({
+	create: function () {
+		return overviewView;
+	}
 });

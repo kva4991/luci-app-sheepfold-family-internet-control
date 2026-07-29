@@ -291,7 +291,7 @@ if (existsSync(overview)) {
     "'use strict';",
     "'require sheepfold.features.overview.application as overviewApplication';",
     '',
-    'return overviewApplication;',
+    'return overviewApplication.create();',
   ];
   if (JSON.stringify(lines) !== JSON.stringify(expected))
     addError('overview_bootstrap_changed', 'overview.js must remain the stable four-line bootstrap', rel(overview));

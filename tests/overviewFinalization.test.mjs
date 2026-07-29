@@ -52,7 +52,8 @@ describe('overview.js final composition root §frontmod §ovfinal1', () => {
     assert.ok(bytes < 256, `overview.js is ${bytes} bytes`);
     assert.ok(lines <= 4, `overview.js is ${lines} lines`);
     assert.match(overview, /require sheepfold\.features\.overview\.application as overviewApplication/);
-    assert.match(overview, /return overviewApplication/);
+    assert.match(overview, /return overviewApplication\.create\(\)/);
+    assert.doesNotMatch(overview, /return overviewApplication;/);
     assert.doesNotMatch(overview, /uci\.|ui\.|fs\.|function\s+|pageShellModel/);
   });
 
@@ -69,7 +70,8 @@ describe('overview.js final composition root §frontmod §ovfinal1', () => {
     ]) {
       assert.match(application, new RegExp(`require sheepfold\\.[^;]+ as ${alias}`));
     }
-    assert.match(application, /return pageShellModel\.create\(/);
+    assert.match(application, /var overviewView = pageShellModel\.create\(/);
+    assert.match(application, /return baseclass\.extend\(/);
     assert.doesNotMatch(application, /return view\.extend\(/);
     assert.doesNotMatch(application, /\buci\.(?:set|unset|remove|add|save|apply)\s*\(/);
     assert.doesNotMatch(application, /\bui\.(?:showModal|hideModal|addNotification)\s*\(/);

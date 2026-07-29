@@ -267,7 +267,8 @@ describe('final overview.js decomposition §ovfinal1', () => {
     assert.ok(lines.length <= 4, `overview.js has ${lines.length} lines`);
     assert.ok(Buffer.byteLength(overview, 'utf8') < 256);
     assert.match(overview, /require sheepfold\.features\.overview\.application as overviewApplication/);
-    assert.match(overview, /return overviewApplication/);
+    assert.match(overview, /return overviewApplication\.create\(\)/);
+    assert.doesNotMatch(overview, /return overviewApplication;/);
     assert.doesNotMatch(overview, /uci\.|ui\.|fs\.|function\s+|pageShellModel/);
   });
 
@@ -277,7 +278,8 @@ describe('final overview.js decomposition §ovfinal1', () => {
 
     assert.ok(lines.length < 700, `application.js has ${lines.length} lines`);
     assert.ok(Buffer.byteLength(application, 'utf8') < 30_000);
-    assert.match(application, /return pageShellModel\.create\(/);
+    assert.match(application, /var overviewView = pageShellModel\.create\(/);
+    assert.match(application, /return baseclass\.extend\(/);
     assert.doesNotMatch(application, /return view\.extend\(/);
     assert.doesNotMatch(application, /\buci\.(?:set|unset|remove|add|save|apply)\s*\(/);
     assert.doesNotMatch(application, /\bui\.(?:showModal|hideModal|addNotification)\s*\(/);

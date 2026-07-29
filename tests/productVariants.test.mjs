@@ -139,7 +139,8 @@ describe('product variant boundary §prodvar', () => {
       assert.doesNotMatch(standardOverviewApplication, /AI assistant|deepseek_|gemini_|grok_|activity_log_enabled/);
       assert.match(standardOverview, /features\.overview\.application as overviewApplication/);
       assert.match(aiOverview, /features\.overview\.application as overviewApplication/);
-      assert.match(standardOverview, /return overviewApplication/);
+      assert.match(standardOverview, /return overviewApplication\.create\(\)/);
+      assert.match(aiOverview, /return overviewApplication\.create\(\)/);
       assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/overview/application.js'));
       assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/overview/application.js'));
       assert.match(standardOverviewApplication, /require sheepfold\.features\.schedules\.editor as scheduleEditor/);
