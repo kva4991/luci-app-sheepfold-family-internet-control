@@ -168,7 +168,11 @@ grep -q 'ensure-staged)' "$DEVICE_ID" || die "staged device ID allocation is una
 grep -q 'pair_restore_snapshot' "$PAIR_DEVICE" || die "pairing has no commit-failure recovery"
 grep -q 'token_write_bound_file' "$PAIR_COMMON" || die "pairing does not store token device metadata"
 grep -q 'token_device_is_admin_paired' "$TOKEN_COMMON" || die "token device binding helper is missing"
-grep -q 'HTTP_X_SHEEPFOLD_DEVICE_ID' "$CGI" || die "API auth does not read bound device id"
+grep -q 'authenticate-token)' "$CONTROL" || die "server-side bound-token authentication is missing"
+grep -q 'token_file_get "\$token_file" device_id' "$CONTROL" || die "API auth does not read server-bound device id"
+grep -q 'authenticate-token "\$bearer" "\$client_ip"' "$CGI" || die "CGI does not use server-side bound-token authentication"
+! grep -q 'HTTP_X_SHEEPFOLD_DEVICE_ID\|HTTP_X_SHEEPFOLD_DEVICE_MAC' "$CGI" || \
+    die "CGI trusts optional client identity headers"
 grep -q 'revoke-device-tokens' "$CONTROL" || die "per-device token revoke is missing"
 grep -q 'pair_valid_code' "$PAIR_COMMON" || die "pairing-code alphabet validation is missing"
 grep -q 'device_id' "$PAIR_DEVICE" || die "pairing does not return stable device id"

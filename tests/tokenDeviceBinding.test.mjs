@@ -256,6 +256,7 @@ describe('Administrator token device binding', () => {
     const apiLegacy = readProjectFile('root/usr/libexec/sheepfold/sheepfold-api-legacy');
     const aiGate = readProjectFile('root/usr/libexec/sheepfold/sheepfold-ai-gate');
     const tokenCommon = readProjectFile('root/usr/libexec/sheepfold/sheepfold-token-common');
+    const hardening = readProjectFile('root/usr/libexec/sheepfold/sheepfold-runtime-hardening');
 
     assert.match(control, /authenticate_token\(\)/);
     assert.match(control, /local bearer client_ip token_file hash now/);
@@ -276,6 +277,8 @@ describe('Administrator token device binding', () => {
     assert.match(tokenCommon, /\/tmp\/dhcp\.leases/);
     assert.match(tokenCommon, /ip neigh show "\$client_ip"/);
     assert.match(aiGate, /is_admin_request "\$requested_device_id" "\$mac"/);
+    assert.match(hardening, /server-side bound-token authentication is missing/);
+    assert.match(hardening, /CGI trusts optional client identity headers/);
   });
 
   it('authenticates without client identity headers and rejects a different network source', () => {
