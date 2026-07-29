@@ -55,40 +55,46 @@ enforce_rate_limit() {
 
 require_admin() {
     bearer=""
-    client_device_id="${HTTP_X_SHEEPFOLD_DEVICE_ID:-}"
-    client_device_mac="${HTTP_X_SHEEPFOLD_DEVICE_MAC:-}"
     case "${HTTP_AUTHORIZATION:-}" in [Bb]earer\ *) bearer="${HTTP_AUTHORIZATION#* }" ;; esac
-    # Заголовок X-Sheepfold-Device-Mac выбирает token binding, но право
-    # подтверждает MAC, который роутер видит у REMOTE_ADDR. Иначе украденный
-    # Bearer можно было бы использовать с поддельным клиентским заголовком.
     if [ -z "$bearer" ]; then
         header_json "401 Unauthorized"
         printf '{"app":"sheepfold","ok":false,"error":"auth_required","message":"Administrator Bearer token required."}\n'
         exit 0
     fi
-    if ! token_request_source_matches "$client_ip" "$client_device_mac"; then
+
+    auth_output=""
+    auth_status=0
+    auth_output="$(/usr/libexec/sheepfold/sheepfold-router-control authenticate-token "$bearer" "$client_ip" 2>/dev/null)" || auth_status=$?
+    if [ "$auth_status" -ne 0 ]; then
         header_json "401 Unauthorized"
-        printf '{"app":"sheepfold","ok":false,"error":"device_source_mismatch","message":"Administrator device source does not match the bound token."}\n'
+        case "$auth_status" in
+            3)
+                printf '{"app":"sheepfold","ok":false,"error":"device_source_mismatch","message":"Administrator device source does not match the bound token."}\n'
+                ;;
+            4)
+                printf '{"app":"sheepfold","ok":false,"error":"device_unbound","message":"Administrator device is no longer paired."}\n'
+                ;;
+            *)
+                printf '{"app":"sheepfold","ok":false,"error":"invalid_token","message":"Invalid, expired, or revoked administrator token."}\n'
+                ;;
+        esac
         exit 0
     fi
-    if ! token_device_is_admin_paired "$client_device_id" "$client_device_mac"; then
+
+    authenticated_admin_login="$(printf '%s\n' "$auth_output" | sed -n 's/^login=//p' | sed -n '1p')"
+    authenticated_admin_device_id="$(printf '%s\n' "$auth_output" | sed -n 's/^device_id=//p' | sed -n '1p')"
+    authenticated_admin_mac="$(printf '%s\n' "$auth_output" | sed -n 's/^mac=//p' | sed -n '1p')"
+    if [ -z "$authenticated_admin_login" ] || [ -z "$authenticated_admin_device_id" ] || [ -z "$authenticated_admin_mac" ]; then
         header_json "401 Unauthorized"
-        printf '{"app":"sheepfold","ok":false,"error":"device_unbound","message":"Administrator device is no longer paired."}\n'
-        exit 0
-    fi
-    if [ "$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" "$client_device_id" "$client_device_mac" 2>/dev/null || printf fail)" != ok ]; then
-        header_json "401 Unauthorized"
-        printf '{"app":"sheepfold","ok":false,"error":"invalid_token","message":"Invalid, expired, or revoked administrator token."}\n'
-        exit 0
-    fi
-    authenticated_admin_login="$(/usr/libexec/sheepfold/sheepfold-router-control token-login "$bearer" "$client_device_id" "$client_device_mac" 2>/dev/null || true)"
-    if [ -z "$authenticated_admin_login" ]; then
-        header_json "401 Unauthorized"
-        printf '{"app":"sheepfold","ok":false,"error":"token_revoked"}\n'
+        printf '{"app":"sheepfold","ok":false,"error":"invalid_token"}\n'
         exit 0
     fi
     SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN="$authenticated_admin_login"
+    SHEEPFOLD_AUTHENTICATED_ADMIN_DEVICE_ID="$authenticated_admin_device_id"
+    SHEEPFOLD_AUTHENTICATED_ADMIN_MAC="$authenticated_admin_mac"
     export SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN
+    export SHEEPFOLD_AUTHENTICATED_ADMIN_DEVICE_ID
+    export SHEEPFOLD_AUTHENTICATED_ADMIN_MAC
 }
 
 run_legacy() {

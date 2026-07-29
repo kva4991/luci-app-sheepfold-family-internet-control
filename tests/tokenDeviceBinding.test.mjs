@@ -87,6 +87,57 @@ pair_transaction_cleanup 6
   return state;
 }
 
+function runServerBoundAuthentication({ sourceMatches = true, adminPaired = true } = {}) {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'sheepfold-bound-auth-'));
+  const tokenDir = join(fixtureRoot, 'tokens');
+  const tokenFile = join(tokenDir, 'knownhash');
+  const testScript = join(fixtureRoot, 'authenticate.sh');
+  const control = readProjectFile('root/usr/libexec/sheepfold/sheepfold-router-control');
+  const authenticateFunction = control.slice(
+    control.indexOf('authenticate_token() {'),
+    control.indexOf('\n}\n', control.indexOf('authenticate_token() {')) + 3,
+  );
+
+  mkdirSync(tokenDir, { recursive: true });
+  writeFileSync(tokenFile, [
+    'login=SuperParent',
+    'device_id=8',
+    'mac=F2:D2:99:48:B2:D6',
+    'issued_at=100',
+    'expires_at=0',
+    '',
+  ].join('\n'), 'utf8');
+  writeFileSync(testScript, `#!/bin/sh
+set -eu
+TOKEN_STATE_DIR='${shellPath(tokenDir)}'
+uci() {
+  case "$*" in
+    '-q show sheepfold') printf 'sheepfold.admin=administrator\\n' ;;
+    '-q get sheepfold.admin.login') printf 'SuperParent\\n' ;;
+    *) return 1 ;;
+  esac
+}
+sha256_value() { printf 'knownhash\\n'; }
+token_file_get() { sed -n "s/^$2=//p" "$1" | sed -n '1p'; }
+token_file_is_legacy() { return 1; }
+token_normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
+token_valid_mac() { printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
+token_device_is_admin_paired() {
+  [ '${adminPaired ? 1 : 0}' = 1 ] && [ "$1" = 8 ] && [ "$2" = 'F2:D2:99:48:B2:D6' ]
+}
+token_request_source_matches() {
+  [ '${sourceMatches ? 1 : 0}' = 1 ] && [ "$1" = '192.168.4.201' ] && [ "$2" = 'F2:D2:99:48:B2:D6' ]
+}
+${authenticateFunction}
+authenticate_token 'phoneBearer' '192.168.4.201'
+`, 'utf8');
+  chmodSync(testScript, 0o755);
+
+  const result = spawnSync('sh', [shellPath(testScript)], { encoding: 'utf8' });
+  rmSync(fixtureRoot, { recursive: true, force: true });
+  return result;
+}
+
 describe('Administrator token device binding', () => {
   it('stores login, device_id and mac when pairing succeeds', () => {
     const pairCommon = readProjectFile('root/usr/libexec/sheepfold/sheepfold-pair-common');
@@ -199,28 +250,50 @@ describe('Administrator token device binding', () => {
     assert.equal(state.lockExists, false);
   });
 
-  it('checks bearer tokens together with device identity', () => {
+  it('resolves bearer identity from server-side token metadata §pairtx1 §authrs1', () => {
     const control = readProjectFile('root/usr/libexec/sheepfold/sheepfold-router-control');
     const cgi = readProjectFile('root/www/cgi-bin/sheepfold-api');
     const apiLegacy = readProjectFile('root/usr/libexec/sheepfold/sheepfold-api-legacy');
     const aiGate = readProjectFile('root/usr/libexec/sheepfold/sheepfold-ai-gate');
     const tokenCommon = readProjectFile('root/usr/libexec/sheepfold/sheepfold-token-common');
 
-    assert.match(control, /check_token "\$\{2:-\}" "\$\{3:-\}" "\$\{4:-\}"/);
+    assert.match(control, /authenticate_token\(\)/);
+    assert.match(control, /local bearer client_ip token_file hash now/);
+    assert.match(control, /token_file_get "\$token_file" device_id/);
+    assert.match(control, /token_file_get "\$token_file" mac/);
+    assert.match(control, /token_request_source_matches "\$client_ip" "\$mac"/);
+    assert.match(control, /authenticate_token "\$\{2:-\}" "\$\{3:-\}"/);
     assert.match(control, /revoke-device-tokens/);
-    assert.match(cgi, /HTTP_X_SHEEPFOLD_DEVICE_ID/);
-    assert.match(cgi, /token_request_source_matches "\$client_ip" "\$client_device_mac"/);
-    assert.match(cgi, /check-token "\$bearer" "\$client_device_id" "\$client_device_mac"/);
-    assert.match(apiLegacy, /HTTP_X_SHEEPFOLD_DEVICE_MAC/);
-    assert.match(apiLegacy, /token_request_source_matches "\$\{REMOTE_ADDR:-\}" "\$client_device_mac"/);
-    assert.match(apiLegacy, /check-token "\$bearer" "\$client_device_id" "\$client_device_mac"/);
+    assert.match(cgi, /authenticate-token "\$bearer" "\$client_ip"/);
+    assert.doesNotMatch(cgi, /HTTP_X_SHEEPFOLD_DEVICE_(?:ID|MAC)/);
+    assert.match(apiLegacy, /SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN/);
+    assert.match(apiLegacy, /authenticate-token "\$bearer" "\$\{REMOTE_ADDR:-\}"/);
+    assert.doesNotMatch(apiLegacy, /HTTP_X_SHEEPFOLD_DEVICE_(?:ID|MAC)/);
     assert.match(tokenCommon, /token_mac_for_ip\(\)/);
+    assert.match(tokenCommon, /local wanted_id wanted_mac section device_id/);
+    assert.match(tokenCommon, /local file client_device_id client_mac now login/);
+    assert.doesNotMatch(tokenCommon, /^\s+(?:section|login)\s+device_id\b/m);
     assert.match(tokenCommon, /\/tmp\/dhcp\.leases/);
     assert.match(tokenCommon, /ip neigh show "\$client_ip"/);
     assert.match(aiGate, /is_admin_request "\$requested_device_id" "\$mac"/);
   });
 
-  it('requires Android admin client to send bound device headers', () => {
+  it('authenticates without client identity headers and rejects a different network source', () => {
+    const accepted = runServerBoundAuthentication();
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.equal(
+      accepted.stdout,
+      'login=SuperParent\ndevice_id=8\nmac=F2:D2:99:48:B2:D6\n',
+    );
+
+    const wrongSource = runServerBoundAuthentication({ sourceMatches: false });
+    assert.equal(wrongSource.status, 3, wrongSource.stderr);
+
+    const detachedDevice = runServerBoundAuthentication({ adminPaired: false });
+    assert.equal(detachedDevice.status, 4, detachedDevice.stderr);
+  });
+
+  it('keeps Android device headers as optional diagnostics rather than authority', () => {
     const adminClient = readProjectFile(
       '../../android/app/src/main/java/app/sheepfold/android/router/RouterAdminClient.kt',
     );
@@ -236,5 +309,8 @@ describe('Administrator token device binding', () => {
     assert.match(aiClient, /X-Sheepfold-Device-Mac/);
     assert.match(store, /administratorDeviceMac/);
     assert.match(store, /deviceMacKey/);
+
+    const cgi = readProjectFile('root/www/cgi-bin/sheepfold-api');
+    assert.doesNotMatch(cgi, /HTTP_X_SHEEPFOLD_DEVICE_(?:ID|MAC)/);
   });
 });

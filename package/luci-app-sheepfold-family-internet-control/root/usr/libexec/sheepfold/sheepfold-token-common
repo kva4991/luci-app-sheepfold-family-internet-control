@@ -5,8 +5,9 @@ token_normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 
 token_valid_mac() { printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
 
-# Административный клиент сообщает свой MAC для выбора bound-token, но доверять
-# этому заголовку нельзя. Источник подтверждает сам роутер по DHCP/neighbor.
+# Для обычного административного API ожидаемый MAC приходит из server-side
+# bound-token. Helper всегда подтверждает источник сам по DHCP/neighbor; значение
+# от клиента допустимо лишь в старом внутреннем контракте и не считается доверием.
 token_mac_for_ip() {
 	client_ip="$1"
 	observed_mac=""
@@ -67,9 +68,9 @@ token_write_bound_file() {
 }
 
 token_device_is_admin_paired() {
+	local wanted_id wanted_mac section device_id legacy_ids mac admin
 	wanted_id="$1"
 	wanted_mac="$(token_normalize_mac "$2")"
-	section device_id legacy_ids mac admin
 
 	token_valid_mac "$wanted_mac" || return 1
 	[ -n "$wanted_id" ] || return 1
@@ -92,12 +93,11 @@ token_device_is_admin_paired() {
 }
 
 token_bound_file_valid() {
+	local file client_device_id client_mac now login device_id mac issued_at expires_at normalized_client_mac
 	file="$1"
 	client_device_id="$2"
 	client_mac="$3"
 	now="${4:-$(date +%s)}"
-	login device_id mac issued_at expires_at normalized_client_mac
-
 	[ -n "$client_device_id" ] || return 1
 	normalized_client_mac="$(token_normalize_mac "$client_mac")"
 	token_valid_mac "$normalized_client_mac" || return 1

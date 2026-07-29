@@ -20,6 +20,7 @@ const activity = read('android/app/src/main/java/app/sheepfold/android/MainActiv
 const setup = read('android/app/src/main/java/app/sheepfold/android/ui/setup/SafeRouterSetupScreen.kt');
 const api = read('package/luci-app-sheepfold-family-internet-control/root/www/cgi-bin/sheepfold-api');
 const legacyApi = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-api-legacy');
+const routerControl = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-router-control');
 
 describe('Android router session recovery §authrs1', () => {
   it('treats only final authorization failures as a lost pairing', () => {
@@ -67,12 +68,13 @@ describe('Android router session recovery §authrs1', () => {
 
   it('returns a distinct device_unbound code when administrator rights were removed', () => {
     for (const source of [api, legacyApi]) {
-      assert.match(source, /token_device_is_admin_paired/);
+      assert.match(source, /authenticate-token/);
       assert.match(source, /"error":"device_unbound"/);
       assert.match(source, /401 Unauthorized/);
     }
+    assert.match(routerControl, /token_device_is_admin_paired "\$device_id" "\$mac"/);
     assert.match(api, /"error":"invalid_token"/);
-    assert.match(api, /"error":"token_revoked"/);
+    assert.doesNotMatch(api, /HTTP_X_SHEEPFOLD_DEVICE_(?:ID|MAC)/);
   });
 
   it('requires explicit re-pairing after a stored TLS identity mismatch', () => {

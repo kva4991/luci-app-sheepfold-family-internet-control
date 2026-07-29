@@ -33,8 +33,8 @@ test('dispatcher authenticates and bounds every management request before the he
   assert.match(dispatcher, /CONTENT_LENGTH/);
   assert.match(dispatcher, /16384/);
   assert.match(dispatcher, /SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN/);
-  assert.match(dispatcher, /token_request_source_matches/);
-  assert.match(dispatcher, /token_device_is_admin_paired/);
+  assert.match(dispatcher, /authenticate-token "\$bearer" "\$client_ip"/);
+  assert.doesNotMatch(dispatcher, /HTTP_X_SHEEPFOLD_DEVICE_(?:ID|MAC)/);
 });
 
 test('helper uses optimistic revision, one kernel lock and verified rollback', () => {

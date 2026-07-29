@@ -69,10 +69,10 @@ sha256_value() {
 }
 
 check_token() {
+    local bearer client_device_id client_mac token_file hash now section login
     bearer="${1:-}"
     client_device_id="${2:-}"
     client_mac="${3:-}"
-    token_file hash now
 
     [ -n "$bearer" ] || { printf 'fail\n'; return 0; }
 
@@ -94,7 +94,50 @@ check_token() {
     printf 'fail\n'
 }
 
+authenticate_token() {
+    local bearer client_ip token_file hash now file_login device_id mac issued_at expires_at section login
+    bearer="${1:-}"
+    client_ip="${2:-}"
+
+    [ -n "$bearer" ] || return 2
+    [ -n "$client_ip" ] || return 3
+
+    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$/\1/p'); do
+        login="$(uci -q get "sheepfold.$section.login" 2>/dev/null || true)"
+        [ -n "$login" ] || continue
+        hash="$(sha256_value "$login:$bearer")" || return 2
+        token_file="$TOKEN_STATE_DIR/$hash"
+        [ -f "$token_file" ] || continue
+
+        # uhttpd на части OpenWrt-сборок не передаёт произвольные X-Sheepfold-*
+        # заголовки CGI. Поэтому доверенные ID и MAC берём только из серверной
+        # записи токена, а телефон предъявляет один Bearer. §pairtx1 §authrs1
+        token_file_is_legacy "$token_file" && return 4
+        file_login="$(token_file_get "$token_file" login)"
+        device_id="$(token_file_get "$token_file" device_id)"
+        mac="$(token_normalize_mac "$(token_file_get "$token_file" mac)")"
+        issued_at="$(token_file_get "$token_file" issued_at)"
+        expires_at="$(token_file_get "$token_file" expires_at)"
+
+        [ "$file_login" = "$login" ] || return 4
+        [ -n "$device_id" ] || return 4
+        token_valid_mac "$mac" || return 4
+        case "$issued_at" in ''|*[!0-9]*) return 4 ;; esac
+        case "$expires_at" in ''|*[!0-9]*) return 4 ;; esac
+        now="$(date +%s)"
+        [ "$expires_at" -le 0 ] || [ "$now" -le "$expires_at" ] || return 2
+        token_device_is_admin_paired "$device_id" "$mac" || return 4
+        token_request_source_matches "$client_ip" "$mac" || return 3
+
+        printf 'login=%s\ndevice_id=%s\nmac=%s\n' "$login" "$device_id" "$mac"
+        return 0
+    done
+
+    return 2
+}
+
 token_login() {
+    local bearer client_device_id client_mac section login hash token_file
     bearer="${1:-}"
     client_device_id="${2:-}"
     client_mac="${3:-}"
@@ -116,8 +159,8 @@ token_login() {
 }
 
 revoke_tokens() {
+    local login token_file file_login
     login="${1:-}"
-    token_file file_login
 
     if [ -z "$login" ]; then
         rm -f "$TOKEN_STATE_DIR"/* 2>/dev/null || true
@@ -136,8 +179,8 @@ revoke_tokens() {
 }
 
 revoke_device_tokens() {
+    local device_id token_file file_device_id
     device_id="${1:-}"
-    token_file file_device_id
 
     [ -n "$device_id" ] || return 1
     for token_file in "$TOKEN_STATE_DIR"/*; do
@@ -159,6 +202,9 @@ case "$command" in
         ;;
     check-token)
         check_token "${2:-}" "${3:-}" "${4:-}"
+        ;;
+    authenticate-token)
+        authenticate_token "${2:-}" "${3:-}"
         ;;
     token-login)
         token_login "${2:-}" "${3:-}" "${4:-}"

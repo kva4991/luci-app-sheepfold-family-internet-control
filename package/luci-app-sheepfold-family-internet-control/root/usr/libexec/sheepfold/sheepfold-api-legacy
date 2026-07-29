@@ -32,6 +32,13 @@ header_json() {
 auth_check() {
 	bearer=""
 
+	# Внешний CGI уже выполнил единую серверную проверку токена. Повторно
+	# разбирать необязательные X-Sheepfold-* заголовки здесь нельзя: некоторые
+	# сборки uhttpd их не передают и разрывают уже успешное сопряжение. §pairtx1
+	if [ -n "${SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN:-}" ]; then
+		return 0
+	fi
+
 	if [ -n "$(form_get token "$QUERY_STRING")" ]; then
 		header_json "400 Bad Request"
 		printf '{"app":"sheepfold","ok":false,"error":"query_token_forbidden"}\n'
@@ -48,28 +55,25 @@ auth_check() {
 		exit 0
 	fi
 
-	client_device_id="${HTTP_X_SHEEPFOLD_DEVICE_ID:-}"
-	client_device_mac="${HTTP_X_SHEEPFOLD_DEVICE_MAC:-}"
-	if ! token_request_source_matches "${REMOTE_ADDR:-}" "$client_device_mac"; then
+	auth_output=""
+	auth_status=0
+	auth_output="$(/usr/libexec/sheepfold/sheepfold-router-control authenticate-token "$bearer" "${REMOTE_ADDR:-}" 2>/dev/null)" || auth_status=$?
+	if [ "$auth_status" -ne 0 ]; then
 		header_json "401 Unauthorized"
-		printf '{"app":"sheepfold","ok":false,"error":"device_source_mismatch","message":"Administrator device source does not match the bound token."}\n'
+		case "$auth_status" in
+			3) printf '{"app":"sheepfold","ok":false,"error":"device_source_mismatch","message":"Administrator device source does not match the bound token."}\n' ;;
+			4) printf '{"app":"sheepfold","ok":false,"error":"device_unbound","message":"Administrator device is no longer paired."}\n' ;;
+			*) printf '{"app":"sheepfold","ok":false,"error":"invalid_token","message":"Invalid or expired token."}\n' ;;
+		esac
 		exit 0
 	fi
-	if ! token_device_is_admin_paired "$client_device_id" "$client_device_mac"; then
-		# Отдельный код позволяет APK объяснить явное отвязывание устройства,
-		# не принимая временную сетевую ошибку за отзыв доступа. §authrs1
+	SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN="$(printf '%s\n' "$auth_output" | sed -n 's/^login=//p' | sed -n '1p')"
+	[ -n "$SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN" ] || {
 		header_json "401 Unauthorized"
-		printf '{"app":"sheepfold","ok":false,"error":"device_unbound","message":"Administrator device is no longer paired."}\n'
+		printf '{"app":"sheepfold","ok":false,"error":"invalid_token"}\n'
 		exit 0
-	fi
-
-	# Делегируем проверку в sheepfold-router-control, который знает хэши и привязку к устройству.
-	result="$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" "$client_device_id" "$client_device_mac" 2>/dev/null || printf 'fail')"
-	if [ "$result" != "ok" ]; then
-		header_json "401 Unauthorized"
-		printf '{"app":"sheepfold","ok":false,"error":"invalid_token","message":"Invalid or expired token."}\n'
-		exit 0
-	fi
+	}
+	export SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN
 }
 
 router_name="$(uci -q get system.@system[0].hostname 2>/dev/null || printf OpenWrt)"
