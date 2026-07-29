@@ -41,6 +41,7 @@ import app.sheepfold.android.ui.main.OperationalMainScreen
 import app.sheepfold.android.ui.security.AppUnlockScreen
 import app.sheepfold.android.ui.setup.SafeRouterSetupScreen
 import app.sheepfold.android.ui.theme.SheepfoldTheme
+import app.sheepfold.android.ui.theme.LanguagePreferenceStore
 import app.sheepfold.android.ui.theme.ThemePreferenceStore
 import app.sheepfold.android.widget.SheepfoldWidgetRenderer
 import app.sheepfold.android.widget.WidgetCommand
@@ -51,6 +52,10 @@ class MainActivity : FragmentActivity() {
     private var forceLockToken by mutableIntStateOf(0)
     private var pendingWidgetCommand by mutableStateOf<WidgetCommand?>(null)
     private var backgroundedAtElapsed = 0L
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LanguagePreferenceStore.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,7 +68,8 @@ class MainActivity : FragmentActivity() {
                 forceLockToken = forceLockToken,
                 pendingWidgetCommand = pendingWidgetCommand,
                 onWidgetCommandConsumed = { pendingWidgetCommand = null },
-                onLockNow = { forceLockToken += 1 }
+                onLockNow = { forceLockToken += 1 },
+                onLanguageChanged = { recreate() }
             )
         }
     }
@@ -112,7 +118,8 @@ private fun SheepfoldRoot(
     forceLockToken: Int,
     pendingWidgetCommand: WidgetCommand?,
     onWidgetCommandConsumed: () -> Unit,
-    onLockNow: () -> Unit
+    onLockNow: () -> Unit,
+    onLanguageChanged: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -171,6 +178,10 @@ private fun SheepfoldRoot(
                             onThemeModeChange = { newMode ->
                                 themeMode = newMode
                                 ThemePreferenceStore.save(context, newMode)
+                            },
+                            onLanguageChange = { language ->
+                                LanguagePreferenceStore.save(context, language)
+                                onLanguageChanged()
                             },
                             onLockNow = {
                                 if (AppProtectionStore.requiresAuthentication(context)) {

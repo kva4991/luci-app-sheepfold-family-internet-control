@@ -492,3 +492,74 @@ msgstr "此备份来自另一台路由器或较旧版本的 Sheepfold。设备�
 
 # Add more translations as needed. Use msgmerge.sh to update from template.
 # For production, run the i18n scripts and provide high-quality translations for all msgids.
+
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-details.js
+msgid "No contradictions"
+msgstr "没有矛盾"
+
+msgid "No data"
+msgstr "暂无数据"
+
+msgid "Detection data will appear after the first device scan."
+msgstr "首次扫描设备后将显示检测数据。"
+
+msgid "The device type was selected manually. Detecting it again will remove the manual selection."
+msgstr "设备类型已手动选择。重新检测将取消手动选择。"
+
+msgid "Automatic detection has not run yet."
+msgstr "尚未运行自动检测。"
+
+msgid "This is the detection result. Positive technical scores are hidden; only contradictions that need attention are shown."
+msgstr "这是设备检测结果。正向技术评分已隐藏，仅显示需要注意的矛盾。"
+
+msgid "Device detection data"
+msgstr "设备检测数据"
+
+msgid "Detected type"
+msgstr "检测到的类型"
+
+msgid "Type confidence"
+msgstr "类型置信度"
+
+msgid "Contradicting evidence"
+msgstr "矛盾证据"
+
+msgid "Collecting current device signals..."
+msgstr "正在收集当前设备信号..."
+
+msgid "Preparing device detection."
+msgstr "正在准备设备检测。"
+
+msgid "Detect device again"
+msgstr "重新检测设备"
+
+msgid "Could not detect the device again."
+msgstr "无法重新检测设备。"
+
+msgid "The device was detected again."
+msgstr "设备已重新检测。"
+
+msgid "Unknown error."
+msgstr "未知错误。"
+
+msgid "Remove the manual type selection, collect signals, and detect the type again"
+msgstr "取消手动类型选择，收集信号并重新检测类型"
+
+msgid "Save the device before detecting it again"
+msgstr "请先保存设备，再重新检测"
+
+msgid "Detect again"
+msgstr "重新检测"
+
+#: htdocs/luci-static/resources/sheepfold/features/devices/presence.js
+msgid "Could not obtain device status."
+msgstr "无法获取设备状态。"
+
+msgid "Online: now (seen in the last 15 minutes)"
+msgstr "在线：当前（过去 15 分钟内可见）"
+
+msgid "Online: last seen %s"
+msgstr "在线：最后出现于 %s"
+
+msgid "Online: no presence data yet"
+msgstr "在线：暂无在线记录"

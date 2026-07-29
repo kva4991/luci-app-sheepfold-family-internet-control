@@ -6,9 +6,10 @@
  * shared UCI mutation. Section names are collision-safe and bound devices are
  * removed from standalone device-target schedules as well as legacy fields.
  */
-function create(deps) {
-	function value(item) { return typeof item === 'function' ? item() : item; }
-	function validateLogin(login) { return /^[A-Za-z0-9_.@+-]{1,64}$/.test(String(login || '').trim()); }
+function normalizeLogin(login) { return String(login || '').trim().toLowerCase(); }
+function validateLogin(login) { return /^[A-Za-z0-9_.@+-]{1,64}$/.test(String(login || '').trim()); }
+
+function createAccountStore(deps) {
 	function hash(text) {
 		var result = 2166136261;
 		String(text || '').split('').forEach(function (character) {
@@ -51,15 +52,74 @@ function create(deps) {
 	}
 
 	function ensureNewAdministratorLogin(login) {
-		var normalized = String(login || '').trim().toLowerCase();
+		var normalized = normalizeLogin(login);
 		var duplicate = deps.persistence.sections('sheepfold', 'administrator').some(function (section) {
-			return String(section.login || '').trim().toLowerCase() === normalized;
+			return normalizeLogin(section.login) === normalized;
 		});
 		if (duplicate) {
 			var error = new Error('administrator_login_exists');
 			error.errorCode = 'administrator_login_exists';
 			throw error;
 		}
+	}
+
+	function nextAdministratorId() {
+		var maximum = 0;
+
+		deps.persistence.sections('sheepfold', 'administrator').forEach(function (section) {
+			var id = parseInt(section.id, 10);
+			if (isFinite(id) && id > maximum)
+				maximum = id;
+		});
+		return String(maximum + 1);
+	}
+
+	function loginExists(login) {
+		var normalized = normalizeLogin(login);
+
+		return deps.persistence.sections('sheepfold', 'administrator').some(function (section) {
+			return normalizeLogin(section.login) === normalized;
+		});
+	}
+
+	function createAccount(admin) {
+		var login = String(admin && admin.login || '').trim();
+		var name = String(admin && admin.name || '').trim();
+
+		if (!name || !login) {
+			var required = new Error('administrator_name_and_login_required');
+			required.errorCode = 'invalid_request';
+			return Promise.reject(required);
+		}
+		if (!validateLogin(login)) {
+			var invalid = new Error('invalid_administrator_login');
+			invalid.errorCode = 'invalid_request';
+			return Promise.reject(invalid);
+		}
+
+		return deps.persistence.mutate(['sheepfold'], function () {
+			var section;
+
+			// Проверка находится внутри общей UCI-мутации: две вкладки LuCI не
+			// смогут одновременно создать одинаковый логин. §pairsec
+			ensureNewAdministratorLogin(login);
+			section = sectionName({ login: login });
+			deps.uci.set('sheepfold', section, 'id', nextAdministratorId());
+			deps.uci.set('sheepfold', section, 'display_name', name);
+			deps.uci.set('sheepfold', section, 'login', login);
+			deps.uci.set('sheepfold', section, 'role', login === 'SuperParent' ? 'owner' : 'admin');
+			deps.uci.set('sheepfold', section, 'password_hash', '');
+			deps.uci.set('sheepfold', section, 'password_setup_required', '1');
+			deps.uci.set('sheepfold', section, 'allow_child_access_requests',
+				admin.allowChildAccessRequests ? '1' : '0');
+			return { sectionName: section };
+		}).then(function (mutation) {
+			return {
+				persisted: true,
+				runtimeApplied: true,
+				sectionName: mutation.stageResult.sectionName
+			};
+		});
 	}
 
 	function stageAdministrator(admin) {
@@ -79,6 +139,26 @@ function create(deps) {
 			return { persisted: true, runtimeApplied: true, sectionName: mutation.stageResult.sectionName };
 		});
 	}
+
+	return {
+		normalizeLogin: normalizeLogin,
+		validateLogin: validateLogin,
+		loginExists: loginExists,
+		ensureNewAdministratorLogin: ensureNewAdministratorLogin,
+		createAccount: createAccount,
+		sectionName: sectionName,
+		stageAdministrator: stageAdministrator,
+		saveAdministrator: saveAdministrator
+	};
+}
+
+function create(deps) {
+	var accounts = createAccountStore({
+		persistence: deps.persistence,
+		uci: deps.uci
+	});
+
+	function value(item) { return typeof item === 'function' ? item() : item; }
 
 	function activate(admin, code) {
 		return deps.action({
@@ -174,8 +254,8 @@ function create(deps) {
 	function persistBindings(admin, selectedDevices, previousIds, includeAdministrator) {
 		return deps.devicePersistence.saveAccess(['sheepfold'], function () {
 			if (includeAdministrator !== false)
-				ensureNewAdministratorLogin(admin && admin.login);
-			var administratorSection = includeAdministrator === false ? '' : stageAdministrator(admin);
+				accounts.ensureNewAdministratorLogin(admin && admin.login);
+			var administratorSection = includeAdministrator === false ? '' : accounts.stageAdministrator(admin);
 			var binding = stageBindings(admin, selectedDevices, previousIds);
 			binding.administratorSection = administratorSection;
 			return binding;
@@ -183,11 +263,14 @@ function create(deps) {
 	}
 
 	return {
-		validateLogin: validateLogin,
-		ensureNewAdministratorLogin: ensureNewAdministratorLogin,
-		sectionName: sectionName,
-		stageAdministrator: stageAdministrator,
-		saveAdministrator: saveAdministrator,
+		normalizeLogin: accounts.normalizeLogin,
+		validateLogin: accounts.validateLogin,
+		loginExists: accounts.loginExists,
+		ensureNewAdministratorLogin: accounts.ensureNewAdministratorLogin,
+		createAccount: accounts.createAccount,
+		sectionName: accounts.sectionName,
+		stageAdministrator: accounts.stageAdministrator,
+		saveAdministrator: accounts.saveAdministrator,
 		activate: activate,
 		status: status,
 		removeDeviceScheduleTargets: removeDeviceScheduleTargets,
@@ -196,4 +279,7 @@ function create(deps) {
 	};
 }
 
-return baseclass.extend({ create: create });
+return baseclass.extend({
+	create: create,
+	createAccountStore: createAccountStore
+});

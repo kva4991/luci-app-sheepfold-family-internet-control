@@ -1,7 +1,7 @@
 import org.gradle.api.tasks.Copy
 
-val sheepfoldVersionCode = 50
-val sheepfoldVersionName = "0.1.49"
+val sheepfoldVersionCode = 51
+val sheepfoldVersionName = "0.1.50"
 
 
 val releaseSigningEnvironment = mapOf(
@@ -63,6 +63,14 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    // Язык переключается внутри приложения, поэтому APK/AAB должен содержать
+    // все переводы и не рассчитывать на их отдельную загрузку через Play Core.
+    bundle {
+        language {
+            enableSplit = false
+        }
     }
 }
 

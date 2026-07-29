@@ -2,13 +2,14 @@
 <resources>
     <string name="protection_biometric">Биометрия Android</string>
     <string name="settings_security_title">Защита приложения</string>
+    <string name="settings_relock_label">Блокировать приложение</string>
     <string name="settings_relock_description">После указанного времени в фоне Sheepfold снова потребует пароль, PIN или системную биометрию.</string>
     <string name="settings_relock_immediate">Блокировать сразу</string>
     <string name="settings_relock_one_minute">Блокировать через 1 минуту</string>
     <string name="settings_relock_five_minutes">Блокировать через 5 минут</string>
     <string name="settings_relock_fifteen_minutes">Блокировать через 15 минут</string>
     <string name="settings_lock_now">Заблокировать приложение сейчас</string>
-    <string name="settings_widget_disable_title">Отключение интернета из виджета</string>
+    <string name="settings_widget_disable_title">Отключение/включение интернета из виджета</string>
     <string name="settings_widget_disable_safe">Безопасный режим: открыть приложение, разблокировать и подтвердить отключение.</string>
     <string name="settings_widget_disable_instant">Опытный режим: отключать интернет сразу с домашнего экрана без разблокировки.</string>
     <string name="settings_widget_disable_warning_title">Разрешить мгновенное отключение?</string>

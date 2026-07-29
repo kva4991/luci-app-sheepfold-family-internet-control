@@ -23,6 +23,7 @@ test('parent-management shell entrypoints keep valid syntax and AI variant marke
   assert.match(dispatcher, /# SHEEPFOLD_AI_BEGIN[\s\S]*AI_GATE/);
   assert.match(dispatcher, /\/ai-assistant\)/);
   assert.match(dispatcher, /\/api\/v1\/admin-config/);
+  assert.match(dispatcher, /\/api\/v1\/admin-config\/wifi\/save/);
 });
 
 test('dispatcher authenticates and bounds every management request before the helper', () => {
@@ -49,12 +50,15 @@ test('helper uses optimistic revision, one kernel lock and verified rollback', (
   assert.match(helper, /group_state_is_valid/);
   assert.match(helper, /config_verify_failed/);
   assert.match(helper, /restore_snapshot/);
+  assert.match(helper, /expectedWifiRevision/);
+  assert.match(helper, /WIFI_TX_RESTORE=1/);
+  assert.match(helper, /wifi_state_is_valid/);
 });
 
 test('helper excludes secrets and rejects administrator policy targets', () => {
   const adminProjection = helper.slice(
     helper.indexOf('json_administrator()'),
-    helper.indexOf('wifi_enabled()'),
+    helper.indexOf('json_wifi_network()'),
   );
   assert.doesNotMatch(adminProjection, /password_hash|pairing_code|token/);
   assert.match(helper, /administrator_schedule_forbidden/);
@@ -63,4 +67,13 @@ test('helper excludes secrets and rejects administrator policy targets', () => {
   assert.match(helper, /group_has_schedules/);
   assert.match(helper, /reserved_group_name/);
   assert.match(helper, /duplicate_schedule_target/);
+});
+
+test('Wi-Fi projection and writes stay behind administrator auth and verified rollback', () => {
+  assert.match(helper, /json_wifi_networks/);
+  assert.match(helper, /wifiRevision/);
+  assert.match(helper, /wifi-save\) wifi_save/);
+  assert.match(helper, /wifi_network_not_found/);
+  assert.match(helper, /wifi_reload_failed/);
+  assert.match(helper, /SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN/);
 });

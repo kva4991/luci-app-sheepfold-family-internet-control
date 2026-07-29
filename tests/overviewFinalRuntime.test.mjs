@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 import vm from 'node:vm';
@@ -368,14 +367,23 @@ describe('experimental final overview runtime tests §ovaudit3', () => {
   });
 
   it('never exposes arbitrary failing backend output as actionMessage metadata', () => {
-    const temp = mkdtempSync(join(tmpdir(), 'sheepfold-action-'));
+    const fixtureParent = resolve('.build/test-fixtures');
+    mkdirSync(fixtureParent, { recursive: true });
+    const temp = mkdtempSync(join(fixtureParent, 'sheepfold-action-'));
+    const shellPath = (path) => relative(process.cwd(), path).replaceAll('\\', '/');
     try {
       const control = join(temp, 'control');
       writeFileSync(control, '#!/bin/sh\necho "token=super-secret"\necho "password=also-secret" >&2\nexit 9\n');
       chmodSync(control, 0o755);
       const wrapper = resolve(pkg, 'root/usr/libexec/sheepfold/sheepfold-luci-action');
-      const result = spawnSync('sh', [wrapper, 'test-command'], {
-        encoding: 'utf8', env: { ...process.env, SHEEPFOLD_ROUTER_CONTROL: control, SHEEPFOLD_LUCI_ACTION_RUNTIME_DIR: join(temp, 'run') },
+      const result = spawnSync('sh', [shellPath(wrapper), 'test-command'], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          SHEEPFOLD_ROUTER_CONTROL: shellPath(control),
+          SHEEPFOLD_LUCI_ACTION_RUNTIME_DIR: shellPath(join(temp, 'run')),
+        },
       });
       assert.equal(result.status, 9);
       const metadata = result.stderr.split(/\r?\n/).filter((line) => line.startsWith('action'));
@@ -551,8 +559,6 @@ describe('experimental final overview runtime tests §ovaudit3', () => {
     assert.ok(finalAt > 0);
     const executable = raw.slice(0, finalAt) + `module.exports = {
       showSafeAddAdministratorModal,
-      administratorSectionName,
-      administratorHash,
     };`;
     const writes = [];
     const added = [];
@@ -607,6 +613,11 @@ describe('experimental final overview runtime tests §ovaudit3', () => {
         return gate.then(() => ({ stageResult }));
       },
     };
+    const uci = {
+      get: () => null,
+      set(config, section, option, value) { writes.push([config, section, option, value]); },
+    };
+    const pairingPersistence = loadModule('sheepfold/features/pairing/persistence.js');
     const context = {
       module: { exports: {} }, Promise, Object, Array, String, Number, Boolean, Math, Date, JSON, Error, RegExp,
       Map, Set, parseInt, isFinite, setTimeout, clearTimeout,
@@ -620,10 +631,7 @@ describe('experimental final overview runtime tests §ovaudit3', () => {
       },
       overview: { renderSettings() {}, renderAdmins() {}, load() {}, render() {} },
       view: { extend: (value) => value },
-      uci: {
-        get: () => null,
-        set(config, section, option, value) { writes.push([config, section, option, value]); },
-      },
+      uci,
       ui: {
         showModal(_title, nodes) { modal = nodes; }, hideModal() {},
         addNotification(_title, content, level) { notifications.push([content, level]); },
@@ -634,6 +642,9 @@ describe('experimental final overview runtime tests §ovaudit3', () => {
         errorText: (error, fallback) => error?.message || fallback, actionMetadata: () => ({}), parseKeyValues: () => ({}),
       },
       uciPersistenceModel: { create: () => persistence },
+      pairingPersistenceModel: {
+        createAccountStore: () => pairingPersistence.createAccountStore({ persistence, uci }),
+      },
       commandActionsModel: { create: () => ({
         run: async () => ({ code: 0 }), errorText: (error, fallback) => error?.message || fallback,
         ensureOk: (value) => value,

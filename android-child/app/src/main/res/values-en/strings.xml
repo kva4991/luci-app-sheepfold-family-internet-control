@@ -7,17 +7,8 @@
     <string name="status_no_connection">Cannot reach the router</string>
 
     <!-- Access modes -->
-    <string name="access_mode_allowlist">Allowlist</string>
-    <string name="access_mode_blocked">Parental control</string>
-    <string name="access_mode_scheduled">Scheduled</string>
-    <string name="access_mode_temporary">Temporary access</string>
-    <string name="access_mode_restricted">Restricted access</string>
-    <string name="access_mode_default">New-device rule</string>
-    <string name="access_mode_unknown">Mode unknown</string>
 
     <!-- Timer and time -->
-    <string name="time_remaining">%1$d min remaining</string>
-    <string name="ends_at">Access until %1$s</string>
     <string name="last_updated">Updated: %1$s</string>
 
     <!-- Buttons -->
@@ -53,8 +44,6 @@
     <string name="access_screen_title">My access</string>
     <string name="access_device_label">Device</string>
     <string name="access_internet_label">Internet</string>
-    <string name="access_mode_label">Mode</string>
-    <string name="access_time_label">Time remaining</string>
     <string name="access_next_change_label">Next access change</string>
     <string name="access_message_label">Message</string>
     <string name="access_request_30_minutes">Request 30 minutes of internet access</string>

@@ -21,8 +21,8 @@ function fixture() {
 }
 
 describe('final LuCI audit tool §ovaudit3', () => {
-  it('accepts the corrected overlay with only declared original-module warnings', () => {
-    const { result, report } = run(repo, ['--allow-overlay-missing']);
+  it('accepts the complete package in strict mode without overlay exceptions', () => {
+    const { result, report } = run(repo);
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(report.ok, true);
     assert.equal(report.errors.length, 0);
@@ -35,7 +35,7 @@ describe('final LuCI audit tool §ovaudit3', () => {
     try {
       const path = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/core/persistence/uci.js');
       writeFileSync(path, readFileSync(path, 'utf8').replace('savePromise = deps.uci.save();', "savePromise = deps.uci.save('sheepfold');"));
-      const { result, report } = run(root, ['--allow-overlay-missing']);
+      const { result, report } = run(root);
       assert.notEqual(result.status, 0);
       assert.ok(report.errors.some((error) => error.code === 'uci_call_arity'));
     } finally { rmSync(root, { recursive: true, force: true }); }
@@ -46,7 +46,7 @@ describe('final LuCI audit tool §ovaudit3', () => {
     try {
       const path = join(root, 'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/application.js');
       writeFileSync(path, readFileSync(path, 'utf8').replace('definitions: deviceTypes.definitions,', ''));
-      const { result, report } = run(root, ['--allow-overlay-missing']);
+      const { result, report } = run(root);
       assert.notEqual(result.status, 0);
       assert.ok(report.errors.some((error) => error.code === 'missing_dependency' || error.code === 'device_type_definitions_missing'));
     } finally { rmSync(root, { recursive: true, force: true }); }
@@ -60,7 +60,7 @@ describe('final LuCI audit tool §ovaudit3', () => {
         "'require sheepfold.features.page.refresh as pageRefreshModel';",
         "'require sheepfold.features.page.missing-refresh as pageRefreshModel';",
       ));
-      const { result, report } = run(root, ['--allow-overlay-missing']);
+      const { result, report } = run(root);
       assert.notEqual(result.status, 0);
       assert.ok(report.errors.some((error) => error.code === 'local_require_missing'));
     } finally { rmSync(root, { recursive: true, force: true }); }

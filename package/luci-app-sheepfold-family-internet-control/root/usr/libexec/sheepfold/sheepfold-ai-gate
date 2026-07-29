@@ -1,8 +1,13 @@
 #!/bin/sh
 set -eu
 
-RATE_DIR="/tmp/sheepfold/ai-rate"
+RATE_DIR="${SHEEPFOLD_AI_RATE_DIR:-/tmp/sheepfold/ai-rate}"
 JSON_COMMON="${SHEEPFOLD_JSON_COMMON:-/usr/libexec/sheepfold/sheepfold-lib-json}"
+UCI_BIN="${SHEEPFOLD_UCI_BIN:-uci}"
+ROUTER_CONTROL="${SHEEPFOLD_ROUTER_CONTROL:-/usr/libexec/sheepfold/sheepfold-router-control}"
+DEVICE_ID_HELPER="${SHEEPFOLD_DEVICE_ID_HELPER:-/usr/libexec/sheepfold/sheepfold-device-id}"
+DHCP_LEASES="${SHEEPFOLD_DHCP_LEASES:-/tmp/dhcp.leases}"
+ARP_TABLE="${SHEEPFOLD_ARP_TABLE:-/proc/net/arp}"
 mkdir -p "$RATE_DIR"
 chmod 700 "$RATE_DIR" 2>/dev/null || true
 
@@ -40,19 +45,22 @@ sheepfold_json_require || {
 
 normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 valid_mac() { printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
+uci_read() { "$UCI_BIN" "$@"; }
 
 mac_for_ip() {
+    local ip mac
     ip="$1"
     mac=""
-    [ ! -r /tmp/dhcp.leases ] || mac="$(awk -v ip="$ip" '$3 == ip { print toupper($2); exit }' /tmp/dhcp.leases)"
-    [ -n "$mac" ] || [ ! -r /proc/net/arp ] || mac="$(awk -v ip="$ip" '$1 == ip { print toupper($4); exit }' /proc/net/arp)"
+    [ ! -r "$DHCP_LEASES" ] || mac="$(awk -v ip="$ip" '$3 == ip { print toupper($2); exit }' "$DHCP_LEASES")"
+    [ -n "$mac" ] || [ ! -r "$ARP_TABLE" ] || mac="$(awk -v ip="$ip" '$1 == ip { print toupper($4); exit }' "$ARP_TABLE")"
     normalize_mac "$mac"
 }
 
 device_section_for_mac() {
+    local wanted section existing
     wanted="$(normalize_mac "$1")"
-    for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
-        existing="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
+    for section in $(uci_read -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+        existing="$(uci_read -q get "sheepfold.$section.mac" 2>/dev/null || true)"
         [ "$(normalize_mac "$existing")" = "$wanted" ] || continue
         printf '%s\n' "$section"
         return 0
@@ -61,35 +69,37 @@ device_section_for_mac() {
 }
 
 list_has_mac() {
+    local wanted existing
     wanted="$(normalize_mac "$2")"
-    for existing in $(uci -q get "sheepfold.$1.mac" 2>/dev/null || true); do
+    for existing in $(uci_read -q get "sheepfold.$1.mac" 2>/dev/null || true); do
         [ "$(normalize_mac "$existing")" = "$wanted" ] && return 0
     done
     return 1
 }
 
 personal_group_for_device() {
+    local section mac device_group group_section existing group_name
     section="$1"
     mac="$(normalize_mac "$2")"
-    device_group="$(uci -q get "sheepfold.$section.group" 2>/dev/null || true)"
+    device_group="$(uci_read -q get "sheepfold.$section.group" 2>/dev/null || true)"
 
     # Детский AI открывается только для устройства, которое родитель явно
     # связал с личной группой. Поддерживаем новую personal_group-модель и
     # текущие group-секции с option personal=1, чтобы миграция была мягкой.
-    for group_section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=personal_group$/\1/p'); do
-        for existing in $(uci -q get "sheepfold.$group_section.deviceMac" 2>/dev/null || true); do
+    for group_section in $(uci_read -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=personal_group$/\1/p'); do
+        for existing in $(uci_read -q get "sheepfold.$group_section.deviceMac" 2>/dev/null || true); do
             [ "$(normalize_mac "$existing")" = "$mac" ] || continue
-            uci -q get "sheepfold.$group_section.displayName" 2>/dev/null || \
-                uci -q get "sheepfold.$group_section.name" 2>/dev/null || \
+            uci_read -q get "sheepfold.$group_section.displayName" 2>/dev/null || \
+                uci_read -q get "sheepfold.$group_section.name" 2>/dev/null || \
                 printf '%s' "$group_section"
             return 0
         done
     done
 
     [ -n "$device_group" ] || return 1
-    for group_section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=group$/\1/p'); do
-        [ "$(uci -q get "sheepfold.$group_section.personal" 2>/dev/null || printf 0)" = 1 ] || continue
-        group_name="$(uci -q get "sheepfold.$group_section.name" 2>/dev/null || printf '%s' "$group_section")"
+    for group_section in $(uci_read -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=group$/\1/p'); do
+        [ "$(uci_read -q get "sheepfold.$group_section.personal" 2>/dev/null || printf 0)" = 1 ] || continue
+        group_name="$(uci_read -q get "sheepfold.$group_section.name" 2>/dev/null || printf '%s' "$group_section")"
         [ "$device_group" = "$group_section" ] || [ "$device_group" = "$group_name" ] || continue
         printf '%s' "$group_name"
         return 0
@@ -99,18 +109,20 @@ personal_group_for_device() {
 }
 
 is_admin_request() {
+    local device_id mac bearer
     device_id="$1"
     mac="$2"
     bearer=""
     case "${HTTP_AUTHORIZATION:-}" in [Bb]earer\ *) bearer="${HTTP_AUTHORIZATION#* }" ;; esac
     [ -n "$bearer" ] || return 1
-    [ "$(/usr/libexec/sheepfold/sheepfold-router-control check-token "$bearer" "$device_id" "$mac" 2>/dev/null || printf fail)" = ok ]
+    [ "$("$ROUTER_CONTROL" check-token "$bearer" "$device_id" "$mac" 2>/dev/null || printf fail)" = ok ]
 }
 
 consume_quota() {
+    local identity limit window id file lock tries now started count retry_after
     identity="$1"
-    limit="$(uci -q get sheepfold.global.ai_rate_limit_requests 2>/dev/null || printf 20)"
-    window="$(uci -q get sheepfold.global.ai_rate_limit_window_seconds 2>/dev/null || printf 3600)"
+    limit="$(uci_read -q get sheepfold.global.ai_rate_limit_requests 2>/dev/null || printf 20)"
+    window="$(uci_read -q get sheepfold.global.ai_rate_limit_window_seconds 2>/dev/null || printf 3600)"
     case "$limit" in ''|*[!0-9]*) limit=20 ;; esac
     case "$window" in ''|*[!0-9]*) window=3600 ;; esac
     [ "$limit" -ge 1 ] || limit=1
@@ -154,9 +166,11 @@ consume_quota() {
 
 body="$(cat)"
 [ ${#body} -le 16384 ] || reject "413 Payload Too Large" request_too_large "AI request is too large."
-[ "$(uci -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)" = 1 ] || \
+[ "$(uci_read -q get sheepfold.global.ai_enabled 2>/dev/null || printf 0)" = 1 ] || \
     reject "503 Service Unavailable" ai_disabled "AI assistant is disabled on the router."
 
+# Все поля проходят одну строгую form-границу до аутентификации и списания
+# квоты. Иначе повреждённое позднее поле расходует лимит или падает как команда.
 requested_device_id="$(sheepfold_form_get deviceId "$body")" || \
     reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
 requested_role="$(sheepfold_form_get clientRole "$body")" || \
@@ -164,6 +178,16 @@ requested_role="$(sheepfold_form_get clientRole "$body")" || \
 requested_admin="$(sheepfold_form_get isAdministrator "$body")" || \
     reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
 consent_version="$(sheepfold_form_get consentVersion "$body")" || \
+    reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
+include_info="$(sheepfold_form_get includeInfo "$body")" || \
+    reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
+include_logs="$(sheepfold_form_get includeLogs "$body")" || \
+    reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
+google_account="$(sheepfold_form_get googleAccount "$body")" || \
+    reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
+provider="$(sheepfold_form_get provider "$body")" || \
+    reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
+model="$(sheepfold_form_get model "$body")" || \
     reject "400 Bad Request" invalid_form_encoding "The request contains invalid form encoding."
 [ -n "$requested_device_id" ] || reject "400 Bad Request" device_id_required "Device id is required."
 [ -n "$requested_role" ] || reject "400 Bad Request" client_role_required "Client role is required."
@@ -179,10 +203,10 @@ fi
 list_has_mac blocklist "$mac" && reject "403 Forbidden" device_blocklisted "Blocked devices cannot use the AI assistant."
 device_section="$(device_section_for_mac "$mac" 2>/dev/null || true)"
 [ -n "$device_section" ] || reject "403 Forbidden" device_not_registered "This device is not registered in Sheepfold."
-server_device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$device_section" 2>/dev/null || true)"
+server_device_id="$("$DEVICE_ID_HELPER" ensure "$device_section" 2>/dev/null || true)"
 [ -n "$server_device_id" ] || reject "500 Internal Server Error" device_id_missing "The router could not assign a numeric device id."
-server_legacy_ids="$(uci -q get "sheepfold.$device_section.legacy_ids" 2>/dev/null || true)"
-server_admin="$(uci -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
+server_legacy_ids="$(uci_read -q get "sheepfold.$device_section.legacy_ids" 2>/dev/null || true)"
+server_admin="$(uci_read -q get "sheepfold.$device_section.admin_device" 2>/dev/null || printf 0)"
 
 # Старый ID допустим только у той же MAC-секции; это сохраняет сопряжение после
 # миграции старого строкового формата номера, не ослабляя проверку устройства. §deviceid2
@@ -204,7 +228,7 @@ else
     [ "$requested_role" = child ] || reject "403 Forbidden" client_role_mismatch "Child device must use the child role."
     [ "$requested_admin" = 0 ] || reject "403 Forbidden" administrator_flag_mismatch "Administrator flag does not match the verified device."
     [ "$consent_version" = child-ai-v1 ] || reject "403 Forbidden" parental_consent_version_required "The current parental consent version is required."
-    [ "$(uci -q get sheepfold.global.child_ai_parental_consent 2>/dev/null || printf 0)" = 1 ] || \
+    [ "$(uci_read -q get sheepfold.global.child_ai_parental_consent 2>/dev/null || printf 0)" = 1 ] || \
         reject "403 Forbidden" parental_consent_required "A parent must enable child AI access in Sheepfold settings."
     personal_group_for_device "$device_section" "$mac" >/dev/null || \
         reject "403 Forbidden" personal_group_required "Ask a parent to put this device into your personal group in Sheepfold settings."
@@ -212,17 +236,11 @@ fi
 
 consume_quota "$server_device_id" || reject "429 Too Many Requests" rate_limited "AI request limit reached for this device." "${retry_after:-3600}"
 
-include_info="$(form_get includeInfo "$body")"
-include_logs="$(form_get includeLogs "$body")"
-google_account="$(form_get googleAccount "$body")"
-provider="$(form_get provider "$body")"
-model="$(form_get model "$body")"
-
 if [ "$include_info" = 1 ] || [ "$include_logs" = 1 ] || [ -n "$google_account" ] || [ -n "$provider" ] || [ -n "$model" ]; then
     [ "$admin_request" = 1 ] || reject "403 Forbidden" privileged_context_forbidden "Diagnostics, logs, account data, and provider overrides require an administrator token."
 fi
 
-if [ "$include_logs" = 1 ] && [ "$(uci -q get sheepfold.global.ai_individual_logs 2>/dev/null || printf 0)" != 1 ]; then
+if [ "$include_logs" = 1 ] && [ "$(uci_read -q get sheepfold.global.ai_individual_logs 2>/dev/null || printf 0)" != 1 ]; then
     reject "403 Forbidden" individual_logs_disabled "Individual AI log context is disabled."
 fi
 

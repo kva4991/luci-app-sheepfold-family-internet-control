@@ -32,6 +32,18 @@ data class RouterWifiModule(
     val mode: String
 )
 
+/** Авторизованная проекция одной точки доступа из OpenWrt wireless UCI. */
+data class RouterWifiNetwork(
+    val section: String,
+    val device: String,
+    val ssid: String,
+    val password: String,
+    val encryption: String,
+    val channel: String,
+    val enabled: Boolean,
+    val band: String
+)
+
 data class RouterSnapshot(
     val routerName: String,
     val diagnostics: Map<String, String>,
@@ -97,12 +109,14 @@ data class RouterAdminMutation(
 data class RouterAdminConfig(
     val schemaVersion: Int = 1,
     val revision: String = "",
+    val wifiRevision: String = "",
     val bedtime: String = "21:00",
     val wifiEnabled: Boolean = false,
     val capabilities: RouterAdminCapabilities = RouterAdminCapabilities(),
     val schedules: List<RouterSchedule> = emptyList(),
     val groups: List<RouterGroup> = emptyList(),
     val administrators: List<RouterAdministrator> = emptyList(),
+    val wifiNetworks: List<RouterWifiNetwork> = emptyList(),
     val mutation: RouterAdminMutation? = null
 )
 
@@ -240,6 +254,31 @@ class RouterAdminClient(
         ).flexibleBoolean("enabled")
     }
 
+    suspend fun saveWifiNetwork(
+        config: RouterAdminConfig,
+        network: RouterWifiNetwork
+    ): RouterAdminConfig = withContext(Dispatchers.IO) {
+        require(config.wifiRevision.isNotBlank()) { "Роутер не вернул ревизию Wi-Fi." }
+        require(network.section.isNotBlank()) { "Неизвестная секция Wi-Fi." }
+        require(network.ssid.isNotBlank()) { "Введите имя Wi-Fi сети." }
+        parseAdminConfig(
+            request(
+                "POST",
+                "$ADMIN_CONFIG_PATH/wifi/save",
+                mutationContext(config) + mapOf(
+                    "expectedWifiRevision" to config.wifiRevision,
+                    "section" to network.section,
+                    "ssid" to network.ssid.trim(),
+                    "password" to network.password,
+                    "encryption" to network.encryption,
+                    "channel" to network.channel,
+                    "enabled" to network.enabled.flag(),
+                    "confirm" to "1"
+                )
+            )
+        )
+    }
+
     suspend fun loadLog(lines: Int = 200): List<String> = withContext(Dispatchers.IO) {
         val safeLines = lines.coerceIn(1, 1000)
         request("GET", "/log?lines=$safeLines").optJSONArray("entries").stringList()
@@ -363,6 +402,7 @@ class RouterAdminClient(
         return RouterAdminConfig(
             schemaVersion = schemaVersion,
             revision = revision,
+            wifiRevision = json.optString("wifiRevision"),
             bedtime = json.optString("bedtime").ifBlank { "21:00" },
             wifiEnabled = json.flexibleBoolean("wifiEnabled"),
             capabilities = RouterAdminCapabilities(
@@ -376,6 +416,7 @@ class RouterAdminClient(
             schedules = parseSchedules(json.optJSONArray("schedules")),
             groups = parseGroups(json.optJSONArray("groups")),
             administrators = parseAdministrators(json.optJSONArray("administrators")),
+            wifiNetworks = parseWifiNetworks(json.optJSONArray("wifiNetworks")),
             mutation = mutation
         )
     }
@@ -391,6 +432,20 @@ class RouterAdminClient(
                 channel = item.optString("channel"),
                 country = item.optString("country"),
                 mode = item.optString("mode")
+            )
+        }
+
+    private fun parseWifiNetworks(items: JSONArray?): List<RouterWifiNetwork> =
+        parseObjectList(items) { item, _ ->
+            RouterWifiNetwork(
+                section = item.optString("section"),
+                device = item.optString("device"),
+                ssid = item.optString("ssid"),
+                password = item.optString("password"),
+                encryption = item.optString("encryption").ifBlank { "none" },
+                channel = item.optString("channel").ifBlank { "auto" },
+                enabled = item.flexibleBoolean("enabled", true),
+                band = item.optString("band")
             )
         }
 
@@ -594,6 +649,13 @@ class RouterAdminClient(
         "administrator_group_forbidden" -> "Администраторское устройство нельзя назначить в семейную группу."
         "administrator_schedule_forbidden" -> "Администраторское устройство нельзя ограничить расписанием."
         "wifi_control_failed" -> "Роутер не смог применить состояние Wi-Fi."
+        "wifi_network_not_found", "wifi_radio_not_found" ->
+            "Сеть Wi-Fi изменилась на роутере. Обновите экран и повторите действие."
+        "wifi_reload_failed" ->
+            "Wi-Fi не перезапустился, поэтому роутер восстановил прежние настройки."
+        "invalid_wifi_ssid", "invalid_wifi_password", "wifi_password_required",
+        "invalid_wifi_encryption", "invalid_wifi_channel", "invalid_wifi_enabled" ->
+            "Проверьте имя сети, пароль, тип защиты, канал и состояние Wi-Fi."
         "config_commit_failed", "config_verify_failed" -> "Роутер не подтвердил сохранение и восстановил прежнюю конфигурацию."
         else -> fallback
     }

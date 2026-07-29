@@ -175,6 +175,23 @@ describe('product variant boundary §prodvar', () => {
       assert.match(updater, /luci-app-sheepfold-ai-support/);
       assert.doesNotMatch(standardPostinst, /sheepfold-activity-log rotate/);
       assert.match(aiPostinst, /sheepfold-activity-log rotate/);
+      for (const aiOnlyOption of [
+        'private_logs',
+        'log_days',
+        'log_max_dir_kb',
+        'log_max_device_kb',
+      ]) {
+        assert.doesNotMatch(
+          standardPostinst,
+          new RegExp(`ensure_global_option\\s+${aiOnlyOption}(?:\\s|$)`),
+          `${aiOnlyOption} leaked into the Standard postinst`,
+        );
+        assert.match(
+          aiPostinst,
+          new RegExp(`ensure_global_option\\s+${aiOnlyOption}(?:\\s|$)`),
+          `${aiOnlyOption} is missing from the AI Support postinst`,
+        );
+      }
 
       assert.match(standard.control.get('control').toString('utf8'), /Package: luci-app-sheepfold-family-internet-control/);
       const standardControl = standard.control.get('control').toString('utf8');

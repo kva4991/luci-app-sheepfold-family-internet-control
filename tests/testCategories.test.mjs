@@ -34,6 +34,17 @@ describe('test category map §testcat', () => {
     }
   });
 
+  it('keeps smoke focused enough for frequent local runs', () => {
+    assert.ok(testCategories.smoke.length <= 12, 'smoke must stay a small representative set');
+    for (const heavy of [
+      'luciFinalAuditTool.test.mjs',
+      'productVariants.test.mjs',
+      'adguardIntegration.test.mjs',
+      'networkIntegration.test.mjs',
+    ])
+      assert.ok(!testCategories.smoke.includes(heavy), `${heavy} makes smoke too slow`);
+  });
+
   it('exposes stable npm commands for common problem categories', () => {
     for (const name of ['smoke', 'luci', 'access', 'devices', 'sites', 'backend', 'backendFast', 'policySimulation', 'networkIntegration', 'android', 'security', 'packaging']) {
       assert.equal(packageJson.scripts[`test:${name}`], `node scripts/run-test-category.mjs ${name}`);

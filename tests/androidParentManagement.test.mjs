@@ -14,14 +14,18 @@ const client = read('android/app/src/main/java/app/sheepfold/android/router/Rout
 const schedules = read('android/app/src/main/java/app/sheepfold/android/ui/main/SchedulesTab.kt');
 const groups = read('android/app/src/main/java/app/sheepfold/android/ui/main/GroupsTab.kt');
 const operations = read('android/app/src/main/java/app/sheepfold/android/ui/main/RouterOperationsTabs.kt');
+const wifi = read('android/app/src/main/java/app/sheepfold/android/ui/main/WifiManagementTab.kt');
+const settings = read('android/app/src/main/java/app/sheepfold/android/ui/main/SettingsTab.kt');
+const controlMenu = read('android/app/src/main/java/app/sheepfold/android/ui/main/ControlMenuTabs.kt');
 
 test('planned parent placeholders are replaced by router-backed screens', () => {
   assert.match(main, /client\.loadAdminConfig\(\)/);
-  assert.match(main, /3 -> SchedulesTab\(/);
-  assert.match(main, /4 -> GroupsTab\(/);
-  assert.match(main, /5 -> AdministratorsTab\(/);
-  assert.match(main, /6 -> WifiTab\(/);
-  assert.match(main, /logsIndex -> LogsTab\(/);
+  assert.match(main, /"schedules" -> SchedulesTab\(/);
+  assert.match(main, /"groups" -> GroupsTab\(/);
+  assert.match(main, /"administrators" -> AdministratorsTab\(/);
+  assert.match(main, /"wifi" -> WifiTab\(/);
+  assert.match(main, /"logs" -> LogsTab\(/);
+  assert.match(main, /"menu" -> MenuTab\(/);
   assert.doesNotMatch(main, /PlaceholderTab/);
   assert.doesNotMatch(main, /section_router_managed/);
 });
@@ -41,7 +45,7 @@ test('schedule and group editors preserve the shared router contract', () => {
 test('Android client uses a versioned optimistic API and typed models', () => {
   for (const model of [
     'RouterAdminConfig', 'RouterSchedule', 'RouterGroup', 'RouterAdministrator',
-    'RouterWifiModule', 'RouterTimeRange',
+    'RouterWifiModule', 'RouterWifiNetwork', 'RouterTimeRange',
   ]) assert.match(client, new RegExp(`data class ${model}\\b`));
   assert.match(client, /ADMIN_CONFIG_PATH = "\/api\/v1\/admin-config"/);
   assert.match(client, /schemaVersion/);
@@ -53,9 +57,21 @@ test('Android client uses a versioned optimistic API and typed models', () => {
 
 test('administrator and Wi-Fi security boundaries remain explicit', () => {
   assert.match(operations, /Учётные записи и QR остаются в LuCI/);
-  assert.match(operations, /client\.setWifiEnabled/);
+  assert.match(wifi, /client\.setWifiEnabled/);
+  assert.match(wifi, /client\.saveWifiNetwork/);
+  assert.match(wifi, /wifiQrPayload/);
+  assert.match(wifi, /PasswordVisualTransformation/);
   assert.match(operations, /client\.clearLog/);
-  assert.match(operations, /wifi_security_note/);
-  assert.doesNotMatch(operations, /wifiPassword|pairingCode|password_hash/);
+  assert.match(wifi, /wifi_security_note/);
+  assert.doesNotMatch(operations, /pairingCode|password_hash/);
   assert.doesNotMatch(client, /activate-admin-pairing-code|pair-token/);
+});
+
+test('parent settings use compact native controls and expose language', () => {
+  assert.match(settings, /ExposedDropdownMenuBox/);
+  assert.match(settings, /settings_relock_label/);
+  assert.match(settings, /ThemeChoice/);
+  assert.match(settings, /AppLanguage\.entries/);
+  assert.match(controlMenu, /router_now_enabled/);
+  assert.match(controlMenu, /R\.drawable\.ic_refresh/);
 });

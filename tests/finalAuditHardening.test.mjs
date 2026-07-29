@@ -205,12 +205,14 @@ describe('final cumulative hardening experiments §ovaudit4', () => {
     assert.doesNotMatch(block, /'disabled': 'disabled'/);
   });
 
-  it('rechecks administrator-login uniqueness inside the serialized secure mutation', () => {
+  it('routes secure account creation through the shared serialized administrator persistence', () => {
     const secure = readFileSync(resolve(resources, 'view/sheepfold/overview-secure.js'), 'utf8');
-    const task = secure.slice(secure.indexOf("task: function ()"), secure.indexOf("}).then(function ()", secure.indexOf("task: function ()")));
-    assert.match(task, /uciPersistence\.sections\('sheepfold', 'administrator'\)/);
-    assert.match(task, /administrator_login_exists/);
-    assert.ok(task.indexOf('administrator_login_exists') < task.indexOf('administratorSectionName(login)'));
+    const persistence = readFileSync(resolve(resources, 'sheepfold/features/pairing/persistence.js'), 'utf8');
+    assert.match(secure, /pairingPersistenceModel\.createAccountStore/);
+    assert.match(secure, /administratorPersistence\.createAccount/);
+    assert.doesNotMatch(secure, /function administratorSectionName|function administratorHash|function nextAdministratorId/);
+    assert.match(persistence, /function createAccount/);
+    assert.match(persistence, /ensureNewAdministratorLogin\(login\)[\s\S]*sectionName\(\{ login: login \}\)/);
   });
 
 });

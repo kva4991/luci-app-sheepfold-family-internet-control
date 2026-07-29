@@ -4,9 +4,8 @@
  * actual UCI/nftables effects remain live-router evidence. §frontmod §apicon1
  */
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 
@@ -236,7 +235,10 @@ describe('LuCI command actions §apicon1', () => {
   });
 
   it('preserves legacy stdout and adds bounded machine-readable shell errors', () => {
-    const root = mkdtempSync(join(tmpdir(), 'sheepfold-luci-action-'));
+    const fixtureParent = resolve('.build/test-fixtures');
+    mkdirSync(fixtureParent, { recursive: true });
+    const root = mkdtempSync(join(fixtureParent, 'sheepfold-luci-action-'));
+    const shellPath = (path) => relative(process.cwd(), path).replaceAll('\\', '/');
     const control = join(root, 'router-control');
     writeFileSync(control, `#!/bin/sh
 [ "$1" = --luci ] || exit 90
@@ -251,12 +253,13 @@ case "$command" in
 esac
 `);
     chmodSync(control, 0o755);
-    const run = (command, ...args) => spawnSync('sh', [wrapperPath, command, ...args], {
+    const run = (command, ...args) => spawnSync('sh', [shellPath(resolve(wrapperPath)), command, ...args], {
+      cwd: process.cwd(),
       encoding: 'utf8',
       env: {
         ...process.env,
-        SHEEPFOLD_ROUTER_CONTROL: control,
-        SHEEPFOLD_LUCI_ACTION_RUNTIME_DIR: join(root, 'runtime'),
+        SHEEPFOLD_ROUTER_CONTROL: shellPath(control),
+        SHEEPFOLD_LUCI_ACTION_RUNTIME_DIR: shellPath(join(root, 'runtime')),
       },
     });
 

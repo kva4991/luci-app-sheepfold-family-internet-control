@@ -133,6 +133,10 @@ admin_config_message() {
         administrator_schedule_forbidden) printf '%s' 'Administrator devices cannot be restricted by a schedule.' ;;
         confirmation_required) printf '%s' 'Explicit confirmation is required.' ;;
         wifi_control_failed) printf '%s' 'The router could not apply the Wi-Fi command.' ;;
+        wifi_reload_failed) printf '%s' 'Wi-Fi could not restart, so the previous wireless configuration was restored.' ;;
+        wifi_network_not_found|wifi_radio_not_found) printf '%s' 'This Wi-Fi network changed or no longer exists. Refresh and try again.' ;;
+        invalid_wifi_ssid|invalid_wifi_password|wifi_password_required|invalid_wifi_encryption|invalid_wifi_channel|invalid_wifi_enabled)
+            printf '%s' 'Check the Wi-Fi name, password, security type, channel and switch state.' ;;
         config_commit_failed|config_verify_failed) printf '%s' 'The router did not confirm the write and restored the previous configuration.' ;;
         *) printf '%s' 'Check the submitted fields and refresh the router state.' ;;
     esac
@@ -347,6 +351,13 @@ case "$path_info" in
         require_admin
         read_admin_body
         run_admin_config group-delete "$ADMIN_BODY"
+        ;;
+    /api/v1/admin-config/wifi/save|/admin-config/wifi/save)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 20 300
+        require_admin
+        read_admin_body
+        run_admin_config wifi-save "$ADMIN_BODY"
         ;;
     /api/v1/admin-config/wifi-control|/admin-config/wifi-control)
         [ "$method" = "POST" ] || method_not_allowed

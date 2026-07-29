@@ -4826,3 +4826,65 @@ msgstr "Телефон привязан, но роутер ещё не опуб�
 #: htdocs/luci-static/resources/sheepfold/features/administrators/controller.js
 msgid "The saved administrator state could not be refreshed in LuCI."
 msgstr "Сохранённое состояние администратора не удалось обновить в LuCI."
+
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-details.js
+msgid "No contradictions"
+msgstr "Противоречий нет"
+
+msgid "No data"
+msgstr "Нет данных"
+
+msgid "Detection data will appear after the first device scan."
+msgstr "Данные появятся после первого сканирования устройства."
+
+msgid "The device type was selected manually. Detecting it again will remove the manual selection."
+msgstr "Тип устройства выбран вручную. Повторное определение снимет ручную фиксацию."
+
+msgid "Automatic detection has not run yet."
+msgstr "Автоматическое определение ещё не выполнено."
+
+msgid "This is the detection result. Positive technical scores are hidden; only contradictions that need attention are shown."
+msgstr "Это результат определения устройства. Положительные технические оценки скрыты; показаны только противоречия, требующие внимания."
+
+msgid "Device detection data"
+msgstr "Данные определения устройства"
+
+msgid "Detected type"
+msgstr "Определённый тип"
+
+msgid "Type confidence"
+msgstr "Уверенность типа"
+
+msgid "Contradicting evidence"
+msgstr "Противоречащие признаки"
+
+msgid "Collecting current device signals..."
+msgstr "Собираются актуальные признаки устройства..."
+
+msgid "Preparing device detection."
+msgstr "Подготовка определения устройства."
+
+msgid "Detect device again"
+msgstr "Определить устройство заново"
+
+msgid "Could not detect the device again."
+msgstr "Не удалось определить устройство заново."
+
+msgid "The device was detected again."
+msgstr "Устройство определено заново."
+
+msgid "Unknown error."
+msgstr "Неизвестная ошибка."
+
+msgid "Remove the manual type selection, collect signals, and detect the type again"
+msgstr "Снять ручную фиксацию, собрать признаки и определить тип заново"
+
+msgid "Save the device before detecting it again"
+msgstr "Сначала сохраните устройство"
+
+msgid "Detect again"
+msgstr "Определить заново"
+
+#: htdocs/luci-static/resources/sheepfold/features/devices/presence.js
+msgid "Could not obtain device status."
+msgstr "Не удалось получить статус устройства."

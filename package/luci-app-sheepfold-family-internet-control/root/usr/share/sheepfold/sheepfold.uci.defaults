@@ -34,7 +34,6 @@ config sheepfold 'global'
         option site_blocklist_sources 'HaGeZi NSFW | https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nsfw.txt; HaGeZi Gambling mini | https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/gambling.mini.txt; HaGeZi Threat Intelligence mini | https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.mini.txt; URLhaus malware domains | https://urlhaus.abuse.ch/downloads/hostfile/'
         option site_lists_update_interval 'weekly'
         # SHEEPFOLD_AI_BEGIN
-        option activity_log_enabled '0'
         option private_logs '0'
         option log_days '7'
         option log_max_dir_kb '0'

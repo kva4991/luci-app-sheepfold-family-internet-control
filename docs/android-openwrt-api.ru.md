@@ -36,11 +36,26 @@ includeDiagnostics=0|1
 
 ### Родительский `/api/v1/admin-config`
 
-Авторизованный `GET /cgi-bin/sheepfold-api/api/v1/admin-config` возвращает `schemaVersion`, `revision`, расписания, группы, безопасные поля администраторов и итоговое состояние Wi-Fi. `password_hash`, pairing-коды, Bearer-токены, Wi-Fi-ключи и секреты интеграций в ответ не входят.
+Авторизованный `GET /cgi-bin/sheepfold-api/api/v1/admin-config` возвращает
+`schemaVersion`, `revision`, отдельную `wifiRevision`, расписания, группы, безопасные
+поля администраторов, итоговое состояние Wi-Fi и редактируемые точки доступа.
+`password_hash`, pairing-коды, Bearer-токены и секреты интеграций в ответ не входят.
+Wi-Fi-ключ является узким исключением: он передаётся только уже сопряжённому
+администраторскому APK по HTTPS с проверкой сохранённого отпечатка роутера и нужен
+для QR-кода и редактирования той же сети, которую показывает LuCI.
 
-Запись выполняют POST-подмаршруты `schedule/save`, `schedule/delete`, `group/save`, `group/delete` и `wifi-control`. Каждый UCI payload передаёт `schemaVersion` и `expectedRevision`; устаревший снимок получает `409 revision_conflict`. Backend сериализует изменение одним `flock`, пишет в изолированный `uci -t/-p` savedir, хранит снимок `/etc/config/sheepfold`, проверяет committed state и сохраняет возможность отката при ошибке. Администраторские устройства запрещены как цели расписаний и участники семейных групп.
+Запись выполняют POST-подмаршруты `schedule/save`, `schedule/delete`, `group/save`,
+`group/delete`, `wifi/save` и `wifi-control`. Sheepfold UCI payload передаёт
+`schemaVersion` и `expectedRevision`; Wi-Fi дополнительно передаёт
+`expectedWifiRevision`. Устаревший снимок получает `409 revision_conflict`.
+Backend сериализует изменения одним `flock`, проверяет committed state и держит
+снимок изменяемого файла для отката. Если сохранённый `/etc/config/wireless` не
+удалось применить, прежний файл и прежнее состояние Wi-Fi восстанавливаются.
+Администраторские устройства запрещены как цели расписаний и участники семейных групп.
 
-APK не выпускает административный QR и не редактирует Wi-Fi-пароли: эти операции остаются в защищённом LuCI (§pairsec, §apicon1).
+APK не выпускает административный QR. Сопряжение новых администраторских устройств
+остаётся в защищённом LuCI. Уже сопряжённый родительский APK может редактировать
+свои Wi-Fi-сети и строить QR подключения (§pairsec, §apicon1).
 
 ### Server-driven доступность ИИ (§prodvar)
 
@@ -700,33 +715,42 @@ Backend роутера обязан:
 
 ## Wi-Fi
 
-### GET `/api/v1/wifi/networks`
+### GET `/api/v1/admin-config`
 
 Ответ:
 
 ```json
 {
-  "ok": true,
-  "networks": [
+  "wifiRevision": "sha256-of-wireless-uci",
+  "wifiEnabled": true,
+  "wifiNetworks": [
     {
-      "id": "radio0.default_radio0",
+      "section": "default_radio0",
+      "device": "radio0",
       "band": "2.4GHz",
       "ssid": "mySweetHome",
+      "password": "password",
       "encryption": "sae-mixed",
       "channel": "auto",
-      "qrPayload": "WIFI:T:WPA;S:mySweetHome;P:password;;"
+      "enabled": true
     }
   ]
 }
 ```
 
-Пароль Wi-Fi возвращать только администраторам и только если это явно нужно для QR/редактирования.
+Пароль Wi-Fi возвращается только после Bearer-аутентификации сопряжённого
+администраторского устройства. Android сам строит стандартный `WIFI:` QR; пароль
+не попадает в диагностический `/router-info`, журналы или AI-контекст.
 
-### PATCH `/api/v1/wifi/networks/{networkId}`
+### POST `/api/v1/admin-config/wifi/save`
 
-Изменение SSID, пароля, защиты, канала. Требует подтверждения, потому что администратор может потерять соединение.
+Изменяет SSID, пароль, защиту, канал и состояние одной точки доступа. Запрос
+передаёт `section`, новые значения, `expectedWifiRevision` и `confirm=1`.
+Backend принимает только существующую `wifi-iface`, проверяет связанную
+`wifi-device`, сохраняет `/etc/config/wireless`, перезапускает Wi-Fi и откатывает
+файл при ошибке применения.
 
-### GET `/api/v1/wifi/state`
+### Состояние Wi-Fi
 
 Состояние всего Wi-Fi на роутере.
 
@@ -757,13 +781,11 @@ Backend роутера обязан:
 }
 ```
 
-### POST `/api/v1/wifi/enable`
+### POST `/api/v1/admin-config/wifi-control`
 
-Включает весь Wi-Fi на роутере. Требует подтверждения, потому что меняет состояние всех радиомодулей.
-
-### POST `/api/v1/wifi/disable`
-
-Выключает весь Wi-Fi на роутере. Требует подтверждения и предупреждения, что родитель может потерять подключение, если управляет роутером по Wi-Fi.
+Поле `enable=1` включает весь Wi-Fi, `enable=0` выключает. Оба действия требуют
+`confirm=1`; перед выключением APK предупреждает, что телефон может потерять
+соединение с роутером.
 
 ### PATCH `/api/v1/wifi/automation`
 

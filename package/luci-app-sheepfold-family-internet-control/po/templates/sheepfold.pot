@@ -4101,3 +4101,74 @@ msgstr ""
 #: htdocs/luci-static/resources/sheepfold/features/administrators/controller.js
 msgid "The saved administrator state could not be refreshed in LuCI."
 msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/devices/detection-details.js
+msgid "No contradictions"
+msgstr ""
+
+msgid "No data"
+msgstr ""
+
+msgid "Detection data will appear after the first device scan."
+msgstr ""
+
+msgid "The device type was selected manually. Detecting it again will remove the manual selection."
+msgstr ""
+
+msgid "Automatic detection has not run yet."
+msgstr ""
+
+msgid "This is the detection result. Positive technical scores are hidden; only contradictions that need attention are shown."
+msgstr ""
+
+msgid "Device detection data"
+msgstr ""
+
+msgid "Detected type"
+msgstr ""
+
+msgid "Type confidence"
+msgstr ""
+
+msgid "Contradicting evidence"
+msgstr ""
+
+msgid "Collecting current device signals..."
+msgstr ""
+
+msgid "Preparing device detection."
+msgstr ""
+
+msgid "Detect device again"
+msgstr ""
+
+msgid "Could not detect the device again."
+msgstr ""
+
+msgid "The device was detected again."
+msgstr ""
+
+msgid "Unknown error."
+msgstr ""
+
+msgid "Remove the manual type selection, collect signals, and detect the type again"
+msgstr ""
+
+msgid "Save the device before detecting it again"
+msgstr ""
+
+msgid "Detect again"
+msgstr ""
+
+#: htdocs/luci-static/resources/sheepfold/features/devices/presence.js
+msgid "Could not obtain device status."
+msgstr ""
+
+msgid "Online: now (seen in the last 15 minutes)"
+msgstr ""
+
+msgid "Online: last seen %s"
+msgstr ""
+
+msgid "Online: no presence data yet"
+msgstr ""

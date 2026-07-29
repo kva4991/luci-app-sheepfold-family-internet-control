@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=256
+PKG_RELEASE:=258
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -18,8 +18,6 @@ LUCI_DEPENDS:=+luci-base +firewall4 +rpcd +uci +jshn +uclient-fetch +ca-bundle +
 # Supported LuCI languages (gettext)
 LUCI_LANGUAGES:=en ru zh_Hans
 LUCI_LANG.zh_Hans:=中文 (简体)
-
-# ... (the rest of the long postinst and other sections remain unchanged)
 
 define Package/$(PKG_NAME)/preinst
 #!/bin/sh
@@ -223,11 +221,12 @@ fi
 ensure_global_option site_lists_update_interval 'weekly'
 ensure_global_option sim_change_notifications 'new_only'
 ensure_global_option child_wifi_network_notifications 'off'
-ensure_global_option activity_log_enabled '0'
+# SHEEPFOLD_AI_BEGIN
 ensure_global_option private_logs '0'
 ensure_global_option log_days '7'
 ensure_global_option log_max_dir_kb '0'
 ensure_global_option log_max_device_kb '0'
+# SHEEPFOLD_AI_END
 if [ "$$(uci -q get sheepfold.global.domain_allowlist_for_blocklist_default_migrated 2>/dev/null)" != "1" ]; then
 	uci -q set sheepfold.global.domain_allowlist_for_blocklist='1'
 	uci -q set sheepfold.global.domain_allowlist_for_blocklist_default_migrated='1'

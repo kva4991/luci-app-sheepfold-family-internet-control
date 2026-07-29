@@ -22,6 +22,7 @@
 | [`tactful-persistence-and-human-help.ru.md`](tactful-persistence-and-human-help.ru.md) | Соразмерное возвращение к опасной теме и добровольная консультация живого специалиста (§aiescal) |
 | [`legal-risk-and-restorative-response.ru.md`](legal-risk-and-restorative-response.ru.md) | Правовой риск ребёнка, отсутствие скрытого информирования и восстановительные сценарии проступков (§ailegal) |
 | [`regional-risk-context.ru.md`](regional-risk-context.ru.md) | Проверяемые региональные факторы риска, страх обращения за помощью и безопасное признание (§aireg01) |
+| [`trusted-safety-advisories.ru.md`](trusted-safety-advisories.ru.md) | Будущие проверяемые уведомления о местном комендантском часе и новых видах мошенничества (§aialert1) |
 | [`external-integrations.ru.md`](external-integrations.ru.md) | Календарь, заметки, SMS и иные будущие внешние адаптеры |
 | [`privacy-proxy-and-external-compute.ru.md`](privacy-proxy-and-external-compute.ru.md) | Локальное маскирование, псевдонимы и необязательный внешний вычислительный worker (§aiexec1, §aimask1) |
 | [`mediator-and-initiative.ru.md`](mediator-and-initiative.ru.md) | Будущие команды ИИ, два режима подтверждения, медиатор и инициатива (§aimed01) |

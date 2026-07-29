@@ -7,6 +7,7 @@
 'require sheepfold.core.backend.router as routerBackend';
 'require sheepfold.core.persistence.uci as uciPersistenceModel';
 'require sheepfold.core.backend.actions as commandActionsModel';
+'require sheepfold.features.pairing.persistence as pairingPersistenceModel';
 
 /*
  * Secure additions are kept as a thin decorator around the regular overview
@@ -42,6 +43,10 @@ var uciPersistence = uciPersistenceModel.create({
 			return callUciRevert(config);
 		}));
 	}
+});
+var administratorPersistence = pairingPersistenceModel.createAccountStore({
+	persistence: uciPersistence,
+	uci: uci
 });
 
 function routerControl(args, options) {
@@ -299,68 +304,6 @@ function attachLedSaveCheck(root, button) {
 	}, true);
 }
 
-function normalizedLogin(login) {
-	return String(login || '').trim().toLowerCase();
-}
-
-function validAdministratorLogin(login) {
-	return /^[A-Za-z0-9_.@+-]{1,64}$/.test(String(login || '').trim());
-}
-
-function administratorLoginExists(login) {
-	var normalized = normalizedLogin(login);
-	var exists = false;
-
-	uciPersistence.sections('sheepfold', 'administrator').forEach(function (section) {
-		if (normalizedLogin(section.login) === normalized)
-			exists = true;
-	});
-	return exists;
-}
-
-function administratorHash(text) {
-	var result = 2166136261;
-
-	String(text || '').split('').forEach(function (character) {
-		result ^= character.charCodeAt(0);
-		result = Math.imul(result, 16777619) >>> 0;
-	});
-	return ('00000000' + result.toString(16)).slice(-8);
-}
-
-function administratorSectionName(login) {
-	var slug = normalizedLogin(login).replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'administrator';
-	var base = 'admin_' + slug + '_' + administratorHash(normalizedLogin(login));
-	var index;
-	var candidate;
-	var occupied;
-
-	for (index = 1; index <= 999; index++) {
-		candidate = index === 1 ? base : base + '_' + index;
-		occupied = uciPersistence.sections('sheepfold').filter(function (section) {
-			return section['.name'] === candidate;
-		})[0] || null;
-		if (!occupied)
-			return uciPersistence.ensureSection('sheepfold', 'administrator', candidate);
-		if (occupied['.type'] === 'administrator' && normalizedLogin(occupied.login) === normalizedLogin(login))
-			return candidate;
-	}
-	var error = new Error('administrator_section_collision');
-	error.errorCode = 'administrator_section_collision';
-	throw error;
-}
-
-function nextAdministratorId() {
-	var maximum = 0;
-
-	uciPersistence.sections('sheepfold', 'administrator').forEach(function (section) {
-		var id = parseInt(section.id, 10);
-		if (isFinite(id) && id > maximum)
-			maximum = id;
-	});
-	return String(maximum + 1);
-}
-
 function showSafeAddAdministratorModal() {
 	var nameInput = E('input', { 'class': 'cbi-input-text' });
 	var loginInput = E('input', { 'class': 'cbi-input-text' });
@@ -391,16 +334,16 @@ function showSafeAddAdministratorModal() {
 			showError(_('Name and login are required.'));
 			return Promise.resolve(false);
 		}
-		if (!validAdministratorLogin(login)) {
+		if (!administratorPersistence.validateLogin(login)) {
 			showError(_('Login may contain only Latin letters, digits, and . _ - @ + symbols.'));
 			return Promise.resolve(false);
 		}
-		if (administratorLoginExists(login)) {
+		if (administratorPersistence.loginExists(login)) {
 			showError(_('This login is already in use.'));
 			return Promise.resolve(false);
 		}
 
-		key = 'secure-administrator-create:' + normalizedLogin(login);
+		key = 'secure-administrator-create:' + administratorPersistence.normalizeLogin(login);
 		setSaving(true);
 		submission = commandActions.execute({
 			key: key,
@@ -408,26 +351,10 @@ function showSafeAddAdministratorModal() {
 			busyText: _('Creating...'),
 			silent: true,
 			task: function () {
-				return uciPersistence.mutate(['sheepfold'], function () {
-					var duplicate = uciPersistence.sections('sheepfold', 'administrator').some(function (section) {
-						return normalizedLogin(section.login) === normalizedLogin(login);
-					});
-					var sectionName;
-
-					if (duplicate) {
-						var duplicateError = new Error(_('This login is already in use.'));
-						duplicateError.errorCode = 'administrator_login_exists';
-						throw duplicateError;
-					}
-					sectionName = administratorSectionName(login);
-					uci.set('sheepfold', sectionName, 'id', nextAdministratorId());
-					uci.set('sheepfold', sectionName, 'display_name', displayName);
-					uci.set('sheepfold', sectionName, 'login', login);
-					uci.set('sheepfold', sectionName, 'role', 'admin');
-					uci.set('sheepfold', sectionName, 'password_hash', '');
-					uci.set('sheepfold', sectionName, 'password_setup_required', '1');
-					uci.set('sheepfold', sectionName, 'allow_child_access_requests', '0');
-					return sectionName;
+				return administratorPersistence.createAccount({
+					name: displayName,
+					login: login,
+					allowChildAccessRequests: false
 				});
 			}
 		}).then(function () {

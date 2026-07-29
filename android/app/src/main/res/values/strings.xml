@@ -3,6 +3,7 @@
     <string name="app_tagline">Семейный интернет-контроль</string>
 
     <string name="tab_control">Управление</string>
+    <string name="tab_menu">Меню</string>
     <string name="tab_devices">Устройства</string>
     <string name="tab_lists">Списки пользователей</string>
     <string name="tab_groups">Группы</string>
@@ -36,11 +37,15 @@
     <string name="settings_title">Настройки</string>
     <string name="settings_router_ip">IP-адрес роутера</string>
     <string name="settings_router_password">Пароль роутера</string>
-    <string name="settings_theme">Оформление</string>
+    <string name="settings_appearance">Оформление</string>
+    <string name="settings_theme">Тема</string>
     <string name="settings_theme_system">Системная</string>
     <string name="settings_theme_light">Светлая</string>
     <string name="settings_theme_dark">Тёмная</string>
     <string name="settings_language">Язык</string>
+    <string name="settings_language_system">Как в системе</string>
+    <string name="settings_language_russian">Русский</string>
+    <string name="settings_language_english">English</string>
     <string name="settings_save">Сохранить</string>
     <string name="settings_saved">Настройки сохранены</string>
     <string name="settings_disconnect">Отключить приложение от роутера</string>
@@ -124,6 +129,8 @@
     <string name="router_internet_enabled">Интернет включён на роутере</string>
     <string name="router_internet_is_enabled">Интернет включён</string>
     <string name="router_internet_is_disabled">Интернет отключён</string>
+    <string name="router_now_enabled">Сейчас включён</string>
+    <string name="router_now_disabled">Сейчас отключён</string>
     <string name="action_allow">Разрешить</string>
     <string name="action_block">Блокировать</string>
     <string name="section_router_managed">Раздел использует настройки и данные подключённого OpenWrt-роутера. Расширенное редактирование будет синхронизировано с LuCI API.</string>

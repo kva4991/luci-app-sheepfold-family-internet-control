@@ -15,6 +15,8 @@ LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-/usr/libexec/sheepfold/sheepfold-lock-comm
 LOCK_FILE="${SHEEPFOLD_ADMIN_CONFIG_LOCK:-/var/lock/sheepfold-admin-config.flock}"
 TRANSACTION_ROOT="${SHEEPFOLD_ADMIN_CONFIG_TX_ROOT:-/tmp/sheepfold/admin-config-transactions}"
 CONFIG_FILE="${SHEEPFOLD_CONFIG_FILE:-/etc/config/sheepfold}"
+WIRELESS_CONFIG_FILE="${SHEEPFOLD_WIRELESS_CONFIG_FILE:-/etc/config/wireless}"
+WIFI_BIN="${SHEEPFOLD_WIFI_BIN:-/sbin/wifi}"
 NOT_CONFIGURED_GROUP="${SHEEPFOLD_NOT_CONFIGURED_GROUP:-Not configured}"
 SCHEMA_VERSION=1
 
@@ -42,6 +44,14 @@ sections_of_type() {
     type="$1"
     uci_read -q show sheepfold 2>/dev/null |
         sed -n "s/^sheepfold\.\([^.=]*\)=$type$/\1/p"
+}
+
+sections_of_config_type() {
+    local config type
+    config="$1"
+    type="$2"
+    uci_read -q show "$config" 2>/dev/null |
+        sed -n "s/^$config\.\([^.=]*\)=$type$/\1/p"
 }
 
 json_escape() {
@@ -97,9 +107,9 @@ json_time_ranges() {
     printf ']'
 }
 
-config_revision() {
+hash_state() {
     local state
-    state="$(uci_read -q show sheepfold 2>/dev/null || true)"
+    state="$1"
     if command -v sha256sum >/dev/null 2>&1; then
         printf '%s' "$state" | sha256sum | awk '{ print $1 }'
     elif command -v openssl >/dev/null 2>&1; then
@@ -108,6 +118,14 @@ config_revision() {
         printf '%s\n' revision_hash_unavailable >&2
         return 1
     fi
+}
+
+config_revision() {
+    hash_state "$(uci_read -q show sheepfold 2>/dev/null || true)"
+}
+
+wifi_revision() {
+    hash_state "$(uci_read -q show wireless 2>/dev/null || true)"
 }
 
 json_schedule() {
@@ -198,6 +216,57 @@ json_administrator() {
     printf '}'
 }
 
+json_wifi_network() {
+    local section device mode interface_disabled radio_disabled enabled band channel
+    section="$1"
+    device="$(uci_get "wireless.$section.device")"
+    mode="$(uci_get "wireless.$section.mode")"
+    [ -z "$mode" ] || [ "$mode" = ap ] || return 1
+    interface_disabled="$(uci_get "wireless.$section.disabled")"
+    radio_disabled=0
+    [ -z "$device" ] || radio_disabled="$(uci_get "wireless.$device.disabled")"
+    enabled=true
+    [ "$interface_disabled" = 1 ] && enabled=false
+    [ "$radio_disabled" = 1 ] && enabled=false
+    band="$(uci_get "wireless.$device.band")"
+    [ -n "$band" ] || band="$(uci_get "wireless.$device.hwmode")"
+    channel="$(uci_get "wireless.$device.channel")"
+    [ -n "$channel" ] || channel=auto
+
+    printf '{"section":'
+    json_string "$section"
+    printf ',"device":'
+    json_string "$device"
+    printf ',"ssid":'
+    json_string "$(uci_get "wireless.$section.ssid")"
+    # Endpoint закрыт администраторским токеном и HTTPS pinning. Ключ нужен
+    # только для того же QR и редактора сети, которые уже доступны в LuCI.
+    printf ',"password":'
+    json_string "$(uci_get "wireless.$section.key")"
+    printf ',"encryption":'
+    json_string "$(uci_get "wireless.$section.encryption")"
+    printf ',"channel":'
+    json_string "$channel"
+    printf ',"enabled":%s' "$enabled"
+    printf ',"band":'
+    json_string "$band"
+    printf '}'
+}
+
+json_wifi_networks() {
+    local first section mode
+    first=1
+    printf '['
+    for section in $(sections_of_config_type wireless wifi-iface); do
+        mode="$(uci_get "wireless.$section.mode")"
+        [ -z "$mode" ] || [ "$mode" = ap ] || continue
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_wifi_network "$section"
+    done
+    printf ']'
+}
+
 wifi_enabled() {
     local found radio
     found=0
@@ -210,13 +279,16 @@ wifi_enabled() {
 }
 
 admin_config_json() {
-    local mutation_kind runtime_applied revision bedtime first section
+    local mutation_kind runtime_applied revision current_wifi_revision bedtime first section
     mutation_kind="${1:-}"
     runtime_applied="${2:-1}"
     revision="$(config_revision)" || exit 70
+    current_wifi_revision="$(wifi_revision)" || exit 70
 
     printf '{"app":"sheepfold","ok":true,"schemaVersion":%s,"revision":' "$SCHEMA_VERSION"
     json_string "$revision"
+    printf ',"wifiRevision":'
+    json_string "$current_wifi_revision"
     printf ',"bedtime":'
     bedtime="$(uci_get sheepfold.global.bedtime)"
     [ -n "$bedtime" ] || bedtime=21:00
@@ -253,7 +325,9 @@ admin_config_json() {
         first=0
         json_administrator "$section"
     done
-    printf ']}\n'
+    printf '],"wifiNetworks":'
+    json_wifi_networks
+    printf '}\n'
 }
 
 url_decode() {
@@ -880,6 +954,184 @@ group_delete() {
     admin_config_json group-delete "$runtime_applied"
 }
 
+WIFI_TX_SNAPSHOT=""
+WIFI_TX_DIR=""
+WIFI_TX_RESTORE=0
+WIFI_TX_ACTIVE=0
+
+wifi_save_cleanup() {
+    local status="${1:-1}"
+    trap - EXIT HUP INT TERM
+    if [ "$WIFI_TX_RESTORE" = 1 ] && [ -r "$WIFI_TX_SNAPSHOT" ]; then
+        cp -p "$WIFI_TX_SNAPSHOT" "$WIRELESS_CONFIG_FILE" 2>/dev/null || true
+        "$WIFI_BIN" reload >/dev/null 2>&1 || "$WIFI_BIN" >/dev/null 2>&1 || true
+    fi
+    [ -z "$WIFI_TX_DIR" ] || rm -rf "$WIFI_TX_DIR" 2>/dev/null || true
+    [ "$WIFI_TX_ACTIVE" = 0 ] || sheepfold_lock_release
+    exit "$status"
+}
+
+valid_wifi_encryption() {
+    case "${1:-}" in
+        none|owe|wep|psk|psk2|psk-mixed|sae|sae-mixed|wpa|wpa2|wpa3|wpa3-mixed) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+valid_wifi_channel() {
+    local value
+    value="${1:-}"
+    [ "$value" = auto ] && return 0
+    printf '%s' "$value" | grep -Eq '^[0-9]{1,3}$' || return 1
+    [ "$value" -ge 1 ] && [ "$value" -le 233 ]
+}
+
+wifi_state_is_valid() {
+    local section device ssid password encryption channel enabled
+    section="$1"
+    device="$2"
+    ssid="$3"
+    password="$4"
+    encryption="$5"
+    channel="$6"
+    enabled="$7"
+    [ "$(uci_get "wireless.$section")" = wifi-iface ] &&
+        [ "$(uci_get "wireless.$section.ssid")" = "$ssid" ] &&
+        [ "$(uci_get "wireless.$section.encryption")" = "$encryption" ] &&
+        [ "$(uci_get "wireless.$device.channel")" = "$channel" ] || return 1
+    if [ "$enabled" = 1 ]; then
+        [ "$(uci_get "wireless.$section.disabled")" != 1 ] &&
+            [ "$(uci_get "wireless.$device.disabled")" != 1 ] || return 1
+    else
+        [ "$(uci_get "wireless.$section.disabled")" = 1 ] || return 1
+    fi
+    if [ "$encryption" = none ]; then
+        [ -z "$(uci_get "wireless.$section.key")" ]
+    else
+        [ "$(uci_get "wireless.$section.key")" = "$password" ]
+    fi
+}
+
+wifi_save() {
+    local body expected_wifi_revision current_wifi_revision section device ssid password
+    local encryption channel enabled confirm
+    body="$(cat)"
+    expected_wifi_revision="$(form_get expectedWifiRevision "$body")"
+    section="$(form_get section "$body")"
+    ssid="$(trim_text "$(form_get ssid "$body")")"
+    password="$(form_get password "$body")"
+    encryption="$(form_get encryption "$body")"
+    channel="$(form_get channel "$body")"
+    enabled="$(form_get enabled "$body")"
+    confirm="$(form_get confirm "$body")"
+
+    [ -n "$expected_wifi_revision" ] || {
+        printf '%s\n' wifi_revision_required >&2
+        return 2
+    }
+    valid_section_name "$section" && [ "$(uci_get "wireless.$section")" = wifi-iface ] || {
+        printf '%s\n' wifi_network_not_found >&2
+        return 2
+    }
+    device="$(uci_get "wireless.$section.device")"
+    valid_section_name "$device" && [ "$(uci_get "wireless.$device")" = wifi-device ] || {
+        printf '%s\n' wifi_radio_not_found >&2
+        return 2
+    }
+    [ -n "$ssid" ] && valid_plain_text "$ssid" 64 || {
+        printf '%s\n' invalid_wifi_ssid >&2
+        return 2
+    }
+    valid_plain_text "$password" 128 || {
+        printf '%s\n' invalid_wifi_password >&2
+        return 2
+    }
+    valid_wifi_encryption "$encryption" || {
+        printf '%s\n' invalid_wifi_encryption >&2
+        return 2
+    }
+    [ "$encryption" = none ] || [ -n "$password" ] || {
+        printf '%s\n' wifi_password_required >&2
+        return 2
+    }
+    valid_wifi_channel "$channel" || {
+        printf '%s\n' invalid_wifi_channel >&2
+        return 2
+    }
+    valid_flag "$enabled" || {
+        printf '%s\n' invalid_wifi_enabled >&2
+        return 2
+    }
+    [ "$enabled" = 1 ] || [ "$confirm" = 1 ] || {
+        printf '%s\n' confirmation_required >&2
+        return 2
+    }
+
+    sheepfold_lock_acquire "$LOCK_FILE" 30 || {
+        printf '%s\n' config_busy >&2
+        return 4
+    }
+    WIFI_TX_ACTIVE=1
+    trap 'wifi_save_cleanup $?' EXIT
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+
+    current_wifi_revision="$(wifi_revision)" || return 70
+    [ "$current_wifi_revision" = "$expected_wifi_revision" ] || {
+        printf '%s\n' revision_conflict >&2
+        return 3
+    }
+    [ "$(uci_get "wireless.$section")" = wifi-iface ] || {
+        printf '%s\n' wifi_network_not_found >&2
+        return 2
+    }
+
+    mkdir -p "$TRANSACTION_ROOT"
+    chmod 700 "$TRANSACTION_ROOT" 2>/dev/null || true
+    WIFI_TX_DIR="$TRANSACTION_ROOT/wifi.$$"
+    WIFI_TX_SNAPSHOT="$WIFI_TX_DIR/wireless.before"
+    (umask 077; mkdir "$WIFI_TX_DIR") || return 70
+    cp -p "$WIRELESS_CONFIG_FILE" "$WIFI_TX_SNAPSHOT" || return 70
+    WIFI_TX_RESTORE=1
+
+    uci_read -q set "wireless.$section.ssid=$ssid"
+    uci_read -q set "wireless.$section.encryption=$encryption"
+    uci_read -q set "wireless.$device.channel=$channel"
+    if [ "$enabled" = 1 ]; then
+        uci_read -q delete "wireless.$section.disabled" 2>/dev/null || true
+        uci_read -q delete "wireless.$device.disabled" 2>/dev/null || true
+    else
+        uci_read -q set "wireless.$section.disabled=1"
+    fi
+    if [ "$encryption" = none ]; then
+        uci_read -q delete "wireless.$section.key" 2>/dev/null || true
+    else
+        uci_read -q set "wireless.$section.key=$password"
+    fi
+    uci_read -q commit wireless || {
+        printf '%s\n' config_commit_failed >&2
+        return 70
+    }
+    wifi_state_is_valid "$section" "$device" "$ssid" "$password" "$encryption" "$channel" "$enabled" || {
+        printf '%s\n' config_verify_failed >&2
+        return 70
+    }
+    "$WIFI_BIN" reload >/dev/null 2>&1 || "$WIFI_BIN" >/dev/null 2>&1 || {
+        printf '%s\n' wifi_reload_failed >&2
+        return 5
+    }
+
+    WIFI_TX_RESTORE=0
+    trap - EXIT HUP INT TERM
+    rm -rf "$WIFI_TX_DIR"
+    WIFI_TX_DIR=""
+    sheepfold_lock_release
+    WIFI_TX_ACTIVE=0
+    audit_event "настройки Wi-Fi сохранены: $ssid"
+    admin_config_json wifi-save 1
+}
+
 wifi_control() {
     local body enable confirm
     body="$(cat)"
@@ -911,6 +1163,7 @@ case "$ACTION" in
     schedule-delete) schedule_delete ;;
     group-save) group_save ;;
     group-delete) group_delete ;;
+    wifi-save) wifi_save ;;
     wifi-control) wifi_control ;;
     *) printf '%s\n' unknown_admin_config_action >&2; exit 2 ;;
 esac

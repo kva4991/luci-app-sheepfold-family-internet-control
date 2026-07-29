@@ -16,7 +16,7 @@ const protection = read('android/app/src/main/java/app/sheepfold/android/securit
 const unlock = read('android/app/src/main/java/app/sheepfold/android/ui/security/AppUnlockScreen.kt');
 const main = read('android/app/src/main/java/app/sheepfold/android/MainActivity.kt');
 const setup = read('android/app/src/main/java/app/sheepfold/android/ui/setup/SafeRouterSetupScreen.kt');
-const operations = read('android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt');
+const settings = read('android/app/src/main/java/app/sheepfold/android/ui/main/SettingsTab.kt');
 const widgets = read('android/app/src/main/java/app/sheepfold/android/widget/InternetWidgets.kt');
 const manifest = read('android/app/src/main/AndroidManifest.xml');
 const build = read('android/app/build.gradle.kts');
@@ -44,8 +44,9 @@ describe('parent Android local protection', () => {
     assert.match(main, /override fun onStop\(\)[\s\S]*!isChangingConfigurations/);
     assert.match(main, /SystemClock\.elapsedRealtime\(\)/);
     assert.match(main, /elapsed >= delayMillis/);
-    assert.match(operations, /settings_relock_immediate/);
-    assert.match(operations, /settings_lock_now/);
+    assert.match(settings, /settings_relock_immediate/);
+    assert.match(settings, /settings_lock_now/);
+    assert.match(settings, /ExposedDropdownMenuBox/);
   });
 
   it('adds escalating secret backoff after five failures without permanent lockout', () => {
@@ -68,7 +69,7 @@ describe('parent Android local protection', () => {
     assert.match(main, /pendingWidgetCommand == WidgetCommand\.DISABLE_INTERNET/);
     assert.match(main, /forceLockToken \+= 1/);
     assert.match(main, /widget_disable_confirmation_title/);
-    assert.match(operations, /settings_widget_disable_warning_body/);
+    assert.match(settings, /settings_widget_disable_warning_body/);
     assert.match(manifest, /android:launchMode="singleTop"/);
   });
 

@@ -3,18 +3,13 @@ package app.sheepfold.android.ui.main
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,7 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -37,7 +31,7 @@ import app.sheepfold.android.router.RouterConnectionRequest
 import app.sheepfold.android.router.RouterDevice
 import app.sheepfold.android.router.RouterSnapshot
 import app.sheepfold.android.notifications.SheepfoldNotifications
-import app.sheepfold.android.security.AppProtectionStore
+import app.sheepfold.android.ui.theme.AppLanguage
 import app.sheepfold.android.ui.theme.ThemeMode
 import app.sheepfold.android.widget.SheepfoldWidgetRenderer
 import kotlinx.coroutines.launch
@@ -48,6 +42,7 @@ fun OperationalMainScreen(
     connection: RouterConnectionRequest,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onLanguageChange: (AppLanguage) -> Unit,
     onLockNow: () -> Unit,
     onDisconnect: () -> Unit
 ) {
@@ -65,27 +60,25 @@ fun OperationalMainScreen(
     // APK один для обоих IPK: вкладка появляется только после подтверждения
     // capability от уже авторизованного роутера. §prodvar
     val productTab = productFeatureTab(connection, snapshot?.aiAvailable == true)
-    val tabs = listOf(
-        stringResource(R.string.tab_control),
-        stringResource(R.string.tab_devices),
-        stringResource(R.string.tab_lists),
-        stringResource(R.string.tab_schedule),
-        stringResource(R.string.tab_groups),
-        stringResource(R.string.tab_administrators),
-        stringResource(R.string.tab_wifi)
-    ) + listOfNotNull(productTab?.title) + listOf(
-        stringResource(R.string.tab_logs),
-        stringResource(R.string.tab_info),
-        stringResource(R.string.tab_feedback),
-        stringResource(R.string.tab_settings)
-    )
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val tabs = buildList {
+        add(MainMenuItem("control", stringResource(R.string.tab_control)))
+        add(MainMenuItem("menu", stringResource(R.string.tab_menu)))
+        add(MainMenuItem("devices", stringResource(R.string.tab_devices)))
+        add(MainMenuItem("lists", stringResource(R.string.tab_lists)))
+        add(MainMenuItem("schedules", stringResource(R.string.tab_schedule)))
+        add(MainMenuItem("groups", stringResource(R.string.tab_groups)))
+        add(MainMenuItem("administrators", stringResource(R.string.tab_administrators)))
+        add(MainMenuItem("wifi", stringResource(R.string.tab_wifi)))
+        productTab?.let { add(MainMenuItem("product", it.title)) }
+        add(MainMenuItem("logs", stringResource(R.string.tab_logs)))
+        add(MainMenuItem("info", stringResource(R.string.tab_info)))
+        add(MainMenuItem("feedback", stringResource(R.string.tab_feedback)))
+        add(MainMenuItem("settings", stringResource(R.string.tab_settings)))
+    }
+    var selectedTabKey by remember { mutableStateOf("control") }
     var isLoading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    val featureIndex = if (productTab == null) -1 else 7
-    val logsIndex = if (productTab == null) 7 else 8
-    val infoIndex = logsIndex + 1
-    val feedbackIndex = infoIndex + 1
+    val selectedTabIndex = tabs.indexOfFirst { it.key == selectedTabKey }.coerceAtLeast(0)
 
     fun refresh() {
         isLoading = true
@@ -111,17 +104,17 @@ fun OperationalMainScreen(
     LaunchedEffect(connection.apiUrl) { refresh() }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        ScrollableTabRow(selectedTabIndex = selectedTab) {
-            tabs.forEachIndexed { index, title ->
+        ScrollableTabRow(selectedTabIndex = selectedTabIndex) {
+            tabs.forEach { destination ->
                 Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = { Text(title) }
+                    selected = selectedTabKey == destination.key,
+                    onClick = { selectedTabKey = destination.key },
+                    text = { Text(destination.title) }
                 )
             }
         }
-        when (selectedTab) {
-            0 -> ControlTab(
+        when (selectedTabKey) {
+            "control" -> ControlTab(
                 routerName = snapshot?.routerName ?: connection.routerName,
                 globalBlocked = snapshot?.globalBlocked ?: false,
                 isLoading = isLoading,
@@ -140,7 +133,11 @@ fun OperationalMainScreen(
                     }
                 }
             )
-            1 -> DevicesTab(devices, isLoading, ::refresh) { device, action ->
+            "menu" -> MenuTab(
+                items = tabs.filterNot { it.key == "control" || it.key == "menu" },
+                onOpen = { selectedTabKey = it }
+            )
+            "devices" -> DevicesTab(devices, isLoading, ::refresh) { device, action ->
                 isLoading = true
                 scope.launch {
                     runCatching {
@@ -153,8 +150,8 @@ fun OperationalMainScreen(
                     refresh()
                 }
             }
-            2 -> DeviceListsTab(devices)
-            3 -> SchedulesTab(
+            "lists" -> DeviceListsTab(devices)
+            "schedules" -> SchedulesTab(
                 client = client,
                 config = adminConfig,
                 devices = devices,
@@ -162,7 +159,7 @@ fun OperationalMainScreen(
                 onConfigChanged = { adminConfig = it },
                 onRefresh = ::refresh
             )
-            4 -> GroupsTab(
+            "groups" -> GroupsTab(
                 client = client,
                 config = adminConfig,
                 devices = devices,
@@ -170,55 +167,27 @@ fun OperationalMainScreen(
                 onConfigChanged = { adminConfig = it },
                 onRefresh = ::refresh
             )
-            5 -> AdministratorsTab(adminConfig.administrators, devices, isLoading, ::refresh)
-            6 -> WifiTab(client, adminConfig, snapshot?.wifiModules.orEmpty(), isLoading, ::refresh)
-            featureIndex -> productTab?.content?.invoke()
-            logsIndex -> LogsTab(client, adminConfig)
-            infoIndex -> RouterInfoTab(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh)
-            feedbackIndex -> FeedbackTab(client)
-            else -> SettingsTab(themeMode, onThemeModeChange, onLockNow, onDisconnect)
-        }
-    }
-}
-
-@Composable
-private fun ControlTab(
-    routerName: String,
-    globalBlocked: Boolean,
-    isLoading: Boolean,
-    message: String?,
-    onRefresh: () -> Unit,
-    onBlock: (Boolean) -> Unit
-) {
-    Column(
-        modifier = Modifier.padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text(stringResource(R.string.router_label_format, routerName), style = MaterialTheme.typography.headlineSmall)
-        Text(stringResource(R.string.router_commands_direct))
-        Button(
-            onClick = { onBlock(false) },
-            enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (!globalBlocked) Color(0xFF178447) else Color(0xFFB9DCCB),
-                contentColor = if (!globalBlocked) Color.White else Color(0xFF315B45)
+            "administrators" -> AdministratorsTab(adminConfig.administrators, devices, isLoading, ::refresh)
+            "wifi" -> WifiTab(
+                client = client,
+                config = adminConfig,
+                wifiModules = snapshot?.wifiModules.orEmpty(),
+                isLoading = isLoading,
+                onConfigChanged = { adminConfig = it },
+                onRefresh = ::refresh
             )
-        ) { Text(stringResource(R.string.router_internet_is_enabled)) }
-        Button(
-            onClick = { onBlock(true) },
-            enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (globalBlocked) Color(0xFFC62828) else Color(0xFFE8B9B9),
-                contentColor = if (globalBlocked) Color.White else Color(0xFF6D3030)
+            "product" -> productTab?.content?.invoke()
+            "logs" -> LogsTab(client, adminConfig)
+            "info" -> RouterInfoTab(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh)
+            "feedback" -> FeedbackTab(client)
+            else -> SettingsTab(
+                themeMode = themeMode,
+                onThemeModeChange = onThemeModeChange,
+                onLanguageChange = onLanguageChange,
+                onLockNow = onLockNow,
+                onDisconnect = onDisconnect
             )
-        ) { Text(stringResource(R.string.router_internet_is_disabled)) }
-        OutlinedButton(onClick = onRefresh, enabled = !isLoading, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.action_refresh))
         }
-        if (isLoading) CircularProgressIndicator()
-        message?.let { Text(it) }
     }
 }
 
@@ -336,148 +305,3 @@ private fun RouterInfoTab(snapshot: RouterSnapshot?, isLoading: Boolean, onRefre
         }
     }
 }
-
-@Composable
-private fun SettingsTab(
-    themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit,
-    onLockNow: () -> Unit,
-    onDisconnect: () -> Unit
-) {
-    val context = LocalContext.current
-    var relockDelaySeconds by remember {
-        mutableIntStateOf(AppProtectionStore.relockDelaySeconds(context))
-    }
-    var allowInstantWidgetDisable by remember {
-        mutableStateOf(AppProtectionStore.allowInstantWidgetDisable(context))
-    }
-    var showWidgetWarning by remember { mutableStateOf(false) }
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(R.string.settings_security_title), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.settings_relock_description))
-        }
-        items(AppProtectionStore.supportedRelockDelaysSeconds) { seconds ->
-            OutlinedButton(
-                onClick = {
-                    AppProtectionStore.setRelockDelaySeconds(context, seconds)
-                    relockDelaySeconds = seconds
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    (if (relockDelaySeconds == seconds) "✓ " else "") +
-                        relockDelayLabel(seconds)
-                )
-            }
-        }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.settings_widget_disable_title))
-                            Text(
-                                stringResource(
-                                    if (allowInstantWidgetDisable) {
-                                        R.string.settings_widget_disable_instant
-                                    } else {
-                                        R.string.settings_widget_disable_safe
-                                    }
-                                )
-                            )
-                        }
-                        Switch(
-                            checked = allowInstantWidgetDisable,
-                            onCheckedChange = { enabled ->
-                                if (enabled) {
-                                    showWidgetWarning = true
-                                } else {
-                                    allowInstantWidgetDisable = false
-                                    AppProtectionStore.setAllowInstantWidgetDisable(context, false)
-                                    SheepfoldWidgetRenderer.updateAllWidgets(context)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-            if (AppProtectionStore.requiresAuthentication(context)) {
-                OutlinedButton(onClick = onLockNow, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.settings_lock_now))
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(stringResource(R.string.settings_theme), style = MaterialTheme.typography.titleMedium)
-        }
-        items(ThemeMode.entries) { mode ->
-            OutlinedButton(
-                onClick = { onThemeModeChange(mode) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text((if (themeMode == mode) "✓ " else "") + themeModeLabel(mode))
-            }
-        }
-        item {
-            Button(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.settings_disconnect))
-            }
-        }
-    }
-
-    if (showWidgetWarning) {
-        AlertDialog(
-            onDismissRequest = { showWidgetWarning = false },
-            title = { Text(stringResource(R.string.settings_widget_disable_warning_title)) },
-            text = { Text(stringResource(R.string.settings_widget_disable_warning_body)) },
-            confirmButton = {
-                Button(onClick = {
-                    allowInstantWidgetDisable = true
-                    AppProtectionStore.setAllowInstantWidgetDisable(context, true)
-                    SheepfoldWidgetRenderer.updateAllWidgets(context)
-                    showWidgetWarning = false
-                }) {
-                    Text(stringResource(R.string.settings_widget_disable_warning_confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showWidgetWarning = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun relockDelayLabel(seconds: Int): String = stringResource(
-    when (seconds) {
-        0 -> R.string.settings_relock_immediate
-        300 -> R.string.settings_relock_five_minutes
-        900 -> R.string.settings_relock_fifteen_minutes
-        else -> R.string.settings_relock_one_minute
-    }
-)
-
-@Composable
-private fun themeModeLabel(mode: ThemeMode): String = stringResource(
-    when (mode) {
-        ThemeMode.SYSTEM -> R.string.settings_theme_system
-        ThemeMode.LIGHT -> R.string.settings_theme_light
-        ThemeMode.DARK -> R.string.settings_theme_dark
-    }
-)

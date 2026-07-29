@@ -199,8 +199,16 @@ describe('final r252 experimental regressions §ovaudit4', () => {
 
   it('keeps the secure administrator modal uniqueness check inside the mutation callback', () => {
     const secure = source('view/sheepfold/overview-secure.js');
-    const mutation = secure.slice(secure.indexOf("return uciPersistence.mutate(['sheepfold']"), secure.indexOf('return sectionName;', secure.indexOf("return uciPersistence.mutate(['sheepfold']")));
-    assert.match(mutation, /administratorLoginExists\(login\)/);
-    assert.match(mutation, /administrator_login_exists/);
+    const pairing = source('sheepfold/features/pairing/persistence.js');
+    const createAccount = pairing.slice(
+      pairing.indexOf('function createAccount(admin)'),
+      pairing.indexOf('function stageAdministrator(admin)'),
+    );
+
+    assert.match(secure, /administratorPersistence\.loginExists\(login\)/);
+    assert.match(secure, /administratorPersistence\.createAccount/);
+    assert.match(createAccount, /deps\.persistence\.mutate\(\['sheepfold'\], function/);
+    assert.match(createAccount, /ensureNewAdministratorLogin\(login\)/);
+    assert.match(pairing, /function ensureNewAdministratorLogin[\s\S]*administrator_login_exists/);
   });
 });

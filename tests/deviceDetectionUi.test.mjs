@@ -8,9 +8,13 @@ import assert from 'node:assert/strict';
 // противоречия, но не внутренние положительные веса классификатора. Тест не
 // заменяет визуальную проверку модального окна в настоящем LuCI. §devident1
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const viewPath = resolve(
+const detectionDetailsPath = resolve(
   repoRoot,
-  'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview-personal.js',
+  'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/detection-details.js',
+);
+const presencePath = resolve(
+  repoRoot,
+  'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/presence.js',
 );
 const generalSettingsPath = resolve(
   repoRoot,
@@ -31,11 +35,11 @@ const sheepfoldCssPath = resolve(
 
 describe('Интерфейс автоопределения устройств', () => {
   it('показывает IP, противоречия и повторное определение без внутренних баллов', () => {
-    const source = readFileSync(viewPath, 'utf8');
+    const source = readFileSync(detectionDetailsPath, 'utf8');
 
-    assert.match(source, /IP-адрес/);
-    assert.match(source, /Уверенность типа/);
-    assert.match(source, /Противоречащие признаки/);
+    assert.match(source, /_\('IP address'\)/);
+    assert.match(source, /_\('Type confidence'\)/);
+    assert.match(source, /_\('Contradicting evidence'\)/);
     assert.doesNotMatch(source, /Балл автодоверия/);
     assert.doesNotMatch(source, /Источники доказательств/);
     assert.doesNotMatch(source, /Жёсткий запрет/);
@@ -50,15 +54,18 @@ describe('Интерфейс автоопределения устройств',
   });
 
   it('не зависит от фиксированного номера MAC-колонки', () => {
-    const source = readFileSync(viewPath, 'utf8');
+    const source = readFileSync(detectionDetailsPath, 'utf8');
 
-    assert.match(source, /function macFromDeviceRow/);
+    assert.match(source, /function macFromRow/);
     assert.match(source, /match\(\/\(\?:\[0-9A-F\]/);
     assert.doesNotMatch(source, /normalizeMac\(cells\[4\]/);
   });
 
   it('показывает онлайн-плашку и точное время последнего появления', () => {
-    const source = readFileSync(viewPath, 'utf8');
+    const source = [
+      readFileSync(presencePath, 'utf8'),
+      readFileSync(detectionDetailsPath, 'utf8'),
+    ].join('\n');
 
     assert.match(source, /device-presence/);
     assert.match(source, /Online: now \(seen in the last 15 minutes\)/);
@@ -69,9 +76,9 @@ describe('Интерфейс автоопределения устройств',
   });
 
   it('сортирует сначала онлайн, затем IP по возрастанию', () => {
-    const source = readFileSync(viewPath, 'utf8');
+    const source = readFileSync(presencePath, 'utf8');
 
-    assert.match(source, /function sortDeviceRowsByPresence/);
+    assert.match(source, /function sortRows/);
     assert.match(source, /return rightOnline - leftOnline/);
     assert.match(source, /rowIpSortValue\(left\.row\) - rowIpSortValue\(right\.row\)/);
   });
@@ -121,18 +128,18 @@ describe('Интерфейс автоопределения устройств',
 
   it('показывает режим реакции на подмену и не предлагает переклассификацию чёрного списка устройств', () => {
     const generalSettings = readFileSync(generalSettingsPath, 'utf8');
-    const personal = readFileSync(viewPath, 'utf8');
+    const details = readFileSync(detectionDetailsPath, 'utf8');
 
     assert.match(generalSettings, /Device monitoring and setup/);
     assert.match(generalSettings, /device_monitoring_mode/);
     assert.match(generalSettings, /Automatic \(recommended\)/);
-    assert.match(personal, /deviceIsBlocklisted/);
-    assert.match(personal, /isBlocklisted \? null : E\('button'/);
-    assert.match(personal, /_\('Trust current connection'\)/);
+    assert.match(details, /function isBlocklisted/);
+    assert.match(details, /reclassifyButton = blocklisted \? null : E\('button'/);
+    assert.match(details, /_\('Trust current connection'\)/);
   });
 
   it('показывает одинаковый индикатор устойчивой идентификации во всех списках устройств', () => {
-	const personal = readFileSync(viewPath, 'utf8');
+	const details = readFileSync(detectionDetailsPath, 'utf8');
 	const inventory = readFileSync(resolve(
 		repoRoot,
 		'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/inventory.js',
@@ -156,7 +163,7 @@ describe('Интерфейс автоопределения устройств',
 
 	assert.match(inventory, /identityProtectionLevel/);
 	assert.match(inventory, /function effectiveDeviceType/);
-	assert.match(personal, /deviceInventory\.effectiveDeviceType/);
+	assert.match(details, /deps\.inventory\.effectiveDeviceType/);
 	assert.match(inventory, /upnp_uuid/);
 	assert.match(inventory, /mdns_serial/);
 	assert.match(icons, /function deviceIdentity/);

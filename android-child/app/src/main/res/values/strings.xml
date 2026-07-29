@@ -7,17 +7,8 @@
     <string name="status_no_connection">Нет связи с роутером</string>
 
     <!-- Режимы доступа -->
-    <string name="access_mode_allowlist">Белый список</string>
-    <string name="access_mode_blocked">Родительский контроль</string>
-    <string name="access_mode_scheduled">По расписанию</string>
-    <string name="access_mode_temporary">Временный доступ</string>
-    <string name="access_mode_restricted">Ограниченный доступ</string>
-    <string name="access_mode_default">По правилу для новых устройств</string>
-    <string name="access_mode_unknown">Режим неизвестен</string>
 
     <!-- Таймер и время -->
-    <string name="time_remaining">Осталось %1$d мин</string>
-    <string name="ends_at">Доступ до %1$s</string>
     <string name="last_updated">Обновлено: %1$s</string>
 
     <!-- Кнопки -->
@@ -52,8 +43,6 @@
     <string name="access_screen_title">Мой доступ</string>
     <string name="access_device_label">Устройство</string>
     <string name="access_internet_label">Интернет</string>
-    <string name="access_mode_label">Режим</string>
-    <string name="access_time_label">Оставшееся время</string>
     <string name="access_next_change_label">Следующее изменение доступа</string>
     <string name="access_message_label">Сообщение</string>
     <string name="access_request_30_minutes">Попросить 30 минут интернета</string>

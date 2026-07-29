@@ -1,7 +1,7 @@
 // Проверяет общую границу form-urlencoded/JSON AI backend без сети и реального провайдера.
 // Тест ловит повторное ручное экранирование и повреждённый ввод, но не доказывает наличие jshn на целевом роутере.
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
@@ -32,6 +32,83 @@ function runFormGet(body) {
     ],
     { cwd: repoRoot, encoding: 'utf8' },
   );
+}
+
+function executable(path, source) {
+  writeFileSync(path, source, 'utf8');
+  chmodSync(path, 0o755);
+}
+
+function runAiGate(body) {
+  const fixtureParent = resolve(repoRoot, '.build', 'test-fixtures');
+  mkdirSync(fixtureParent, { recursive: true });
+  const fixtureRoot = mkdtempSync(resolve(fixtureParent, 'sheepfold-ai-gate-'));
+  const rateDir = resolve(fixtureRoot, 'rate');
+  const leases = resolve(fixtureRoot, 'dhcp.leases');
+  const arp = resolve(fixtureRoot, 'arp');
+  const jshn = resolve(fixtureRoot, 'jshn.sh');
+  const uci = resolve(fixtureRoot, 'uci');
+  const routerControl = resolve(fixtureRoot, 'router-control');
+  const deviceId = resolve(fixtureRoot, 'device-id');
+  const fixturePath = (path) => posix(relative(repoRoot, path));
+
+  mkdirSync(rateDir);
+  writeFileSync(leases, '0 AA:BB:CC:DD:EE:FF 192.168.1.20 parent *\\n', 'utf8');
+  writeFileSync(arp, '', 'utf8');
+  executable(jshn, [
+    'json_init() { :; }',
+    'json_add_string() { :; }',
+    'json_add_boolean() { :; }',
+    'json_add_object() { :; }',
+    'json_add_array() { :; }',
+    'json_close_object() { :; }',
+    'json_close_array() { :; }',
+    'json_add_double() { :; }',
+    "json_dump() { printf '{\"error\":\"invalid_form_encoding\"}'; }",
+    '',
+  ].join('\n'));
+  executable(uci, `#!/bin/sh
+case "$*" in
+  "-q show sheepfold") printf "sheepfold.device_parent=device\\n" ;;
+  "-q get sheepfold.global.ai_enabled") printf "1\\n" ;;
+  "-q get sheepfold.global.ai_rate_limit_requests") printf "20\\n" ;;
+  "-q get sheepfold.global.ai_rate_limit_window_seconds") printf "3600\\n" ;;
+  "-q get sheepfold.device_parent.mac") printf "AA:BB:CC:DD:EE:FF\\n" ;;
+  "-q get sheepfold.device_parent.admin_device") printf "1\\n" ;;
+  "-q get sheepfold.device_parent.legacy_ids") exit 1 ;;
+  "-q get sheepfold.blocklist.mac") exit 1 ;;
+  *) exit 1 ;;
+esac
+`);
+  executable(routerControl, `#!/bin/sh
+[ "$1" = check-token ] && [ "$2" = token ] && printf "ok\\n"
+`);
+  executable(deviceId, `#!/bin/sh
+[ "$1" = ensure ] && [ "$2" = device_parent ] && printf "1\\n"
+`);
+
+  try {
+    return spawnSync('sh', [posix(gatePath)], {
+      cwd: repoRoot,
+      input: body,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        REMOTE_ADDR: '192.168.1.20',
+        HTTP_AUTHORIZATION: 'Bearer token',
+        SHEEPFOLD_AI_RATE_DIR: fixturePath(rateDir),
+        SHEEPFOLD_JSON_COMMON: posix(relative(repoRoot, helperPath)),
+        SHEEPFOLD_JSHN_LIB: fixturePath(jshn),
+        SHEEPFOLD_UCI_BIN: fixturePath(uci),
+        SHEEPFOLD_ROUTER_CONTROL: fixturePath(routerControl),
+        SHEEPFOLD_DEVICE_ID_HELPER: fixturePath(deviceId),
+        SHEEPFOLD_DHCP_LEASES: fixturePath(leases),
+        SHEEPFOLD_ARP_TABLE: fixturePath(arp),
+      },
+    });
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true });
+  }
 }
 
 describe('AI JSON and form boundary', () => {
@@ -71,6 +148,35 @@ describe('AI JSON and form boundary', () => {
     assert.doesNotMatch(gate, /json_escape\(\)|url_decode\(\)|form_get\(\)/);
     assert.doesNotMatch(handler, /json_escape\(\)|url_decode\(\)|form_get\(\)/);
     assert.doesNotMatch(handler, /payload=.*printf '\{/);
+  });
+
+  it('runs the authenticated AI gate with every supported form field', () => {
+    const result = runAiGate([
+      'deviceId=1',
+      'clientRole=parent',
+      'isAdministrator=1',
+      'consentVersion=',
+      'includeInfo=0',
+      'includeLogs=0',
+      'googleAccount=',
+      'provider=',
+      'model=',
+    ].join('&'));
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  });
+
+  it('rejects malformed late form fields before executing the request', () => {
+    const result = runAiGate([
+      'deviceId=1',
+      'clientRole=parent',
+      'isAdministrator=1',
+      'consentVersion=',
+      'includeInfo=bad%QZ',
+    ].join('&'));
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /invalid_form_encoding/);
   });
 
   it('keeps the helper inside the AI-only package boundary and hardens its permissions', () => {
