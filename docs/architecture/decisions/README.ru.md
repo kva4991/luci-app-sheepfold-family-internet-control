@@ -21,6 +21,7 @@ ADR хранит контекст решения, а профильный док
 | [0013](0013-strict-ai-json-boundary.ru.md) | Строгий form-urlencoded и динамический JSON AI backend через общий helper и jshn | Принято | `§jsonio1` |
 | [0014](0014-coalesced-luci-action-subscribers.ru.md) | Одна backend-команда сохраняет callbacks каждого UI-инициатора | Принято | `§actsub1` |
 | [0015](0015-manual-agentic-security-audit.ru.md) | Агентный security-аудит остаётся ручным консультативным слоем | Принято | `§secaudit1` |
+| [0016](0016-trusted-home-network-access.ru.md) | Sheepfold доступен из явно доверенных сегментов без дополнительного кода подтверждения | Принято поэтапно | `§homen01`, `§pairux1` |
 
 ## Статусы
 

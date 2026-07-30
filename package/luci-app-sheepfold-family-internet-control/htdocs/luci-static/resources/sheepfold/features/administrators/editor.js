@@ -141,7 +141,12 @@ function openSettings(deps, admin, pairing, callbacks) {
 	]);
 	ui.showModal(_('Administrator settings'), [
 		E('div', { 'class': 'sf-modal-pairing' }, [
-			E('div', { 'class': 'sf-qr-wrap' }, [pairing.qrNode, E('p', {}, _('Scan this QR code in the Android app for quick setup.'))]),
+			E('div', { 'class': 'sf-qr-wrap' }, [
+				pairing.qrNode,
+				E('p', {}, _('Scan this QR code in the Android app for quick setup.')),
+				E('p', { 'class': 'sf-note sf-note-warning' },
+					_('Do not show or send this QR code to anyone. The first phone that uses it will receive administrator access.'))
+			]),
 			E('div', { 'class': 'sf-manual-settings' }, [
 				deps.inputControl(_('Admin name'), admin.name, { 'readonly': 'readonly' }).node,
 				deps.inputControl(_('Login'), admin.login, { 'readonly': 'readonly' }).node,

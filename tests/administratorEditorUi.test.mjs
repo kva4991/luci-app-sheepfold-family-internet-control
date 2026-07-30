@@ -56,6 +56,12 @@ describe('Administrator editor module §frontmod §pairsec', () => {
     assert.match(settings, /Preparing secure pairing\.\.\./);
   });
 
+  it('warns that the first phone using the QR code receives administrator access', () => {
+    assert.match(editor, /Do not show or send this QR code to anyone\./);
+    assert.match(editor, /The first phone that uses it will receive administrator access\./);
+    assert.match(editor, /sf-note sf-note-warning/);
+  });
+
   it('updates administrator and device views after commit without reloading LuCI', () => {
     const add = functionBody(controller, 'persistNew', 'showAdd');
     const bind = functionBody(controller, 'persistBindings', 'showBindings');

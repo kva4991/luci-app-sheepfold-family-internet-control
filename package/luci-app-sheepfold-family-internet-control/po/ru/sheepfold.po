@@ -2175,6 +2175,14 @@ msgstr "Сначала сохраните API-ключ выбранного пр
 msgid "Scan this QR code in the Android app for quick setup."
 msgstr "Отсканируйте этот QR-код в Android-приложении для быстрой настройки."
 
+#: htdocs/luci-static/resources/sheepfold/features/administrators/editor.js
+msgid ""
+"Do not show or send this QR code to anyone. The first phone that uses it "
+"will receive administrator access."
+msgstr ""
+"Не показывайте и не пересылайте этот QR-код никому. Административный доступ "
+"получит первый телефон, который его использует."
+
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
 msgid "Scan this QR code with the Android app to connect it to this router."
 msgstr "Отсканируйте QR-код Android-приложением, чтобы подключить его к этому роутеру."

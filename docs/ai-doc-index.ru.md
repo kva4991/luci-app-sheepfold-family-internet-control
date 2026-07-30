@@ -35,6 +35,7 @@
 |---|---|
 | [`docs/backend-design.ru.md`](backend-design.ru.md) | Архитектура бэкенда, API-эндпоинты, UCI, приоритеты правил |
 | [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) | Полный справочник CGI-эндпоинтов |
+| [`docs/home-network-access.ru.md`](home-network-access.ru.md) | План безопасного доступа к Sheepfold через разные роутеры и сегменты домашней сети (§homen01) |
 | [`docs/live-router-testing.ru.md`](live-router-testing.ru.md) | Тестирование на живом роутере |
 | [`docs/luci-cache.ru.md`](luci-cache.ru.md) | Cache-busting для LuCI-ассетов |
 | [`docs/frontend-architecture.ru.md`](frontend-architecture.ru.md) | Предметные LuCI-модули, helpers и поэтапное уменьшение `overview.js` (§frontmod) |
@@ -49,6 +50,7 @@
 |---|---|
 | [`docs/android-config.ru.md`](android-config.ru.md) | Конфигурация, сопряжение, детский APK, AI-ассистент |
 | [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) | API, которое вызывает Android |
+| [`docs/home-network-access.ru.md`](home-network-access.ru.md) | Discovery, список endpoint и ограничения routed/NAT-сетей |
 
 ### Семейные функции
 

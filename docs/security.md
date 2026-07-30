@@ -58,6 +58,8 @@ Pairing rules:
 - QR codes must not contain router root passwords, LuCI session cookies, bot tokens, AI keys, or unrelated secrets;
 - manual setup text next to QR should show only the minimum required connection settings;
 - pairing attempts and successful pairings must be written to the administrative action log with masking.
+- the current LAN pairing flow identifies the target phone from the first successful request's source address and observed MAC. LuCI must therefore warn the owner never to show or forward the QR code; one-time consumption prevents reuse but does not prevent theft of the first use. A second verification code is intentionally not required, keeping the main parent flow one-step (§pairux1);
+- pairing through an upstream network must never be enabled by broadly exposing the API port. It is allowed only on an explicitly trusted local network with a short QR lifetime, strict rate limits, an SPKI-pinned HTTPS connection, and immediate one-time-code consumption after the first successful use (§homen01).
 
 ### Обязательная последовательность безопасного сопряжения
 

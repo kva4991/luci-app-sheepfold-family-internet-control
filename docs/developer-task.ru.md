@@ -33,6 +33,7 @@ Sheepfold — OpenWRT-пакет для семейного управления 
 16. [`docs/localization.ru.md`](localization.ru.md) — LuCI gettext, `.lmo`, два параметра языка.
 17. [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента, сопряжение, детский APK.
 18. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
+19. [`docs/home-network-access.ru.md`](home-network-access.ru.md) — принятый план доступа Android к Sheepfold через разные домашние роутеры, границы firewall/discovery и отложенная поддержка NAT.
 19. [`docs/child-wifi-network-notifications.ru.md`](child-wifi-network-notifications.ru.md) — уведомления о новых Wi-Fi-сетях детского устройства, геолокация, приватность и границы доверия (§childwifi1).
 20. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
 21. [`docs/test-strategy.ru.md`](test-strategy.ru.md) — категории автоматических тестов, быстрые команды и условия обязательного полного прогона. (§testcat)
