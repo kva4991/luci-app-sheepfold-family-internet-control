@@ -130,7 +130,7 @@ function administratorDeps(overrides = {}) {
     editor: {
       openAdd(_deps, callback) { addSubmit = callback; },
       openBinding(_deps, _admin, callback) { bindingSubmit = callback; },
-      openSettings() {},
+      openSettings() { return { markQrUsed() {} }; },
     },
     view: { render(config) { renderConfig = config; return config; } },
     ...overrides,
@@ -248,6 +248,10 @@ describe('final refresh and pairing semantics §ovaudit4', () => {
     assert.ok(initial, 'pairing watcher must schedule its first check');
     initial.callback();
     await flush();
+    const usedDelay = timers.find((entry) => entry.delay === 900);
+    assert.ok(usedDelay, 'the consumed QR state must remain visible before refresh and close');
+    usedDelay.callback();
+    await flush();
     assert.equal(fixture.devices.length, 0, 'no synthetic inventory card may be inserted');
     assert.equal(hidden.length, 0, 'pairing modal stays open until the real card exists');
     assert.equal(centered.length, 0);
@@ -330,5 +334,29 @@ describe('final refresh and pairing semantics §ovaudit4', () => {
     await flush();
     assert.equal(saveButton.disabled, false);
     assert.equal(saveButton.attrs['aria-busy'], 'false');
+  });
+
+  it('exposes a pairing view that reveals the used QR status', () => {
+    let modal = null;
+    const { module } = load('sheepfold/features/administrators/editor.js', {
+      ui: { showModal(_title, nodes) { modal = nodes; }, hideModal() {} },
+    });
+    const input = element('input');
+    const pairingView = module.openSettings({
+      checkboxControl: () => ({ input, node: element('label') }),
+      inputControl: () => ({ input: element('input'), node: element('label') }),
+      passwordRevealField: () => element('label'), settingLine: () => element('div'),
+    }, { name: 'Owner', login: 'Owner', allowChildAccessRequests: false }, {
+      qrNode: element('div'), temporaryPassword: '123456', apiUrl: 'https://router', routerAddress: 'router', port: '5201',
+    }, {
+      close() {}, save() { return Promise.resolve(); },
+    });
+    const overlay = walk({ children: modal }).find((node) => node.attrs?.class === 'sf-pairing-qr-used');
+
+    assert.ok(overlay);
+    assert.equal(overlay.hidden, true);
+    pairingView.markQrUsed();
+    assert.equal(overlay.hidden, false);
+    assert.equal(overlay.attrs.hidden, undefined);
   });
 });

@@ -97,6 +97,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 private enum class SetupStep { AGREEMENT, NETWORK, MAC, PAIRING, QR, MANUAL, PROTECTION }
 
@@ -445,7 +447,9 @@ private fun LiveQrScanner(enabled: Boolean, onPayload: (String) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }
-    val delivered = remember { AtomicBoolean(false) }
+    val scannerEnabled = remember { AtomicBoolean(enabled) }
+    val lastDeliveredPayload = remember { AtomicReference<String?>(null) }
+    val emptyFrames = remember { AtomicInteger(0) }
     DisposableEffect(Unit) { onDispose { executor.shutdown() } }
     AndroidView(
         modifier = Modifier.fillMaxSize(),
@@ -458,16 +462,31 @@ private fun LiveQrScanner(enabled: Boolean, onPayload: (String) -> Unit) {
             }
         },
         update = { previewView ->
-            if (!enabled || delivered.get()) return@AndroidView
+            scannerEnabled.set(enabled)
+            if (!enabled) return@AndroidView
             val providerFuture = ProcessCameraProvider.getInstance(context)
             providerFuture.addListener({
+                if (!scannerEnabled.get()) return@addListener
                 val provider = providerFuture.get()
                 val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
                 val analysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
                 analysis.setAnalyzer(executor) { image ->
                     val value = runCatching { decodeQrImage(image) }.getOrNull()
                     image.close()
-                    if (!value.isNullOrBlank() && delivered.compareAndSet(false, true)) previewView.post { onPayload(value) }
+                    if (!scannerEnabled.get()) return@setAnalyzer
+                    if (value.isNullOrBlank()) {
+                        // Три пустых кадра означают, что пользователь убрал код из
+                        // области камеры. После этого тот же QR можно навести намеренно
+                        // ещё раз, не создавая автоматический цикл запросов. §dscqr01
+                        if (emptyFrames.incrementAndGet() >= 3) lastDeliveredPayload.set(null)
+                        return@setAnalyzer
+                    }
+                    emptyFrames.set(0)
+                    // Новый QR из повторно открытой модалки принимается сразу; прежний
+                    // остаётся заблокированным, пока его не убрали из кадра.
+                    if (lastDeliveredPayload.getAndSet(value) != value) {
+                        previewView.post { onPayload(value) }
+                    }
                 }
                 runCatching {
                     provider.unbindAll()

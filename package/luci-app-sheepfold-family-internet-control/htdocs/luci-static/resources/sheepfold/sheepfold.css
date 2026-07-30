@@ -1692,6 +1692,37 @@
         min-width: 0;
 }
 
+.sf-pairing-qr-stage {
+        position: relative;
+        width: max-content;
+        max-width: 100%;
+}
+
+.sf-pairing-qr-stage.sf-is-used .sf-qr {
+        opacity: 0.16;
+        filter: grayscale(1);
+}
+
+.sf-pairing-qr-used {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        border: 1px solid var(--sf-border);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.72);
+        color: #16322a;
+        text-align: center;
+        font-size: 1.05rem;
+        z-index: 1;
+}
+
+.sf-pairing-qr-used[hidden] {
+        display: none;
+}
+
 .sf-qr {
         display: grid;
         grid-template-columns: repeat(33, 1fr);

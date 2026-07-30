@@ -563,3 +563,7 @@ msgstr "在线：最后出现于 %s"
 
 msgid "Online: no presence data yet"
 msgstr "在线：暂无在线记录"
+
+#: htdocs/luci-static/resources/sheepfold/features/administrators/editor.js
+msgid "QR code used"
+msgstr "二维码已使用"

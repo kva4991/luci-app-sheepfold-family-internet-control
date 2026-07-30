@@ -88,7 +88,7 @@ function create(deps) {
 		});
 	}
 
-	function startWatcher(admin, since) {
+	function startWatcher(admin, since, onPaired) {
 		var startedAt = Date.now();
 		var timer = null;
 		var stopped = false;
@@ -100,7 +100,12 @@ function create(deps) {
 				if (stopped) return;
 				if (status.paired !== '1') { timer = window.setTimeout(check, 2000); return; }
 				stopped = true;
-				return reloadAndRefreshDevices().then(function () {
+				if (onPaired) onPaired(status);
+				// Статус QR должен быть виден, но успешная модалка по-прежнему
+				// закрывается сама после обновления таблиц. §dscqr01
+				return new Promise(function (resolve) {
+					timer = window.setTimeout(resolve, 900);
+				}).then(reloadAndRefreshDevices).then(function () {
 					var refreshedAdmin = administrators().filter(function (item) {
 						return String(item.login || '') === String(admin.login || '');
 					})[0] || admin;
@@ -154,8 +159,7 @@ function create(deps) {
 		var temporaryPassword = deps.random.pairingCode();
 		var stopWatcher = null;
 		function openActivated(fingerprint) {
-			stopWatcher = startWatcher(admin, Math.floor(Date.now() / 1000));
-			deps.editor.openSettings({
+			var pairingView = deps.editor.openSettings({
 				checkboxControl: deps.forms.checkboxControl, inputControl: deps.forms.inputControl,
 				passwordRevealField: deps.passwordRevealField, settingLine: deps.settingLine
 			}, admin, {
@@ -179,6 +183,10 @@ function create(deps) {
 						throw error;
 					});
 				}
+			});
+			stopWatcher = startWatcher(admin, Math.floor(Date.now() / 1000), function () {
+				if (pairingView && typeof pairingView.markQrUsed === 'function')
+					pairingView.markQrUsed();
 			});
 		}
 		ui.showModal(_('Administrator settings'), [E('p', { 'class': 'spinning' }, _('Preparing secure pairing...'))]);

@@ -56,6 +56,16 @@ describe('Android pairing discovery and access-list UI', () => {
     assert.match(setupScreen, /PreviewView\.ImplementationMode\.COMPATIBLE/);
   });
 
+  it('accepts a newly issued QR after a failed pairing attempt without retrying the old payload', () => {
+    assert.match(setupScreen, /val scannerEnabled = remember \{ AtomicBoolean\(enabled\) \}/);
+    assert.match(setupScreen, /val lastDeliveredPayload = remember \{ AtomicReference<String\?>\(null\) \}/);
+    assert.match(setupScreen, /val emptyFrames = remember \{ AtomicInteger\(0\) \}/);
+    assert.match(setupScreen, /scannerEnabled\.set\(enabled\)/);
+    assert.match(setupScreen, /emptyFrames\.incrementAndGet\(\) >= 3[\s\S]*lastDeliveredPayload\.set\(null\)/);
+    assert.match(setupScreen, /lastDeliveredPayload\.getAndSet\(value\) != value/);
+    assert.doesNotMatch(setupScreen, /delivered\.compareAndSet\(false, true\)/);
+  });
+
   it('auto-discovers the child router for 30 seconds before showing manual input', () => {
     assert.match(childDiscovery, /activeGateway/);
     assert.match(childDiscovery, /TRANSPORT_WIFI/);
@@ -131,8 +141,8 @@ describe('Android pairing discovery and access-list UI', () => {
   });
 
   it('keeps current Android and OpenWrt release versions synchronized', () => {
-    assert.match(androidBuild, /sheepfoldVersionCode = 51/);
-    assert.match(androidBuild, /sheepfoldVersionName = "0\.1\.50"/);
+    assert.match(androidBuild, /sheepfoldVersionCode = 53/);
+    assert.match(androidBuild, /sheepfoldVersionName = "0\.1\.52"/);
     assert.match(childBuild, /sheepfoldChildVersionCode = 14/);
     assert.match(childBuild, /sheepfoldChildVersionName = "1\.13"/);
     const release = Number(makefile.match(/PKG_RELEASE:=(\d+)/)?.[1] || 0);

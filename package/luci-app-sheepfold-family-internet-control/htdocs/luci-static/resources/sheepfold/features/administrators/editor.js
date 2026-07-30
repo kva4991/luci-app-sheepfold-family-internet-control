@@ -29,6 +29,25 @@ function saveState() {
 	};
 }
 
+function pairingQrState(qrNode) {
+	var usedOverlay = E('div', {
+		'class': 'sf-pairing-qr-used',
+		'hidden': 'hidden',
+		'role': 'status',
+		'aria-live': 'polite'
+	}, E('strong', {}, _('QR code used')));
+	var stage = E('div', { 'class': 'sf-pairing-qr-stage' }, [qrNode, usedOverlay]);
+
+	return {
+		node: stage,
+		markUsed: function () {
+			stage.classList.add('sf-is-used');
+			usedOverlay.hidden = false;
+			usedOverlay.removeAttribute('hidden');
+		}
+	};
+}
+
 function modalActions(onSave, state, label) {
 	var button = E('button', {
 		'class': 'btn cbi-button cbi-button-positive',
@@ -118,6 +137,7 @@ function openSettings(deps, admin, pairing, callbacks) {
 		_('Disabled by default. A request only notifies the parent and never grants internet automatically.')
 	);
 	var state = saveState();
+	var qrState = pairingQrState(pairing.qrNode);
 	function save(button) {
 		return callbacks.save({ allowChildAccessRequests: accessRequests.input.checked }, button);
 	}
@@ -142,7 +162,7 @@ function openSettings(deps, admin, pairing, callbacks) {
 	ui.showModal(_('Administrator settings'), [
 		E('div', { 'class': 'sf-modal-pairing' }, [
 			E('div', { 'class': 'sf-qr-wrap' }, [
-				pairing.qrNode,
+				qrState.node,
 				E('p', {}, _('Scan this QR code in the Android app for quick setup.')),
 				E('p', { 'class': 'sf-note sf-note-warning' },
 					_('Do not show or send this QR code to anyone. The first phone that uses it will receive administrator access.'))
@@ -159,6 +179,7 @@ function openSettings(deps, admin, pairing, callbacks) {
 		]),
 		actions
 	]);
+	return { markQrUsed: qrState.markUsed };
 }
 
 return baseclass.extend({ openAdd: openAdd, openBinding: openBinding, openSettings: openSettings });

@@ -13,6 +13,8 @@ const overview = readOverviewApplication(root + 'view/sheepfold/overview.js');
 const editor = readFileSync(root + 'sheepfold/features/administrators/editor.js', 'utf8');
 const controller = readFileSync(root + 'sheepfold/features/administrators/controller.js', 'utf8');
 const pairingPersistence = readFileSync(root + 'sheepfold/features/pairing/persistence.js', 'utf8');
+const styles = readFileSync(root + 'sheepfold/sheepfold.css', 'utf8');
+const ru = JSON.parse(readFileSync(root + 'sheepfold/i18n/ru.json', 'utf8'));
 
 function functionBody(source, name, nextName) {
   const start = source.indexOf(`function ${name}(`);
@@ -60,6 +62,18 @@ describe('Administrator editor module §frontmod §pairsec', () => {
     assert.match(editor, /Do not show or send this QR code to anyone\./);
     assert.match(editor, /The first phone that uses it will receive administrator access\./);
     assert.match(editor, /sf-note sf-note-warning/);
+  });
+
+  it('marks a backend-confirmed consumed QR before closing the pairing modal', () => {
+    assert.match(editor, /function pairingQrState\(qrNode\)/);
+    assert.match(editor, /_\('QR code used'\)/);
+    assert.match(editor, /markUsed: function \(\)[\s\S]*sf-is-used[\s\S]*usedOverlay\.hidden = false/);
+    assert.match(controller, /status\.paired !== '1'[\s\S]*onPaired\(status\)/);
+    assert.match(controller, /window\.setTimeout\(resolve, 900\)/);
+    assert.match(controller, /pairingView\.markQrUsed\(\)/);
+    assert.match(styles, /\.sf-pairing-qr-stage\.sf-is-used \.sf-qr[\s\S]*opacity: 0\.16/);
+    assert.match(styles, /\.sf-pairing-qr-used\[hidden\][\s\S]*display: none/);
+    assert.equal(ru['QR code used'], 'QR-код использован');
   });
 
   it('updates administrator and device views after commit without reloading LuCI', () => {
