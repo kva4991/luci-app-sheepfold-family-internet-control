@@ -1654,16 +1654,22 @@
 .sf-modal-quick {
         display: grid;
         gap: 18px;
-        width: min(980px, calc(100vw - 48px));
+        width: 100%;
+        min-width: 0;
         max-width: 100%;
         overflow-x: hidden;
 }
 
 .sf-modal-quick-top {
         display: grid;
-        grid-template-columns: minmax(190px, 220px) minmax(220px, 260px) minmax(220px, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 18px;
         align-items: start;
+        min-width: 0;
+}
+
+.sf-modal-quick-top > * {
+        min-width: 0;
 }
 
 .sf-qr-wrap {
@@ -2367,8 +2373,10 @@
 
 .sf-quick-side {
         display: grid;
+        grid-column: 1 / -1;
         gap: 12px;
         align-content: start;
+        min-width: 0;
 }
 
 .sf-quick-permit {
@@ -2405,11 +2413,13 @@
 .sf-quick-candidates {
         display: grid;
         gap: 8px;
+        min-width: 0;
 }
 
 .sf-quick-candidates-wrap {
         display: grid;
         gap: 8px;
+        min-width: 0;
 }
 
 .sf-add-device-candidates {
