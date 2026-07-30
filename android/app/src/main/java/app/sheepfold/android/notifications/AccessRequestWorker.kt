@@ -18,7 +18,7 @@ class AccessRequestWorker(
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         val connection = SheepfoldConnectionStore.read(applicationContext) ?: return Result.success()
-        if (!SheepfoldConnectionStore.hasConnection(applicationContext)) return Result.success()
+        if (!SheepfoldConnectionStore.hasConnection(connection)) return Result.success()
 
         return runCatching {
             val client = RouterAdminClient(connection, applicationContext)

@@ -123,9 +123,13 @@ private fun SheepfoldRoot(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Одно чтение сохраняет идентичность объекта вместе с его токеном и TLS-отпечатком. §authrs1
+    val storedConnection = remember { SheepfoldConnectionStore.read(context) }
     var themeMode by remember { mutableStateOf(ThemePreferenceStore.read(context)) }
-    var setupComplete by remember { mutableStateOf(SheepfoldConnectionStore.hasConnection(context)) }
-    var connection by remember { mutableStateOf(SheepfoldConnectionStore.read(context)) }
+    var setupComplete by remember {
+        mutableStateOf(SheepfoldConnectionStore.hasConnection(storedConnection))
+    }
+    var connection by remember { mutableStateOf(storedConnection) }
     var unlocked by remember { mutableStateOf(!AppProtectionStore.requiresAuthentication(context)) }
     var pairingLoss by remember { mutableStateOf(SheepfoldConnectionStore.consumePairingLoss(context)) }
     var widgetCommandBusy by remember(pendingWidgetCommand) { mutableStateOf(false) }

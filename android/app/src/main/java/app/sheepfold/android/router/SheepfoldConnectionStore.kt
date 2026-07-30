@@ -58,11 +58,13 @@ object SheepfoldConnectionStore {
         }
     }
 
-    fun hasConnection(context: Context): Boolean = read(context)?.let { request ->
+    fun hasConnection(request: RouterConnectionRequest?): Boolean = request?.let {
         !request.bearerToken.isNullOrBlank() &&
             !request.deviceId.isNullOrBlank() &&
             !request.deviceMac.isNullOrBlank()
     } == true
+
+    fun hasConnection(context: Context): Boolean = hasConnection(read(context))
 
     fun updateApiUrl(context: Context, apiUrl: String) {
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)

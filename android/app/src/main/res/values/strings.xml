@@ -121,14 +121,12 @@
     <string name="unlock_biometric_failed">Биометрия не распознана</string>
     <string name="unlock_biometric_unavailable">Биометрическая проверка недоступна на этом устройстве</string>
 
-    <string name="router_label_format">Роутер: %1$s</string>
+    <string name="router_label_format">Название роутера: %1$s</string>
     <string name="router_commands_direct">Команды выполняются непосредственно на OpenWrt-роутере.</string>
-    <string name="router_enable_internet">Включить интернет</string>
-    <string name="router_disable_internet">Отключить интернет для всех</string>
+    <string name="router_turn_internet_on">Интернет включить</string>
+    <string name="router_turn_internet_off">Интернет выключить</string>
     <string name="router_global_block_enabled">Глобальная блокировка включена на роутере</string>
     <string name="router_internet_enabled">Интернет включён на роутере</string>
-    <string name="router_internet_is_enabled">Интернет включён</string>
-    <string name="router_internet_is_disabled">Интернет отключён</string>
     <string name="router_now_enabled">Сейчас включён</string>
     <string name="router_now_disabled">Сейчас отключён</string>
     <string name="action_allow">Разрешить</string>

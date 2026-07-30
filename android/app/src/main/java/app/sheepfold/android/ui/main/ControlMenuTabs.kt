@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -66,12 +68,25 @@ fun ControlTab(
                 stringResource(
                     if (globalBlocked) R.string.router_now_disabled else R.string.router_now_enabled
                 ),
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleMedium
             )
-            IconButton(onClick = onRefresh, enabled = !isLoading) {
+            IconButton(
+                onClick = onRefresh,
+                enabled = !isLoading,
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_refresh),
-                    contentDescription = stringResource(R.string.action_refresh)
+                    contentDescription = stringResource(R.string.action_refresh),
+                    modifier = Modifier.size(30.dp),
+                    tint = if (isLoading) {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
                 )
             }
         }
@@ -80,26 +95,32 @@ fun ControlTab(
             enabled = !isLoading,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp),
+                .height(108.dp),
+            // Бледное состояние остаётся различимым с контрастом не ниже 3:1. §uicontrast
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (!globalBlocked) Color(0xFF178447) else Color(0xFFB9DCCB),
-                contentColor = if (!globalBlocked) Color.White else Color(0xFF315B45)
+                contentColor = if (!globalBlocked) Color.White else Color(0xFF315B45).copy(alpha = 0.75f),
+                disabledContainerColor = Color(0xFFB9DCCB),
+                disabledContentColor = Color(0xFF315B45).copy(alpha = 0.75f)
             )
         ) {
-            Text(stringResource(R.string.router_internet_is_enabled), fontSize = 18.sp)
+            Text(stringResource(R.string.router_turn_internet_on), fontSize = 18.sp)
         }
         Button(
             onClick = { onBlock(true) },
             enabled = !isLoading,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp),
+                .height(108.dp),
+            // Та же контрастная пара нужна и в светлой, и в тёмной теме. §uicontrast
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (globalBlocked) Color(0xFFC62828) else Color(0xFFE8B9B9),
-                contentColor = if (globalBlocked) Color.White else Color(0xFF6D3030)
+                contentColor = if (globalBlocked) Color.White else Color(0xFF6D3030).copy(alpha = 0.75f),
+                disabledContainerColor = Color(0xFFE8B9B9),
+                disabledContentColor = Color(0xFF6D3030).copy(alpha = 0.75f)
             )
         ) {
-            Text(stringResource(R.string.router_internet_is_disabled), fontSize = 18.sp)
+            Text(stringResource(R.string.router_turn_internet_off), fontSize = 18.sp)
         }
         if (isLoading) CircularProgressIndicator()
         message?.let { Text(it) }

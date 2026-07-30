@@ -17,6 +17,8 @@ const operations = read('android/app/src/main/java/app/sheepfold/android/ui/main
 const wifi = read('android/app/src/main/java/app/sheepfold/android/ui/main/WifiManagementTab.kt');
 const settings = read('android/app/src/main/java/app/sheepfold/android/ui/main/SettingsTab.kt');
 const controlMenu = read('android/app/src/main/java/app/sheepfold/android/ui/main/ControlMenuTabs.kt');
+const strings = read('android/app/src/main/res/values/strings.xml');
+const stringsEn = read('android/app/src/main/res/values-en/strings.xml');
 
 test('planned parent placeholders are replaced by router-backed screens', () => {
   assert.match(main, /client\.loadAdminConfig\(\)/);
@@ -74,4 +76,10 @@ test('parent settings use compact native controls and expose language', () => {
   assert.match(settings, /AppLanguage\.entries/);
   assert.match(controlMenu, /router_now_enabled/);
   assert.match(controlMenu, /R\.drawable\.ic_refresh/);
+  assert.match(controlMenu, /height\(108\.dp\)/);
+  assert.match(controlMenu, /tint = if \(isLoading\)/);
+  assert.match(strings, /name="router_turn_internet_on">Интернет включить</);
+  assert.match(strings, /name="router_turn_internet_off">Интернет выключить</);
+  assert.match(strings, /name="router_label_format">Название роутера:/);
+  assert.match(stringsEn, /name="router_label_format">Router name:/);
 });

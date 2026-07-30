@@ -53,8 +53,8 @@
     <string name="tab_schedule">Schedule</string>
     <string name="tab_info">Information</string>
     <string name="tab_settings">Settings</string>
-    <string name="router_internet_is_enabled">Internet enabled</string>
-    <string name="router_internet_is_disabled">Internet disabled</string>
+    <string name="router_turn_internet_on">Turn internet on</string>
+    <string name="router_turn_internet_off">Turn internet off</string>
     <string name="router_now_enabled">Currently enabled</string>
     <string name="router_now_disabled">Currently disabled</string>
     <string name="action_allow">Allow</string>
@@ -128,10 +128,8 @@
     <string name="unlock_invalid">Incorrect value</string>
     <string name="unlock_open">Open</string>
 
-    <string name="router_label_format">Router: %1$s</string>
+    <string name="router_label_format">Router name: %1$s</string>
     <string name="router_commands_direct">Commands are executed directly on the OpenWrt router.</string>
-    <string name="router_enable_internet">Enable internet</string>
-    <string name="router_disable_internet">Disable internet for everyone</string>
     <string name="router_global_block_enabled">Global blocking is enabled on the router</string>
     <string name="router_internet_enabled">Internet is enabled on the router</string>
     <string name="router_refresh_failed">Could not refresh data</string>

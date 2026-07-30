@@ -17,6 +17,12 @@ const client = read('android/app/src/main/java/app/sheepfold/android/router/Rout
 const connectionManager = read('android/app/src/main/java/app/sheepfold/android/router/SecureRouterConnectionManager.kt');
 const aiClient = read('android/app/src/main/java/app/sheepfold/android/router/AiAssistantClient.kt');
 const activity = read('android/app/src/main/java/app/sheepfold/android/MainActivity.kt');
+const request = read(
+  'android/app/src/main/java/app/sheepfold/android/router/RouterConnectionRequest.kt',
+);
+const pairingSession = read(
+  'android/app/src/main/java/app/sheepfold/android/router/PairingSessionToken.kt',
+);
 const setup = read('android/app/src/main/java/app/sheepfold/android/ui/setup/SafeRouterSetupScreen.kt');
 const api = read('package/luci-app-sheepfold-family-internet-control/root/www/cgi-bin/sheepfold-api');
 const legacyApi = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-api-legacy');
@@ -82,5 +88,19 @@ describe('Android router session recovery §authrs1', () => {
     assert.match(session, /сертификат роутера не совпадает/i);
     assert.match(session, /TLS_IDENTITY_CHANGED/);
     assert.match(activity, /pairing_tls_identity_changed/);
+  });
+
+  it('keeps session secrets attached to the same connection instance after app re-entry', () => {
+    assert.match(pairingSession, /WeakHashMap<RouterConnectionRequest, PairingSessionData>/);
+    assert.match(request, /\bclass RouterConnectionRequest\(/);
+    assert.doesNotMatch(request, /\bdata class RouterConnectionRequest\(/);
+    assert.match(activity, /val storedConnection = remember \{ SheepfoldConnectionStore\.read\(context\) \}/);
+    assert.match(activity, /SheepfoldConnectionStore\.hasConnection\(storedConnection\)/);
+    assert.equal(
+      (activity.match(/SheepfoldConnectionStore\.read\(context\)/g) || []).length,
+      1,
+      'root navigation must not create two structurally equal session objects',
+    );
+    assert.match(store, /fun hasConnection\(request: RouterConnectionRequest\?\)/);
   });
 });

@@ -18,6 +18,6 @@
     <string name="unlock_retry_after_seconds">Слишком много неверных попыток. Повторите через %1$d сек.</string>
     <string name="widget_disable_confirmation_title">Отключить семейный интернет?</string>
     <string name="widget_disable_confirmation_body">Команда будет отправлена непосредственно домашнему OpenWrt-роутеру. Устройства из разрешённых исключений продолжат работать согласно правилам.</string>
-    <string name="widget_disable_confirm_action">Отключить интернет</string>
+    <string name="widget_disable_confirm_action">Интернет выключить</string>
     <string name="widget_disable_failed">Не удалось отключить интернет на роутере.</string>
 </resources>

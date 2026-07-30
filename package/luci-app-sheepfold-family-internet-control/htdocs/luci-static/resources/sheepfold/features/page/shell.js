@@ -294,8 +294,8 @@ function create(deps) {
 					E('p', {}, _("Manage family devices' internet access through this OpenWRT router."))
 				]),
 				E('div', { 'class': 'sf-header-actions' }, [
-					internetButton(_('Internet enabled'), 'positive', false, blocked),
-					internetButton(_('Internet disabled'), 'danger', true, blocked)
+					internetButton(_('Turn internet on'), 'positive', false, blocked),
+					internetButton(_('Turn internet off'), 'danger', true, blocked)
 				])
 			]);
 

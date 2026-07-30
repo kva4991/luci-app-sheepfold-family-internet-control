@@ -78,7 +78,7 @@ npm.cmd run lint:android
 | `npm.cmd run test:backendFast` | Быстрые backend-контракты без долгих HTTP/DNS/firewall-стендов и без сборки IPK; основной выбор во время точечной разработки |
 | `npm.cmd run test:policySimulation` | Глубокие и долгие shell-сценарии классификатора устройств и вычислителя расписаний |
 | `npm.cmd run test:networkIntegration` | Долгие AdGuard Home, DNS, nftables и site-list стенды; запускать при изменении сетевой интеграции и перед контрольной точкой |
-| `npm.cmd run test:android` | Общие контракты родительского и детского APK; после Kotlin/XML-правок дополнительно нужен Gradle |
+| `npm.cmd run test:android` | Общие контракты родительского и детского APK, включая вычисляемый контраст темы и управляющих кнопок; после Kotlin/XML-правок дополнительно нужен Gradle и визуальная проверка на устройстве (§uicontrast) |
 | `npm.cmd run test:security` | Авторизация, TLS, rate limit, секреты, firewall-границы и безопасное обновление |
 | `npm.cmd run test:messaging` | Telegram, команды мессенджера и запрос ребёнка на временный доступ |
 | `npm.cmd run test:ai` | Провайдеры, настройки и видимость AI-функций; состав Standard/AI IPK проверяется отдельно категорией `packaging` |

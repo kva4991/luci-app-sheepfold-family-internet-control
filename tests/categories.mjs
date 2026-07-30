@@ -256,6 +256,7 @@ export const testCategories = Object.freeze({
     'childPrivacyPermissions.test.mjs',
     'androidAppProtection.test.mjs',
     'androidParentManagement.test.mjs',
+    'androidUiContrast.test.mjs',
     'adminConfigApi.test.mjs',
     'androidHttpsSecurity.test.mjs',
     'androidPairingDiscoveryAndListUi.test.mjs',

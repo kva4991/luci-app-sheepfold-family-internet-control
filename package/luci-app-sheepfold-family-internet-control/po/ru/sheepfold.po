@@ -1403,12 +1403,12 @@ msgid "Internet connection status"
 msgstr "Статус интернет-соединения"
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
-msgid "Internet disabled"
-msgstr "Интернет отключен"
+msgid "Turn internet off"
+msgstr "Интернет выключить"
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
-msgid "Internet enabled"
-msgstr "Интернет включен"
+msgid "Turn internet on"
+msgstr "Интернет включить"
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
 msgid "Internet is temporarily unavailable by family rules."

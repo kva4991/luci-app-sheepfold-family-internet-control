@@ -1250,11 +1250,11 @@ msgid "Internet connection status"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
-msgid "Internet disabled"
+msgid "Turn internet off"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js
-msgid "Internet enabled"
+msgid "Turn internet on"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/sheepfold/overview.js

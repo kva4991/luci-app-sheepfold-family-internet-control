@@ -18,6 +18,6 @@
     <string name="unlock_retry_after_seconds">Too many incorrect attempts. Try again in %1$d seconds.</string>
     <string name="widget_disable_confirmation_title">Disable family internet?</string>
     <string name="widget_disable_confirmation_body">The command will be sent directly to the home OpenWrt router. Devices covered by allowed exceptions continue to follow their configured rules.</string>
-    <string name="widget_disable_confirm_action">Disable internet</string>
+    <string name="widget_disable_confirm_action">Turn internet off</string>
     <string name="widget_disable_failed">Could not disable internet on the router.</string>
 </resources>
