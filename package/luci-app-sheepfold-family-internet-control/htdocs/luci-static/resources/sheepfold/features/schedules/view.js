@@ -1,5 +1,6 @@
 'use strict';
 'require baseclass';
+'require sheepfold.shared.icons as sharedIcons';
 
 function render(deps, embedded) {
 	var sections = deps.sections();
@@ -29,14 +30,15 @@ function render(deps, embedded) {
 				return E('span', {}, text);
 			})),
 			E('div', { 'class': 'sf-card-actions' }, [
-				E('button', { 'class': 'sf-icon-btn', 'title': _('Edit schedule'), 'click': function (event) { event.preventDefault(); deps.edit(section, false); } }, '⚙'),
-				E('button', { 'class': 'sf-icon-btn', 'title': _('Duplicate schedule'), 'click': function (event) { event.preventDefault(); deps.edit(section, true); } }, '⧉'),
+				E('button', { 'class': 'sf-icon-btn', 'title': _('Edit schedule'), 'aria-label': _('Edit schedule'), 'click': function (event) { event.preventDefault(); deps.edit(section, false); } }, sharedIcons.named('actionSettings')),
+				E('button', { 'class': 'sf-icon-btn', 'title': _('Duplicate schedule'), 'aria-label': _('Duplicate schedule'), 'click': function (event) { event.preventDefault(); deps.edit(section, true); } }, sharedIcons.named('actionDuplicate')),
 				E('button', {
 					'class': 'sf-icon-btn sf-icon-danger',
 					'title': _('Delete schedule'),
+					'aria-label': _('Delete schedule'),
 					'data-sf-action-key': 'schedule-delete:' + section['.name'],
 					'click': function (event) { event.preventDefault(); deps.remove(section, event.currentTarget); }
-				}, '×')
+				}, sharedIcons.named('actionDelete'))
 			])
 		]);
 	}

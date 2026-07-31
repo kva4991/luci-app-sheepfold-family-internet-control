@@ -427,7 +427,7 @@ wifiController = wifiControllerModel.create({
 	confirm: window.confirm.bind(window),
 	notify: environment.notify,
 	errorText: environment.errorText,
-	svg: sharedIcons.svg,
+	icon: sharedIcons.named,
 	palette: groupNaming.palette,
 	payload: wifiPayload,
 	qrCode: environment.qrCode

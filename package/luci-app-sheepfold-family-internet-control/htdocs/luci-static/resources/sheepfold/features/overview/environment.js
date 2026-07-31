@@ -68,12 +68,7 @@ function create(deps) {
 	}
 
 	function identityIcon(device) {
-		var protectedIdentity = !!(device && device.identityProtected);
-		var title = protectedIdentity ?
-			_('Stable device identity is available') :
-			_('This device is protected mainly by its MAC address; MAC spoofing cannot be reliably detected yet');
-
-		return deps.icons.deviceIdentity(protectedIdentity, title);
+		return deps.icons.deviceIdentityForDevice(device);
 	}
 
 	function qrCode(text) {
@@ -110,7 +105,7 @@ function create(deps) {
 				button.setAttribute('title', visible ? _('Hide temporary password') : _('Show temporary password'));
 				button.setAttribute('aria-label', visible ? _('Hide temporary password') : _('Show temporary password'));
 			}
-		}, deps.icons.named('eye'));
+		}, deps.icons.named('actionShowSecret'));
 
 		return E('label', { 'class': 'sf-field sf-secret-field' }, [
 			E('span', {}, label),

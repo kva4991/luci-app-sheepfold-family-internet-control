@@ -1,7 +1,7 @@
 import org.gradle.api.tasks.Copy
 
-val sheepfoldChildVersionCode = 14
-val sheepfoldChildVersionName = "1.13"
+val sheepfoldChildVersionCode = 15
+val sheepfoldChildVersionName = "1.14"
 
 
 val childReleaseSigningEnvironment = mapOf(
@@ -90,7 +90,6 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation("androidx.compose.material:material-icons-core")
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.work.runtime.ktx)

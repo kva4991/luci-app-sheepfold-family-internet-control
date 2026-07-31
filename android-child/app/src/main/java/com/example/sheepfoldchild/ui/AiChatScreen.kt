@@ -8,12 +8,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -127,7 +126,7 @@ fun AiChatScreen(viewModel: AiChatViewModel, status: ClientStatusData?) {
                     enabled = inputText.isNotBlank() && !viewModel.isLoading && !aiBlockedByPersonalGroup
                 ) {
                     Icon(
-                        Icons.AutoMirrored.Filled.Send,
+                        painter = painterResource(R.drawable.ic_send),
                         contentDescription = stringResource(R.string.ai_chat_title)
                     )
                 }

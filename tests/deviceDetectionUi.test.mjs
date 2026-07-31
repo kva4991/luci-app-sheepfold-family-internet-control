@@ -138,7 +138,7 @@ describe('Интерфейс автоопределения устройств',
     assert.match(details, /_\('Trust current connection'\)/);
   });
 
-  it('показывает одинаковый индикатор устойчивой идентификации во всех списках устройств', () => {
+  it('показывает одинаковый трёхсостоянийный индикатор идентификации во всех списках устройств', () => {
 	const details = readFileSync(detectionDetailsPath, 'utf8');
 	const inventory = readFileSync(resolve(
 		repoRoot,
@@ -160,6 +160,7 @@ describe('Интерфейс автоопределения устройств',
 		repoRoot,
 		'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/environment.js',
 	), 'utf8');
+	const identityCss = readFileSync(sheepfoldCssPath, 'utf8');
 
 	assert.match(inventory, /identityProtectionLevel/);
 	assert.match(inventory, /function effectiveDeviceType/);
@@ -167,10 +168,16 @@ describe('Интерфейс автоопределения устройств',
 	assert.match(inventory, /upnp_uuid/);
 	assert.match(inventory, /mdns_serial/);
 	assert.match(icons, /function deviceIdentity/);
+	assert.match(icons, /device\.identityQuarantineMode/);
+	assert.match(icons, /'suspicious'/);
+	assert.match(icons, /deviceIdentityForDevice/);
+	assert.match(icons, /'sf-device-identity-icon is-' \+ normalizedState/);
 	assert.match(environment, /function identityIcon\(device\)/);
-	assert.match(environment, /icons\.deviceIdentity\(protectedIdentity, title\)/);
-	assert.match(selection, /identityIcon\(device\)/);
-	assert.match(groups, /identityIcon\(device\)/);
+	assert.match(environment, /icons\.deviceIdentityForDevice\(device\)/);
+	assert.match(selection, /sharedIcons\.deviceIdentityForDevice\(device\)/);
+	assert.match(groups, /sharedIcons\.deviceIdentityForDevice\(device\)/);
+	assert.match(identityCss, /\.is-mac-only\s*\{\s*color:\s*#5f6b76/);
+	assert.match(identityCss, /\.is-suspicious\s*\{\s*color:\s*#c62828/);
   });
 });
 /*

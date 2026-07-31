@@ -3,12 +3,7 @@
 'require sheepfold.shared.icons as sharedIcons';
 
 function identityIcon(device) {
-	var protectedIdentity = !!(device && device.identityProtected);
-	var title = protectedIdentity ?
-		_('Stable device identity is available') :
-		_('This device is protected mainly by its MAC address; MAC spoofing cannot be reliably detected yet');
-
-	return sharedIcons.deviceIdentity(protectedIdentity, title);
+	return sharedIcons.deviceIdentityForDevice(device);
 }
 
 function matches(device, needle, displayId, formattedId) {

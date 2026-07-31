@@ -31,6 +31,7 @@ const luciGlobals = {
   groupModel: 'readonly',
   groupPersistenceModel: 'readonly',
   groupView: 'readonly',
+  iconRegistry: 'readonly',
   integrationPanel: 'readonly',
   logModel: 'readonly',
   logPanelModel: 'readonly',

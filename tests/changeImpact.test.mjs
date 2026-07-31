@@ -78,6 +78,18 @@ describe('change impact advisor §impact1', () => {
     assert.ok(recommendedCommands(report).automatic.includes('npm.cmd run quality:docs'));
   });
 
+  it('maps the shared icon catalog to LuCI, Android and generation checks', () => {
+    const report = inspectChanges([
+      'icons/catalog.json',
+      'scripts/generateIconCatalog.mjs',
+    ]);
+
+    assert.deepEqual(report.categories, ['android', 'luci', 'tooling']);
+    assert.deepEqual(report.unknown, []);
+    assert.ok(report.areas.some((area) => area.name === 'Единый каталог значков'));
+    assert.ok(recommendedCommands(report).automatic.includes('npm.cmd run icons:check'));
+  });
+
   it('treats rpcd ACL changes as a critical LuCI security boundary', () => {
     const report = inspectChanges([
       'package/luci-app-sheepfold-family-internet-control/root/usr/share/rpcd/acl.d/luci-app-sheepfold-family-internet-control.json',

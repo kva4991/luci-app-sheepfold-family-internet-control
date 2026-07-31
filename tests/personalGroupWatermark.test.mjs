@@ -38,6 +38,9 @@ describe('Personal group watermark', () => {
     assert.match(source, /sheepfold-personal-groups\.css/);
     assert.match(source, /ui_asset_version/);
     assert.match(source, /sf-group-person-watermark/);
+    assert.match(source, /sharedIcons\.named\('personalGroupWatermark'\)/);
+    assert.doesNotMatch(source, /sf-group-person-watermark-head/);
+    assert.doesNotMatch(source, /sf-group-person-watermark-body/);
   });
 
   it('marks the default child group as personal but not the unrestricted group', () => {

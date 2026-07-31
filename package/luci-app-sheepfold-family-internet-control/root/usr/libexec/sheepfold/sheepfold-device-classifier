@@ -14,8 +14,9 @@ WIFI_PROFILE="${10:-}"
 OUI_OVERRIDES="${SHEEPFOLD_OUI_OVERRIDES:-/usr/share/sheepfold/device-oui-overrides}"
 NO_RESTRICTIONS_GROUP="$(uci -q get sheepfold.no_restrictions.name 2>/dev/null || printf 'Без ограничений')"
 PERSONAL_DEVICES_GROUP="$(uci -q get sheepfold.personal_devices.name 2>/dev/null || printf 'Персональные устройства')"
-POLICY_VERSION="10"
+POLICY_VERSION="12"
 NETWORK_NAME_PATTERN='(^|[^a-z0-9])(openwrt|router|gateway|repeater|extender|access[ _-]?point|wireless[ _-]?ap|wi-?fi[ _-]?ap|mesh)([^a-z0-9]|$)|(^|[^a-z0-9])ap[-_][a-z0-9]'
+NETWORK_SWITCH_PATTERN='network[ _-]?switch|ethernet[ _-]?switch|managed[ _-]?switch|unmanaged[ _-]?switch|коммутатор|сетевой свитч'
 SMART_HOME_GATEWAY_PATTERN='thread border router|matter bridge|homekit bridge|zigbee gateway|zigbee bridge|z-wave gateway|zwave gateway|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|tradfri gateway|ikea dirigera|dirigera|hue bridge|sonoff zigbee bridge'
 
 TYPE="smart"
@@ -118,7 +119,7 @@ eligible_type() {
 
 interactive_type() {
 	case "$1" in
-		network|phone|tablet|computer|tv|media_player|smart_watch|console) return 0 ;;
+		network|router|network_switch|phone|tablet|computer|tv|media_player|smart_watch|console) return 0 ;;
 		*) return 1 ;;
 	esac
 }
@@ -138,8 +139,12 @@ classify_text() {
         detected_confidence=35
         detected_reason="lightweight router metadata"
 
-        if name_is_network_infrastructure "$text"; then
-                detected_type="network"
+        if text_has "$lower" "$NETWORK_SWITCH_PATTERN"; then
+                detected_type="network_switch"
+                detected_confidence=92
+                detected_reason="network switch marker"
+        elif name_is_network_infrastructure "$text"; then
+                detected_type="router"
                 detected_confidence=96
                 detected_reason="network infrastructure marker"
         elif text_has "$lower" 'home[ -]?assistant|hassio|hass\.io|haos|openhab|adguard[ -]?home|adguardhome|file server|proxmox|truenas|freenas|openmediavault|synology|diskstation|qnap|unraid|docker host|portainer|smlight|slzb|zigbee2mqtt|zha coordinator|zigbee coordinator|zigbee gateway|zigbee bridge|matter bridge|thread border router|homekit bridge|smart home hub|smarthome hub|philips hue bridge|hue bridge|ikea dirigera|dirigera|tradfri gateway|aqara hub|aqara gateway|xiaomi gateway|mijia gateway|tuya gateway|sonoff zigbee bridge|hubitat|smartthings hub|aeotec hub|homey|fibaro home center|homematic|deconz|conbee|skyconnect|zwavejs|z-wave js|z-wave gateway|zwave gateway' ||
@@ -188,7 +193,7 @@ classify_text() {
 		detected_type="tv"
                 detected_confidence=76
                 detected_reason="TV or media marker"
-        elif text_has "$lower" 'playstation|ps4|ps5|xbox|switch|console'; then
+        elif text_has "$lower" 'playstation|ps4|ps5|xbox|nintendo[ _-]?switch|game[ _-]?console'; then
                 detected_type="console"
                 detected_confidence=82
                 detected_reason="game console marker"
@@ -281,8 +286,8 @@ apply_text_result() {
 
         [ "$candidate_type" != "smart" ] || return 0
 
-        if [ "$candidate_type" = "network" ]; then
-                TYPE="network"
+        if [ "$candidate_type" = "network" ] || [ "$candidate_type" = "router" ] || [ "$candidate_type" = "network_switch" ]; then
+                TYPE="$candidate_type"
                 TYPE_CONFIDENCE=96
                 REASON="$candidate_reason"
                 HARD_DENY=1
@@ -367,7 +372,7 @@ fi
 
 if [ -n "$SSDP_PROFILE" ]; then
         if text_has "$SSDP_PROFILE" 'internetgatewaydevice|wandevice|wanconnectiondevice|urn:schemas-upnp-org:device:router'; then
-                TYPE="network"
+                TYPE="router"
                 TYPE_CONFIDENCE=96
                 REASON="UPnP network infrastructure service"
                 HARD_DENY=1
@@ -430,8 +435,8 @@ OUI_VENDOR="$(lookup_oui_vendor || true)"
 if [ -n "$OUI_VENDOR" ]; then
         candidate_oui_type="$(oui_type "$OUI_VENDOR")"
         if [ "$candidate_oui_type" = "network" ]; then
-                if network_port_profile || [ "$TYPE" = "network" ]; then
-                        TYPE="network"
+                if network_port_profile || [ "$TYPE" = "router" ]; then
+                        TYPE="router"
                         TYPE_CONFIDENCE=96
                         REASON="network vendor and router service profile"
                         HARD_DENY=1
@@ -546,7 +551,7 @@ if name_is_network_infrastructure "$NAME"; then
 fi
 
 if [ "$NETWORK_DENY" = "1" ]; then
-        TYPE="network"
+        [ "$TYPE" = "network_switch" ] || [ "$TYPE" = "router" ] || TYPE="router"
         TYPE_CONFIDENCE=96
         REASON="network infrastructure evidence"
         HARD_DENY=1

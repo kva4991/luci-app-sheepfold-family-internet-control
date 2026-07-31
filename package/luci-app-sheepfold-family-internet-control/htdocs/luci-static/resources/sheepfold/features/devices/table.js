@@ -1,5 +1,6 @@
 'use strict';
 'require baseclass';
+'require sheepfold.shared.icons as sharedIcons';
 
 function sort(table, key, rowSelector, buttonSelector) {
 	var currentKey = table.getAttribute('data-sort-key');
@@ -24,8 +25,14 @@ function sort(table, key, rowSelector, buttonSelector) {
 	table.setAttribute('data-sort-direction', direction);
 	table.querySelectorAll(buttonSelector).forEach(function (button) {
 		var active = button.getAttribute('data-sort-key') === key;
+		var arrow = button.querySelector('.sf-sort-arrow');
+		var iconName = active ?
+			(direction === 'asc' ? 'sortAscending' : 'sortDescending') :
+			'sortUnsorted';
+
 		button.classList.toggle('active', active);
 		button.setAttribute('data-sort-direction', active ? direction : '');
+		arrow.replaceChildren(sharedIcons.named(iconName));
 	});
 	rows.forEach(function (row) { table.appendChild(row); });
 }
@@ -40,7 +47,7 @@ function sortHeader(label, key, options) {
 		}
 	}, [
 		E('span', {}, label),
-		E('span', { 'class': 'sf-sort-arrow' }, '')
+		E('span', { 'class': 'sf-sort-arrow', 'aria-hidden': 'true' }, sharedIcons.named('sortUnsorted'))
 	]);
 }
 

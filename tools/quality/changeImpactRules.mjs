@@ -22,6 +22,11 @@ export const checkCatalog = Object.freeze({
     automatic: true,
     description: 'Android Lint обоих приложений через их Gradle Wrapper.',
   }),
+  icons: Object.freeze({
+    command: 'npm.cmd run icons:check',
+    automatic: true,
+    description: 'Синхронизация единого каталога значков с LuCI и Android-ресурсами.',
+  }),
   androidBuild: Object.freeze({
     command: 'android\\gradlew.bat -p android :app:assembleDebug; android-child\\gradlew.bat -p android-child :app:assembleDebug',
     automatic: false,
@@ -55,6 +60,15 @@ export const checkCatalog = Object.freeze({
 });
 
 export const impactRules = Object.freeze([
+  Object.freeze({
+    id: 'projectIcons',
+    area: 'Единый каталог значков',
+    pattern: /(?:^icons\/|^scripts\/generateIconCatalog\.mjs$|\/sheepfold\/shared\/icon-registry\.js$|\/sheepfold\/shared\/icons\.js$|^docs\/icon-catalog\.ru\.md$|0017-central-project-icon-catalog)/,
+    categories: ['android', 'luci', 'tooling'],
+    checks: ['icons'],
+    risk: 'medium',
+    review: 'Проверить места использования, толщину paths/thinPaths и визуально открыть icons/catalog.html.',
+  }),
   Object.freeze({
     id: 'localization',
     area: 'Локализация интерфейса',

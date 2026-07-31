@@ -3,12 +3,7 @@
 'require sheepfold.shared.icons as sharedIcons';
 
 function identityIcon(device) {
-	var protectedIdentity = !!(device && device.identityProtected);
-	var title = protectedIdentity ?
-		_('Stable device identity is available') :
-		_('This device is protected mainly by its MAC address; MAC spoofing cannot be reliably detected yet');
-
-	return sharedIcons.deviceIdentity(protectedIdentity, title);
+	return sharedIcons.deviceIdentityForDevice(device);
 }
 
 function render(deps, embedded) {
@@ -81,8 +76,8 @@ function render(deps, embedded) {
 			E('div', { 'class': 'sf-group-head' }, [
 				E('div', {}, [E('h4', { 'class': 'sf-group-title' }, deps.displayName(name)), E('strong', { 'class': 'sf-group-count' }, groupDevices.length + ' ' + _('Devices'))]),
 				E('div', { 'class': 'sf-row-actions' }, [
-					deps.iconButton(_('Configure group'), 'gear', 'neutral', function () { deps.configure(name, section, refresh); }),
-					deps.iconButton(_('Delete group'), 'trash', 'danger', function (event) { removeGroup(name, event.currentTarget); })
+					deps.iconButton(_('Configure group'), 'actionSettings', 'neutral', function () { deps.configure(name, section, refresh); }),
+					deps.iconButton(_('Delete group'), 'actionDelete', 'danger', function (event) { removeGroup(name, event.currentTarget); })
 				])
 			]),
 			visible.length ? E('div', { 'class': 'sf-group-device-list' }, visible.map(function (device) {

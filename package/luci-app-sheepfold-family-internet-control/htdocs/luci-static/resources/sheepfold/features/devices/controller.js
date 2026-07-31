@@ -530,10 +530,10 @@ function create(deps) {
 					/* SHEEPFOLD_AI_END */
 				]),
 				E('div', { 'class': 'sf-row-actions', 'data-label': _('Actions') }, [
-					deps.iconButton(_('Configure'), 'gear', 'neutral', function () { showSettings(device); }),
+					deps.iconButton(_('Configure'), 'actionSettings', 'neutral', function () { showSettings(device); }),
 					options.removeFromList ? deps.iconButton(
 						options.removeFromList === 'allowlist' ? _('Remove from allowlist') : _('Remove from blocklist'),
-						'trash', 'danger', function (event) { removeFromList(device, options.removeFromList, event.currentTarget); }
+						'actionDelete', 'danger', function (event) { removeFromList(device, options.removeFromList, event.currentTarget); }
 					) : '',
 					options.compact || adminDevice || device.status === 'allow' || device.status === 'blocked' ? '' :
 						E('button', {

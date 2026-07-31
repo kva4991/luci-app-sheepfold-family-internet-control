@@ -23,7 +23,7 @@ function create(deps) {
 					event.currentTarget.setAttribute('title', visible ? _('Hide secret') : _('Show secret'));
 					event.currentTarget.setAttribute('aria-label', visible ? _('Hide secret') : _('Show secret'));
 				}
-			}, deps.icon('eye'))
+			}, deps.icon('actionShowSecret'))
 		]);
 	}
 

@@ -9,6 +9,7 @@
 'require sheepfold.core.backend.actions as commandActionsModel';
 'require sheepfold.features.devices.presence as devicePresenceModel';
 'require sheepfold.features.devices.detection-details as detectionDetailsModel';
+'require sheepfold.shared.icons as sharedIcons';
 
 /*
  * secureOverview нужен как зависимость: он патчит базовый overview до того,
@@ -80,10 +81,7 @@ function personalGroupWatermark() {
 	return E('span', {
 		'class': 'sf-group-person-watermark',
 		'aria-hidden': 'true'
-	}, [
-		E('span', { 'class': 'sf-group-person-watermark-head' }),
-		E('span', { 'class': 'sf-group-person-watermark-body' })
-	]);
+	}, sharedIcons.named('personalGroupWatermark'));
 }
 
 overview.renderGroups = function() {

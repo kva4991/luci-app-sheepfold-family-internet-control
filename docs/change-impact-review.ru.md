@@ -28,6 +28,7 @@ npm.cmd run quality:gate
 | Изменённая область | Проверить рядом | Минимальные категории |
 |---|---|---|
 | LuCI view/core/shared | переводы, cache version, mobile layout, сохранение состояния | `luci` |
+| `icons/catalog.json`, генератор и сгенерированные значки | LuCI, оба Android APK, места использования и визуальную узнаваемость | `luci android tooling`, `icons:check` |
 | LuCI устройства/группы/расписания/администраторы | backend-команду, UCI, списки и access evaluator | `luci devices access` |
 | CGI или общий API helper | Android-клиенты, status/error codes, auth, timeout | `backendFast android security` |
 | rpcd ACL LuCI | минимальность UCI/exec-прав, фактические вызовы экрана | `backendFast luci security` |

@@ -173,13 +173,13 @@ function create(deps) {
 	function card(site) {
 		return E('div', { 'class': 'sf-domain' }, [
 			E('div', { 'class': 'sf-domain-actions sf-domain-actions-top' }, [
-				deps.iconButton(_('Edit site'), 'gear', 'neutral', function () { showEditor(site); })
+				deps.iconButton(_('Edit site'), 'actionSettings', 'neutral', function () { showEditor(site); })
 			]),
 			E('strong', {}, site[0]),
 			E('span', {}, site[1]),
 			E('small', {}, site[2]),
 			E('div', { 'class': 'sf-domain-actions sf-domain-actions-bottom' }, [
-				deps.iconButton(_('Delete site'), 'trash', 'danger', function () { showDelete(site); })
+				deps.iconButton(_('Delete site'), 'actionDelete', 'danger', function () { showDelete(site); })
 			])
 		]);
 	}

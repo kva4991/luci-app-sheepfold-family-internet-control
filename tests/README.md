@@ -43,6 +43,9 @@ IPK-зависимых тестов описаны в
   ESLint с глобалами LuCI.
 - `npm.cmd run lint:android` запускает Android Lint обоих APK. Категория
   `test:android` не заменяет Lint, Gradle-сборку, эмулятор и физический телефон.
+- `npm.cmd run icons:check` проверяет, что LuCI-реестр, HTML-каталог и Android
+  Vector Drawable соответствуют `icons/catalog.json`; визуальную узнаваемость
+  значков всё равно проверяют в `icons/catalog.html`.
 - `router:*` не входят в `npm.cmd test`. Они проверяют установку пакета, UCI,
   fw4 и LuCI на настоящем OpenWrt. Полная DNS-матрица и hardware-in-loop требуют
   отдельных живых сценариев и пока не доказываются одним `router:allSafe`.

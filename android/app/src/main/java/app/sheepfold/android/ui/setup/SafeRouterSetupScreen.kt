@@ -46,6 +46,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -299,7 +300,11 @@ private fun NetworkStep(
                     Text(stringResource(R.string.setup_server_search), style = MaterialTheme.typography.titleMedium)
                     Text(discovery?.let { "✓ ${it.routerName}" } ?: stringResource(R.string.setup_server_not_found))
                 }
-                Text("↻", style = MaterialTheme.typography.headlineMedium)
+                Icon(
+                    painter = painterResource(R.drawable.ic_refresh),
+                    contentDescription = stringResource(R.string.action_refresh),
+                    modifier = Modifier.size(30.dp)
+                )
             }
         }
         if (busy) CircularProgressIndicator()

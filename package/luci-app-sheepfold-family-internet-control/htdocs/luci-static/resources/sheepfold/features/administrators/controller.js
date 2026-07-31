@@ -301,8 +301,8 @@ function create(deps) {
 		}, [
 			E('div', {}, E('strong', {}, admin.name)), E('div', { 'class': 'sf-mono' }, admin.login), devicesCell,
 			E('div', { 'class': 'sf-row-actions' }, [
-				deps.iconButton(_('Configure'), 'gear', 'neutral', function () { showSettings(admin); }),
-				deps.iconButton(_('Bind devices'), 'link', 'neutral', function () {
+				deps.iconButton(_('Configure'), 'actionSettings', 'neutral', function () { showSettings(admin); }),
+				deps.iconButton(_('Bind devices'), 'actionLink', 'neutral', function () {
 					showBindings(admin, function (actual) { devicesCell.replaceChildren(deviceList(actual || admin)); });
 				})
 			])

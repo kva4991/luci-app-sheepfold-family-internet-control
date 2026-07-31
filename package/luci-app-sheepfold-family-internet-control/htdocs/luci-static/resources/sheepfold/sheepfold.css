@@ -81,6 +81,16 @@
         font-size: 17px;
 }
 
+.sf-icon-btn svg {
+        width: 17px;
+        height: 17px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+}
+
 .sf-icon-btn:disabled {
         cursor: default;
         opacity: 0.35;
@@ -790,6 +800,10 @@
 }
 
 .sf-device-identity-icon.is-mac-only {
+	color: #5f6b76;
+}
+
+.sf-device-identity-icon.is-suspicious {
 	color: #c62828;
 }
 
@@ -887,10 +901,20 @@
 }
 
 .sf-device-type-select-caret {
+        display: inline-flex;
         margin-left: auto;
         color: var(--sf-muted);
-        font-size: 12px;
         font-weight: 400 !important;
+}
+
+.sf-device-type-select-caret svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
 }
 
 .sf-device-type-select-menu {
@@ -990,20 +1014,25 @@
         color: #0f766e;
 }
 
-.sf-sort-arrow::after {
-        content: "↕";
-        font-size: 10px;
+.sf-sort-arrow {
+        display: inline-flex;
+        width: 13px;
+        height: 13px;
         color: #94a3b8;
 }
 
-.sf-device-sort[data-sort-direction="asc"] .sf-sort-arrow::after {
-        content: "↑";
+.sf-device-sort.active .sf-sort-arrow {
         color: #0f766e;
 }
 
-.sf-device-sort[data-sort-direction="desc"] .sf-sort-arrow::after {
-        content: "↓";
-        color: #0f766e;
+.sf-sort-arrow svg {
+        width: 13px;
+        height: 13px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
 }
 
 .sf-device-row .sf-row-actions {

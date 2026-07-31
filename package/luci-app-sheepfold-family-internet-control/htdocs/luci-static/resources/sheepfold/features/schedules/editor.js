@@ -1,6 +1,7 @@
 'use strict';
 'require baseclass';
 'require ui';
+'require sheepfold.shared.icons as sharedIcons';
 
 /* §frontmod §apicon1
  * The editor owns only one schedule draft. The coordinator receives the save
@@ -82,6 +83,7 @@ function open(deps, section, copyMode) {
 				E('button', {
 					'class': 'sf-icon-btn sf-icon-danger',
 					'title': _('Remove time interval'),
+					'aria-label': _('Remove time interval'),
 					'disabled': draft.timeRanges.length === 1 ? 'disabled' : null,
 					'click': function (event) {
 						event.preventDefault();
@@ -89,7 +91,7 @@ function open(deps, section, copyMode) {
 						renderRanges();
 						updatePreview();
 					}
-				}, '×')
+				}, sharedIcons.named('actionDelete'))
 			]);
 		}));
 	}

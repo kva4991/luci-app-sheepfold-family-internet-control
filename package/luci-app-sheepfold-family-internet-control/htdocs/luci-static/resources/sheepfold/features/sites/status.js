@@ -456,7 +456,7 @@ function panel() {
 	var refreshButton;
 	var repaint = function () { paint(container, title, message, problems, refreshButton); };
 
-	refreshButton = sharedIcons.button(_('Refresh status'), 'refresh', 'neutral', function () {
+	refreshButton = sharedIcons.button(_('Refresh status'), 'actionRefresh', 'neutral', function () {
 		load(true).catch(function () {});
 	});
 	container.appendChild(E('div', { 'class': 'sf-site-list-status-head' }, [title, refreshButton]));
@@ -504,7 +504,7 @@ function compactPanel() {
 		message.textContent = description.message;
 	};
 
-	refreshButton = sharedIcons.button(_('Refresh status'), 'refresh', 'neutral', function () {
+	refreshButton = sharedIcons.button(_('Refresh status'), 'actionRefresh', 'neutral', function () {
 		load(true).catch(function () {});
 	});
 	container.appendChild(lamp);

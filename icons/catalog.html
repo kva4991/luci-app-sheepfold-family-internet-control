@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Каталог значков Sheepfold</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, Segoe UI, Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f4f7f6; color: #17211f; }
+    header { border-bottom: 4px solid #24343b; background: #bdd7ce; padding: 24px max(20px, calc((100vw - 1120px) / 2)); }
+    h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: 0; }
+    header p { margin: 0; max-width: 760px; line-height: 1.5; }
+    .toolbar { max-width: 1120px; margin: 20px auto 0; padding: 0 20px; }
+    .toolbar label { display: block; font-weight: 700; margin-bottom: 7px; }
+    .toolbar input { width: min(100%, 560px); min-height: 44px; padding: 9px 12px; border: 2px solid #6f817b; border-radius: 4px; background: #fff; color: #17211f; font: inherit; }
+    main { max-width: 1120px; margin: 0 auto; padding: 8px 20px 44px; }
+    h2 { margin: 28px 0 0; padding: 11px 0; border-bottom: 3px solid #7e9890; font-size: 21px; letter-spacing: 0; }
+    .icon-row { display: grid; grid-template-columns: 116px minmax(0, 1fr); min-height: 132px; border-bottom: 1px solid #c6d2ce; }
+    .preview { display: grid; place-items: center; padding: 22px; border-right: 1px solid #c6d2ce; }
+    .preview svg { width: 68px; height: 68px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .preview.raster img { display: block; width: 82px; height: 82px; object-fit: contain; }
+    .details { min-width: 0; padding: 18px 20px; }
+    .title-line { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+    code { color: #005f50; background: #e4efeb; border: 1px solid #b7c9c3; border-radius: 3px; padding: 3px 7px; font: 700 15px Consolas, monospace; }
+    .title-line span { font-weight: 700; }
+    ul { margin: 12px 0 0; padding-left: 20px; }
+    li + li { margin-top: 10px; }
+    .files { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+    a { color: #075fa3; overflow-wrap: anywhere; }
+    .source { display: inline-block; margin-top: 10px; }
+    .icon-row[hidden], .catalog-section[hidden] { display: none; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #111715; color: #eef5f2; }
+      header { background: #34534a; border-bottom-color: #9fc6b9; }
+      .toolbar input { background: #19221f; color: #eef5f2; border-color: #829a92; }
+      h2 { border-bottom-color: #78958b; }
+      .icon-row, .preview { border-color: #3b4944; }
+      code { color: #b5efdc; background: #21372f; border-color: #416156; }
+      a { color: #8ec8ff; }
+    }
+    @media (max-width: 620px) {
+      h1 { font-size: 25px; }
+      .icon-row { grid-template-columns: 82px minmax(0, 1fr); }
+      .preview { padding: 13px; }
+      .preview svg { width: 50px; height: 50px; }
+      .preview.raster img { width: 58px; height: 58px; }
+      .details { padding: 15px 14px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Каталог значков Sheepfold</h1>
+    <p>37 SVG-значков и 3 фирменных изображения. Слева показан значок, справа — его уникальное английское имя и все места использования.</p>
+  </header>
+  <div class="toolbar">
+    <label for="icon-search">Поиск по имени или месту использования</label>
+    <input id="icon-search" type="search" autocomplete="off" placeholder="Например: deviceTypeCamera или расписание">
+  </div>
+  <main><section class="catalog-section">
+  <h2>Действия</h2>
+  <div class="rows"><article class="icon-row" data-search="actionsettings настроить действия кнопка настройки устройства, администратора, группы, расписания и аварийно-полезного сайта">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.5-2.4 1a8 8 0 0 0-2.6-1.5L14 2h-4l-.4 3a8 8 0 0 0-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 2.6 1.5l.4 3h4l.4-3a8 8 0 0 0 2.6-1.5l2.4 1 2-3.5z"></path><path d="M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>actionSettings</code><span>Настроить</span></div>
+    <ul><li><span>Кнопка настройки устройства, администратора, группы, расписания и аварийно-полезного сайта</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/administrators/controller.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/administrators/controller.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/groups/view.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/groups/view.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/emergency/panel.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/emergency/panel.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="actiondelete удалить действия удаление устройства из списка, группы, расписания, интервала и аварийно-полезного сайта">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 14h10l1-14"></path><path d="M9 7V4h6v3"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>actionDelete</code><span>Удалить</span></div>
+    <ul><li><span>Удаление устройства из списка, группы, расписания, интервала и аварийно-полезного сайта</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/groups/view.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/groups/view.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/editor.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/editor.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/emergency/panel.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/emergency/panel.js</a><a href="../android/app/src/main/java/app/sheepfold/android/ui/main/SchedulesTab.kt">android/app/src/main/java/app/sheepfold/android/ui/main/SchedulesTab.kt</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="actionlink назначить устройства действия назначение устройств администратору">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>actionLink</code><span>Назначить устройства</span></div>
+    <ul><li><span>Назначение устройств администратору</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/administrators/controller.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/administrators/controller.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="actionshowsecret показать или скрыть секрет действия глаз у временного пароля, токенов и других секретных полей">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"></path><path d="M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>actionShowSecret</code><span>Показать или скрыть секрет</span></div>
+    <ul><li><span>Глаз у временного пароля, токенов и других секретных полей</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/environment.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/environment.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/fields.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/fields.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/messenger/settings.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/messenger/settings.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="actionrefresh обновить действия обновление состояния списков сайтов в luci обновление данных на экране управления родительского android-приложения">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.4 9A7 7 0 0 0 6.2 6.2L4 9"></path><path d="M5.6 15A7 7 0 0 0 17.8 17.8L20 15"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>actionRefresh</code><span>Обновить</span></div>
+    <ul><li><span>Обновление состояния списков сайтов в LuCI</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/sites/status.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/sites/status.js</a></div></li><li><span>Обновление данных на экране управления родительского Android-приложения</span><div class="files"><a href="../android/app/src/main/java/app/sheepfold/android/ui/main/ControlMenuTabs.kt">android/app/src/main/java/app/sheepfold/android/ui/main/ControlMenuTabs.kt</a><a href="../android/app/src/main/res/drawable/ic_refresh.xml">android/app/src/main/res/drawable/ic_refresh.xml</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="actionduplicate создать копию действия создание копии расписания">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h11v11H8z"></path><path d="M5 5h11v3"></path><path d="M5 5v11h3"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>actionDuplicate</code><span>Создать копию</span></div>
+    <ul><li><span>Создание копии расписания</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="actionsend отправить сообщение действия отправка сообщения в ии-помощнике детского android-приложения">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4l18 8-18 8 4-8-4-8z"></path><path d="M7 12h14"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>actionSend</code><span>Отправить сообщение</span></div>
+    <ul><li><span>Отправка сообщения в ИИ-помощнике детского Android-приложения</span><div class="files"><a href="../android-child/app/src/main/java/com/example/sheepfoldchild/ui/AiChatScreen.kt">android-child/app/src/main/java/com/example/sheepfoldchild/ui/AiChatScreen.kt</a></div></li></ul>
+  </div>
+</article></div>
+</section>
+<section class="catalog-section">
+  <h2>Навигация</h2>
+  <div class="rows"><article class="icon-row" data-search="sortunsorted сортировка не выбрана навигация заголовки сортируемых таблиц устройств и администраторов">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7l4-4 4 4"></path><path d="M12 3v18"></path><path d="M8 17l4 4 4-4"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>sortUnsorted</code><span>Сортировка не выбрана</span></div>
+    <ul><li><span>Заголовки сортируемых таблиц устройств и администраторов</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/table.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/table.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="sortascending сортировка по возрастанию навигация активное состояние сортируемого заголовка таблицы">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5-5 5 5"></path><path d="M12 5v14"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>sortAscending</code><span>Сортировка по возрастанию</span></div>
+    <ul><li><span>Активное состояние сортируемого заголовка таблицы</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/table.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/table.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="sortdescending сортировка по убыванию навигация активное состояние сортируемого заголовка таблицы">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14l5 5 5-5"></path><path d="M12 5v14"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>sortDescending</code><span>Сортировка по убыванию</span></div>
+    <ul><li><span>Активное состояние сортируемого заголовка таблицы</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/table.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/table.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="navigationdropdown раскрыть список навигация выпадающий список выбора типа устройства">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>navigationDropdown</code><span>Раскрыть список</span></div>
+    <ul><li><span>Выпадающий список выбора типа устройства</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/type-control.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/type-control.js</a></div></li></ul>
+  </div>
+</article></div>
+</section>
+<section class="catalog-section">
+  <h2>Сеть</h2>
+  <div class="rows"><article class="icon-row" data-search="wifisignal wi-fi сеть плашка диапазона wi-fi 2,4/5/6 ггц">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8c5-5 15-5 20 0"></path><path d="M5 11c3.5-3.5 10.5-3.5 14 0"></path><path d="M8 14c2-2 6-2 8 0"></path><path d="M11 17h2"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>wifiSignal</code><span>Wi-Fi</span></div>
+    <ul><li><span>Плашка диапазона Wi-Fi 2,4/5/6 ГГц</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/wifi/controller.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/wifi/controller.js</a></div></li></ul>
+  </div>
+</article></div>
+</section>
+<section class="catalog-section">
+  <h2>Статусы</h2>
+  <div class="rows"><article class="icon-row" data-search="administratorcrown устройство администратора статусы корона возле имени каждого администраторского устройства">
+  <div class="preview" style="color:#b77900"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l4 4 5-7 5 7 4-4-2 11H5L3 8z"></path><path d="M6 19h12"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>administratorCrown</code><span>Устройство администратора</span></div>
+    <ul><li><span>Корона возле имени каждого администраторского устройства</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/environment.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/environment.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="staticiplease постоянная dhcp-аренда статусы замок возле ip-адреса с постоянной dhcp-арендой">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3"></path><path d="M6 11h12v10H6z"></path><path d="M12 15v2"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>staticIpLease</code><span>Постоянная DHCP-аренда</span></div>
+    <ul><li><span>Замок возле IP-адреса с постоянной DHCP-арендой</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/controller.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/environment.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/overview/environment.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="deviceidentitytrusted устойчивый паспорт устройства статусы зелёный паспорт возле устройства с устойчивыми признаками">
+  <div class="preview" style="color:#16834a"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 11a4 4 0 1 1 5 0"></path><path d="M4 21a8 8 0 0 1 12.2-6.8"></path><path d="M18 12.5v1.1l1 .6-1 1.8-1.1-.4-.9.5-.2 1.2h-2l-.2-1.2-.9-.5-1.1.4-1-1.8 1-.6v-1.1l-1-.6 1-1.8 1.1.4.9-.5.2-1.2h2l.2 1.2.9.5 1.1-.4 1 1.8z"></path><path d="M15 11.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2z"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceIdentityTrusted</code><span>Устойчивый паспорт устройства</span></div>
+    <ul><li><span>Зелёный паспорт возле устройства с устойчивыми признаками</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/shared/icons.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/shared/icons.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="deviceidentitymaconly защита в основном по mac статусы серый перечёркнутый паспорт у устройства без устойчивых признаков">
+  <div class="preview" style="color:#5f6b76"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 11a4 4 0 1 1 5 0"></path><path d="M4 21a8 8 0 0 1 12.2-6.8"></path><path d="M18 12.5v1.1l1 .6-1 1.8-1.1-.4-.9.5-.2 1.2h-2l-.2-1.2-.9-.5-1.1.4-1-1.8 1-.6v-1.1l-1-.6 1-1.8 1.1.4.9-.5.2-1.2h2l.2 1.2.9.5 1.1-.4 1 1.8z"></path><path d="M15 11.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2z"></path><path d="M3 3l18 18"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceIdentityMacOnly</code><span>Защита в основном по MAC</span></div>
+    <ul><li><span>Серый перечёркнутый паспорт у устройства без устойчивых признаков</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/shared/icons.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/shared/icons.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="deviceidentitymismatch подозрительное несовпадение паспорта статусы красный перечёркнутый паспорт только при действующем identity-карантине">
+  <div class="preview" style="color:#c62828"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 11a4 4 0 1 1 5 0"></path><path d="M4 21a8 8 0 0 1 12.2-6.8"></path><path d="M18 12.5v1.1l1 .6-1 1.8-1.1-.4-.9.5-.2 1.2h-2l-.2-1.2-.9-.5-1.1.4-1-1.8 1-.6v-1.1l-1-.6 1-1.8 1.1.4.9-.5.2-1.2h2l.2 1.2.9.5 1.1-.4 1 1.8z"></path><path d="M15 11.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2z"></path><path d="M3 3l18 18"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceIdentityMismatch</code><span>Подозрительное несовпадение паспорта</span></div>
+    <ul><li><span>Красный перечёркнутый паспорт только при действующем identity-карантине</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/shared/icons.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/shared/icons.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="personalgroupwatermark личная группа статусы водяной знак головы и плеч на карточке личной группы">
+  <div class="preview" style="color:#375f55"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"></path><path d="M4 21a8 8 0 0 1 16 0"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>personalGroupWatermark</code><span>Личная группа</span></div>
+    <ul><li><span>Водяной знак головы и плеч на карточке личной группы</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview-personal.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/overview-personal.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/sheepfold-personal-groups.css">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/sheepfold-personal-groups.css</a></div></li></ul>
+  </div>
+</article></div>
+</section>
+<section class="catalog-section">
+  <h2>Типы устройств</h2>
+  <div class="rows"><article class="icon-row" data-search="devicetypeunknown неизвестный тип типы устройств таблицы и редактор типа устройства; также безопасная замена неизвестного имени значка">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeUnknown</code><span>Неизвестный тип</span></div>
+    <ul><li><span>Таблицы и редактор типа устройства; также безопасная замена неизвестного имени значка</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/type-control.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/type-control.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypephone телефон типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"></path><path d="M11 18h2"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypePhone</code><span>Телефон</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypetablet планшет типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path><path d="M12 17h.01"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeTablet</code><span>Планшет</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypecomputer компьютер типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 5h14v10H2z"></path><path d="M5 19h8"></path><path d="M9 15v4"></path><path d="M19 5h4v14h-4z"></path><path d="M21 16h.01"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeComputer</code><span>Компьютер</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypetelevision телевизор типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2l4 4 4-4"></path><path d="M3 6h18v10H3z"></path><path d="M8 21h8"></path><path d="M12 16v5"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeTelevision</code><span>Телевизор</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypemediaplayer медиаплеер типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"></path><path d="M10 9l6 3-6 3z"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeMediaPlayer</code><span>Медиаплеер</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypesmartwatch умные часы типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6l1 4h2v12h-2l-1 4H9l-1-4H6V6h2z"></path><path d="M9 7h6v10H9z" stroke-width="1.25"></path><path d="M12 9v3l2 1" stroke-width="1.25"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeSmartWatch</code><span>Умные часы</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypegameconsole игровая приставка типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8h10a5 5 0 0 1 4.5 7.2l-.9 3.4a2 2 0 0 1-3.3.9L15 17H9l-2.3 2.5a2 2 0 0 1-3.3-.9l-.9-3.4A5 5 0 0 1 7 8z"></path><path d="M5.5 13h4"></path><path d="M7.5 11v4"></path><path d="M16 11h.01"></path><path d="M18 13h.01"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeGameConsole</code><span>Игровая приставка</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypeprinter принтер типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V3h10v5"></path><path d="M6 17H4v-6h16v6h-2"></path><path d="M7 14h10v7H7z"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypePrinter</code><span>Принтер</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypeserver сервер типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M8 7h8"></path><path d="M8 11h8"></path><path d="M8 15h4"></path><path d="M16 15h.01"></path><path d="M16 18h.01"></path><path d="M8 18h4"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeServer</code><span>Сервер</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypecamera камера типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h4l2-3h4l2 3h4v13H4z"></path><path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeCamera</code><span>Камера</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypesmartspeaker умная колонка типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-2a3 3 0 0 1-3-3z"></path><path d="M10 8h4"></path><path d="M10 11h4"></path><path d="M12 17h.01"></path><path d="M18 9c1.2 1.6 1.2 4.4 0 6"></path><path d="M20.5 7c2 2.8 2 7.2 0 10"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeSmartSpeaker</code><span>Умная колонка</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetyperobotvacuum робот-пылесос типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18"></path><path d="M4 6 2 4"></path><path d="M3 5H1"></path><path d="M4 4V2"></path><path d="M20 6l2-2"></path><path d="M21 5h2"></path><path d="M20 4V2"></path><path d="M9 20v2h6v-2"></path><path d="M6 8a7 7 0 0 1 12 0" stroke-width="1.25"></path><path d="M5 11a7.5 7.5 0 0 0 1 6" stroke-width="1.25"></path><path d="M19 11a7.5 7.5 0 0 1-1 6" stroke-width="1.25"></path><path d="M9 5v7a3 3 0 0 0 6 0V5" stroke-width="1.25"></path><path d="M9 8h6" stroke-width="1.25"></path><path d="M12 9.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3" stroke-width="1.25"></path><path d="M10 14h1" stroke-width="1.25"></path><path d="M13 14h1" stroke-width="1.25"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeRobotVacuum</code><span>Робот-пылесос</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypesmarthome умный дом типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path><path d="M12 9v9" stroke-width="1.25"></path><path d="M12 10c-1-2-4-1-4 1a2 2 0 0 0 .5 3.5A2 2 0 0 0 10 18c1.1 0 2-.9 2-2" stroke-width="1.25"></path><path d="M12 10c1-2 4-1 4 1a2 2 0 0 1-.5 3.5A2 2 0 0 1 14 18c-1.1 0-2-.9-2-2" stroke-width="1.25"></path><path d="M10 18h4" stroke-width="1.25"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeSmartHome</code><span>Умный дом</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypeengineering инженерное устройство типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path><path d="M7 20v2"></path><path d="M17 20v2"></path><path d="M9 8h6" stroke-width="1.25"></path><path d="M9 11h3" stroke-width="1.25"></path><path d="M12 18c-1.6-.8-2.4-1.9-2-3.2.3-1 1.2-1.6 1.7-2.8 1.6 1.1 3.3 2.4 3.3 4 0 1.2-1 2-3 2z" stroke-width="1.25"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeEngineering</code><span>Инженерное устройство</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypesmartdevice умное устройство типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path><path d="M9 2v3"></path><path d="M12 2v3"></path><path d="M15 2v3"></path><path d="M9 19v3"></path><path d="M12 19v3"></path><path d="M15 19v3"></path><path d="M2 9h3"></path><path d="M2 12h3"></path><path d="M2 15h3"></path><path d="M19 9h3"></path><path d="M19 12h3"></path><path d="M19 15h3"></path><path d="M12 8v8"></path><path d="M12 9c-1-2-4-1-4 1a2 2 0 0 0 .5 3.5A2 2 0 0 0 10 17c1.1 0 2-.9 2-2"></path><path d="M12 9c1-2 4-1 4 1a2 2 0 0 1-.5 3.5A2 2 0 0 1 14 17c-1.1 0-2-.9-2-2"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeSmartDevice</code><span>Умное устройство</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypenetwork сетевое устройство типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"></path><path d="M12 16v2"></path><path d="M12 18a2 2 0 1 1 0 4a2 2 0 1 1 0-4"></path><path d="M2 20h8"></path><path d="M14 20h8"></path><path d="M6 6V4h2" stroke-width="1.25"></path><path d="M8 6h2V5h4v1h2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" stroke-width="1.25"></path><path d="M9 14v-3" stroke-width="1.25"></path><path d="M12 14v-3" stroke-width="1.25"></path><path d="M15 14v-3" stroke-width="1.25"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeNetwork</code><span>Сетевое устройство</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetyperouter роутер или точка доступа типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z"></path><path d="M12 12V7"></path><path d="M9.5 8a3.5 3.5 0 0 1 5 0"></path><path d="M7 5.5a7 7 0 0 1 10 0"></path><path d="M6 16h.01"></path><path d="M9 16h.01"></path><path d="M12 16h.01"></path><path d="M15 16h4"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeRouter</code><span>Роутер или точка доступа</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article>
+<article class="icon-row" data-search="devicetypenetworkswitch сетевой свич типы устройств таблицы устройств и выбор типа">
+  <div class="preview" style="color:#24343b"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"></path><path d="M3 10h4v5H3z" stroke-width="1.25"></path><path d="M4 10V9h2v1" stroke-width="1.25"></path><path d="M8 10h4v5H8z" stroke-width="1.25"></path><path d="M9 10V9h2v1" stroke-width="1.25"></path><path d="M13 10h4v5h-4z" stroke-width="1.25"></path><path d="M14 10V9h2v1" stroke-width="1.25"></path><path d="M18 10h4v5h-4z" stroke-width="1.25"></path><path d="M19 10V9h2v1" stroke-width="1.25"></path><path d="M5 18h.01" stroke-width="1.25"></path><path d="M10 18h.01" stroke-width="1.25"></path><path d="M15 18h.01" stroke-width="1.25"></path><path d="M20 18h.01" stroke-width="1.25"></path></svg></div>
+  <div class="details">
+    <div class="title-line"><code>deviceTypeNetworkSwitch</code><span>Сетевой свич</span></div>
+    <ul><li><span>Таблицы устройств и выбор типа</span><div class="files"><a href="../package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js">package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/types.js</a></div></li></ul>
+  </div>
+</article></div>
+</section>
+<section class="catalog-section">
+  <h2>Фирменная графика</h2>
+  <div class="rows"><article class="icon-row brand-row" data-search="sheepfoldlogo основной логотип sheepfold фирменная графика readme и первый экран родительского android-приложения">
+  <div class="preview raster"><img src="../docs/assets/sheepfold-logo.png" alt=""></div>
+  <div class="details">
+    <div class="title-line"><code>sheepfoldLogo</code><span>Основной логотип Sheepfold</span></div>
+    <ul><li><span>README и первый экран родительского Android-приложения</span><div class="files"><a href="../README.md">README.md</a><a href="../README.ru.md">README.ru.md</a><a href="../android/app/src/main/java/app/sheepfold/android/ui/setup/SafeRouterSetupScreen.kt">android/app/src/main/java/app/sheepfold/android/ui/setup/SafeRouterSetupScreen.kt</a></div></li></ul>
+    <a class="source" href="../docs/assets/sheepfold-logo.png">Источник: docs/assets/sheepfold-logo.png</a>
+  </div>
+</article>
+<article class="icon-row brand-row" data-search="sheepfoldappicon исходник значка android-приложения фирменная графика исходник для android image asset; готовые density-варианты лежат в mipmap-*">
+  <div class="preview raster"><img src="../docs/assets/sheepfold-app-icon.png" alt=""></div>
+  <div class="details">
+    <div class="title-line"><code>sheepfoldAppIcon</code><span>Исходник значка Android-приложения</span></div>
+    <ul><li><span>Исходник для Android Image Asset; готовые density-варианты лежат в mipmap-*</span><div class="files"><a href="../android/app/src/main/AndroidManifest.xml">android/app/src/main/AndroidManifest.xml</a><a href="../android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml">android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml</a><a href="../android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml">android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml</a></div></li></ul>
+    <a class="source" href="../docs/assets/sheepfold-app-icon.png">Источник: docs/assets/sheepfold-app-icon.png</a>
+  </div>
+</article>
+<article class="icon-row brand-row" data-search="sheepfoldwebicon значок для веб-представления проекта фирменная графика исходник веб-значка и оформления репозитория">
+  <div class="preview raster"><img src="../docs/assets/sheepfold-web-icon.png" alt=""></div>
+  <div class="details">
+    <div class="title-line"><code>sheepfoldWebIcon</code><span>Значок для веб-представления проекта</span></div>
+    <ul><li><span>Исходник веб-значка и оформления репозитория</span><div class="files"><a href="../docs/assets/sheepfold-web-icon.png">docs/assets/sheepfold-web-icon.png</a></div></li></ul>
+    <a class="source" href="../docs/assets/sheepfold-web-icon.png">Источник: docs/assets/sheepfold-web-icon.png</a>
+  </div>
+</article></div>
+</section></main>
+  <script>
+    const search = document.getElementById('icon-search');
+    search.addEventListener('input', () => {
+      const query = search.value.trim().toLowerCase();
+      document.querySelectorAll('.catalog-section').forEach((section) => {
+        let visible = 0;
+        section.querySelectorAll('.icon-row').forEach((row) => {
+          row.hidden = query && !row.dataset.search.includes(query);
+          if (!row.hidden) visible += 1;
+        });
+        section.hidden = visible === 0;
+      });
+    });
+  </script>
+</body>
+</html>

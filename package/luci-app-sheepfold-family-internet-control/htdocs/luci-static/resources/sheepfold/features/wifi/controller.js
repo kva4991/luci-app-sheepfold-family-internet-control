@@ -30,12 +30,7 @@ function create(deps) {
 			'title': titles[kind],
 			'aria-label': titles[kind]
 		}, [
-			deps.svg([
-				'M2 8c5-5 15-5 20 0',
-				'M5 11c3.5-3.5 10.5-3.5 14 0',
-				'M8 14c2-2 6-2 8 0',
-				'M11 17h2'
-			]),
+			deps.icon('wifiSignal'),
 			E('span', { 'class': 'sf-wifi-band-label' }, labels[kind])
 		]);
 	}

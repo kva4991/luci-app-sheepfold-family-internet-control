@@ -1,5 +1,6 @@
 'use strict';
 'require baseclass';
+'require sheepfold.shared.icons as sharedIcons';
 
 /* §frontmod §settingview1
  * Визуальный выбор типа устройства не читает UCI и не сохраняет настройки. Он
@@ -39,7 +40,9 @@ function create(deps) {
 		}, [
 			currentIcon,
 			currentLabel,
-			E('span', { 'class': 'sf-device-type-select-caret' }, '▾')
+			E('span', { 'class': 'sf-device-type-select-caret' }, [
+				sharedIcons.named('navigationDropdown')
+			])
 		]);
 
 		function setOpen(open) {
