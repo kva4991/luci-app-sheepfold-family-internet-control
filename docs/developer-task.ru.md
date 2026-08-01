@@ -43,6 +43,7 @@ Sheepfold — OpenWRT-пакет для семейного управления 
 25. [`docs/quality-assistants/README.ru.md`](quality-assistants/README.ru.md) — единая точка входа в карту влияния, быстрый/строгий gate, документационный и структурный аудит, all-pairs и read-only LuCI (§qassist).
 26. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
 27. [`docs/icon-catalog.ru.md`](icon-catalog.ru.md) — единый источник собственных значков LuCI/Android, визуальная страница и команды генерации (§iconcat1).
+28. [`utilities/README.ru.md`](../utilities/README.ru.md) — граница для полезных сопутствующих материалов, которые стоит сохранить, но нельзя выдавать за действующий контракт или рабочий инструмент (§utils1).
 
 ---
 
@@ -112,6 +113,7 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 │   ├── android-config.ru.md  # Android-конфигурация ← читать обязательно
 │   ├── testing-cases.ru.md   # Тест-кейсы ← прогнать перед PR
 │   └── ...
+├── utilities/                # Сопутствующие полезные материалы, не являющиеся контрактом или частью сборки
 ├── AGENTS.md                 # Правила для AI-агентов ← читать обязательно
 └── README.md
 ```

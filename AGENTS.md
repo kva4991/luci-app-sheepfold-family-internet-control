@@ -54,6 +54,7 @@ Avoid:
 - When fixing non-obvious code in this repository, leave short Russian comments explaining why the fix is needed and why this approach is used. Do not comment obvious assignments or noise.
 - When a subtle implementation choice is intentionally correct, add a short Russian comment near that code so future agents do not "simplify" it away.
 - Project-owned icons use the unique English `camelCase` names and geometry in `icons/catalog.json`. Do not add inline SVG paths, CSS-drawn copies, or font symbols such as `⚙`, `×`, and `↻` to LuCI/Kotlin screens. Run `npm run icons:generate` and `npm run icons:check`; see `docs/icon-catalog.ru.md` (§iconcat1).
+- Store useful but non-canonical companion material in `utilities/` only when its README explains why it is preserved and what must be adapted. Do not place secrets, build artifacts, required scripts, product contracts, or unlabelled temporary files there. Promote accepted decisions to `docs/`/ADR and required helpers to `scripts/` or `tools/` (§utils1).
 
 ## README Layout
 
