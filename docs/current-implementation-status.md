@@ -16,7 +16,7 @@ device documents supplement that contract instead of redefining it.
 Current local test-package name produced by `scripts/build-test-ipk.py`:
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-274_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-275_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.

@@ -575,11 +575,17 @@ printf '%s\\n' "$section"
 
   it('сверяет версии политики classifier и detector без зашитого номера', () => {
     const hardening = readFileSync(hardeningPath, 'utf8');
+    const classifier = readFileSync(classifierPath, 'utf8');
+    const detector = readFileSync(detectorPath, 'utf8');
+    const classifierPolicy = classifier.match(/^POLICY_VERSION="([^"]+)"/m)?.[1];
+    const detectorPolicy = detector.match(/^POLICY_VERSION="([^"]+)"/m)?.[1];
 
     assert.match(hardening, /classifier_policy=/);
     assert.match(hardening, /detector_policy=/);
     assert.match(hardening, /"\$classifier_policy" = "\$detector_policy"/);
     assert.doesNotMatch(hardening, /grep -q 'POLICY_VERSION="\d+"'/);
+    assert.ok(classifierPolicy, 'classifier policy version must be declared');
+    assert.equal(detectorPolicy, classifierPolicy);
     assert.match(hardening, /evidence_count.*-lt 2/);
     assert.match(hardening, /assign_detected_group_if_allowed/);
   });
