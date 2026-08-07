@@ -165,6 +165,10 @@ describe('product variant boundary §prodvar', () => {
       assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/devices/editor.js'));
       assert.ok(standard.data.has('www/luci-static/resources/sheepfold/features/devices/responsive.css'));
       assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/devices/responsive.css'));
+      assert.ok(standard.data.has('usr/libexec/sheepfold/sheepfold-lib-form'));
+      assert.ok(ai.data.has('usr/libexec/sheepfold/sheepfold-lib-form'));
+      assert.ok(!standard.data.has('usr/libexec/sheepfold/sheepfold-lib-json'));
+      assert.ok(ai.data.has('usr/libexec/sheepfold/sheepfold-lib-json'));
       assert.doesNotMatch(standard.data.get('www/luci-static/resources/sheepfold/features/devices/editor.js').toString('utf8'), /activity_log_enabled|activityLogEnabled|activityLogField/);
       assert.doesNotMatch(standard.data.get('www/luci-static/resources/sheepfold/features/groups/editor.js').toString('utf8'), /activity_log_enabled|activityLogEnabled|activityLogField/);
       assert.doesNotMatch([...standard.data.values()].map((value) => value.toString('utf8')).join('\n'), /SHEEPFOLD_(?:AI|STANDARD)_(?:BEGIN|END)/);

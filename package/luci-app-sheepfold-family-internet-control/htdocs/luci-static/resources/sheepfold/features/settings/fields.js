@@ -126,10 +126,14 @@ function create(deps) {
 		]);
 	}
 
-	function globalFlagOptionField(label, option, defaultValue, hint) {
+	function globalFlagOptionField(label, option, defaultValue, hint, onChange) {
 		var control = deps.checkbox(label, deps.value(option, defaultValue || '0') === '1', hint, {
 			'change': function (event) {
-				deps.setOption(option, event.currentTarget.checked ? '1' : '0');
+				var value = event.currentTarget.checked ? '1' : '0';
+
+				deps.setOption(option, value);
+				if (typeof onChange === 'function')
+					onChange(value);
 			}
 		});
 

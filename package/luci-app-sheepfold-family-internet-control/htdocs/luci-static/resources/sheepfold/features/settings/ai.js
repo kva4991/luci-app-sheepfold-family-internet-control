@@ -117,7 +117,11 @@ create = function (deps) {
 							_('Allow per-device logs for AI'),
 							'ai_individual_logs',
 							'0',
-							_('Enabling protected per-device logs runs an OpenSSL check on the router.')
+							_('Enabling protected per-device logs runs an OpenSSL check on the router.'),
+							function (value) {
+								/* private_logs is the backend collector switch; keep one user decision. */
+								deps.setOption('private_logs', value);
+							}
 						)
 					);
 				}

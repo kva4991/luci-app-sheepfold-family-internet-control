@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=273
+PKG_RELEASE:=274
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -226,6 +226,12 @@ ensure_global_option private_logs '0'
 ensure_global_option log_days '7'
 ensure_global_option log_max_dir_kb '0'
 ensure_global_option log_max_device_kb '0'
+# Один видимый opt-in управляет и разрешением AI, и фактическим локальным сборщиком.
+if [ "$$(uci -q get sheepfold.global.ai_individual_logs 2>/dev/null)" = "1" ]; then
+	uci -q set sheepfold.global.private_logs='1'
+else
+	uci -q set sheepfold.global.private_logs='0'
+fi
 # SHEEPFOLD_AI_END
 if [ "$$(uci -q get sheepfold.global.domain_allowlist_for_blocklist_default_migrated 2>/dev/null)" != "1" ]; then
 	uci -q set sheepfold.global.domain_allowlist_for_blocklist='1'
@@ -467,6 +473,7 @@ for library in \
 	/usr/libexec/sheepfold/sheepfold-token-common \
 	/usr/libexec/sheepfold/sheepfold-hash-common \
 	/usr/libexec/sheepfold/sheepfold-lock-common \
+	/usr/libexec/sheepfold/sheepfold-lib-form \
 	/usr/libexec/sheepfold/sheepfold-lib-json; do
 	[ -f "$$library" ] && chmod 0644 "$$library" 2>/dev/null || true
 done

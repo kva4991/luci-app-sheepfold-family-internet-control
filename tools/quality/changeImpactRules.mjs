@@ -194,10 +194,10 @@ export const impactRules = Object.freeze([
     review: 'Проверить Standard/AI, IPK/OpenWrt APK, package identity, upgrade и сохранение UCI.',
     full: true,
   }),
-  Object.freeze({
-    id: 'architectureDocs',
-    area: 'Архитектура и правила агентов',
-    pattern: /(?:^(?:README(?:\.ru)?|AGENTS|CODING_RULES)\.md$|^docs\/)/,
+	Object.freeze({
+		id: 'architectureDocs',
+		area: 'Архитектура и правила агентов',
+		pattern: /(?:^(?:README(?:\.ru)?|AGENTS|CODING_RULES)\.md$|^(?:docs|utilities)\/)/,
     categories: ['tooling'],
     checks: ['docs'],
     risk: 'low',

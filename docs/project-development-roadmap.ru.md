@@ -33,7 +33,7 @@
 На момент записи плана:
 
 - этап `globalTest` завершён: PR [#3](https://github.com/kva4991/luci-app-sheepfold-family-internet-control/pull/3) слит fast-forward в `main` на commit `c80cd09`, временная ветка удалена;
-- версия OpenWrt-пакета в рабочей ветке — `0.1.0-r273`;
+- версия OpenWrt-пакета в рабочей ветке — `0.1.0-r274`;
 - локальный строгий quality gate, ESLint, документационный аудит и матрица официальной SDK-сборки прошли;
 - Standard и AI Support успешно собираются в форматах IPK для OpenWrt 24.10 и APK v3 для OpenWrt 25.12;
 - `r241` остаётся последней явно зафиксированной полной read-only/backend/LuCI-проверкой на тестовом роутере OpenWrt 25.12; более новые изменения требуют повторного живого прогона;

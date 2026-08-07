@@ -12,11 +12,12 @@ import test from 'node:test';
 
 const helperPath = 'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-api-admin-config';
 const dispatcherPath = 'package/luci-app-sheepfold-family-internet-control/root/www/cgi-bin/sheepfold-api';
+const formHelperPath = 'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-lib-form';
 const helper = readFileSync(helperPath, 'utf8');
 const dispatcher = readFileSync(dispatcherPath, 'utf8');
 
 test('parent-management shell entrypoints keep valid syntax and AI variant markers', () => {
-  for (const path of [helperPath, dispatcherPath]) {
+  for (const path of [helperPath, dispatcherPath, formHelperPath]) {
     const result = spawnSync('sh', ['-n', path], { encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr || result.error?.message);
   }
@@ -36,6 +37,9 @@ test('dispatcher authenticates and bounds every management request before the he
   assert.match(dispatcher, /SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN/);
   assert.match(dispatcher, /authenticate-token "\$bearer" "\$client_ip"/);
   assert.doesNotMatch(dispatcher, /HTTP_X_SHEEPFOLD_DEVICE_(?:ID|MAC)/);
+  assert.match(helper, /sheepfold-lib-form/);
+  assert.match(helper, /sheepfold_form_get/);
+  assert.doesNotMatch(helper, /printf\s+['"]%b|url_decode\(\)/);
 });
 
 test('helper uses optimistic revision, one kernel lock and verified rollback', () => {

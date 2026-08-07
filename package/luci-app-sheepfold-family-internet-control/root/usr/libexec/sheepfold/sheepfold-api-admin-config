@@ -12,6 +12,7 @@ ROUTER_CONTROL="${SHEEPFOLD_ROUTER_CONTROL:-/usr/libexec/sheepfold/sheepfold-rou
 LOG_HELPER="${SHEEPFOLD_LOG_HELPER:-/usr/libexec/sheepfold/sheepfold-log}"
 ADMIN_LOGIN="${SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN:-}"
 LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-/usr/libexec/sheepfold/sheepfold-lock-common}"
+FORM_COMMON="${SHEEPFOLD_FORM_COMMON:-/usr/libexec/sheepfold/sheepfold-lib-form}"
 LOCK_FILE="${SHEEPFOLD_ADMIN_CONFIG_LOCK:-/var/lock/sheepfold-admin-config.flock}"
 TRANSACTION_ROOT="${SHEEPFOLD_ADMIN_CONFIG_TX_ROOT:-/tmp/sheepfold/admin-config-transactions}"
 CONFIG_FILE="${SHEEPFOLD_CONFIG_FILE:-/etc/config/sheepfold}"
@@ -30,6 +31,11 @@ SCHEMA_VERSION=1
     exit 70
 }
 . "$LOCK_COMMON"
+[ -r "$FORM_COMMON" ] || {
+    printf '%s\n' form_decoder_unavailable >&2
+    exit 70
+}
+. "$FORM_COMMON"
 
 uci_read() {
     "$UCI_BIN" "$@"
@@ -330,21 +336,13 @@ admin_config_json() {
     printf '}\n'
 }
 
-url_decode() {
-    local value
-    value="$(printf '%s' "${1:-}" | sed 's/+/ /g; s/%/\\x/g')"
-    printf '%b' "$value"
-}
-
 form_get() {
-    local key body item_key item_value
-    key="$1"
-    body="$2"
-    printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
-        [ "$item_key" = "$key" ] || continue
-        url_decode "$item_value"
-        break
-    done
+    local value
+    if ! value="$(sheepfold_form_get "$1" "$2")"; then
+        printf '%s\n' invalid_form_encoding >&2
+        return 2
+    fi
+    printf '%s' "$value"
 }
 
 trim_text() {

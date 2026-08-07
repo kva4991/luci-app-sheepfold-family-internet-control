@@ -105,7 +105,7 @@ uninstall.sh                                         Router uninstaller that pre
 
 ## Status
 
-This repository is in active experimental development. LuCI uses one guarded runner for mutating router commands; duplicate clicks coalesce and the global internet toggle is confirmed by the backend. UCI, device/DHCP/firewall, Wi-Fi reload, backup rollback, and pairing are split into narrow persistence adapters. The final cleanup removes duplicate forwarding functions from the coordinator without changing runtime ordering. Schedules, groups, settings side effects, and discovery payloads are also separated from the LuCI coordinator. LuCI/backend, nftables enforcement, schedules, secure Android pairing, and a basic Telegram adapter are implemented; stable release still requires the documented live OpenWrt/integration matrix, physical Android validation, production signing, and roadmap limitations.
+This repository is an experimental build, not a stable release. LuCI and the router backend already implement device access control, schedules, secure Android pairing, site-list integration, and basic Telegram control. Before a stable release, the project still requires the documented live OpenWrt/integration matrix, physical Android validation, and an owner-controlled production signing key.
 
 See:
 
@@ -141,9 +141,3 @@ If you find Sheepfold useful and want to support development, see [Donation](doc
 ## License
 
 MIT License.
-
-LuCI `r249` additionally moves shared settings fields, the full Misc/Storage composition, AI presentation, and the device-type selector out of `overview.js`; the coordinator remains the composition root rather than owning those DOM trees.
-
-LuCI `r250` completes the `overview.js` decomposition: the public file is a four-line bootstrap, the explicit composition root lives in `features/overview/application.js`, and domain behavior is owned by focused controllers.
-
-LuCI `r252` is the re-audited finalization of the `overview.js` decomposition: a four-line bootstrap, strict require/dependency/UCI auditing, and honest partial-persistence/refresh outcomes. The hardware firewall/DNS/Wi-Fi matrix remains mandatory before release. §ovaudit5

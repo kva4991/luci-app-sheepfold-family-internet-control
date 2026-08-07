@@ -1,4 +1,4 @@
-# ADR-0013: Строгая JSON/form-граница AI backend
+# ADR-0013: Строгая form-urlencoded-граница и JSON-граница AI backend
 
 - Статус: Принято
 - Дата: 2026-07-27
@@ -21,16 +21,16 @@ AI endpoint принимает `application/x-www-form-urlencoded`, добавл
 
 1. Оставить локальные `sed`/`printf` helpers и расширить набор замен. Это почти не увеличивает пакет, но сохраняет дублирование и хрупкую ручную сериализацию.
 2. Добавить большой внешний JSON/parser runtime. Он даст богатый API, но увеличит зависимости роутера ради двух AI endpoint.
-3. Использовать уже обязательный OpenWrt `jshn` для JSON и одну небольшую AI-only shell-библиотеку для строгого form-urlencoded.
+3. Использовать уже обязательный OpenWrt `jshn` для JSON, общую небольшую shell-библиотеку для строгого form-urlencoded и отдельную AI-only библиотеку provider payload.
 
 ## Решение
 
 - Динамический JSON ошибок и запросов провайдеров строится только функциями `jshn`.
-- Общая `sheepfold-lib-json` строго разбирает `%XX`, преобразует `+` в пробел и отклоняет malformed escape либо NUL.
-- Gate и handler используют один helper и не имеют собственных `json_escape`, `url_decode` или `form_get`.
+- Общая для Standard и AI Support `sheepfold-lib-form` строго разбирает `%XX`, преобразует `+` в пробел и отклоняет malformed escape либо NUL. Её же использует аутентифицированный Android admin API.
+- AI-only `sheepfold-lib-json` строит provider payload через `jshn` и подключает общий form-decoder; gate и handler не имеют собственных `json_escape`, `url_decode` или `form_get`.
 - Статические JSON-константы без пользовательских значений можно оставить строковыми литералами.
-- Helper входит только в AI Support-вариант: Standard-пакету эта поверхность и зависимость выполнения не нужны.
-- Отсутствие helper или `jshn` приводит к структурированной локальной ошибке до обращения к внешнему провайдеру.
+- `sheepfold-lib-form` входит в обе редакции, потому что admin API является общей функцией. `sheepfold-lib-json` входит только в AI Support.
+- Отсутствие нужной библиотеки или `jshn` приводит к структурированной локальной ошибке до изменения настроек либо обращения к внешнему провайдеру.
 
 ## Последствия
 
@@ -42,9 +42,9 @@ AI endpoint принимает `application/x-www-form-urlencoded`, добавл
 
 ## Проверка
 
-- `node --test tests/aiJsonBoundary.test.mjs`
+- `node --test tests/aiJsonBoundary.test.mjs tests/adminConfigApi.test.mjs`
 - полный `npm.cmd test`
-- `sh -n` для helper, gate, handler и runtime hardening;
+- `sh -n` для обеих библиотек, admin API helper, gate, handler и runtime hardening;
 - read-only `tools/router-testing/remoteChecks.sh` на AI Support проверяет chat и
   Gemini payload с кавычками, обратным слешем, табом, переводом строки и русским
   текстом через настоящий `jshn`, не обращаясь к провайдеру;

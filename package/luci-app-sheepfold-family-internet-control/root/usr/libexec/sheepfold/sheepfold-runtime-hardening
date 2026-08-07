@@ -44,6 +44,7 @@ CHILD_WIFI_MONITOR="$(path /usr/libexec/sheepfold/sheepfold-child-wifi-monitor)"
 TLS_FINGERPRINT="$(path /usr/libexec/sheepfold/sheepfold-tls-fingerprint)"
 HASH_COMMON="$(path /usr/libexec/sheepfold/sheepfold-hash-common)"
 LOCK_COMMON="$(path /usr/libexec/sheepfold/sheepfold-lock-common)"
+FORM_COMMON="$(path /usr/libexec/sheepfold/sheepfold-lib-form)"
 FIREWALL="$(path /usr/libexec/sheepfold/sheepfold-firewall)"
 SCHEDULE_EVALUATOR="$(path /usr/libexec/sheepfold/sheepfold-schedule-evaluator)"
 EMERGENCY_SITES="$(path /usr/libexec/sheepfold/sheepfold-emergency-sites)"
@@ -84,7 +85,7 @@ for required in \
 	"$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS" \
     "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP" "$DEVICE_SSDP_UCODE" "$DEVICE_UPNP_DESCRIPTION" "$DEVICE_WSD" "$DEVICE_WSD_UCODE" "$DEVICE_IDENTITY" "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" \
     "$DHCP_SIGNALS" "$LED_CONTROL" "$IPV6_CONTROL" "$PACKAGE_MANAGER" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-	"$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$API_RATE_LIMIT" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$SIM_MONITOR" "$CHILD_WIFI_MONITOR" "$TLS_FINGERPRINT" "$HASH_COMMON" "$LOCK_COMMON" \
+	"$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$API_RATE_LIMIT" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$SIM_MONITOR" "$CHILD_WIFI_MONITOR" "$TLS_FINGERPRINT" "$HASH_COMMON" "$LOCK_COMMON" "$FORM_COMMON" \
     "$FIREWALL" "$SCHEDULE_EVALUATOR" "$EMERGENCY_SITES" "$COUNTRY_PROFILE" \
     "$COUNTRY_PROFILE_RU" "$COUNTRY_PROFILE_BY" "$COUNTRY_PROFILE_CN" "$SITE_LISTS" "$DOMAIN_POLICY" \
     "$ADGUARD_ADAPTER" "$ADGUARD_FEED" $VARIANT_REQUIRED \
@@ -108,7 +109,7 @@ for executable in \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
-chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" ${JSON_COMMON:+"$JSON_COMMON"} "$ACL" "$PRIVACY_NOTICE" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
+chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$FORM_COMMON" ${JSON_COMMON:+"$JSON_COMMON"} "$ACL" "$PRIVACY_NOTICE" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
     "$COUNTRY_PROFILE_RU" "$COUNTRY_PROFILE_BY" "$COUNTRY_PROFILE_CN" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND"
 
 mkdir -p "$(path /etc/sheepfold/tokens)"
@@ -323,6 +324,7 @@ grep -q 'PRIVACY_NOTICE_SOURCE' "$USB_STORAGE" || die "USB privacy notice is not
 # SHEEPFOLD_AI_BEGIN
 grep -q 'sheepfold-openssl-ensure' "$ACL" || die "OpenSSL verification helper is absent from LuCI ACL"
 grep -q "ai_individual_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable individual logs"
+grep -q "private_logs='0'" "$OPENSSL_ENSURE" || die "OpenSSL failure does not disable the local log collector"
 # SHEEPFOLD_AI_END
 
 # QR v2 закрепляет публичный ключ API до первого сетевого запроса Android.

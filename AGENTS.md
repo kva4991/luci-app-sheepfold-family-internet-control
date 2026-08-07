@@ -102,7 +102,7 @@ Avoid:
 - Work on AI-assistant memory, dialogue behavior, database design, or external AI integrations must start with `docs/ai-assistant-development/README.md`; put each new idea directly into the relevant focused document, and keep the folder's module map synchronized. If no focused document fits, create one and link it from the folder README. (§aiarch1)
 - Before sending AI data to any provider or compute worker, perform deterministic secret removal, identifier pseudonymization, minimization, and any required user preview on the router. A post-send auditor cannot repair a disclosure. Do not call pseudonymized data anonymous (§aimask1).
 - External AI compute is optional and must not participate in firewall or access-control decisions. Prefer a user-controlled LAN worker first; never send it the alias reverse map, provider keys, UCI, raw logs, or router credentials, and treat every result as untrusted input (§aiexec1).
-- Dynamic JSON in the router AI boundary must be built with OpenWrt `jshn` through the shared AI-only `sheepfold-lib-json`. Decode `application/x-www-form-urlencoded` strictly, reject malformed `%XX` and NUL, and do not recreate local `sed`/`printf` escaping or provider payload templates (§jsonio1).
+- Dynamic JSON in the router AI boundary must be built with OpenWrt `jshn` through the shared AI-only `sheepfold-lib-json`. Decode every project-owned `application/x-www-form-urlencoded` boundary through the shared `sheepfold-lib-form`, reject malformed `%XX` and NUL, and do not recreate local `sed`/`printf` decoders or provider payload templates (§jsonio1).
 - Do not implement fastText token classification as if it were sequence BIO NER. Any NER design must demonstrate sentence-context behavior, target-router benchmarks, architecture-specific packaging impact, and leak/false-positive tests before it becomes a privacy boundary (§aimask1).
 - Regional AI risk hints must be versioned, sourced, scoped, and phrased as possible barriers to help-seeking, never as traits of every resident. A country/city, sex, age, or religion cannot by itself create a personal risk fact (§aireg01).
 - In injury, loss, sexual-health, violence, poisoning, or substance-risk scenarios, AI guidance prioritizes safety and appropriate help before discipline. Do not recommend punishment for disclosing harm or asking for help; separate the later teaching conversation from the act of disclosure (§aireg01).
@@ -465,7 +465,7 @@ Avoid:
 ## Activity Journal
 
 - Internet activity journal is separate from the administrative action log.
-- It has two required levels: the global `activity_log_enabled` switch is off by default, and the device/group scope must also allow collection.
+- It has two required levels: the user-facing global `ai_individual_logs` switch is off by default and mirrors the internal collector switch `private_logs`; the device/group `activity_log_enabled` scope must also allow collection. Do not restore the removed duplicate global `activity_log_enabled` option.
 - When the global switch is off, hide per-device activity-log controls and reject writes in the backend. When it is enabled, initially enable eligible devices in the protected `Personal devices` group; the parent can then change individual device choices.
 - Do not collect activity journal data for administrator devices, device allowlist, or device blocklist.
 - Show only a visible badge/size/status in ordinary UI; do not display raw browsing history by default.

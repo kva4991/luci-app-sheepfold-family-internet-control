@@ -19,8 +19,9 @@ UCI-параметры и секции Sheepfold, которые **сущест�
 | `domain_allowlist_for_blocklist_default_migrated` | `global` | Флаг одноразовой миграции |
 | `country_profile_schema`, `country_profile_migrated` | `global` | Версия country profile и одноразовая миграция старых заводских карточек (§country1) |
 | `emergency_sites_initialized` | `global` | Служебный флаг первичного заполнения аварийно-полезных сайтов; не является пользовательским переключателем |
-| `activity_log_enabled` | `global` | Глобальный журнал активности (в UI только per-device/per-group) |
-| `private_logs`, `log_days`, `log_max_dir_kb`, `log_max_device_kb` | `global` | Старые/расширенные лимиты журналов |
+| `private_logs` | `global` | Внутренний переключатель локального сборщика в AI Support; при сохранении зеркалит видимый `ai_individual_logs` |
+| `log_days`, `log_max_dir_kb`, `log_max_device_kb` | `global` | Лимиты приватных журналов AI Support |
+| `activity_log_enabled` | `device` / `group` | Локальная область сбора; действует только вместе с глобальным `ai_individual_logs=1` |
 | `no_restrictions_auto_assign` | `global` | Автоназначение в «Без ограничений»; задаётся только вместе с `detection_mode` |
 | `detector_watch_interval_seconds` | `global` | Интервал чтения текущего ARP/Wi-Fi/DHCP online-снимка; 10 секунд по умолчанию (§detlife1) |
 | `detector_offline_grace_seconds` | `global` | Grace-период 90 секунд перед реальным offline; подавляет ложные новые подключения из-за сна Wi-Fi/roaming, backend ограничивает 30-900 (§detlife1) |

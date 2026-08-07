@@ -160,11 +160,14 @@ return view.extend({
 		o.description = _('Enabling this opens the OpenSSL setup dialog. Sending a log still requires an administrator token and a separate opt-in in the app.');
 		o.write = function(sectionId, value) {
 			uci.set('sheepfold', sectionId, 'ai_individual_logs', value === '1' ? '1' : '0');
+			/* Старый отдельный AI-view обязан включать тот же backend-сборщик. */
+			uci.set('sheepfold', sectionId, 'private_logs', value === '1' ? '1' : '0');
 			if (value !== '1')
 				return Promise.resolve();
 
 			return showOpenSslProgress().catch(function(error) {
 				uci.set('sheepfold', sectionId, 'ai_individual_logs', '0');
+				uci.set('sheepfold', sectionId, 'private_logs', '0');
 				ui.addNotification(null, E('p', {},
 					_('OpenSSL is not installed or failed verification. Per-device logs are disabled.')), 'error');
 				throw error;

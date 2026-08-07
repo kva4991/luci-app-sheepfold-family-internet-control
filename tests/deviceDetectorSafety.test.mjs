@@ -171,7 +171,7 @@ printf '%s\\n' "$section"
   it('никогда не доверяет OpenWrt-роутеру автоматически', () => {
     const device = classify({ name: 'OpenWrt' });
 
-    assert.equal(device.type, 'network');
+    assert.equal(device.type, 'router');
     assert.equal(device.targetGroup, '');
     assert.ok(device.confidence >= 90);
     assert.equal(device.autoScore, 0);
@@ -185,7 +185,7 @@ printf '%s\\n' "$section"
       ports: '22,53,80,443',
     });
 
-    assert.equal(device.type, 'network');
+    assert.equal(device.type, 'router');
     assert.equal(device.hardDeny, true);
     assert.equal(isAutoAssignable(device), false);
   });
@@ -201,7 +201,7 @@ printf '%s\\n' "$section"
       signalFile,
     });
 
-    assert.equal(device.type, 'network');
+    assert.equal(device.type, 'router');
     assert.equal(device.hardDeny, true);
     assert.equal(isAutoAssignable(device), false);
   });
@@ -271,7 +271,7 @@ printf '%s\\n' "$section"
       ssdpProfile: 'urn:schemas-upnp-org:device:InternetGatewayDevice:1|uuid:gateway-1234|OpenWrt UPnP|http://192.168.1.1/root.xml',
     });
 
-    assert.equal(device.type, 'network');
+    assert.equal(device.type, 'router');
     assert.equal(device.hardDeny, true);
     assert.equal(isAutoAssignable(device), false);
   });

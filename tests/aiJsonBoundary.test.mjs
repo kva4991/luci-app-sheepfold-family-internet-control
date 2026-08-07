@@ -1,4 +1,4 @@
-// Проверяет общую границу form-urlencoded/JSON AI backend без сети и реального провайдера.
+// Проверяет общую form-urlencoded-границу и JSON-границу AI backend без сети и провайдера.
 // Тест ловит повторное ручное экранирование и повреждённый ввод, но не доказывает наличие jshn на целевом роутере.
 import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageRoot = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
+const formHelperPath = resolve(packageRoot, 'root/usr/libexec/sheepfold/sheepfold-lib-form');
 const helperPath = resolve(packageRoot, 'root/usr/libexec/sheepfold/sheepfold-lib-json');
 const gatePath = resolve(packageRoot, 'root/usr/libexec/sheepfold/sheepfold-ai-gate');
 const handlerPath = resolve(packageRoot, 'root/usr/libexec/sheepfold/sheepfold-ai-handler');
@@ -27,7 +28,7 @@ function runFormGet(body) {
       '-c',
       '. "$1"; sheepfold_form_get message "$2"',
       'sheepfold-form-test',
-      posix(relative(repoRoot, helperPath)),
+      posix(relative(repoRoot, formHelperPath)),
       body,
     ],
     { cwd: repoRoot, encoding: 'utf8' },
@@ -98,6 +99,7 @@ esac
         HTTP_AUTHORIZATION: 'Bearer token',
         SHEEPFOLD_AI_RATE_DIR: fixturePath(rateDir),
         SHEEPFOLD_JSON_COMMON: posix(relative(repoRoot, helperPath)),
+        SHEEPFOLD_FORM_COMMON: posix(relative(repoRoot, formHelperPath)),
         SHEEPFOLD_JSHN_LIB: fixturePath(jshn),
         SHEEPFOLD_UCI_BIN: fixturePath(uci),
         SHEEPFOLD_ROUTER_CONTROL: fixturePath(routerControl),
@@ -119,9 +121,9 @@ describe('AI JSON and form boundary', () => {
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, 'Тест "x"\nline');
-    const helper = readFileSync(helperPath, 'utf8');
-    assert.doesNotMatch(helper, /\beval\b/);
-    assert.doesNotMatch(helper, /printf\s+['"]%b/);
+    const formHelper = readFileSync(formHelperPath, 'utf8');
+    assert.doesNotMatch(formHelper, /\beval\b/);
+    assert.doesNotMatch(formHelper, /printf\s+['"]%b/);
   });
 
   it('rejects malformed percent escapes and NUL instead of decoding ambiguous input', () => {
@@ -133,10 +135,13 @@ describe('AI JSON and form boundary', () => {
 
   it('uses the shared jshn boundary in both AI request stages', () => {
     const helper = readFileSync(helperPath, 'utf8');
+    const formHelper = readFileSync(formHelperPath, 'utf8');
     const gate = readFileSync(gatePath, 'utf8');
     const handler = readFileSync(handlerPath, 'utf8');
 
     assert.match(helper, /\/usr\/share\/libubox\/jshn\.sh/);
+    assert.match(helper, /sheepfold-lib-form/);
+    assert.match(formHelper, /sheepfold_form_get\(\)/);
     assert.match(helper, /command -v json_add_double/);
     assert.match(helper, /sheepfold_gemini_payload\(\)/);
     assert.match(helper, /sheepfold_chat_payload\(\)/);
@@ -179,7 +184,7 @@ describe('AI JSON and form boundary', () => {
     assert.match(result.stdout, /invalid_form_encoding/);
   });
 
-  it('keeps the helper inside the AI-only package boundary and hardens its permissions', () => {
+  it('keeps the JSON helper AI-only and hardens shared parser permissions', () => {
     const variants = readFileSync(variantsPath, 'utf8');
     const hardening = readFileSync(hardeningPath, 'utf8');
     const makefile = readFileSync(makefilePath, 'utf8');
@@ -191,7 +196,7 @@ describe('AI JSON and form boundary', () => {
   });
 
   it('keeps all changed shell modules syntactically valid', () => {
-    for (const path of [helperPath, gatePath, handlerPath, hardeningPath]) {
+    for (const path of [formHelperPath, helperPath, gatePath, handlerPath, hardeningPath]) {
       const result = spawnSync('sh', ['-n', path], { encoding: 'utf8' });
       assert.equal(result.status, 0, `${path}\n${result.stderr}`);
     }

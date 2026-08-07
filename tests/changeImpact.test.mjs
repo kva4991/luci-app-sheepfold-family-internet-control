@@ -71,6 +71,8 @@ describe('change impact advisor §impact1', () => {
       'docs/developer-task.ru.md',
       'docs/project-development-roadmap.ru.md',
       'docs/new-profile-document.ru.md',
+	  'utilities/README.ru.md',
+	  'utilities/guides/example.ru.md',
     ]);
     assert.deepEqual(report.categories, ['tooling']);
     assert.deepEqual(report.unknown, []);

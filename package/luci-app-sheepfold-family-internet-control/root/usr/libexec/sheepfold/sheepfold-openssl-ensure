@@ -5,7 +5,10 @@ PACKAGE_MANAGER_HELPER="/usr/libexec/sheepfold/sheepfold-package-manager"
 [ ! -r "$PACKAGE_MANAGER_HELPER" ] || . "$PACKAGE_MANAGER_HELPER"
 
 uci_disable_logs() {
+    # Оба флага образуют одно согласие пользователя: при сбое шифрования
+    # внутренний сборщик не должен оставаться включённым за выключенным UI.
     uci -q set sheepfold.global.ai_individual_logs='0' 2>/dev/null || true
+    uci -q set sheepfold.global.private_logs='0' 2>/dev/null || true
     uci -q commit sheepfold 2>/dev/null || true
 }
 

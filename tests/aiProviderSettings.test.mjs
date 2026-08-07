@@ -12,6 +12,7 @@ const aiSettingsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfo
 const settingsControllerPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/settings/controller.js');
 const defaultsPath = resolve(packageDir, 'root/usr/share/sheepfold/sheepfold.uci.defaults');
 const makefilePath = resolve(packageDir, 'Makefile');
+const opensslEnsurePath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-openssl-ensure');
 const aiHandlerPath = resolve(packageDir, 'root/usr/libexec/sheepfold/sheepfold-ai-handler');
 const parentPromptV1Path = resolve(packageDir, 'root/usr/share/sheepfold/prompts/parent/v1/system.txt');
 const parentPromptV2Path = resolve(packageDir, 'root/usr/share/sheepfold/prompts/parent/v2/system.txt');
@@ -27,6 +28,7 @@ describe('AI provider settings', () => {
     const settingsController = readProjectFile(settingsControllerPath);
     const defaults = readProjectFile(defaultsPath);
     const makefile = readProjectFile(makefilePath);
+    const opensslEnsure = readProjectFile(opensslEnsurePath);
 
     assert.match(defaults, /option ai_provider 'none'/);
     assert.match(makefile, /ensure_global_option ai_provider 'none'/);
@@ -43,6 +45,9 @@ describe('AI provider settings', () => {
     assert.match(aiSettings, /AI assistant prompt version/);
     assert.match(aiSettings, /parent_ai_prompt_version/);
     assert.match(aiSettings, /Version 2 \(recommended\)/);
+	assert.match(aiSettings, /setOption\('private_logs', value\)/);
+	assert.match(makefile, /ai_individual_logs[\s\S]*private_logs='1'[\s\S]*private_logs='0'/);
+	assert.match(opensslEnsure, /ai_individual_logs='0'[\s\S]*private_logs='0'[\s\S]*commit sheepfold/);
   });
 
   it('does not fall back to DeepSeek on the router when provider is unset', () => {
