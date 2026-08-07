@@ -122,6 +122,7 @@ describe('AI JSON and form boundary', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, 'Тест "x"\nline');
     const formHelper = readFileSync(formHelperPath, 'utf8');
+    assert.match(formHelper, /LC_ALL=C awk/);
     assert.doesNotMatch(formHelper, /\beval\b/);
     assert.doesNotMatch(formHelper, /printf\s+['"]%b/);
   });

@@ -9,7 +9,9 @@ sheepfold_form_get() {
 	wanted="$1"
 	body="$2"
 
-	printf '%s' "$body" | awk -v wanted="$wanted" '
+	# Percent-encoding хранит байты, а не Unicode code points. Locale C не даёт
+	# awk повторно UTF-8-кодировать байты 0x80..0xFF через sprintf("%c").
+	printf '%s' "$body" | LC_ALL=C awk -v wanted="$wanted" '
 	function hex_value(char) {
 		if (char >= "0" && char <= "9")
 			return char + 0
