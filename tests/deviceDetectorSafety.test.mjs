@@ -37,6 +37,7 @@ const hardeningPath = resolve(
   repoRoot,
   'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-runtime-hardening',
 );
+const validationWorkflowPath = resolve(repoRoot, '.github/workflows/placeholder.yml');
 const temporaryDirectories = [];
 
 afterEach(() => {
@@ -170,6 +171,7 @@ printf '%s\\n' "$section"
 
   it('никогда не доверяет OpenWrt-роутеру автоматически', () => {
     const device = classify({ name: 'OpenWrt' });
+    const validationWorkflow = readFileSync(validationWorkflowPath, 'utf8');
 
     assert.equal(device.type, 'router');
     assert.equal(device.targetGroup, '');
@@ -177,6 +179,7 @@ printf '%s\\n' "$section"
     assert.equal(device.autoScore, 0);
     assert.equal(device.hardDeny, true);
     assert.equal(isAutoAssignable(device), false);
+    assert.match(validationWorkflow, /cut -f1\)" = "router"/);
   });
 
   it('сетевой маркер старше ложного инженерного маркера', () => {

@@ -63,7 +63,7 @@ jobs:
           # дублировал меняющиеся пороги и не расходился с единственным источником истины.
           openwrt="$(sh "$classifier" "OpenWrt" "" "" "" "00:11:22:33:44:55")"
           test "$(printf '%s' "$openwrt" | awk -F '\t' '{ print NF }')" = "11"
-          test "$(printf '%s' "$openwrt" | cut -f1)" = "network"
+          test "$(printf '%s' "$openwrt" | cut -f1)" = "router"
           test -z "$(printf '%s' "$openwrt" | cut -f3)"
           test "$(printf '%s' "$openwrt" | cut -f8)" = "1"
 
