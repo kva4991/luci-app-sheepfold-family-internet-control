@@ -24,18 +24,28 @@ fi
 
 echo "Detected OpenWRT: ${DISTRIB_DESCRIPTION:-unknown}"
 
+# Повторный запуск установщика не должен молча возвращать настройки к заводским:
+# Enter означает «оставить текущее значение», а при первой установке берётся default.
+DEFAULT_APP_LANGUAGE="$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
+case "$DEFAULT_APP_LANGUAGE" in
+    ru|en|zh_Hans) ;;
+    *) DEFAULT_APP_LANGUAGE='ru' ;;
+esac
 echo ""
 echo "Choose application language / Выберите язык приложения:"
 echo "  Русский: ru"
 echo "  English: en"
 echo "  简体中文: zh_Hans"
-printf "Language [ru]: "
+printf "Language [%s]: " "$DEFAULT_APP_LANGUAGE"
 if ! read -r APP_LANGUAGE; then
     APP_LANGUAGE=""
 fi
 
 case "${APP_LANGUAGE}" in
-    ""|ru|RU|Ru)
+    "")
+        APP_LANGUAGE="$DEFAULT_APP_LANGUAGE"
+        ;;
+    ru|RU|Ru)
         APP_LANGUAGE="ru"
         ;;
     en|EN|En)
@@ -45,18 +55,19 @@ case "${APP_LANGUAGE}" in
         APP_LANGUAGE="zh_Hans"
         ;;
     *)
-        echo "Unknown language. Using Russian / Неизвестный язык. Используется русский." >&2
-        APP_LANGUAGE="ru"
+        echo "Unknown language. Keeping ${DEFAULT_APP_LANGUAGE} / Неизвестный язык. Сохраняется ${DEFAULT_APP_LANGUAGE}." >&2
+        APP_LANGUAGE="$DEFAULT_APP_LANGUAGE"
         ;;
 esac
 
 DEFAULT_COUNTRY="$(uci -q get sheepfold.global.country_profile 2>/dev/null || printf ru)"
-case "$DEFAULT_COUNTRY" in ru|by|cn) ;; *) DEFAULT_COUNTRY='ru' ;; esac
+case "$DEFAULT_COUNTRY" in ru|by|cn|other) ;; *) DEFAULT_COUNTRY='ru' ;; esac
 echo ""
 echo "Choose router country / Выберите страну нахождения роутера:"
 echo "  Россия: ru"
 echo "  Беларусь: by"
 echo "  中国 / China: cn"
+echo "  Другая страна / Other country: other"
 printf "Country [%s]: " "$DEFAULT_COUNTRY"
 if ! read -r ROUTER_COUNTRY; then
     ROUTER_COUNTRY=""
@@ -67,6 +78,7 @@ case "${ROUTER_COUNTRY}" in
     ru|RU|Ru) ROUTER_COUNTRY='ru' ;;
     by|BY|By) ROUTER_COUNTRY='by' ;;
     cn|CN|Cn) ROUTER_COUNTRY='cn' ;;
+    other|OTHER|Other) ROUTER_COUNTRY='other' ;;
     *)
         echo "Unknown country profile. Installation cancelled / Неизвестный профиль страны." >&2
         exit 1
@@ -77,13 +89,29 @@ echo ""
 echo "Choose Sheepfold product / Выберите вариант Sheepfold:"
 echo "  1: Sheepfold (without AI / без ИИ)"
 echo "  2: Sheepfold - AI Support"
-printf "Product [1]: "
+# Особенно важно сохранить AI Support: выбор Standard по пустому ответу фактически
+# заменил бы редакцию пакета, хотя пользователь ожидает обычное обновление.
+DEFAULT_PRODUCT_VARIANT="$(uci -q get sheepfold.global.product_variant 2>/dev/null || true)"
+if [ -z "$DEFAULT_PRODUCT_VARIANT" ]; then
+    if [ -x /usr/libexec/sheepfold/sheepfold-ai-handler ] ||
+        { command -v opkg >/dev/null 2>&1 && opkg status "$LEGACY_AI_PACKAGE" >/dev/null 2>&1; } ||
+        { command -v apk >/dev/null 2>&1 && apk info -e "$LEGACY_AI_PACKAGE" >/dev/null 2>&1; }; then
+        DEFAULT_PRODUCT_VARIANT='sheepfoldAi'
+    fi
+fi
+case "$DEFAULT_PRODUCT_VARIANT" in
+    sheepfoldAi) DEFAULT_PRODUCT_CHOICE='2' ;;
+    *) DEFAULT_PRODUCT_CHOICE='1' ;;
+esac
+printf "Product [%s]: " "$DEFAULT_PRODUCT_CHOICE"
 if ! read -r PRODUCT_CHOICE; then
     PRODUCT_CHOICE=""
 fi
 
+[ -n "$PRODUCT_CHOICE" ] || PRODUCT_CHOICE="$DEFAULT_PRODUCT_CHOICE"
+
 case "${PRODUCT_CHOICE}" in
-    ""|1|sheepfold)
+    1|sheepfold)
         PRODUCT_VARIANT="sheepfold"
         ASSET_PACKAGE="luci-app-sheepfold-family-internet-control"
         ;;
@@ -202,30 +230,72 @@ case "${AGREEMENT_ACCEPTED}" in
 esac
 
 echo ""
-echo "Apply Sheepfold automatic setup?"
+echo "Choose Sheepfold automation mode:"
 echo "If enabled, Sheepfold may automatically configure safe defaults and put confidently detected home infrastructure devices"
 echo "such as NAS, Home Assistant, AdGuard Home, Proxmox, video recorders, and smart-home hubs into the No restrictions group."
 echo "The blocklist will still override this group."
-printf "Press Enter or type yes/y/да to use full automatic setup, or type no/n/нет for reduced mode: "
+AUTO_CONFIGURE="$(uci -q get sheepfold.global.auto_configure 2>/dev/null || printf 1)"
+DETECTION_MODE="$(uci -q get sheepfold.global.detection_mode 2>/dev/null || printf full)"
+NO_RESTRICTIONS_AUTO_ASSIGN="$(uci -q get sheepfold.global.no_restrictions_auto_assign 2>/dev/null || printf 1)"
+PERSONAL_DEVICES_AUTO_ASSIGN="$(uci -q get sheepfold.global.personal_devices_auto_assign 2>/dev/null || printf 1)"
+NEW_DEVICE_POLICY="$(uci -q get sheepfold.global.new_device_policy 2>/dev/null || printf allow)"
+DEVICE_MONITORING_MODE="$(uci -q get sheepfold.global.device_monitoring_mode 2>/dev/null || printf automatic)"
+case "$AUTO_CONFIGURE" in 0|1) ;; *) AUTO_CONFIGURE=1 ;; esac
+case "$DETECTION_MODE" in full|reduced) ;; *) DETECTION_MODE='full' ;; esac
+case "$NO_RESTRICTIONS_AUTO_ASSIGN" in 0|1) ;; *) NO_RESTRICTIONS_AUTO_ASSIGN=1 ;; esac
+case "$PERSONAL_DEVICES_AUTO_ASSIGN" in 0|1) ;; *) PERSONAL_DEVICES_AUTO_ASSIGN=1 ;; esac
+# Старые релизы писали короткое `restrict`. Нормализуем его до вычисления
+# automation_mode, иначе обновление ошибочно сочтёт профиль максимальным.
+case "$NEW_DEVICE_POLICY" in
+    restrict) NEW_DEVICE_POLICY='restrict_until_configured' ;;
+    allow|restrict_until_configured) ;;
+    *) NEW_DEVICE_POLICY='allow' ;;
+esac
+case "$DEVICE_MONITORING_MODE" in automatic|manual) ;; *) DEVICE_MONITORING_MODE='automatic' ;; esac
+
+automation_profile_matches_maximum() {
+    [ "$AUTO_CONFIGURE" = 1 ] &&
+        [ "$DETECTION_MODE" = full ] &&
+        [ "$NO_RESTRICTIONS_AUTO_ASSIGN" = 1 ] &&
+        [ "$PERSONAL_DEVICES_AUTO_ASSIGN" = 1 ] &&
+        [ "$NEW_DEVICE_POLICY" = allow ] &&
+        [ "$DEVICE_MONITORING_MODE" = automatic ]
+}
+
+# В старых конфигурациях главного поля ещё нет. Восстанавливаем его по реальным
+# подчинённым значениям, иначе Enter при обновлении затрёт ручной выбор родителя.
+DEFAULT_AUTOMATION_MODE="$(uci -q get sheepfold.global.automation_mode 2>/dev/null || true)"
+case "$DEFAULT_AUTOMATION_MODE" in
+    maximum|selective) ;;
+    "")
+        if automation_profile_matches_maximum; then
+            DEFAULT_AUTOMATION_MODE='maximum'
+        else
+            DEFAULT_AUTOMATION_MODE='selective'
+        fi
+        ;;
+    *) DEFAULT_AUTOMATION_MODE='selective' ;;
+esac
+printf "Automation [%s] (maximum/selective; yes/no and да/нет are accepted): " "$DEFAULT_AUTOMATION_MODE"
 if ! read -r AUTO_CONFIGURE_ACCEPTED; then
     AUTO_CONFIGURE_ACCEPTED=""
 fi
 
-AUTO_CONFIGURE=1
-DETECTION_MODE="full"
-NO_RESTRICTIONS_AUTO_ASSIGN=1
+[ -n "$AUTO_CONFIGURE_ACCEPTED" ] || AUTO_CONFIGURE_ACCEPTED="$DEFAULT_AUTOMATION_MODE"
 case "${AUTO_CONFIGURE_ACCEPTED}" in
-    ""|yes|YES|Yes|y|Y|да|Да|ДА)
+    maximum|MAXIMUM|Maximum|yes|YES|Yes|y|Y|да|Да|ДА)
         AUTO_CONFIGURE=1
         DETECTION_MODE="full"
         NO_RESTRICTIONS_AUTO_ASSIGN=1
-        echo "Automatic setup enabled."
+        PERSONAL_DEVICES_AUTO_ASSIGN=1
+        AUTOMATION_MODE="maximum"
+        NEW_DEVICE_POLICY="allow"
+        DEVICE_MONITORING_MODE="automatic"
+        echo "Maximum automation enabled."
         ;;
-    no|NO|No|n|N|нет|Нет|НЕТ)
-        AUTO_CONFIGURE=1
-        DETECTION_MODE="reduced"
-        NO_RESTRICTIONS_AUTO_ASSIGN=1
-        echo "Reduced automatic setup selected."
+    selective|SELECTIVE|Selective|no|NO|No|n|N|нет|Нет|НЕТ)
+        AUTOMATION_MODE="selective"
+        echo "Selective automation enabled. Existing subordinate choices are preserved and can be changed in LuCI."
         ;;
     *)
         echo "Installation cancelled: automatic setup answer was not understood." >&2
@@ -310,6 +380,10 @@ apply_selected_settings() {
     uci -q set sheepfold.global.auto_configure="${AUTO_CONFIGURE}"
     uci -q set sheepfold.global.detection_mode="${DETECTION_MODE}"
     uci -q set sheepfold.global.no_restrictions_auto_assign="${NO_RESTRICTIONS_AUTO_ASSIGN}"
+    uci -q set sheepfold.global.personal_devices_auto_assign="${PERSONAL_DEVICES_AUTO_ASSIGN}"
+    uci -q set sheepfold.global.automation_mode="${AUTOMATION_MODE}"
+    uci -q set sheepfold.global.new_device_policy="${NEW_DEVICE_POLICY}"
+    uci -q set sheepfold.global.device_monitoring_mode="${DEVICE_MONITORING_MODE}"
     uci -q set sheepfold.adguard.enabled="${ADGUARD_DETECTED}"
     uci -q set sheepfold.podkop.enabled="${PODKOP_DETECTED}"
     uci -q commit sheepfold
@@ -334,6 +408,8 @@ if [ ! -r /etc/config/sheepfold ]; then
     echo "  auto_configure=${AUTO_CONFIGURE}"
     echo "  detection_mode=${DETECTION_MODE}"
     echo "  no_restrictions_auto_assign=${NO_RESTRICTIONS_AUTO_ASSIGN}"
+    echo "  personal_devices_auto_assign=${PERSONAL_DEVICES_AUTO_ASSIGN}"
+    echo "  automation_mode=${AUTOMATION_MODE}"
 else
     echo "Existing Sheepfold settings were found and will be preserved."
 fi

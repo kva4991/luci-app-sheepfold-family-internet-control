@@ -3,7 +3,7 @@
  * и тестов, измеряет каждый этап и сохраняет JSON-отчёт. Он намеренно не запускает
  * живой роутер, сборку release и другие изменяющие внешнее состояние проверки. §qassist
  */
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { spawnSync } from 'node:child_process';
@@ -107,12 +107,10 @@ function runDiffCheck(options) {
 }
 
 function runNodeTests(report, full) {
-  if (full) {
-    const names = readdirSync(resolve(repoRoot, 'tests'))
-      .filter((name) => name.endsWith('.test.mjs'))
-      .sort();
-    return runProcess(process.execPath, ['--test', ...names.map((name) => `tests/${name}`)]);
-  }
+  // Полный runner намеренно изолирует тяжёлые сетевые и packaging-тесты. Возврат
+  // к одному огромному `node --test` на Windows снова создаёт многоминутное зависание. §qassist
+  if (full)
+    return runProcess(process.execPath, [resolve(repoRoot, 'scripts', 'runAllTests.mjs')]);
   const names = selectTestNames(report.categories, report.directTests);
   if (!names.length) return { status: 'skipped', durationMs: 0, files: [] };
   const args = [

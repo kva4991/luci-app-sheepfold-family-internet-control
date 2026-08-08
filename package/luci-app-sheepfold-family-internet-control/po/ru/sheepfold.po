@@ -4900,3 +4900,51 @@ msgstr "Определить заново"
 #: htdocs/luci-static/resources/sheepfold/features/devices/presence.js
 msgid "Could not obtain device status."
 msgstr "Не удалось получить статус устройства."
+
+msgid "Automation actions"
+msgstr "Автоматизация действий"
+
+msgid "Mode"
+msgstr "Режим"
+
+msgid "Maximum automation"
+msgstr "Максимальная автоматизация"
+
+msgid "Selective automation"
+msgstr "Выборочная автоматизация"
+
+msgid "Maximum automation applies the recommended automatic behavior to all settings below. Selective automation lets you configure each setting separately."
+msgstr "Максимальная автоматизация применяет рекомендуемое автоматическое поведение ко всем настройкам ниже. Выборочная автоматизация позволяет настраивать каждую из них отдельно."
+
+msgid "Other country"
+msgstr "Другая страна"
+
+msgid "Unknown automation mode."
+msgstr "Неизвестный режим автоматизации."
+
+msgid "Wi-Fi automation"
+msgstr "Автоматизация Wi-Fi"
+
+msgid "Yandex Disk (experimental)"
+msgstr "Яндекс Диск (экспериментально)"
+
+msgid "Google Drive (experimental)"
+msgstr "Google Диск (экспериментально)"
+
+msgid "Experimental feature: verify authorization, revocation, storage limits, and restore on your own account before relying on cloud copies."
+msgstr "Экспериментальная функция: прежде чем полагаться на облачные копии, проверьте на своём аккаунте авторизацию, отзыв доступа, лимит места и восстановление."
+
+msgid "Terminate all sessions"
+msgstr "Завершить все сеансы"
+
+msgid "Terminate all phone sessions for administrator"
+msgstr "Завершить все телефонные сеансы администратора"
+
+msgid "The account and assigned devices will remain, but every phone will have to pair again."
+msgstr "Учётная запись и назначенные устройства останутся, но каждый телефон потребуется привязать заново."
+
+msgid "All administrator phone sessions have been terminated."
+msgstr "Все телефонные сеансы администратора завершены."
+
+msgid "Could not terminate administrator sessions."
+msgstr "Не удалось завершить сеансы администратора."

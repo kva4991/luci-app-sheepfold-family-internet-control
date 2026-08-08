@@ -21,6 +21,7 @@ const logWriter = read('package/luci-app-sheepfold-family-internet-control/root/
 const updater = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-updater');
 const routerControl = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-router-control-legacy');
 const adminConfig = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-api-admin-config');
+const adminConfigGroups = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-lib-admin-config-groups');
 
 function posix(path) {
   const absolute = resolve(path).replace(/\\/g, '/');
@@ -99,7 +100,8 @@ describe('background maintenance jobs §maintjob1', () => {
     assert.match(helper, /"\$NOTIFIER" enqueue update[\s\S]*9>&-/);
     assert.match(helper, /"\$LOG_HELPER"[\s\S]*9>&-/);
     assert.match(routerControl, /device_type=\$device_type"[\s\S]*user_configured=1/);
-    assert.match(adminConfig, /group_source=user[\s\S]*user_configured=1/);
+    assert.match(adminConfig, /sheepfold-lib-admin-config-groups/);
+    assert.match(adminConfigGroups, /group_source=user[\s\S]*user_configured=1/);
   });
 
   it('rotates the RAM log by calendar retention and byte limit', () => {

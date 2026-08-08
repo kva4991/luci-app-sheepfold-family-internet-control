@@ -1,0 +1,106 @@
+#!/bin/sh
+
+# Явное изменение карточки и списка устройства через Android admin API.\n# UCI подтверждается до применения runtime; частичный успех сообщается честно. §apicon1
+
+device_save() {
+    local body expected_revision schema_version mac status update_profile section
+    local name ip group device_type old_group runtime_applied
+    local manual_type type_source no_restrictions_excluded personal_devices_excluded
+    body="$(cat)"
+    expected_revision="$(form_get expectedRevision "$body")"
+    schema_version="$(form_get schemaVersion "$body")"
+    mac="$(printf '%s' "$(form_get mac "$body")" | tr 'a-z' 'A-Z')"
+    status="$(form_get status "$body")"
+    update_profile="$(form_get updateProfile "$body")"
+
+    printf '%s' "$mac" | grep -qE '^([0-9A-F]{2}:){5}[0-9A-F]{2}$' || {
+        printf '%s\n' invalid_mac >&2
+        return 2
+    }
+    case "$status" in allow|blocked|restricted|scheduled|new) ;; *) printf '%s\n' invalid_device_status >&2; return 2 ;; esac
+    valid_flag "$update_profile" || { printf '%s\n' invalid_device_profile_flag >&2; return 2; }
+    section="$(device_section_by_mac "$mac" 2>/dev/null || true)"
+    [ -n "$section" ] || { printf '%s\n' device_not_found >&2; return 2; }
+
+    if [ "$(uci_get "sheepfold.$section.admin_device")" = 1 ]; then
+        [ "$status" = allow ] || {
+            printf '%s\n' administrator_device_forbidden >&2
+            return 3
+        }
+    fi
+
+    name="$(uci_get "sheepfold.$section.name")"
+    ip="$(uci_get "sheepfold.$section.ip")"
+    group="$(uci_get "sheepfold.$section.group")"
+    device_type="$(uci_get "sheepfold.$section.device_type")"
+    old_group="$group"
+    if [ "$update_profile" = 1 ]; then
+        name="$(trim_text "$(form_get name "$body")")"
+        group="$(trim_text "$(form_get group "$body")")"
+        device_type="$(form_get deviceType "$body")"
+        [ -n "$name" ] && valid_plain_text "$name" 80 || { printf '%s\n' invalid_device_name >&2; return 2; }
+        [ -n "$group" ] || group="$NOT_CONFIGURED_GROUP"
+        valid_plain_text "$group" 80 && group_name_exists "$group" || { printf '%s\n' invalid_device_group >&2; return 2; }
+        if [ "$(uci_get "sheepfold.$section.admin_device")" = 1 ] && [ "$group" != "$NOT_CONFIGURED_GROUP" ]; then
+            printf '%s\n' administrator_group_forbidden >&2
+            return 3
+        fi
+        case "$device_type" in
+            unknown|phone|tablet|computer|tv|media_player|smart_watch|console|printer|server|camera|speaker|vacuum|smart_home|engineering|smart|network|router|network_switch) ;;
+            *) printf '%s\n' invalid_device_type >&2; return 2 ;;
+        esac
+    fi
+
+    if ! sheepfold_lock_acquire "$LOCK_FILE" 30; then
+        printf '%s\n' config_busy >&2
+        return 4
+    fi
+    trap 'sheepfold_lock_release' EXIT HUP INT TERM
+    validate_expected_revision "$schema_version" "$expected_revision" || return "$?"
+    runtime_applied=1
+    manual_type=""
+    type_source=""
+    no_restrictions_excluded=""
+    personal_devices_excluded=""
+    if [ "$update_profile" = 1 ]; then
+        if [ "$device_type" = unknown ]; then
+            manual_type=0
+            type_source=detector
+        else
+            manual_type=1
+            type_source=user
+        fi
+        if [ "$old_group" = "$(uci_get sheepfold.no_restrictions.name)" ] && [ "$group" != "$old_group" ]; then
+            no_restrictions_excluded=1
+        fi
+        if [ "$old_group" = "$(uci_get sheepfold.personal_devices.name)" ] && [ "$group" != "$old_group" ]; then
+            personal_devices_excluded=1
+        fi
+    fi
+    if ! SHEEPFOLD_ACTION_ACTOR="Android ($ADMIN_LOGIN)" \
+        SHEEPFOLD_DEVICE_PROFILE_UPDATE="$update_profile" \
+        SHEEPFOLD_DEVICE_MANUAL_TYPE="$manual_type" \
+        SHEEPFOLD_DEVICE_TYPE_SOURCE="$type_source" \
+        SHEEPFOLD_DEVICE_NO_RESTRICTIONS_EXCLUDED="$no_restrictions_excluded" \
+        SHEEPFOLD_DEVICE_PERSONAL_EXCLUDED="$personal_devices_excluded" \
+        "$ROUTER_CONTROL" \
+            set-device-status "$mac" "$status" "$name" "$ip" "$group" "$device_type" >/dev/null 2>&1; then
+        if device_mutation_persisted "$section" "$mac" "$status" "$update_profile" \
+            "$name" "$group" "$device_type" "$manual_type" "$type_source" \
+            "$no_restrictions_excluded" "$personal_devices_excluded"; then
+            runtime_applied=0
+        else
+            printf '%s\n' device_save_failed >&2
+            return 5
+        fi
+    fi
+    trap - EXIT HUP INT TERM
+    sheepfold_lock_release
+    if [ "$runtime_applied" = 1 ]; then
+        audit_event "устройство #$(uci_get "sheepfold.$section.id") сохранено"
+    else
+        audit_event "устройство #$(uci_get "sheepfold.$section.id") сохранено; применение firewall будет повторено"
+    fi
+    admin_config_json device-save "$runtime_applied"
+}
+

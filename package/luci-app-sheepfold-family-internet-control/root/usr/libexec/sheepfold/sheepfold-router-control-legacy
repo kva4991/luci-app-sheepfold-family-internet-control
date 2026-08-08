@@ -637,7 +637,7 @@ list_devices() {
         printf '['
 
         for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
-                local id mac name ip group device_type device_status admin_device
+                local id mac name ip group device_type device_status admin_device manual_device_type
                 id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section")"
                 mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
                 [ -n "$mac" ] || continue
@@ -648,6 +648,7 @@ list_devices() {
                 device_type="$(uci -q get "sheepfold.$section.device_type" 2>/dev/null || printf smart)"
                 device_status="$(uci -q get "sheepfold.$section.status" 2>/dev/null || printf new)"
                 admin_device="$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)"
+                manual_device_type="$(uci -q get "sheepfold.$section.manual_device_type" 2>/dev/null || printf 0)"
 
                 # Экранируем поля для безопасной вставки в JSON.
                 local safe_name safe_group
@@ -655,8 +656,9 @@ list_devices() {
                 safe_group="$(printf '%s' "$group" | sed 's/\\/\\\\/g; s/"/\\"/g')"
 
                 [ "$first" = "1" ] || printf ','
-                printf '{"id":%s,"mac":"%s","name":"%s","ip":"%s","group":"%s","deviceType":"%s","status":"%s","adminDevice":%s}' \
-                        "$id" "$mac" "$safe_name" "$ip" "$safe_group" "$device_type" "$device_status" \
+                printf '{"id":%s,"mac":"%s","name":"%s","ip":"%s","group":"%s","deviceType":"%s","manualDeviceType":%s,"status":"%s","adminDevice":%s}' \
+                        "$id" "$mac" "$safe_name" "$ip" "$safe_group" "$device_type" \
+                        "$([ "$manual_device_type" = "1" ] && printf true || printf false)" "$device_status" \
                         "$([ "$admin_device" = "1" ] && printf true || printf false)"
                 first=0
         done
@@ -904,18 +906,24 @@ global_block_off() {
 
 # -----------------------------------------------------------------------------
 # set-device-status — полное обновление UCI-полей устройства
-# Используется LuCI-страницей, не Android-приложением.
+# Используется LuCI и авторизованным родительским Android-приложением.
 # -----------------------------------------------------------------------------
 
 set_device_status() {
         local device_mac device_status device_name device_ip device_group device_type
-        local current_status temp_added
+        local current_status temp_added profile_update manual_type type_source
+        local no_restrictions_excluded personal_devices_excluded
         device_mac="$(normalize_mac "${1:-}")"
         device_status="${2:-}"
         device_name="${3:-}"
         device_ip="${4:-}"
         device_group="${5:-}"
         device_type="${6:-}"
+        profile_update="${SHEEPFOLD_DEVICE_PROFILE_UPDATE:-0}"
+        manual_type="${SHEEPFOLD_DEVICE_MANUAL_TYPE:-}"
+        type_source="${SHEEPFOLD_DEVICE_TYPE_SOURCE:-}"
+        no_restrictions_excluded="${SHEEPFOLD_DEVICE_NO_RESTRICTIONS_EXCLUDED:-}"
+        personal_devices_excluded="${SHEEPFOLD_DEVICE_PERSONAL_EXCLUDED:-}"
 
         valid_mac "$device_mac" || { echo "Invalid MAC address" >&2; return 2; }
 
@@ -923,6 +931,10 @@ set_device_status() {
                 allow|blocked|restricted|scheduled|new) ;;
                 *) echo "Unsupported device status: $device_status" >&2; return 2 ;;
         esac
+        if [ "$profile_update" = 1 ]; then
+                case "$manual_type" in 0|1) ;; *) echo "Invalid manual device type flag" >&2; return 2 ;; esac
+                case "$type_source" in user|detector) ;; *) echo "Invalid device type source" >&2; return 2 ;; esac
+        fi
 
         repair_sheepfold_uci_sections
         ensure_list_section allowlist
@@ -968,6 +980,20 @@ set_device_status() {
         uci -q set "sheepfold.$device_section.device_type=$device_type"
         uci -q set "sheepfold.$device_section.status=$device_status"
         uci -q set "sheepfold.$device_section.user_configured=1"
+
+        # Android передаёт ручные поля паспорта вместе со статусом. Держим их
+        # в этом же UCI-коммите, чтобы ошибка не оставила профиль наполовину
+        # обновлённым после уже применённого белого или чёрного списка.
+        if [ "$profile_update" = 1 ]; then
+                uci -q set "sheepfold.$device_section.name_source=user"
+                uci -q set "sheepfold.$device_section.group_source=user"
+                uci -q set "sheepfold.$device_section.manual_device_type=$manual_type"
+                uci -q set "sheepfold.$device_section.device_type_source=$type_source"
+                [ -z "$no_restrictions_excluded" ] || \
+                        uci -q set "sheepfold.$device_section.no_restrictions_auto_excluded=$no_restrictions_excluded"
+                [ -z "$personal_devices_excluded" ] || \
+                        uci -q set "sheepfold.$device_section.personal_devices_auto_excluded=$personal_devices_excluded"
+        fi
 
         if [ "$device_status" = "allow" ]; then
                 add_mac_to_list allowlist "$device_mac"

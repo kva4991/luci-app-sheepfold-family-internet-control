@@ -94,6 +94,45 @@ fingerprints_from_file() {
 	awk -F '|' '{ print $2 }' "$1" | sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//'
 }
 
+phones_from_file() {
+	awk -F '|' '$3 != "" { print $3 }' "$1" | sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+}
+
+phones_for_fingerprints() {
+	fingerprints="$1"
+	history="$2"
+	printf '%s\n' "$history" | tr ';' '\n' | awk -F '|' -v fingerprints="$fingerprints" '
+		BEGIN {
+			count = split(fingerprints, items, " ")
+			for (index = 1; index <= count; index++)
+				wanted[items[index]] = 1
+		}
+		wanted[$1] && $2 != "" { print $2 }
+	' | sort -u | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+}
+
+word_count() {
+	printf '%s\n' "$1" | awk '{ print NF }'
+}
+
+same_reported_phone_set() {
+	previous_fingerprints="$1"
+	previous_history="$2"
+	previous_phones="$3"
+	current_file="$4"
+	current_fingerprints="$5"
+	[ -n "$previous_phones" ] || \
+		previous_phones="$(phones_for_fingerprints "$previous_fingerprints" "$previous_history")"
+	current_phones="$(phones_from_file "$current_file")"
+
+	[ -n "$previous_fingerprints" ] && [ -n "$current_fingerprints" ] || return 1
+	[ -n "$previous_phones" ] && [ "$previous_phones" = "$current_phones" ] || return 1
+	# Подавлять тревогу можно только когда номер известен для каждой SIM с обеих
+	# сторон. Частичный Android-отчёт не является доказательством совпадения.
+	[ "$(word_count "$previous_fingerprints")" = "$(word_count "$previous_phones")" ] || return 1
+	[ "$(word_count "$current_fingerprints")" = "$(word_count "$current_phones")" ]
+}
+
 summary_from_file() {
 	file="$1"
 	if [ ! -s "$file" ]; then
@@ -190,6 +229,8 @@ report_snapshot() {
 	previous_hash="$(uci -q get "sheepfold.$section.sim_snapshot_hash" 2>/dev/null || true)"
 	known_fingerprints="$(uci -q get "sheepfold.$section.sim_known_fingerprints" 2>/dev/null || true)"
 	phone_history="$(uci -q get "sheepfold.$section.sim_phone_history" 2>/dev/null || true)"
+	previous_phones="$(uci -q get "sheepfold.$section.sim_current_phones" 2>/dev/null || true)"
+	current_phones="$(phones_from_file "$normalized_file")"
 	initialized="$(uci -q get "sheepfold.$section.sim_monitor_initialized" 2>/dev/null || printf 0)"
 	updated_known="$(merge_known "$known_fingerprints" "$current_fingerprints")"
 	updated_phone_history="$(merge_phone_history "$phone_history" "$normalized_file" "$now")"
@@ -200,6 +241,7 @@ report_snapshot() {
 		uci -q set "sheepfold.$section.sim_monitor_initialized=1"
 		uci -q set "sheepfold.$section.sim_snapshot_hash=$snapshot_hash"
 		uci -q set "sheepfold.$section.sim_current_fingerprints=$current_fingerprints"
+		uci -q set "sheepfold.$section.sim_current_phones=$current_phones"
 		uci -q set "sheepfold.$section.sim_known_fingerprints=$updated_known"
 		[ "$updated_phone_history" = "$phone_history" ] || \
 			uci -q set "sheepfold.$section.sim_phone_history=$updated_phone_history"
@@ -218,11 +260,34 @@ report_snapshot() {
 	if [ "$first_observation" = 0 ] && [ "$snapshot_hash" = "$previous_hash" ]; then
 		# Android иногда сообщает номер не сразу. Сохраняем его один раз, но не
 		# изображаем позднее появление номера как замену SIM-карты. §simchg1
+		state_changed=0
 		if [ "$updated_phone_history" != "$phone_history" ]; then
 			uci -q set "sheepfold.$section.sim_phone_history=$updated_phone_history"
-			uci -q commit sheepfold
+			state_changed=1
 		fi
+		if [ "$current_phones" != "$previous_phones" ]; then
+			uci -q set "sheepfold.$section.sim_current_phones=$current_phones"
+			state_changed=1
+		fi
+		[ "$state_changed" != 1 ] || uci -q commit sheepfold
 		printf '{"app":"sheepfold","ok":true,"changed":false,"baselineCreated":false}\n'
+		return 0
+	fi
+
+	if [ "$first_observation" = 0 ] && \
+	   same_reported_phone_set "$(uci -q get "sheepfold.$section.sim_current_fingerprints" 2>/dev/null || true)" \
+		"$phone_history" "$previous_phones" "$normalized_file" "$current_fingerprints"; then
+		# Тот же доступный номер в другом слоте не считается заменой SIM. Новый
+		# технический fingerprint сохраняется, чтобы следующий отчёт не повторял
+		# сравнение, но журнал и уведомление не создаются. §simchg1
+		uci -q set "sheepfold.$section.sim_snapshot_hash=$snapshot_hash"
+		uci -q set "sheepfold.$section.sim_current_fingerprints=$current_fingerprints"
+		uci -q set "sheepfold.$section.sim_current_phones=$current_phones"
+		uci -q set "sheepfold.$section.sim_known_fingerprints=$updated_known"
+		[ "$updated_phone_history" = "$phone_history" ] || \
+			uci -q set "sheepfold.$section.sim_phone_history=$updated_phone_history"
+		uci -q commit sheepfold
+		printf '{"app":"sheepfold","ok":true,"changed":false,"baselineCreated":false,"sameReportedNumbers":true}\n'
 		return 0
 	fi
 
@@ -236,6 +301,7 @@ report_snapshot() {
 
 		uci -q set "sheepfold.$section.sim_snapshot_hash=$snapshot_hash"
 		uci -q set "sheepfold.$section.sim_current_fingerprints=$current_fingerprints"
+		uci -q set "sheepfold.$section.sim_current_phones=$current_phones"
 		uci -q set "sheepfold.$section.sim_known_fingerprints=$updated_known"
 		[ "$updated_phone_history" = "$phone_history" ] || \
 			uci -q set "sheepfold.$section.sim_phone_history=$updated_phone_history"

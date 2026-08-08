@@ -75,7 +75,6 @@ fun AdministratorsTab(
                 ) {
                     Text(administrator.displayName, style = MaterialTheme.typography.titleMedium)
                     Text(stringResource(R.string.administrator_login_format, administrator.login))
-                    Text(stringResource(R.string.administrator_role_format, administrator.role))
                     Text(stringResource(R.string.administrator_id_format, administrator.id.ifBlank { "—" }))
                     Text(
                         if (administrator.allowChildAccessRequests) {

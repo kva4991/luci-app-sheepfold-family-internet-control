@@ -248,23 +248,23 @@ msgstr "缺少 Google Drive 辅助程序"
 
 +#: migrated from the previously shipped client catalog
 msgid "Could not apply the IPv6 setting."
-msgstr "???? IPv6 ???"
+msgstr "无法应用 IPv6 设置。"
 
 #: migrated from the previously shipped client catalog
 msgid "Network compatibility"
-msgstr "?????"
+msgstr "网络兼容性"
 
 #: migrated from the previously shipped client catalog
 msgid "Disable IPv6 on the router"
-msgstr "??????? IPv6"
+msgstr "禁用路由器上的 IPv6"
 
 #: migrated from the previously shipped client catalog
 msgid "IPv6 is disabled automatically because the selected integration uses Podkop."
-msgstr "???????? Podkop?IPv6 ??????"
+msgstr "由于所选集成使用 Podkop，IPv6 已自动禁用。"
 
 #: migrated from the previously shipped client catalog
 msgid "Current Podkop releases do not provide complete IPv6 support. Enable this manually only when it is needed without Podkop."
-msgstr "?? Podkop ????????? IPv6 ???????? Podkop ??????????????"
+msgstr "当前版本的 Podkop 尚未完整支持 IPv6。仅在不使用 Podkop 且确有需要时手动启用此设置。"
 
 #: migrated from the previously shipped client catalog
 msgid "Administrator devices must remain in the allowlist and outside ordinary groups."
@@ -567,3 +567,51 @@ msgstr "在线：暂无在线记录"
 #: htdocs/luci-static/resources/sheepfold/features/administrators/editor.js
 msgid "QR code used"
 msgstr "二维码已使用"
+
+msgid "Automation actions"
+msgstr "自动化操作"
+
+msgid "Mode"
+msgstr "模式"
+
+msgid "Maximum automation"
+msgstr "最大程度自动化"
+
+msgid "Selective automation"
+msgstr "选择性自动化"
+
+msgid "Maximum automation applies the recommended automatic behavior to all settings below. Selective automation lets you configure each setting separately."
+msgstr "最大程度自动化会为下方所有设置应用推荐的自动行为。选择性自动化允许分别配置每项设置。"
+
+msgid "Other country"
+msgstr "其他国家或地区"
+
+msgid "Unknown automation mode."
+msgstr "未知的自动化模式。"
+
+msgid "Wi-Fi automation"
+msgstr "Wi-Fi 自动化"
+
+msgid "Yandex Disk (experimental)"
+msgstr "Yandex Disk（实验性）"
+
+msgid "Google Drive (experimental)"
+msgstr "Google Drive（实验性）"
+
+msgid "Experimental feature: verify authorization, revocation, storage limits, and restore on your own account before relying on cloud copies."
+msgstr "实验性功能：在依赖云端副本前，请使用自己的账户验证授权、撤销访问、存储限制和恢复。"
+
+msgid "Terminate all sessions"
+msgstr "结束所有会话"
+
+msgid "Terminate all phone sessions for administrator"
+msgstr "结束管理员的所有手机会话"
+
+msgid "The account and assigned devices will remain, but every phone will have to pair again."
+msgstr "账户和已分配设备会保留，但所有手机都需要重新配对。"
+
+msgid "All administrator phone sessions have been terminated."
+msgstr "管理员的所有手机会话已结束。"
+
+msgid "Could not terminate administrator sessions."
+msgstr "无法结束管理员会话。"

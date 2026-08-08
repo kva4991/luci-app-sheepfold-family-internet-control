@@ -1,0 +1,193 @@
+#!/bin/sh
+
+# Чтение payload, проверка, сохранение и удаление расписаний Android admin API.\n# Общая транзакция и JSON-проекция принадлежат соседним библиотекам. §apicon1 §grpsch1
+
+schedule_payload() {
+    local body target_count target device_section seen_targets weekday_count seen_days day range_count seen_ranges range start end
+    body="$1"
+    section="$(form_get section "$body")"
+    name="$(trim_text "$(form_get name "$body")")"
+    description="$(trim_text "$(form_get description "$body")")"
+    enabled="$(form_get enabled "$body")"
+    action="$(form_get action "$body")"
+    target_type="$(form_get targetType "$body")"
+    targets="$(csv_words "$(form_get targets "$body")")"
+    weekdays="$(csv_words "$(form_get weekdays "$body")")"
+    time_ranges="$(csv_words "$(form_get timeRanges "$body")")"
+
+    [ -z "$section" ] || { valid_section_name "$section" && section_is_type "$section" schedule; } || {
+        printf '%s\n' schedule_not_found >&2
+        return 2
+    }
+    [ -n "$name" ] && valid_plain_text "$name" 80 || {
+        printf '%s\n' invalid_schedule_name >&2
+        return 2
+    }
+    valid_plain_text "$description" 240 || {
+        printf '%s\n' invalid_schedule_description >&2
+        return 2
+    }
+    valid_flag "$enabled" || {
+        printf '%s\n' invalid_schedule_enabled >&2
+        return 2
+    }
+    case "$action" in allow|block) ;; *) printf '%s\n' invalid_schedule_action >&2; return 2 ;; esac
+    case "$target_type" in group|device) ;; *) printf '%s\n' invalid_schedule_target_type >&2; return 2 ;; esac
+
+    target_count="$(word_count "$targets")"
+    [ "$target_count" -ge 1 ] && [ "$target_count" -le 128 ] || {
+        printf '%s\n' invalid_schedule_targets >&2
+        return 2
+    }
+    seen_targets=""
+    for target in $targets; do
+        case " $seen_targets " in *" $target "*) printf '%s\n' duplicate_schedule_target >&2; return 2 ;; esac
+        seen_targets="$seen_targets $target"
+        case "$target_type" in
+            group) valid_section_name "$target" && section_is_type "$target" group || {
+                printf '%s\n' invalid_schedule_target >&2
+                return 2
+            } ;;
+            device)
+                printf '%s' "$target" | grep -Eq '^[0-9]+$' || {
+                    printf '%s\n' invalid_schedule_target >&2
+                    return 2
+                }
+                device_section="$(device_section_by_id "$target" 2>/dev/null || true)"
+                [ -n "$device_section" ] || {
+                    printf '%s\n' invalid_schedule_target >&2
+                    return 2
+                }
+                [ "$(uci_get "sheepfold.$device_section.admin_device")" != 1 ] || {
+                    printf '%s\n' administrator_schedule_forbidden >&2
+                    return 2
+                }
+                ;;
+        esac
+    done
+
+    weekday_count="$(word_count "$weekdays")"
+    [ "$weekday_count" -ge 1 ] && [ "$weekday_count" -le 7 ] || {
+        printf '%s\n' invalid_schedule_weekdays >&2
+        return 2
+    }
+    seen_days=""
+    for day in $weekdays; do
+        case "$day" in mon|tue|wed|thu|fri|sat|sun) ;; *) printf '%s\n' invalid_schedule_weekdays >&2; return 2 ;; esac
+        case " $seen_days " in *" $day "*) printf '%s\n' duplicate_schedule_weekday >&2; return 2 ;; esac
+        seen_days="$seen_days $day"
+    done
+
+    range_count="$(word_count "$time_ranges")"
+    [ "$range_count" -ge 1 ] && [ "$range_count" -le 8 ] || {
+        printf '%s\n' invalid_schedule_time_ranges >&2
+        return 2
+    }
+    seen_ranges=""
+    for range in $time_ranges; do
+        case " $seen_ranges " in *" $range "*) printf '%s\n' duplicate_schedule_time_range >&2; return 2 ;; esac
+        seen_ranges="$seen_ranges $range"
+        start="${range%%-*}"
+        end="${range#*-}"
+        [ "$start" != "$range" ] && valid_time "$start" && valid_time "$end" && [ "$start" != "$end" ] || {
+            printf '%s\n' invalid_schedule_time_range >&2
+            return 2
+        }
+    done
+}
+
+schedule_state_is_valid() {
+    section_is_type "$section" schedule &&
+        [ "$(uci_get "sheepfold.$section.name")" = "$name" ] &&
+        [ "$(uci_get "sheepfold.$section.description")" = "$description" ] &&
+        [ "$(uci_get "sheepfold.$section.enabled")" = "$enabled" ] &&
+        [ "$(uci_get "sheepfold.$section.action")" = "$action" ] &&
+        [ "$(uci_get "sheepfold.$section.target_type")" = "$target_type" ] &&
+        words_equal "$(uci_get "sheepfold.$section.targets")" "$targets" &&
+        words_equal "$(uci_get "sheepfold.$section.weekdays")" "$weekdays" &&
+        words_equal "$(uci_get "sheepfold.$section.time_ranges")" "$time_ranges"
+}
+
+schedule_delete_is_valid() {
+    local group_section schedule_reference
+    ! section_is_type "$section" schedule || return 1
+    for group_section in $(sections_of_type group); do
+        for schedule_reference in $(uci_get "sheepfold.$group_section.schedules"); do
+            [ "$schedule_reference" != "$section" ] || return 1
+        done
+    done
+    return 0
+}
+
+schedule_save() {
+    body="$(cat)"
+    expected_revision="$(form_get expectedRevision "$body")"
+    schema_version="$(form_get schemaVersion "$body")"
+    begin_transaction "$expected_revision" "$schema_version" || return "$?"
+    schedule_payload "$body" || return "$?"
+
+    if [ -z "$section" ]; then
+        section="schedule_android_$(date +%s)_$$"
+        tx_uci -q set "sheepfold.$section=schedule"
+    fi
+    tx_uci -q set "sheepfold.$section.name=$name"
+    tx_uci -q set "sheepfold.$section.description=$description"
+    tx_uci -q set "sheepfold.$section.enabled=$enabled"
+    tx_uci -q set "sheepfold.$section.action=$action"
+    tx_uci -q set "sheepfold.$section.target_type=$target_type"
+    set_tx_list "$section" targets "$targets"
+    set_tx_list "$section" weekdays "$weekdays"
+    set_tx_list "$section" time_ranges "$time_ranges"
+    tx_uci -q delete "sheepfold.$section.start_time" 2>/dev/null || true
+    tx_uci -q delete "sheepfold.$section.end_time" 2>/dev/null || true
+
+    commit_transaction || {
+        printf '%s\n' config_commit_failed >&2
+        return 70
+    }
+    schedule_state_is_valid || {
+        printf '%s\n' config_verify_failed >&2
+        return 70
+    }
+    confirm_transaction
+    runtime_applied=1
+    "$ROUTER_CONTROL" schedule-sync >/dev/null 2>&1 || runtime_applied=0
+    audit_event "расписание сохранено: $name"
+    admin_config_json schedule-save "$runtime_applied"
+}
+
+schedule_delete() {
+    body="$(cat)"
+    section="$(form_get section "$body")"
+    expected_revision="$(form_get expectedRevision "$body")"
+    schema_version="$(form_get schemaVersion "$body")"
+    begin_transaction "$expected_revision" "$schema_version" || return "$?"
+    valid_section_name "$section" && section_is_type "$section" schedule || {
+        printf '%s\n' schedule_not_found >&2
+        return 2
+    }
+
+    tx_uci -q delete "sheepfold.$section"
+    for group_section in $(sections_of_type group); do
+        kept=""
+        for schedule in $(uci_get "sheepfold.$group_section.schedules"); do
+            [ "$schedule" = "$section" ] && continue
+            kept="$kept $schedule"
+        done
+        set_tx_list "$group_section" schedules "$kept"
+    done
+    commit_transaction || {
+        printf '%s\n' config_commit_failed >&2
+        return 70
+    }
+    schedule_delete_is_valid || {
+        printf '%s\n' config_verify_failed >&2
+        return 70
+    }
+    confirm_transaction
+    runtime_applied=1
+    "$ROUTER_CONTROL" schedule-sync >/dev/null 2>&1 || runtime_applied=0
+    audit_event "расписание удалено: $section"
+    admin_config_json schedule-delete "$runtime_applied"
+}
+

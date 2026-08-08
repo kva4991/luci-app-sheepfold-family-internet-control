@@ -64,7 +64,7 @@ npm.cmd run router:readOnly
 - `/cgi-bin/sheepfold-api` отдаёт JSON с `app=sheepfold`;
 - `/.well-known/sheepfold.json` существует и содержит `service=sheepfold`, версию, имя роутера и API base URL;
 - `uci -q get sheepfold.global.ui_asset_version` совпадает с установленной версией пакета;
-- `uci show sheepfold` содержит обязательные секции `global`, `allowlist`, `blocklist`, `group_no_restrictions`, дефолтного администратора и базовые настройки;
+- `uci show sheepfold` содержит обязательные секции `global`, `allowlist`, `blocklist`, `no_restrictions`, `personal_devices`, дефолтного администратора и базовые настройки;
 - `sheepfold-router-control status` отвечает без ошибки;
 - `sheepfold-router-control router-info` отдаёт модель роутера, версию OpenWRT, статус интернета, Wi-Fi-модули, наличие AdGuard Home и Podkop;
 - CGI endpoint `/router-info` не отдаёт Wi-Fi-пароли, токены, API-ключи, LuCI cookie, MAC-адреса клиентов и журнал;

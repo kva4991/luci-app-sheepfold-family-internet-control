@@ -21,6 +21,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -62,10 +63,12 @@ fun WifiTab(
     var messageIsError by remember { mutableStateOf(false) }
     var pendingGlobalState by remember { mutableStateOf<Boolean?>(null) }
     val canControl = config.capabilities.wifiControl
+    val canSaveAutomation = config.capabilities.wifiAutomationWrite && config.revision.isNotBlank()
     val wifiEnabledText = stringResource(R.string.wifi_enabled_success)
     val wifiDisabledText = stringResource(R.string.wifi_disabled_success)
     val wifiFailedText = stringResource(R.string.management_error_update_wifi)
     val wifiSavedText = stringResource(R.string.wifi_saved_success)
+    val wifiAutomationSavedText = stringResource(R.string.wifi_automation_saved)
     val runtimePendingText = stringResource(R.string.management_runtime_pending)
 
     fun saveNetwork(network: RouterWifiNetwork) {
@@ -75,11 +78,30 @@ fun WifiTab(
             runCatching { client.saveWifiNetwork(config, network) }
                 .onSuccess {
                     onConfigChanged(it)
-                    message = if (it.mutation?.runtimeApplied == false) {
-                        runtimePendingText
+                    val runtimePending = it.mutation?.runtimeApplied == false
+                    message = if (runtimePending) {
+                        "$wifiSavedText $runtimePendingText"
                     } else {
                         wifiSavedText
                     }
+                    messageIsError = runtimePending
+                }
+                .onFailure {
+                    message = it.message ?: wifiFailedText
+                    messageIsError = true
+                }
+            isSaving = false
+        }
+    }
+
+    fun saveAutomation(automation: app.sheepfold.android.router.RouterWifiAutomation) {
+        isSaving = true
+        message = null
+        scope.launch {
+            runCatching { client.saveWifiAutomation(config, automation) }
+                .onSuccess {
+                    onConfigChanged(it)
+                    message = wifiAutomationSavedText
                     messageIsError = false
                 }
                 .onFailure {
@@ -138,6 +160,14 @@ fun WifiTab(
                     }
                 }
             }
+        }
+        item {
+            WifiAutomationCard(
+                current = config.wifiAutomation,
+                enabled = canSaveAutomation && !isLoading && !isSaving,
+                onSave = ::saveAutomation
+            )
+            if (!canSaveAutomation) Text(stringResource(R.string.wifi_automation_update_router))
         }
     }
 
@@ -218,8 +248,9 @@ private fun WifiNetworkCard(
         channel = channel,
         enabled = networkEnabled
     )
-    val qrBitmap = remember(ssid, password, encryption) {
-        wifiQrBitmap(wifiQrPayload(ssid, password, encryption))
+    // QR должен содержать подтверждённые роутером данные, а не ещё не сохранённый черновик формы.
+    val qrBitmap = remember(network.ssid, network.password, network.encryption) {
+        wifiQrBitmap(wifiQrPayload(network.ssid, network.password, network.encryption))
     }
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -280,7 +311,7 @@ private fun WifiNetworkCard(
                     label = { Text(stringResource(R.string.wifi_security)) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(securityExpanded) },
                     modifier = Modifier
-                        .menuAnchor()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = enabled)
                         .fillMaxWidth(),
                     enabled = enabled
                 )
@@ -310,7 +341,7 @@ private fun WifiNetworkCard(
                     label = { Text(stringResource(R.string.wifi_channel)) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(channelExpanded) },
                     modifier = Modifier
-                        .menuAnchor()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = enabled)
                         .fillMaxWidth(),
                     enabled = enabled
                 )
@@ -337,7 +368,7 @@ private fun WifiNetworkCard(
             qrBitmap?.let {
                 Image(
                     bitmap = it.asImageBitmap(),
-                    contentDescription = stringResource(R.string.wifi_qr_description, ssid),
+                    contentDescription = stringResource(R.string.wifi_qr_description, network.ssid),
                     modifier = Modifier
                         .size(220.dp)
                         .align(Alignment.CenterHorizontally)

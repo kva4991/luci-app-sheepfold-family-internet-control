@@ -51,7 +51,17 @@ describe('test category map §testcat', () => {
     }
     assert.equal(packageJson.scripts['test:category'], 'node scripts/run-test-category.mjs');
     assert.equal(packageJson.scripts['test:list'], 'node scripts/run-test-category.mjs --list');
+    assert.equal(packageJson.scripts.test, 'node scripts/runAllTests.mjs');
     assert.match(readFileSync(resolve(repoRoot, 'scripts/run-test-category.mjs'), 'utf8'), /--file/);
+    const fullRunner = readFileSync(resolve(repoRoot, 'scripts/runAllTests.mjs'), 'utf8');
+    assert.match(fullRunner, /networkIntegration/);
+    assert.match(fullRunner, /policySimulation/);
+    assert.match(fullRunner, /packaging/);
+    assert.match(fullRunner, /SHEEPFOLD_TEST_BATCH_SIZE/);
+    assert.match(fullRunner, /SHEEPFOLD_TEST_TIMEOUT_SECONDS/);
+    assert.match(fullRunner, /result\.error\?\.code === 'ETIMEDOUT'/);
+    assert.match(fullRunner, /group\.tests\.slice\(offset, offset \+ batchSize\)/);
+    assert.match(fullRunner, /new Set\(selectedTests\)\.size !== allTests\.length/);
   });
 
   it('keeps Python package builders out of the fast tooling category', () => {

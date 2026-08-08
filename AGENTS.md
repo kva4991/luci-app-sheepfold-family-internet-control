@@ -355,7 +355,7 @@ Avoid:
 - Default UCI may expose this as `ui_asset_version`, but individual JS/CSS files must not hardcode their own versions.
 - Append the same version to Sheepfold JS/CSS/static asset URLs as a query suffix such as `?v=0.1.0-1`.
 - Bump the package version/release when LuCI frontend files change.
-- After changing LuCI asset versioning, run `node --test tests/*.test.mjs`. On Windows PowerShell, prefer this direct command or `npm.cmd test` if `npm.ps1` is blocked by Execution Policy.
+- After changing LuCI asset versioning, run `node --test tests/luciAssetVersioning.test.mjs`; before publication use `npm.cmd test`. Do not replace the full Windows runner with monolithic `node --test tests/*.test.mjs`: the project runner isolates every test file because mixed fake-server, Git Bash, and Python workloads can retain one process indefinitely.
 - Keep manual browser-cache clearing as troubleshooting, not the normal update path.
 - Clear LuCI index/module cache from install/update hooks when the menu or LuCI view structure changes.
 

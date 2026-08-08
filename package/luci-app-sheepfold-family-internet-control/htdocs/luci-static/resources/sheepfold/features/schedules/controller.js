@@ -91,6 +91,38 @@ function create(deps) {
 		return match;
 	}
 
+	function hasSelectedConflict(values) {
+		var selectedIds = values || [];
+		var selected = sections().filter(function (section) {
+			return selectedIds.indexOf(section['.name']) !== -1 &&
+				section.enabled !== '0' && (section.target_type || 'group') === 'group';
+		});
+		var index;
+		var otherIndex;
+		var leftWindows;
+		var rightWindows;
+
+		for (index = 0; index < selected.length; index++) {
+			leftWindows = deps.model.windows(
+				deps.listValues(selected[index].weekdays),
+				deps.model.ranges(selected[index], deps.listValues),
+				days
+			);
+			for (otherIndex = index + 1; otherIndex < selected.length; otherIndex++) {
+				if (selected[index].action === selected[otherIndex].action)
+					continue;
+				rightWindows = deps.model.windows(
+					deps.listValues(selected[otherIndex].weekdays),
+					deps.model.ranges(selected[otherIndex], deps.listValues),
+					days
+				);
+				if (deps.model.windowsOverlap(leftWindows, rightWindows))
+					return true;
+			}
+		}
+		return false;
+	}
+
 	function conflictResultText() {
 		return deps.conflictValue() === 'on' ?
 			_('According to the conflict setting, internet will be on.') :
@@ -295,12 +327,15 @@ function create(deps) {
 		]);
 	}
 
-	function checkboxList(selectedValues) {
+	function checkboxList(selectedValues, targetType) {
 		var selected = Object.create(null);
+		var availableSchedules = sections().filter(function (section) {
+			return !targetType || (section.target_type || 'group') === targetType;
+		});
 		var nodes;
 
 		(selectedValues || []).forEach(function (value) { selected[value] = true; });
-		nodes = sections().map(function (section) {
+		nodes = availableSchedules.map(function (section) {
 			var checkbox = E('input', {
 				'type': 'checkbox',
 				'checked': selected[section['.name']] ? 'checked' : null,
@@ -314,7 +349,7 @@ function create(deps) {
 		return {
 			node: E('div', { 'class': 'sf-schedule-list' }, nodes),
 			values: function () {
-				return sections().filter(function (section) { return selected[section['.name']]; })
+				return availableSchedules.filter(function (section) { return selected[section['.name']]; })
 					.map(function (section) { return section['.name']; });
 			}
 		};
@@ -340,9 +375,9 @@ function create(deps) {
 		timeText: timeText,
 		targetText: targetText,
 		findConflict: findConflict,
+		hasSelectedConflict: hasSelectedConflict,
 		showConflict: showConflict,
 		checkboxList: checkboxList,
-		hasMultiple: function (values) { return (values || []).length > 1; },
 		openEditor: openEditor,
 		setEnabled: setEnabled,
 		remove: remove,

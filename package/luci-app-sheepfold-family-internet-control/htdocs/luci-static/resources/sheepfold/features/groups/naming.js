@@ -72,16 +72,15 @@ function create(deps) {
 	}
 
 	function validColor(value) {
-		return /^#[0-9a-f]{6}$/i.test(String(value || ''));
+		return deps.groupModel.validColor(value);
 	}
 
 	function palette() {
-		return ['#dbeafe', '#dcfce7', '#fef3c7', '#fee2e2', '#ede9fe', '#fce7f3', '#cffafe', '#e2e8f0'];
+		return deps.groupModel.palette();
 	}
 
 	function automaticColor(name) {
-		var values = palette();
-		return values[deps.groupModel.hash(name) % values.length];
+		return deps.groupModel.automaticColor(name);
 	}
 
 	function usedColors() {
@@ -94,15 +93,9 @@ function create(deps) {
 	}
 
 	function nextAvailableColor(name) {
-		var used = usedColors();
-		var result = '';
-		palette().some(function (color) {
-			if (used[color.toLowerCase()])
-				return false;
-			result = color;
-			return true;
-		});
-		return result || automaticColor(name);
+		/* Одна модель владеет палитрой и fallback-выбором. Иначе LuCI и Android
+		 * назначают новой группе разные цвета при одинаковом сохранённом состоянии. */
+		return deps.groupModel.nextColor(name, usedColors());
 	}
 
 	function color(name, section) {

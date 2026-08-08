@@ -90,6 +90,7 @@ function create(deps) {
 			setOptions: deps.setOptions,
 			selectField: fields.saveSelectGlobalField,
 			textareaField: fields.globalTextareaOptionField,
+			divider: fields.settingsDivider,
 			detectionTools: deps.detectionTools,
 			timeSettings: deps.timeSettings,
 			timeSetupNotice: deps.timeSettings.notice
@@ -153,6 +154,9 @@ function create(deps) {
 		return E('div', {
 			'class': 'sf-tabs sf-settings-tabs' + (extraClass ? ' ' + extraClass : '')
 		}, tabs.map(function (tab) {
+			var icon = tab[2] ? deps.icon(tab[2]) : null;
+			if (icon)
+				icon.classList.add('sf-tab-icon');
 			return E('button', {
 				'class': 'sf-tab sf-settings-tab' + (activeTab === tab[0] ? ' active' : ''),
 				'data-settings-tab': tab[0],
@@ -160,7 +164,7 @@ function create(deps) {
 					event.preventDefault();
 					onSelect(event.currentTarget, tab[0]);
 				}
-			}, _(tab[1]));
+			}, [icon || '', E('span', { 'class': 'sf-tab-label' }, _(tab[1]))]);
 		}));
 	}
 
@@ -214,6 +218,8 @@ function create(deps) {
 		integrationUi: function () { return integrationUi; },
 		updateSaveButtons: updateSaveButtons,
 		saveNow: saveFlow.save,
+		renderWifiAutomation: miscPanel.renderWifiAutomation,
+		renderSaveBar: saveFlow.bar,
 		switchTab: switchTab,
 		render: render
 	};

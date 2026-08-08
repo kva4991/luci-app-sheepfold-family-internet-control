@@ -33,6 +33,7 @@ fun productFeatureTab(connection: RouterConnectionRequest, aiAvailable: Boolean)
     if (!aiAvailable) return null
     return ProductTab(
         title = stringResource(R.string.tab_ai),
+        iconRes = R.drawable.ic_navigation_ai_assistant,
         content = { AiTab(connection) }
     )
 }

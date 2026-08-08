@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=276
+PKG_RELEASE:=279
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -110,7 +110,7 @@ ensure_global_option language 'ru'
 install_country='ru'
 if [ -r /etc/sheepfold/install.country ]; then
 	install_country="$$(sed -n '1p' /etc/sheepfold/install.country | tr -d '\r\n')"
-	case "$$install_country" in ru|by|cn) ;; *) install_country='ru' ;; esac
+	case "$$install_country" in ru|by|cn|other) ;; *) install_country='ru' ;; esac
 fi
 ensure_global_option country_profile "$$install_country"
 ensure_global_option country_profile_schema '1'
@@ -138,6 +138,36 @@ ensure_global_option detection_mode 'full'
 ensure_global_option device_monitoring_mode 'automatic'
 ensure_global_option no_restrictions_auto_assign '1'
 ensure_global_option personal_devices_auto_assign '1'
+# Старое значение UI приводим к контракту, который одинаково понимают LuCI,
+# effective-status и firewall. §autoact1
+[ "$$(uci -q get sheepfold.global.new_device_policy 2>/dev/null || true)" != 'restrict' ] || \
+	uci -q set sheepfold.global.new_device_policy='restrict_until_configured'
+automation_mode="$$(uci -q get sheepfold.global.automation_mode 2>/dev/null || true)"
+if [ -z "$$automation_mode" ]; then
+	if [ "$$(uci -q get sheepfold.global.new_device_policy 2>/dev/null || printf allow)" = 'allow' ] && \
+	   [ "$$(uci -q get sheepfold.global.auto_configure 2>/dev/null || printf 1)" = '1' ] && \
+	   [ "$$(uci -q get sheepfold.global.detection_mode 2>/dev/null || printf full)" = 'full' ] && \
+	   [ "$$(uci -q get sheepfold.global.device_monitoring_mode 2>/dev/null || printf automatic)" = 'automatic' ] && \
+	   [ "$$(uci -q get sheepfold.global.no_restrictions_auto_assign 2>/dev/null || printf 1)" = '1' ] && \
+	   [ "$$(uci -q get sheepfold.global.personal_devices_auto_assign 2>/dev/null || printf 1)" = '1' ]; then
+		automation_mode='maximum'
+	else
+		automation_mode='selective'
+	fi
+	uci -q set sheepfold.global.automation_mode="$$automation_mode"
+fi
+case "$$automation_mode" in
+	maximum)
+		uci -q set sheepfold.global.new_device_policy='allow'
+		uci -q set sheepfold.global.auto_configure='1'
+		uci -q set sheepfold.global.detection_mode='full'
+		uci -q set sheepfold.global.device_monitoring_mode='automatic'
+		uci -q set sheepfold.global.no_restrictions_auto_assign='1'
+		uci -q set sheepfold.global.personal_devices_auto_assign='1'
+		;;
+	selective) ;;
+	*) uci -q set sheepfold.global.automation_mode='selective' ;;
+esac
 ensure_global_option detector_watch_interval_seconds '10'
 current_detector_interval="$$(uci -q get sheepfold.global.detector_interval_seconds 2>/dev/null || true)"
 [ "$$current_detector_interval" != '900' ] || uci -q set sheepfold.global.detector_interval_seconds='86400'
@@ -317,12 +347,11 @@ if [ "$$(uci -q get sheepfold.global.emergency_sites_initialized 2>/dev/null || 
 		add_emergency_site emergency_mos_ru mos.ru 'Услуги Москвы' 'Городские сервисы' 3 country_profile ru mos
 		add_emergency_site emergency_school_mos_ru school.mos.ru 'Московская школа' 'Доступ к школе' 4 country_profile ru school_mos
 		add_emergency_site emergency_dnevnik_ru dnevnik.ru 'Дневник.ру' 'Школьный дневник' 5 country_profile ru dnevnik
-		add_emergency_site emergency_ya_ru ya.ru 'Поиск Яндекса' 'Узкая точка входа в поиск' 6 country_profile ru ya_search
-		add_emergency_site emergency_2gis_ru 2gis.ru '2ГИС' 'Карты и организации' 7 country_profile ru 2gis
-		add_emergency_site emergency_mchs_ru mchs.gov.ru 'МЧС России' 'Официальная информация о чрезвычайных ситуациях и безопасности.' 8 country_profile ru mchs
-		add_emergency_site emergency_mchs_psychology_ru psi.mchs.gov.ru 'Экстренная психологическая помощь МЧС' 'Информация и контакты психологической помощи в кризисной ситуации.' 9 country_profile ru mchs_psychology
-		add_emergency_site emergency_minzdrav_ru minzdrav.gov.ru 'Минздрав России' 'Официальная информация здравоохранения.' 10 country_profile ru minzdrav
-		add_emergency_site emergency_rzd_ru rzd.ru 'Российские железные дороги' 'Расписание поездов и информация о железнодорожных поездках.' 11 country_profile ru rzd
+		add_emergency_site emergency_2gis_ru 2gis.ru '2ГИС' 'Карты и организации' 6 country_profile ru 2gis
+		add_emergency_site emergency_mchs_ru mchs.gov.ru 'МЧС России' 'Официальная информация о чрезвычайных ситуациях и безопасности.' 7 country_profile ru mchs
+		add_emergency_site emergency_mchs_psychology_ru psi.mchs.gov.ru 'Экстренная психологическая помощь МЧС' 'Информация и контакты психологической помощи в кризисной ситуации.' 8 country_profile ru mchs_psychology
+		add_emergency_site emergency_minzdrav_ru minzdrav.gov.ru 'Минздрав России' 'Официальная информация здравоохранения.' 9 country_profile ru minzdrav
+		add_emergency_site emergency_rzd_ru rzd.ru 'Российские железные дороги' 'Расписание поездов и информация о железнодорожных поездках.' 10 country_profile ru rzd
 	fi
 fi
 uci -q set sheepfold.global.emergency_sites_initialized='1'
@@ -392,6 +421,31 @@ for section in $$(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^
 done
 [ -x /usr/libexec/sheepfold/sheepfold-default-groups ] && /usr/libexec/sheepfold/sheepfold-default-groups apply
 [ -x /usr/libexec/sheepfold/sheepfold-device-id ] && /usr/libexec/sheepfold/sheepfold-device-id migrate
+migrate_group_schedule_links() {
+	for group_section in $$(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=group$$/\1/p'); do
+		group_name="$$(uci -q get "sheepfold.$$group_section.name" 2>/dev/null || true)"
+		legacy_schedules="$$(uci -q get "sheepfold.$$group_section.schedules" 2>/dev/null || true)"
+		for schedule_section in $$(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=schedule$$/\1/p'); do
+			target_type="$$(uci -q get "sheepfold.$$schedule_section.target_type" 2>/dev/null || printf group)"
+			[ "$$target_type" = group ] || continue
+			linked=0
+			if uci -q del_list "sheepfold.$$schedule_section.targets=$$group_section" 2>/dev/null; then
+				linked=1
+			fi
+			if [ -n "$$group_name" ] && uci -q del_list "sheepfold.$$schedule_section.targets=$$group_name" 2>/dev/null; then
+				linked=1
+			fi
+			for legacy_schedule in $$legacy_schedules; do
+				[ "$$legacy_schedule" != "$$schedule_section" ] || linked=1
+			done
+			[ "$$linked" != 1 ] || uci -q add_list "sheepfold.$$schedule_section.targets=$$group_section"
+		done
+		# Единственный источник связи — targets самого расписания. Повторный
+		# postinst остаётся безопасным и не создаёт дубликаты. §grpsch1
+		uci -q delete "sheepfold.$$group_section.schedules" 2>/dev/null || true
+	done
+}
+migrate_group_schedule_links
 if [ "$$(uci -q get sheepfold.global.luci_language_synced 2>/dev/null)" != "1" ]; then
 	lang="$$(uci -q get sheepfold.global.language 2>/dev/null || printf ru)"
 	case "$$lang" in
@@ -474,6 +528,13 @@ for library in \
 	/usr/libexec/sheepfold/sheepfold-hash-common \
 	/usr/libexec/sheepfold/sheepfold-lock-common \
 	/usr/libexec/sheepfold/sheepfold-lib-form \
+	/usr/libexec/sheepfold/sheepfold-lib-admin-config-common \
+	/usr/libexec/sheepfold/sheepfold-lib-admin-config-devices \
+	/usr/libexec/sheepfold/sheepfold-lib-admin-config-groups \
+	/usr/libexec/sheepfold/sheepfold-lib-admin-config-model \
+	/usr/libexec/sheepfold/sheepfold-lib-admin-config-notifications \
+	/usr/libexec/sheepfold/sheepfold-lib-admin-config-schedules \
+	/usr/libexec/sheepfold/sheepfold-lib-admin-config-wifi \
 	/usr/libexec/sheepfold/sheepfold-lib-json; do
 	[ -f "$$library" ] && chmod 0644 "$$library" 2>/dev/null || true
 done

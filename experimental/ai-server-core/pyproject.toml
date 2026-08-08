@@ -1,0 +1,9 @@
+[project]
+name = "sheepfold-ai-server-core-experiment"
+version = "0.0.1"
+description = "Isolated, provider-neutral prototype of the Sheepfold AI support pipeline"
+requires-python = ">=3.11"
+
+[tool.unittest]
+start-directory = "tests"
+

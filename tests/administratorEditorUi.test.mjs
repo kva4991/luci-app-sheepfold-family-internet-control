@@ -86,4 +86,12 @@ describe('Administrator editor module §frontmod §pairsec', () => {
     assert.doesNotMatch(bind, /window\.location\.reload/);
     assert.match(editor, /'readonly': 'readonly'/);
   });
+
+  it('revokes every phone session only after explicit confirmation', () => {
+    assert.match(controller, /function revokeSessions\(admin, button\)/);
+    assert.match(controller, /deps\.confirm\(question\)/);
+    assert.match(controller, /args: \['revoke-tokens', admin\.login\]/);
+    assert.match(controller, /'actionSignOut'/);
+    assert.match(controller, /account and assigned devices will remain/i);
+  });
 });

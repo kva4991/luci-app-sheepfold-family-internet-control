@@ -3,139 +3,11 @@ package app.sheepfold.android.router
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.net.ConnectException
 import java.net.NoRouteToHostException
 import java.net.URL
 import java.net.URLEncoder
-
-/** Безопасная проекция устройства, которую возвращает авторизованный router API. */
-data class RouterDevice(
-    val id: String,
-    val name: String,
-    val ip: String,
-    val mac: String,
-    val group: String,
-    val status: String,
-    val isAdministrator: Boolean
-)
-
-data class RouterWifiModule(
-    val name: String,
-    val status: String,
-    val type: String,
-    val path: String,
-    val band: String,
-    val channel: String,
-    val country: String,
-    val mode: String
-)
-
-/** Авторизованная проекция одной точки доступа из OpenWrt wireless UCI. */
-data class RouterWifiNetwork(
-    val section: String,
-    val device: String,
-    val ssid: String,
-    val password: String,
-    val encryption: String,
-    val channel: String,
-    val enabled: Boolean,
-    val band: String
-)
-
-data class RouterSnapshot(
-    val routerName: String,
-    val diagnostics: Map<String, String>,
-    val globalBlocked: Boolean,
-    val aiAvailable: Boolean,
-    val wifiModules: List<RouterWifiModule> = emptyList()
-)
-
-data class RouterTimeRange(
-    val start: String,
-    val end: String
-) {
-    val encoded: String get() = "$start-$end"
-}
-
-data class RouterSchedule(
-    val section: String = "",
-    val name: String,
-    val description: String = "",
-    val enabled: Boolean = true,
-    val action: String = "block",
-    val targetType: String = "group",
-    val targets: List<String> = emptyList(),
-    val weekdays: List<String> = listOf("mon", "tue", "wed", "thu", "fri"),
-    val timeRanges: List<RouterTimeRange> = listOf(RouterTimeRange("21:00", "07:00"))
-)
-
-data class RouterGroup(
-    val section: String = "",
-    val name: String,
-    val description: String = "",
-    val color: String = "#E8F4EF",
-    val personal: Boolean = false,
-    val protectedGroup: Boolean = false,
-    val autoAssignable: Boolean = false,
-    val allowlistOnly: Boolean = false,
-    val deviceIds: List<String> = emptyList()
-)
-
-data class RouterAdministrator(
-    val section: String,
-    val id: String,
-    val displayName: String,
-    val login: String,
-    val role: String,
-    val allowChildAccessRequests: Boolean
-)
-
-data class RouterAdminCapabilities(
-    val scheduleWrite: Boolean = false,
-    val groupWrite: Boolean = false,
-    val wifiControl: Boolean = false,
-    val administratorRead: Boolean = true,
-    val logRead: Boolean = true,
-    val logClear: Boolean = true
-)
-
-data class RouterAdminMutation(
-    val kind: String,
-    val runtimeApplied: Boolean
-)
-
-data class RouterAdminConfig(
-    val schemaVersion: Int = 1,
-    val revision: String = "",
-    val wifiRevision: String = "",
-    val bedtime: String = "21:00",
-    val wifiEnabled: Boolean = false,
-    val capabilities: RouterAdminCapabilities = RouterAdminCapabilities(),
-    val schedules: List<RouterSchedule> = emptyList(),
-    val groups: List<RouterGroup> = emptyList(),
-    val administrators: List<RouterAdministrator> = emptyList(),
-    val wifiNetworks: List<RouterWifiNetwork> = emptyList(),
-    val mutation: RouterAdminMutation? = null
-)
-
-data class ChildAccessRequest(
-    val id: String,
-    val deviceId: String,
-    val deviceName: String,
-    val ip: String,
-    val mac: String,
-    val createdAt: Long
-)
-
-data class RouterAdminNotification(
-    val id: String,
-    val type: String,
-    val title: String,
-    val message: String,
-    val createdAt: Long
-)
 
 /** Все команды выполняются на парном OpenWrt-роутере, а не в локальном состоянии APK. */
 class RouterAdminClient(
@@ -160,6 +32,8 @@ class RouterAdminClient(
                 ip = item.optString("ip"),
                 mac = item.optString("mac"),
                 group = item.optString("group"),
+                deviceType = item.optString("deviceType", "unknown"),
+                manualDeviceType = item.flexibleBoolean("manualDeviceType"),
                 status = item.optString("status", "unknown"),
                 isAdministrator = item.flexibleBoolean("adminDevice")
             )
@@ -168,7 +42,7 @@ class RouterAdminClient(
 
     /** Читает один согласованный снимок расписаний, групп и безопасных данных администраторов. */
     suspend fun loadAdminConfig(): RouterAdminConfig = withContext(Dispatchers.IO) {
-        parseAdminConfig(request("GET", ADMIN_CONFIG_PATH))
+        RouterAdminJson.parseConfig(request("GET", ADMIN_CONFIG_PATH))
     }
 
     /**
@@ -182,7 +56,7 @@ class RouterAdminClient(
             require(schedule.targets.isNotEmpty()) { "Выберите устройства или группы" }
             require(schedule.weekdays.isNotEmpty()) { "Выберите дни недели" }
             require(schedule.timeRanges.isNotEmpty()) { "Добавьте хотя бы один интервал" }
-            parseAdminConfig(
+            RouterAdminJson.parseConfig(
                 request(
                     "POST",
                     "$ADMIN_CONFIG_PATH/schedule/save",
@@ -204,7 +78,7 @@ class RouterAdminClient(
     suspend fun deleteSchedule(config: RouterAdminConfig, section: String): RouterAdminConfig =
         withContext(Dispatchers.IO) {
             validateMutationContext(config)
-            parseAdminConfig(
+            RouterAdminJson.parseConfig(
                 request(
                     "POST",
                     "$ADMIN_CONFIG_PATH/schedule/delete",
@@ -217,7 +91,7 @@ class RouterAdminClient(
         withContext(Dispatchers.IO) {
             validateMutationContext(config)
             require(group.name.isNotBlank()) { "Название группы обязательно" }
-            parseAdminConfig(
+            RouterAdminJson.parseConfig(
                 request(
                     "POST",
                     "$ADMIN_CONFIG_PATH/group/save",
@@ -228,7 +102,11 @@ class RouterAdminClient(
                         "color" to group.color,
                         "personal" to group.personal.flag(),
                         "allowlistOnly" to group.allowlistOnly.flag(),
-                        "deviceIds" to group.deviceIds.distinct().joinToString(",")
+                        "deviceIds" to group.deviceIds.distinct().joinToString(","),
+                        // Наличие флага отличает новый клиент с пустым выбором от
+                        // старого APK, который вообще не умел менять расписания группы. §grpsch1
+                        "scheduleIdsPresent" to "1",
+                        "scheduleIds" to group.scheduleIds.distinct().joinToString(",")
                     )
                 )
             )
@@ -237,7 +115,7 @@ class RouterAdminClient(
     suspend fun deleteGroup(config: RouterAdminConfig, section: String): RouterAdminConfig =
         withContext(Dispatchers.IO) {
             validateMutationContext(config)
-            parseAdminConfig(
+            RouterAdminJson.parseConfig(
                 request(
                     "POST",
                     "$ADMIN_CONFIG_PATH/group/delete",
@@ -261,7 +139,7 @@ class RouterAdminClient(
         require(config.wifiRevision.isNotBlank()) { "Роутер не вернул ревизию Wi-Fi." }
         require(network.section.isNotBlank()) { "Неизвестная секция Wi-Fi." }
         require(network.ssid.isNotBlank()) { "Введите имя Wi-Fi сети." }
-        parseAdminConfig(
+        RouterAdminJson.parseConfig(
             request(
                 "POST",
                 "$ADMIN_CONFIG_PATH/wifi/save",
@@ -274,6 +152,81 @@ class RouterAdminClient(
                     "channel" to network.channel,
                     "enabled" to network.enabled.flag(),
                     "confirm" to "1"
+                )
+            )
+        )
+    }
+
+    suspend fun saveWifiAutomation(
+        config: RouterAdminConfig,
+        automation: RouterWifiAutomation
+    ): RouterAdminConfig = withContext(Dispatchers.IO) {
+        validateMutationContext(config)
+        require(automation.enableMode in WIFI_AUTOMATION_MODES) { "Неизвестный режим включения Wi-Fi." }
+        require(automation.disableMode in WIFI_AUTOMATION_MODES) { "Неизвестный режим выключения Wi-Fi." }
+        require(automation.enableTime.matches(ROUTER_TIME_PATTERN)) { "Проверьте время включения Wi-Fi." }
+        require(automation.disableTime.matches(ROUTER_TIME_PATTERN)) { "Проверьте время выключения Wi-Fi." }
+        RouterAdminJson.parseConfig(
+            request(
+                "POST",
+                "$ADMIN_CONFIG_PATH/wifi-automation/save",
+                mutationContext(config) + mapOf(
+                    "enableMode" to automation.enableMode,
+                    "enableTime" to automation.enableTime,
+                    "disableMode" to automation.disableMode,
+                    "disableTime" to automation.disableTime,
+                    "confirmRisk" to (automation.disableMode == "time").flag()
+                )
+            )
+        )
+    }
+
+    suspend fun saveNotificationSettings(
+        config: RouterAdminConfig,
+        settings: RouterNotificationSettings
+    ): RouterAdminConfig = withContext(Dispatchers.IO) {
+        validateMutationContext(config)
+        require(settings.simChangeMode in setOf("all", "new_only", "off")) {
+            "Неизвестный режим уведомлений о SIM-карте."
+        }
+        require(settings.childWifiMode in setOf("with_location", "network_only", "off")) {
+            "Неизвестный режим уведомлений о Wi-Fi."
+        }
+        RouterAdminJson.parseConfig(
+            request(
+                "POST",
+                "$ADMIN_CONFIG_PATH/notifications/save",
+                mutationContext(config) + mapOf(
+                    "simChangeMode" to settings.simChangeMode,
+                    "childWifiMode" to settings.childWifiMode
+                )
+            )
+        )
+    }
+
+    suspend fun saveDevice(
+        config: RouterAdminConfig,
+        device: RouterDevice,
+        updateProfile: Boolean = true
+    ): RouterAdminConfig = withContext(Dispatchers.IO) {
+        validateMutationContext(config)
+        require(device.mac.matches(MAC_PATTERN)) { "Некорректный MAC-адрес устройства." }
+        require(device.status in DEVICE_STATUSES) { "Неизвестный статус устройства." }
+        if (updateProfile) {
+            require(device.name.isNotBlank()) { "Введите имя устройства." }
+            require(device.deviceType in DEVICE_TYPES) { "Неизвестный тип устройства." }
+        }
+        RouterAdminJson.parseConfig(
+            request(
+                "POST",
+                "$ADMIN_CONFIG_PATH/device/save",
+                mutationContext(config) + mapOf(
+                    "mac" to device.mac,
+                    "name" to device.name.trim(),
+                    "group" to device.group.trim(),
+                    "deviceType" to device.deviceType,
+                    "status" to device.status,
+                    "updateProfile" to updateProfile.flag()
                 )
             )
         )
@@ -352,7 +305,7 @@ class RouterAdminClient(
             aiAvailable = json.optJSONObject("capabilities")
                 ?.flexibleBoolean("aiAssistant")
                 ?: false,
-            wifiModules = parseWifiModules(json.optJSONArray("wifiModules"))
+            wifiModules = RouterAdminJson.parseWifiModules(json.optJSONArray("wifiModules"))
         )
     }
 
@@ -385,137 +338,8 @@ class RouterAdminClient(
         }
     }
 
-    private fun parseAdminConfig(json: JSONObject): RouterAdminConfig {
-        val schemaVersion = json.optInt("schemaVersion", 0)
-        if (schemaVersion != ADMIN_CONFIG_SCHEMA_VERSION) {
-            throw IllegalStateException("Версия API управления не поддерживается. Обновите Sheepfold на роутере и телефоне.")
-        }
-        val revision = json.optString("revision")
-        if (revision.isBlank()) throw IllegalStateException("Роутер не вернул ревизию настроек.")
-        val capabilities = json.optJSONObject("capabilities")
-        val mutation = json.optJSONObject("mutation")?.let {
-            RouterAdminMutation(
-                kind = it.optString("kind"),
-                runtimeApplied = it.flexibleBoolean("runtimeApplied", true)
-            )
-        }
-        return RouterAdminConfig(
-            schemaVersion = schemaVersion,
-            revision = revision,
-            wifiRevision = json.optString("wifiRevision"),
-            bedtime = json.optString("bedtime").ifBlank { "21:00" },
-            wifiEnabled = json.flexibleBoolean("wifiEnabled"),
-            capabilities = RouterAdminCapabilities(
-                scheduleWrite = capabilities?.flexibleBoolean("scheduleWrite") == true,
-                groupWrite = capabilities?.flexibleBoolean("groupWrite") == true,
-                wifiControl = capabilities?.flexibleBoolean("wifiControl") == true,
-                administratorRead = capabilities?.flexibleBoolean("administratorRead", true) != false,
-                logRead = capabilities?.flexibleBoolean("logRead", true) != false,
-                logClear = capabilities?.flexibleBoolean("logClear", true) != false
-            ),
-            schedules = parseSchedules(json.optJSONArray("schedules")),
-            groups = parseGroups(json.optJSONArray("groups")),
-            administrators = parseAdministrators(json.optJSONArray("administrators")),
-            wifiNetworks = parseWifiNetworks(json.optJSONArray("wifiNetworks")),
-            mutation = mutation
-        )
-    }
-
-    private fun parseWifiModules(items: JSONArray?): List<RouterWifiModule> =
-        parseObjectList(items) { item, _ ->
-            RouterWifiModule(
-                name = item.optString("name"),
-                status = item.optString("status"),
-                type = item.optString("type"),
-                path = item.optString("path"),
-                band = item.optString("band"),
-                channel = item.optString("channel"),
-                country = item.optString("country"),
-                mode = item.optString("mode")
-            )
-        }
-
-    private fun parseWifiNetworks(items: JSONArray?): List<RouterWifiNetwork> =
-        parseObjectList(items) { item, _ ->
-            RouterWifiNetwork(
-                section = item.optString("section"),
-                device = item.optString("device"),
-                ssid = item.optString("ssid"),
-                password = item.optString("password"),
-                encryption = item.optString("encryption").ifBlank { "none" },
-                channel = item.optString("channel").ifBlank { "auto" },
-                enabled = item.flexibleBoolean("enabled", true),
-                band = item.optString("band")
-            )
-        }
-
-    private fun parseSchedules(items: JSONArray?): List<RouterSchedule> =
-        parseObjectList(items) { item, index ->
-            val section = item.optString("section").ifBlank { "schedule-$index" }
-            RouterSchedule(
-                section = section,
-                name = item.optString("name").ifBlank { section },
-                description = item.optString("description"),
-                enabled = item.flexibleBoolean("enabled", true),
-                action = item.optString("action").ifBlank { "block" },
-                targetType = item.optString("targetType").ifBlank { "group" },
-                targets = item.optJSONArray("targets").stringList(),
-                weekdays = item.optJSONArray("weekdays").stringList(),
-                timeRanges = parseTimeRanges(item.optJSONArray("timeRanges"))
-            )
-        }
-
-    private fun parseGroups(items: JSONArray?): List<RouterGroup> =
-        parseObjectList(items) { item, index ->
-            val section = item.optString("section").ifBlank { "group-$index" }
-            RouterGroup(
-                section = section,
-                name = item.optString("name").ifBlank { section },
-                description = item.optString("description"),
-                color = item.optString("color").ifBlank { "#E8F4EF" },
-                personal = item.flexibleBoolean("personal"),
-                protectedGroup = item.flexibleBoolean("protected"),
-                autoAssignable = item.flexibleBoolean("autoAssignable"),
-                allowlistOnly = item.flexibleBoolean("allowlistOnly"),
-                deviceIds = item.optJSONArray("deviceIds").stringList()
-            )
-        }
-
-    private fun parseAdministrators(items: JSONArray?): List<RouterAdministrator> =
-        parseObjectList(items) { item, index ->
-            val section = item.optString("section").ifBlank { "administrator-$index" }
-            RouterAdministrator(
-                section = section,
-                id = item.optString("id"),
-                displayName = item.optString("displayName")
-                    .ifBlank { item.optString("login") }
-                    .ifBlank { section },
-                login = item.optString("login"),
-                role = item.optString("role"),
-                allowChildAccessRequests = item.flexibleBoolean("allowChildAccessRequests")
-            )
-        }
-
-    private fun parseTimeRanges(items: JSONArray?): List<RouterTimeRange> {
-        if (items == null) return emptyList()
-        return buildList {
-            for (index in 0 until items.length()) {
-                when (val value = items.opt(index)) {
-                    is JSONObject -> {
-                        val start = value.optString("start")
-                        val end = value.optString("end")
-                        if (TIME_PATTERN.matches(start) && TIME_PATTERN.matches(end) && start != end) {
-                            add(RouterTimeRange(start, end))
-                        }
-                    }
-                    is String -> parseTimeRange(value)?.let(::add)
-                }
-            }
-        }
-    }
-
     private fun validateMutationContext(config: RouterAdminConfig) {
-        require(config.schemaVersion == ADMIN_CONFIG_SCHEMA_VERSION) { "Обновите снимок настроек." }
+        require(config.schemaVersion == ROUTER_ADMIN_CONFIG_SCHEMA_VERSION) { "Обновите снимок настроек." }
         require(config.revision.isNotBlank()) { "Сначала обновите настройки с роутера." }
     }
 
@@ -632,23 +456,30 @@ class RouterAdminClient(
 
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())
 
-    private fun parseTimeRange(value: String): RouterTimeRange? {
-        val parts = value.split('-', limit = 2)
-        if (parts.size != 2 || !TIME_PATTERN.matches(parts[0]) || !TIME_PATTERN.matches(parts[1])) return null
-        if (parts[0] == parts[1]) return null
-        return RouterTimeRange(parts[0], parts[1])
-    }
-
     private fun friendlyApiMessage(errorCode: String, fallback: String): String = when (errorCode) {
         "revision_conflict" -> "Настройки изменились на роутере. Обновите экран и повторите действие."
         "config_busy" -> "Роутер уже сохраняет настройки. Повторите действие после обновления."
         "unsupported_schema" -> "Версия API управления не поддерживается. Обновите Sheepfold."
         "group_has_devices" -> "Сначала удалите устройства из группы."
         "group_has_schedules" -> "Сначала удалите или переназначьте расписания этой группы."
+        "schedule_not_found", "invalid_group_schedule" ->
+            "Одно из расписаний больше не существует. Обновите экран и повторите действие."
+        "group_schedule_type_forbidden" ->
+            "К группе можно прикрепить только расписание, созданное для групп."
+        "duplicate_group_schedule", "too_many_group_schedules", "invalid_group_schedule_presence" ->
+            "Проверьте выбранные расписания группы."
         "protected_group", "protected_group_name" -> "Системную группу нельзя удалить или переименовать."
         "administrator_group_forbidden" -> "Администраторское устройство нельзя назначить в семейную группу."
         "administrator_schedule_forbidden" -> "Администраторское устройство нельзя ограничить расписанием."
+        "administrator_device_forbidden" -> "Администраторское устройство нельзя лишить администраторских настроек."
+        "device_not_found" -> "Устройство больше не найдено. Обновите список."
+        "device_save_failed" -> "Роутер не смог применить настройки устройства."
+        "invalid_device_name", "invalid_device_group", "invalid_device_type",
+        "invalid_device_status", "invalid_device_profile_flag" ->
+            "Проверьте имя, группу, тип и статус устройства."
         "wifi_control_failed" -> "Роутер не смог применить состояние Wi-Fi."
+        "invalid_sim_change_mode", "invalid_child_wifi_mode" ->
+            "Проверьте выбранные режимы уведомлений."
         "wifi_network_not_found", "wifi_radio_not_found" ->
             "Сеть Wi-Fi изменилась на роутере. Обновите экран и повторите действие."
         "wifi_reload_failed" ->
@@ -656,51 +487,26 @@ class RouterAdminClient(
         "invalid_wifi_ssid", "invalid_wifi_password", "wifi_password_required",
         "invalid_wifi_encryption", "invalid_wifi_channel", "invalid_wifi_enabled" ->
             "Проверьте имя сети, пароль, тип защиты, канал и состояние Wi-Fi."
+        "invalid_wifi_automation_mode", "invalid_wifi_automation_time" ->
+            "Проверьте режим и время автоматизации Wi-Fi."
         "config_commit_failed", "config_verify_failed" -> "Роутер не подтвердил сохранение и восстановил прежнюю конфигурацию."
         else -> fallback
     }
 
     private companion object {
-        const val ADMIN_CONFIG_SCHEMA_VERSION = 1
         const val ADMIN_CONFIG_PATH = "/api/v1/admin-config"
-        val TIME_PATTERN = Regex("(?:[01]\\d|2[0-3]):[0-5]\\d")
+        val MAC_PATTERN = Regex("(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
+        val WIFI_AUTOMATION_MODES = setOf("never", "time")
+        val DEVICE_STATUSES = setOf("allow", "blocked", "restricted", "scheduled", "new")
+        val DEVICE_TYPES = setOf(
+            "unknown", "phone", "tablet", "computer", "tv", "media_player", "smart_watch",
+            "console", "printer", "server", "camera", "speaker", "vacuum", "smart_home",
+            "engineering", "smart", "network", "router", "network_switch"
+        )
     }
 }
 
 private fun Boolean.flag(): String = if (this) "1" else "0"
-
-private fun JSONArray?.stringList(): List<String> {
-    if (this == null) return emptyList()
-    return buildList {
-        for (index in 0 until length()) {
-            optString(index).takeIf { it.isNotBlank() }?.let(::add)
-        }
-    }
-}
-
-private fun JSONObject.flexibleBoolean(name: String, default: Boolean = false): Boolean {
-    if (!has(name) || isNull(name)) return default
-    return when (val value = opt(name)) {
-        is Boolean -> value
-        is Number -> value.toInt() != 0
-        is String -> value == "1" || value.equals("true", ignoreCase = true) ||
-            value.equals("yes", ignoreCase = true) || value.equals("on", ignoreCase = true)
-        else -> default
-    }
-}
-
-private inline fun <T : Any> parseObjectList(
-    items: JSONArray?,
-    mapper: (JSONObject, Int) -> T?
-): List<T> {
-    if (items == null) return emptyList()
-    return buildList {
-        for (index in 0 until items.length()) {
-            val item = items.optJSONObject(index) ?: continue
-            mapper(item, index)?.let(::add)
-        }
-    }
-}
 
 private class RouterHttpException(
     val statusCode: Int,

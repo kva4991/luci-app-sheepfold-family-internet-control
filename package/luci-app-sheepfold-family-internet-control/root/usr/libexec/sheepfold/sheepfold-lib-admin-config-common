@@ -1,0 +1,253 @@
+#!/bin/sh
+
+# Общие валидаторы и единая optimistic UCI-транзакция Android admin API.\n# Доменные модули используют этот слой, но не создают собственные commit/lock. §apicon1
+
+form_get() {
+    local value
+    if ! value="$(sheepfold_form_get "$1" "$2")"; then
+        printf '%s\n' invalid_form_encoding >&2
+        return 2
+    fi
+    printf '%s' "$value"
+}
+
+trim_text() {
+    printf '%s' "${1:-}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+valid_plain_text() {
+    local value max_length
+    value="${1:-}"
+    max_length="$2"
+    [ "${#value}" -le "$max_length" ] || return 1
+    # Keep UTF-8 text, but reject all control bytes (newline, tab, NUL, DEL, etc.).
+    # LC_ALL=C makes the class byte-stable on BusyBox and does not reject UTF-8 bytes.
+    ! printf '%s' "$value" | LC_ALL=C grep -q '[[:cntrl:]]'
+}
+
+valid_section_name() {
+    printf '%s' "${1:-}" | grep -Eq '^[A-Za-z0-9_]+$'
+}
+
+valid_flag() {
+    [ "${1:-}" = 0 ] || [ "${1:-}" = 1 ]
+}
+
+
+section_is_type() {
+    [ "$(uci_get "sheepfold.$1")" = "$2" ]
+}
+
+device_section_by_id() {
+    local wanted section
+    wanted="$1"
+    for section in $(sections_of_type device); do
+        [ "$(uci_get "sheepfold.$section.id")" = "$wanted" ] || continue
+        printf '%s\n' "$section"
+        return 0
+    done
+    return 1
+}
+
+device_section_by_mac() {
+    local wanted section stored
+    wanted="$(printf '%s' "$1" | tr 'a-z' 'A-Z')"
+    for section in $(sections_of_type device); do
+        stored="$(uci_get "sheepfold.$section.mac" | tr 'a-z' 'A-Z')"
+        [ "$stored" = "$wanted" ] || continue
+        printf '%s\n' "$section"
+        return 0
+    done
+    return 1
+}
+
+list_has_mac() {
+    local section wanted item
+    section="$1"
+    wanted="$(printf '%s' "$2" | tr 'a-z' 'A-Z')"
+    for item in $(uci_get "sheepfold.$section.mac"); do
+        [ "$(printf '%s' "$item" | tr 'a-z' 'A-Z')" = "$wanted" ] && return 0
+    done
+    return 1
+}
+
+# set-device-status сначала фиксирует UCI, а затем обновляет firewall. Если упал
+# только второй шаг, API обязан сообщить «сохранено, но ещё не применено», а не
+# предлагать родителю повторить запись вслепую. Сверяем весь запрошенный профиль,
+# чтобы раннюю ошибку валидации или коммита не принять за частичный успех.
+device_mutation_persisted() {
+    local section mac status update_profile name group device_type manual_type type_source
+    local no_restrictions_excluded personal_devices_excluded
+    section="$1"
+    mac="$2"
+    status="$3"
+    update_profile="$4"
+    name="$5"
+    group="$6"
+    device_type="$7"
+    manual_type="$8"
+    type_source="$9"
+    no_restrictions_excluded="${10}"
+    personal_devices_excluded="${11}"
+
+    [ "$(uci_get "sheepfold.$section.status")" = "$status" ] || return 1
+    case "$status" in
+        allow)
+            list_has_mac allowlist "$mac" && ! list_has_mac blocklist "$mac" || return 1
+            ;;
+        blocked)
+            list_has_mac blocklist "$mac" && ! list_has_mac allowlist "$mac" || return 1
+            ;;
+        *)
+            ! list_has_mac allowlist "$mac" && ! list_has_mac blocklist "$mac" || return 1
+            ;;
+    esac
+
+    [ "$update_profile" = 1 ] || return 0
+    [ "$(uci_get "sheepfold.$section.name")" = "$name" ] || return 1
+    [ "$(uci_get "sheepfold.$section.group")" = "$group" ] || return 1
+    [ "$(uci_get "sheepfold.$section.device_type")" = "$device_type" ] || return 1
+    [ "$(uci_get "sheepfold.$section.manual_device_type")" = "$manual_type" ] || return 1
+    [ "$(uci_get "sheepfold.$section.device_type_source")" = "$type_source" ] || return 1
+    [ -z "$no_restrictions_excluded" ] ||
+        [ "$(uci_get "sheepfold.$section.no_restrictions_auto_excluded")" = "$no_restrictions_excluded" ] || return 1
+    [ -z "$personal_devices_excluded" ] ||
+        [ "$(uci_get "sheepfold.$section.personal_devices_auto_excluded")" = "$personal_devices_excluded" ] || return 1
+    return 0
+}
+
+group_name_exists() {
+    local wanted section
+    wanted="$1"
+    [ "$wanted" = "$NOT_CONFIGURED_GROUP" ] && return 0
+    for section in $(sections_of_type group); do
+        [ "$(uci_get "sheepfold.$section.name")" = "$wanted" ] && return 0
+    done
+    return 1
+}
+
+csv_words() {
+    printf '%s' "${1:-}" | tr ',' ' '
+}
+
+word_count() {
+    local count unused
+    count=0
+    for unused in ${1:-}; do count=$((count + 1)); done
+    printf '%s\n' "$count"
+}
+
+validate_expected_revision() {
+    local schema_version expected_revision current_revision
+    schema_version="$1"
+    expected_revision="$2"
+    [ "$schema_version" = "$SCHEMA_VERSION" ] || {
+        printf '%s\n' unsupported_schema >&2
+        return 2
+    }
+    [ -n "$expected_revision" ] || {
+        printf '%s\n' revision_required >&2
+        return 2
+    }
+    current_revision="$(config_revision)" || return 70
+    [ "$expected_revision" = "$current_revision" ] || {
+        printf '%s\n' revision_conflict >&2
+        return 3
+    }
+}
+
+TX_DIR=""
+TX_UCI_DIR=""
+TX_SNAPSHOT=""
+TX_RESTORE=0
+TX_ACTIVE=0
+
+restore_snapshot() {
+    local restore_file
+    restore_file="${CONFIG_FILE}.android-restore.$$"
+    [ -r "$TX_SNAPSHOT" ] || return 1
+    cp -p "$TX_SNAPSHOT" "$restore_file" || return 1
+    mv -f "$restore_file" "$CONFIG_FILE" || {
+        rm -f "$restore_file" 2>/dev/null || true
+        return 1
+    }
+}
+
+transaction_cleanup() {
+    local status="${1:-1}"
+    trap - EXIT HUP INT TERM
+    if [ "$TX_RESTORE" = 1 ]; then
+        restore_snapshot || logger -t sheepfold "Android admin-config transaction rollback failed"
+    fi
+    [ -z "$TX_DIR" ] || rm -rf "$TX_DIR" 2>/dev/null || true
+    [ "$TX_ACTIVE" = 0 ] || sheepfold_lock_release
+    exit "$status"
+}
+
+begin_transaction() {
+    local expected_revision schema_version
+    expected_revision="$1"
+    schema_version="$2"
+
+    if ! sheepfold_lock_acquire "$LOCK_FILE" 30; then
+        printf '%s\n' config_busy >&2
+        return 4
+    fi
+    TX_ACTIVE=1
+    # Install cleanup immediately after acquiring the kernel lock. Validation or
+    # allocation failures must not leave FD 9 locked until the CGI process exits.
+    trap 'transaction_cleanup $?' EXIT
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    validate_expected_revision "$schema_version" "$expected_revision" || return "$?"
+
+    mkdir -p "$TRANSACTION_ROOT"
+    chmod 700 "$TRANSACTION_ROOT" 2>/dev/null || true
+    TX_DIR="$TRANSACTION_ROOT/tx.$$"
+    TX_UCI_DIR="$TX_DIR/uci"
+    TX_SNAPSHOT="$TX_DIR/sheepfold.before"
+    (umask 077; mkdir "$TX_DIR" && mkdir "$TX_UCI_DIR") || return 70
+    cp -p "$CONFIG_FILE" "$TX_SNAPSHOT" || return 70
+}
+
+tx_uci() {
+    "$UCI_BIN" -t "$TX_UCI_DIR" -p "$TX_UCI_DIR" "$@"
+}
+
+set_tx_list() {
+    local section option values value
+    section="$1"
+    option="$2"
+    values="${3:-}"
+    tx_uci -q delete "sheepfold.$section.$option" 2>/dev/null || true
+    for value in $values; do
+        tx_uci -q add_list "sheepfold.$section.$option=$value"
+    done
+}
+
+commit_transaction() {
+    # Keep rollback armed until the caller has verified the main UCI view. A
+    # successful `uci commit` with a wrong save/search path is not proof that
+    # the persistent config changed (§debug01, §pairtx1).
+    TX_RESTORE=1
+    tx_uci -q commit sheepfold
+}
+
+confirm_transaction() {
+    TX_RESTORE=0
+}
+
+normalize_words() {
+    printf '%s\n' "${1:-}" | awk '{$1=$1; print}'
+}
+
+words_equal() {
+    [ "$(normalize_words "${1:-}")" = "$(normalize_words "${2:-}")" ]
+}
+
+audit_event() {
+    [ -x "$LOG_HELPER" ] || return 0
+    "$LOG_HELPER" "Android ($ADMIN_LOGIN): $*" >/dev/null 2>&1 || true
+}
+

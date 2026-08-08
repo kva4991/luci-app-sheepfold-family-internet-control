@@ -1,6 +1,27 @@
 'use strict';
 'require baseclass';
 
+/* §autoact1
+ * Главный режим автоматизации является профилем нескольких UCI-полей. Это
+ * оставляет backend простым и совместимым с прежними конфигами, но не позволяет
+ * скрытому интерфейсу обещать автоматизацию при ручных значениях ниже.
+ */
+function maximumAutomationDraft() {
+	return {
+		automation_mode: 'maximum',
+		new_device_policy: 'allow',
+		auto_configure: '1',
+		detection_mode: 'full',
+		no_restrictions_auto_assign: '1',
+		personal_devices_auto_assign: '1',
+		device_monitoring_mode: 'automatic'
+	};
+}
+
+function automationModeDraft(value) {
+	return value === 'selective' ? { automation_mode: 'selective' } : maximumAutomationDraft();
+}
+
 function automaticSetupDraft(value) {
 	var mode = value === 'reduced' ? 'reduced' : 'full';
 
@@ -45,6 +66,7 @@ function automaticSetupField(deps) {
 		deps.value('detection_mode', 'full') === 'reduced' ? 'reduced' : 'full';
 	var select = E('select', {
 		'class': 'cbi-input-select',
+		'data-setting-option': 'automatic_setup',
 		'change': function (event) {
 			var nextValue = event.currentTarget.value;
 			deps.setOptions(automaticSetupDraft(nextValue));
@@ -67,13 +89,51 @@ function automaticSetupField(deps) {
 	]);
 }
 
+function setAutomationControlValue(container, option, value) {
+	var control = container.querySelector('[data-setting-option="' + option + '"]');
+	if (control)
+		control.value = value;
+}
+
+function automationModeField(deps, childContainer) {
+	var currentValue = deps.value('automation_mode', 'maximum') === 'selective' ? 'selective' : 'maximum';
+	var select = E('select', {
+		'class': 'cbi-input-select',
+		'data-setting-option': 'automation_mode',
+		'change': function (event) {
+			var nextValue = event.currentTarget.value === 'selective' ? 'selective' : 'maximum';
+			deps.setOptions(automationModeDraft(nextValue));
+			childContainer.hidden = nextValue === 'maximum' ? 'hidden' : null;
+			if (nextValue === 'maximum') {
+				setAutomationControlValue(childContainer, 'new_device_policy', 'allow');
+				setAutomationControlValue(childContainer, 'automatic_setup', 'full');
+				setAutomationControlValue(childContainer, 'device_monitoring_mode', 'automatic');
+				if (deps.detectionTools)
+					deps.detectionTools.setMode('full');
+			}
+		}
+	}, [
+		E('option', { 'value': 'maximum', 'selected': currentValue === 'maximum' ? 'selected' : null }, _('Maximum automation')),
+		E('option', { 'value': 'selective', 'selected': currentValue === 'selective' ? 'selected' : null }, _('Selective automation'))
+	]);
+
+	childContainer.hidden = currentValue === 'maximum' ? 'hidden' : null;
+
+	return E('label', { 'class': 'sf-field sf-field-wide' }, [
+		E('span', {}, _('Mode')),
+		select,
+		E('small', {}, _('Maximum automation applies the recommended automatic behavior to all settings below. Selective automation lets you configure each setting separately.'))
+	]);
+}
+
 
 function countryProfileField(deps) {
 	var current = deps.value('country_profile', 'ru');
 	var values = [
 		['ru', _('Russia')],
 		['by', _('Belarus')],
-		['cn', _('China')]
+		['cn', _('China')],
+		['other', _('Other country')]
 	];
 	var select = E('select', {
 		'class': 'cbi-input-select',
@@ -102,6 +162,22 @@ function countryProfileField(deps) {
 
 function render(deps) {
 	var fields = [];
+	var automationChildren;
+	var automaticFields = [
+		deps.selectField(_('New device behavior'), 'new_device_policy', 'allow', [
+			['allow', _('Allow internet by default')],
+			['restrict_until_configured', _('Restrict until configured')]
+		]),
+		automaticSetupField(deps)
+	];
+
+	if (deps.detectionTools)
+		automaticFields.push(deps.detectionTools.render());
+	automaticFields.push(deps.selectField(_('Device monitoring and setup'), 'device_monitoring_mode', 'automatic', [
+		['automatic', _('Automatic (recommended)')],
+		['manual', _('Manual')]
+	], null, null, _('When a known MAC appears with strongly different trusted DHCP, mDNS, or UPnP identifiers, automatic mode temporarily blocks that connection at device-blocklist level. Manual mode restricts it until a parent decides. The saved rights of the original device are not changed.')));
+	automationChildren = E('div', { 'class': 'sf-flat-form sf-automation-settings' }, automaticFields);
 
 	if (deps.timeSetupNotice)
 		fields.push(typeof deps.timeSetupNotice === 'function' ? deps.timeSetupNotice() : deps.timeSetupNotice);
@@ -113,20 +189,12 @@ function render(deps) {
 		], null, null, _('Applies only to Sheepfold. Does not change the router LuCI language. The page reloads after Save.')),
 		countryProfileField(deps),
 		applicationPortField(deps),
-		deps.selectField(_('New device behavior'), 'new_device_policy', 'allow', [
-			['allow', _('Allow internet by default')],
-			['restrict_until_configured', _('Restrict until configured')]
-		]),
-		automaticSetupField(deps)
+		deps.divider(_('Automation actions')),
+		automationModeField(deps, automationChildren),
+		automationChildren
 	]);
 
-	if (deps.detectionTools)
-		fields.push(deps.detectionTools.render());
 	fields.push(
-		deps.selectField(_('Device monitoring and setup'), 'device_monitoring_mode', 'automatic', [
-			['automatic', _('Automatic (recommended)')],
-			['manual', _('Manual')]
-		], null, null, _('When a known MAC appears with strongly different trusted DHCP, mDNS, or UPnP identifiers, automatic mode temporarily blocks that connection at device-blocklist level. Manual mode restricts it until a parent decides. The saved rights of the original device are not changed.')),
 		deps.selectField(_('Update check and installation'), 'update_check_install_mode', 'weekly', [
 			['daily', _('Every day')],
 			['weekly', _('Every week')],
@@ -152,6 +220,8 @@ function render(deps) {
 }
 
 return baseclass.extend({
+	maximumAutomationDraft: maximumAutomationDraft,
+	automationModeDraft: automationModeDraft,
 	automaticSetupDraft: automaticSetupDraft,
 	render: render
 });

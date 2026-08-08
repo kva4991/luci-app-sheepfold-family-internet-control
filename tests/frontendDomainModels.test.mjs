@@ -98,6 +98,19 @@ describe('extracted LuCI domain models §frontmod', () => {
   it('maps the general automatic-setup choice to one coherent draft', () => {
     const general = loadFeature('settings/general.js');
 
+    assert.deepEqual({ ...general.automationModeDraft('maximum') }, {
+      automation_mode: 'maximum',
+      new_device_policy: 'allow',
+      auto_configure: '1',
+      detection_mode: 'full',
+      no_restrictions_auto_assign: '1',
+      personal_devices_auto_assign: '1',
+      device_monitoring_mode: 'automatic'
+    });
+    assert.deepEqual({ ...general.automationModeDraft('selective') }, {
+      automation_mode: 'selective'
+    });
+
     assert.deepEqual({ ...general.automaticSetupDraft('full') }, {
       auto_configure: '1',
       detection_mode: 'full',
@@ -113,6 +126,20 @@ describe('extracted LuCI domain models §frontmod', () => {
       detection_mode: 'full',
       no_restrictions_auto_assign: '0'
     });
+  });
+
+  it('keeps the automation profile consistent across defaults, installer, and upgrade', () => {
+    const defaults = readFileSync(join(root, 'package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/sheepfold.uci.defaults'), 'utf8');
+    const makefile = readFileSync(join(root, 'package/luci-app-sheepfold-family-internet-control/Makefile'), 'utf8');
+    const installer = readFileSync(join(root, 'install.sh'), 'utf8');
+
+    assert.match(defaults, /option automation_mode 'maximum'/);
+    assert.match(installer, /AUTOMATION_MODE="maximum"/);
+    assert.match(installer, /AUTOMATION_MODE="selective"/);
+    assert.match(installer, /new_device_policy="\$\{NEW_DEVICE_POLICY\}"/);
+    assert.match(makefile, /automation_mode='maximum'[\s\S]*new_device_policy='allow'[\s\S]*device_monitoring_mode='automatic'/);
+    assert.match(makefile, /automation_mode='selective'/);
+    assert.match(makefile, /new_device_policy='restrict_until_configured'/);
   });
 
   it('validates and stages one settings draft through the persistence adapter', async () => {
@@ -151,6 +178,7 @@ describe('extracted LuCI domain models §frontmod', () => {
       }
     });
     assert.throws(() => adapter.validate({ app_port: '0' }), /Application HTTPS port/);
+    assert.throws(() => adapter.validate({ automation_mode: 'surprise' }), /Unknown automation mode/);
     assert.throws(() => adapter.validate({
       access_priority: 'blocklist unknown allowlist default_access'
     }), /Access priority contains an unknown or duplicate rule/);
@@ -162,6 +190,18 @@ describe('extracted LuCI domain models §frontmod', () => {
     }));
 
     adapter.validate({ app_port: '5201' });
+    assert.deepEqual(JSON.parse(JSON.stringify(await adapter.save({ automation_mode: 'maximum' }))), {
+      global: {
+        automation_mode: 'maximum',
+        new_device_policy: 'allow',
+        auto_configure: '1',
+        detection_mode: 'full',
+        no_restrictions_auto_assign: '1',
+        personal_devices_auto_assign: '1',
+        device_monitoring_mode: 'automatic'
+      },
+      sections: {}
+    });
     assert.deepEqual(JSON.parse(JSON.stringify(await adapter.save({
       language: 'RU',
       'usb.device': '/dev/sda1',

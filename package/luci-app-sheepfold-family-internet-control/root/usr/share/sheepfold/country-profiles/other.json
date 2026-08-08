@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "country": "other",
+  "displayName": {
+    "ru": "Другая страна",
+    "en": "Other country",
+    "zh_Hans": "其他国家"
+  },
+  "emergencySites": []
+}

@@ -339,8 +339,8 @@ function create(deps) {
 	        }, [
 	                ['ram', _('RAM, router operational memory, cleared on reboot (recommended)')],
 	                ['usb', _('USB flash drive')],
-	                ['yandex_disk', _('Yandex Disk')],
-	                ['google_drive', _('Google Drive')]
+	                ['yandex_disk', _('Yandex Disk (experimental)')],
+	                ['google_drive', _('Google Drive (experimental)')]
 	        ].map(function (item) {
 	                return E('option', {
 	                        'value': item[0],
@@ -349,6 +349,8 @@ function create(deps) {
 	        }));
 
 	        yandexBlock.appendChild(deps.divider(_('Yandex Disk settings')));
+	        yandexBlock.appendChild(E('p', { 'class': 'alert-message warning' },
+	                _('Experimental feature: verify authorization, revocation, storage limits, and restore on your own account before relying on cloud copies.')));
 	        yandexBlock.appendChild(deps.sectionInputField(
 	                'cloud',
 	                _('Yandex Disk login'),
@@ -390,6 +392,8 @@ function create(deps) {
 	        yandexBlock.appendChild(yandexDiskMaintenancePanel());
 
 	        googleBlock.appendChild(deps.divider(_('Google Drive settings')));
+	        googleBlock.appendChild(E('p', { 'class': 'alert-message warning' },
+	                _('Experimental feature: verify authorization, revocation, storage limits, and restore on your own account before relying on cloud copies.')));
 	        googleBlock.appendChild(deps.sectionInputField(
 	                'gdrive',
 	                _('Google OAuth client ID'),

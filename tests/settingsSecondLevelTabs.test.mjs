@@ -31,8 +31,8 @@ const application = readFileSync(applicationPath, 'utf8');
 test('AI assistant and router memory live in settings second-level tabs', () => {
   assert.match(overview, /require sheepfold\.features\.settings\.controller as settingsControllerModel/);
   assert.match(settingsController, /settingsSecondaryTabs/);
-  assert.match(navigationState, /\['ai',\s*'AI assistant'\]/);
-  assert.match(navigationState, /\['storage',\s*'Router memory management'\]/);
+  assert.match(navigationState, /\['ai',\s*'AI assistant',\s*'navigationAiAssistant'\]/);
+  assert.match(navigationState, /\['storage',\s*'Router memory management',\s*'navigationStorage'\]/);
   assert.match(settingsController, /panel\('ai', aiView\.render\(\), active\)/);
   assert.match(settingsController, /panel\('storage', storageView\.render\(\), active\)/);
   assert.match(settingsController, /sf-settings-tabs-secondary/);
@@ -68,6 +68,8 @@ test('storage tab exposes cloud storage backends and storage status UI', () => {
   assert.match(storagePanel, /function logStorageLocationField/);
   assert.match(storagePanel, /yandex_disk/);
   assert.match(storagePanel, /google_drive/);
+  assert.match(storagePanel, /Yandex Disk \(experimental\)/);
+  assert.match(storagePanel, /Google Drive \(experimental\)/);
   assert.match(storagePanel, /sf-storage-status-lamp/);
   assert.match(storagePanel, /router operational memory, cleared on reboot/);
   assert.match(storagePanel, /yandexDiskMaintenancePanel/);
@@ -85,6 +87,9 @@ test('storage tab exposes cloud storage backends and storage status UI', () => {
   assert.match(storagePanel, /Refresh sync status/);
   assert.doesNotMatch(storagePanel, /RAM only \(recommended\)/);
   assert.doesNotMatch(storagePanel, /\buci\.(get|set|unset|remove)/);
+  assert.match(settingsStorage, /cachePathField\(\)/);
+  assert.match(settingsStorage, /offline_device_retention_days/);
+  assert.match(settingsStorage, /USB flash settings/);
 });
 
 test('secure wrapper uses valid LuCI inheritance', () => {

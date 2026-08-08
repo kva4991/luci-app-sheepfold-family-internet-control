@@ -34,7 +34,7 @@ describe('optional feedback channel', () => {
     const navigation = readPkg('htdocs/luci-static/resources/sheepfold/features/navigation/state.js');
     const parent = read('android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt');
     const childNavigation = read('android-child/app/src/main/java/com/example/sheepfoldchild/ui/MainNavigation.kt');
-    assert.match(navigation, /\['feedback', 'Feedback \/ suggestions'\]/);
+    assert.match(navigation, /\['feedback', 'Feedback \/ suggestions', 'navigationFeedback'\]/);
     assert.match(parent, /R\.string\.tab_feedback/);
     assert.doesNotMatch(childNavigation, /feedback|отзыв/i);
   });

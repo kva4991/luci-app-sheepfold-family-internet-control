@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepfold.example/schemas/ai/review-result.schema.json",
+  "title": "Independent response review result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "decision", "reasons", "failedChecks", "clarifyingQuestions"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "decision": { "enum": ["pass", "revise", "safeFallback", "needsClarification", "needsHumanReview"] },
+    "reasons": {
+      "type": "array",
+      "maxItems": 12,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+    },
+    "failedChecks": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "unsupportedClaim",
+          "privacyBoundary",
+          "ageMismatch",
+          "unsafeAction",
+          "dependencyNudge",
+          "diagnosisOrTreatment",
+          "educationSubstitution",
+          "missingUncertainty",
+          "needsSpecialist"
+        ]
+      }
+    },
+    "clarifyingQuestions": {
+      "type": "array",
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "decision": { "const": "pass" } } },
+      "then": {
+        "properties": {
+          "reasons": { "maxItems": 0 },
+          "failedChecks": { "maxItems": 0 },
+          "clarifyingQuestions": { "maxItems": 0 }
+        }
+      },
+      "else": { "properties": { "reasons": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "decision": { "const": "needsClarification" } } },
+      "then": { "properties": { "clarifyingQuestions": { "minItems": 1 } } },
+      "else": { "properties": { "clarifyingQuestions": { "maxItems": 0 } } }
+    }
+  ]
+}

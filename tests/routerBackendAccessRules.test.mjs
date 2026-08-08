@@ -96,7 +96,7 @@ describe('Router backend access rules', () => {
 
   it('reports the configured policy for newly detected devices', () => {
     assert.match(clientStatus, /new_device_policy/);
-    assert.match(clientStatus, /new_device_policy" = restrict[\s\S]*status=restricted[\s\S]*reason=new_device_policy/);
+    assert.match(clientStatus, /restrict\|restrict_until_configured[\s\S]*status restricted[\s\S]*reason new_device_policy/);
     assert.match(clientStatus, /status=allow[\s\S]*reason=new_device_policy_allow/);
   });
 });

@@ -37,20 +37,46 @@ includeDiagnostics=0|1
 ### Родительский `/api/v1/admin-config`
 
 Авторизованный `GET /cgi-bin/sheepfold-api/api/v1/admin-config` возвращает
-`schemaVersion`, `revision`, отдельную `wifiRevision`, расписания, группы, безопасные
-поля администраторов, итоговое состояние Wi-Fi и редактируемые точки доступа.
+`schemaVersion`, `revision`, отдельную `wifiRevision`, capabilities, расписания,
+группы, безопасные поля администраторов, устройства, политики уведомлений,
+итоговое состояние Wi-Fi, его общее расписание и редактируемые точки доступа.
 `password_hash`, pairing-коды, Bearer-токены и секреты интеграций в ответ не входят.
 Wi-Fi-ключ является узким исключением: он передаётся только уже сопряжённому
 администраторскому APK по HTTPS с проверкой сохранённого отпечатка роутера и нужен
 для QR-кода и редактирования той же сети, которую показывает LuCI.
 
 Запись выполняют POST-подмаршруты `schedule/save`, `schedule/delete`, `group/save`,
-`group/delete`, `wifi/save` и `wifi-control`. Sheepfold UCI payload передаёт
+`group/delete`, `device/save`, `notifications/save`, `wifi/save`,
+`wifi-automation/save` и `wifi-control`. Sheepfold UCI payload передаёт
 `schemaVersion` и `expectedRevision`; Wi-Fi дополнительно передаёт
 `expectedWifiRevision`. Устаревший снимок получает `409 revision_conflict`.
 Backend сериализует изменения одним `flock`, проверяет committed state и держит
 снимок изменяемого файла для отката. Если сохранённый `/etc/config/wireless` не
 удалось применить, прежний файл и прежнее состояние Wi-Fi восстанавливаются.
+
+Реализация разделена по ответственности (§apicon1):
+
+- `sheepfold-api-admin-config` проверяет окружение и диспетчеризует действие;
+- `sheepfold-lib-admin-config-model` только читает UCI, вычисляет ревизии и строит JSON;
+- `...-common` владеет общей блокировкой, optimistic revision и UCI-транзакцией;
+- `...-schedules`, `...-groups`, `...-wifi`, `...-notifications` и `...-devices`
+  проверяют и выполняют команды своих областей.
+
+Доменные файлы подключаются в один shell-процесс: это не отдельные конкурирующие
+commit-точки. Модель чтения не должна записывать UCI, а доменный модуль не должен
+создавать собственный обход общей транзакции.
+
+Для каждой группы ответ содержит вычисляемый `scheduleIds`. Это проекция групповых
+расписаний, чьи `targets` содержат ID секции группы, а не самостоятельное поле UCI.
+`POST group/save` меняет связи только при `scheduleIdsPresent=1`; поле `scheduleIds`
+содержит разделённые запятыми ID групповых расписаний. Отсутствие признака сохраняет
+существующие связи для совместимости со старым APK. Расписание устройства передать в
+этом поле нельзя (§grpsch1).
+При изменении устройства UCI записывается до обновления firewall. Если UCI полностью
+совпадает с запросом, но runtime-обновление не удалось, ответ остаётся успешным и
+содержит `mutation.runtimeApplied=false`; APK показывает, что настройки сохранены,
+но применение нужно повторить. Ошибка до полного сохранения возвращается как ошибка,
+поэтому частичное состояние не маскируется под успех.
 Администраторские устройства запрещены как цели расписаний и участники семейных групп.
 
 APK не выпускает административный QR. Сопряжение новых администраторских устройств
@@ -729,6 +755,12 @@ Backend роутера обязан:
 {
   "wifiRevision": "sha256-of-wireless-uci",
   "wifiEnabled": true,
+  "wifiAutomation": {
+    "enableMode": "never",
+    "enableTime": "07:00",
+    "disableMode": "time",
+    "disableTime": "23:00"
+  },
   "wifiNetworks": [
     {
       "section": "default_radio0",
@@ -793,7 +825,7 @@ Backend принимает только существующую `wifi-iface`, �
 `confirm=1`; перед выключением APK предупреждает, что телефон может потерять
 соединение с роутером.
 
-### PATCH `/api/v1/wifi/automation`
+### POST `/api/v1/admin-config/wifi-automation/save`
 
 Настройки автоматического включения/выключения всего Wi-Fi.
 
@@ -801,18 +833,21 @@ Backend принимает только существующую `wifi-iface`, �
 
 Текст дисклеймера должен объяснять: когда Wi-Fi отключится, через телефон, подключённый только по Wi-Fi, пользователь не сможет включить его обратно; заранее должен быть настроен мессенджер или действие кнопки WPS для включения Wi-Fi вне расписания.
 
-```json
-{
-  "autoEnable": {
-    "mode": "never",
-    "time": "07:00"
-  },
-  "autoDisable": {
-    "mode": "time",
-    "time": "23:00"
-  }
-}
+Запрос использует тот же `application/x-www-form-urlencoded`, optimistic revision
+и UCI-транзакцию, что другие изменения `admin-config`:
+
+```text
+schemaVersion=1
+expectedRevision=<revision из GET>
+enableMode=never
+enableTime=07:00
+disableMode=time
+disableTime=23:00
+confirmRisk=1
 ```
+
+`confirmRisk=1` обязателен при `disableMode=time`; это дополнительная backend-защита
+от случайного вызова, но она не заменяет десятисекундное предупреждение в UI.
 
 `mode`:
 

@@ -293,6 +293,20 @@ function create(deps) {
 		});
 	}
 
+	function revokeSessions(admin, button) {
+		var question = _('Terminate all phone sessions for administrator') + ' «' + admin.name + '»? ' +
+			_('The account and assigned devices will remain, but every phone will have to pair again.');
+		if (!deps.confirm(question))
+			return Promise.resolve(false);
+		return deps.actions.execute({
+			key: 'administrator-revoke-sessions:' + String(admin.login || '').toLowerCase(),
+			button: button,
+			args: ['revoke-tokens', admin.login],
+			successMessage: _('All administrator phone sessions have been terminated.'),
+			errorMessage: _('Could not terminate administrator sessions.')
+		}).then(function () { return true; }).catch(function () { return false; });
+	}
+
 	function renderRow(admin) {
 		var devicesCell = E('div', {}, deviceList(admin));
 		return E('div', {
@@ -304,6 +318,9 @@ function create(deps) {
 				deps.iconButton(_('Configure'), 'actionSettings', 'neutral', function () { showSettings(admin); }),
 				deps.iconButton(_('Bind devices'), 'actionLink', 'neutral', function () {
 					showBindings(admin, function (actual) { devicesCell.replaceChildren(deviceList(actual || admin)); });
+				}),
+				deps.iconButton(_('Terminate all sessions'), 'actionSignOut', 'danger', function (event) {
+					revokeSessions(admin, event.currentTarget);
 				})
 			])
 		]);
@@ -314,7 +331,7 @@ function create(deps) {
 
 	return {
 		load: load, administrators: administrators, isAdminDevice: isAdminDevice, canBind: canBind,
-		byDeepLink: byDeepLink, showSettings: showSettings, showBindings: showBindings,
+		byDeepLink: byDeepLink, showSettings: showSettings, showBindings: showBindings, revokeSessions: revokeSessions,
 		reloadAndRefreshDevices: reloadAndRefreshDevices, renderRow: renderRow, render: render
 	};
 }

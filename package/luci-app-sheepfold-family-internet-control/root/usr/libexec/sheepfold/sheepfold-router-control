@@ -14,6 +14,7 @@ FEEDBACK="/usr/libexec/sheepfold/sheepfold-feedback"
 IPV6_CONTROL="/usr/libexec/sheepfold/sheepfold-ipv6-control"
 CHILD_WIFI_MONITOR="/usr/libexec/sheepfold/sheepfold-child-wifi-monitor"
 TLS_FINGERPRINT="/usr/libexec/sheepfold/sheepfold-tls-fingerprint"
+LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
 TOKEN_STATE_DIR="/etc/sheepfold/tokens"
 TOKEN_RUNTIME_LINK="/tmp/sheepfold/tokens"
 
@@ -159,11 +160,17 @@ token_login() {
 }
 
 revoke_tokens() {
-    local login token_file file_login
+    local login token_file file_login revoked actor
     login="${1:-}"
+    revoked=0
 
     if [ -z "$login" ]; then
-        rm -f "$TOKEN_STATE_DIR"/* 2>/dev/null || true
+        for token_file in "$TOKEN_STATE_DIR"/*; do
+            [ -f "$token_file" ] || continue
+            rm -f "$token_file" 2>/dev/null || true
+            revoked=$((revoked + 1))
+        done
+        printf 'revoked=%s\n' "$revoked"
         return 0
     fi
 
@@ -175,7 +182,14 @@ revoke_tokens() {
         file_login="$(token_file_get "$token_file" login)"
         [ "$file_login" = "$login" ] || continue
         rm -f "$token_file" 2>/dev/null || true
+        revoked=$((revoked + 1))
     done
+
+    actor="${SHEEPFOLD_ACTION_ACTOR:-Sheepfold API}"
+    if [ -x "$LOG_HELPER" ]; then
+        "$LOG_HELPER" "$actor: завершены все телефонные сеансы администратора $login; отозвано токенов: $revoked" >/dev/null 2>&1 || true
+    fi
+    printf 'revoked=%s\n' "$revoked"
 }
 
 revoke_device_tokens() {

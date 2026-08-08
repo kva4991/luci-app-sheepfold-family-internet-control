@@ -190,6 +190,7 @@ export const testCategories = Object.freeze({
     'firewallDomainPolicyRuntime.test.mjs',
     'firewallIntegration.test.mjs',
     'installLanguage.test.mjs',
+    'installSettingsPreservation.test.mjs',
     'logStorage.test.mjs',
     'lockCommon.test.mjs',
     'packageManagerAdapter.test.mjs',
@@ -323,6 +324,7 @@ export const testCategories = Object.freeze({
     'telegramConfirmation.test.mjs',
   ],
   ai: [
+    'aiServerCoreExperiment.test.mjs',
     'overviewFinalRuntime.test.mjs',
     'overviewFinalAudit.test.mjs',
     'overviewFinalization.test.mjs',
@@ -347,6 +349,7 @@ export const testCategories = Object.freeze({
     'runtimeCompatibilityMatrix.test.mjs',
     'deprecationGuards.test.mjs',
     'installLanguage.test.mjs',
+    'installSettingsPreservation.test.mjs',
     'liveRouterHarness.test.mjs',
     'luciAssetVersioning.test.mjs',
     'iconCatalog.test.mjs',

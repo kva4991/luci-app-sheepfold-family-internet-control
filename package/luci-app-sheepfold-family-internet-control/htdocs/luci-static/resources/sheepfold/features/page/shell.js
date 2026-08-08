@@ -127,12 +127,15 @@ function create(deps) {
 
 	function tabs(definitions, active, className, dataName, onSelect) {
 		return E('div', { 'class': 'sf-tabs ' + (className || '') }, definitions.map(function (tab) {
+			var icon = tab[2] ? deps.icon(tab[2]) : null;
 			var attrs = {
 				'class': 'sf-tab ' + (className ? className.replace(/-tabs\b/g, '-tab') : '') + (active === tab[0] ? ' active' : ''),
 				'click': function (event) { event.preventDefault(); onSelect(event.currentTarget, tab[0]); }
 			};
 			attrs['data-' + dataName] = tab[0];
-			return E('button', attrs, _(tab[1]));
+			if (icon)
+				icon.classList.add('sf-tab-icon');
+			return E('button', attrs, [icon || '', E('span', { 'class': 'sf-tab-label' }, _(tab[1]))]);
 		}));
 	}
 

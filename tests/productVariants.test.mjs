@@ -167,6 +167,13 @@ describe('product variant boundary §prodvar', () => {
       assert.ok(ai.data.has('www/luci-static/resources/sheepfold/features/devices/responsive.css'));
       assert.ok(standard.data.has('usr/libexec/sheepfold/sheepfold-lib-form'));
       assert.ok(ai.data.has('usr/libexec/sheepfold/sheepfold-lib-form'));
+      for (const moduleName of [
+        'model', 'common', 'schedules', 'groups', 'wifi', 'notifications', 'devices',
+      ]) {
+        const modulePath = `usr/libexec/sheepfold/sheepfold-lib-admin-config-${moduleName}`;
+        assert.ok(standard.data.has(modulePath), `${modulePath} отсутствует в Standard IPK`);
+        assert.ok(ai.data.has(modulePath), `${modulePath} отсутствует в AI Support IPK`);
+      }
       assert.ok(!standard.data.has('usr/libexec/sheepfold/sheepfold-lib-json'));
       assert.ok(ai.data.has('usr/libexec/sheepfold/sheepfold-lib-json'));
       assert.doesNotMatch(standard.data.get('www/luci-static/resources/sheepfold/features/devices/editor.js').toString('utf8'), /activity_log_enabled|activityLogEnabled|activityLogField/);

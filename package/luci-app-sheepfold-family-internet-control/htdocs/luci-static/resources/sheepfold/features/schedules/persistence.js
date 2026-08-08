@@ -93,6 +93,15 @@ function create(deps) {
 	function remove(section) {
 		return persistAndRun(function () {
 			var current = requireScheduleSection(section['.name']);
+			// После миграции group.schedules отсутствует, но очистка оставлена для
+			// старого конфига, который мог попасть на роутер без package postinst. §grpsch1
+			deps.persistence.sections('sheepfold', 'group').forEach(function (group) {
+				var remaining = deps.listValues(group.schedules).filter(function (scheduleId) {
+					return scheduleId !== current['.name'];
+				});
+				if (remaining.length !== deps.listValues(group.schedules).length)
+					deps.persistence.replaceList('sheepfold', group['.name'], 'schedules', remaining);
+			});
 			deps.uci.remove('sheepfold', current['.name']);
 			return { sectionName: current['.name'], removed: true };
 		});

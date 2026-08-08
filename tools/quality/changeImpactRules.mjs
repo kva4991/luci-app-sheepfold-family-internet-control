@@ -61,6 +61,15 @@ export const checkCatalog = Object.freeze({
 
 export const impactRules = Object.freeze([
   Object.freeze({
+    id: 'aiServerCoreExperiment',
+    area: 'Экспериментальное серверное ядро ИИ',
+    pattern: /^experimental\/(?:README\.ru\.md$|ai-server-core\/)/,
+    categories: ['ai', 'security'],
+    checks: ['docs'],
+    risk: 'high',
+    review: 'Проверить fail-closed ворота, приватность, tenant-разделение, строгие схемы и отсутствие связи с поставкой IPK/APK.',
+  }),
+  Object.freeze({
     id: 'projectIcons',
     area: 'Единый каталог значков',
     pattern: /(?:^icons\/|^scripts\/generateIconCatalog\.mjs$|\/sheepfold\/shared\/icon-registry\.js$|\/sheepfold\/shared\/icons\.js$|^docs\/icon-catalog\.ru\.md$|0017-central-project-icon-catalog)/,
@@ -113,6 +122,15 @@ export const impactRules = Object.freeze([
     checks: ['routerReadOnly'],
     risk: 'high',
     review: 'Проверить конфликт расписаний, protected groups и границу административного сопряжения.',
+  }),
+  Object.freeze({
+    id: 'countryProfiles',
+    area: 'Профили стран',
+    pattern: /root\/usr\/share\/sheepfold\/country-profiles\/[^/]+\.json$/,
+    categories: ['backendFast', 'packaging', 'sites'],
+    checks: ['routerReadOnly'],
+    risk: 'high',
+    review: 'Проверить JSON-схему, аварийно-полезные сайты, NTP-рекомендации и безопасную миграцию выбранного профиля.',
   }),
   Object.freeze({
     id: 'routerBackend',

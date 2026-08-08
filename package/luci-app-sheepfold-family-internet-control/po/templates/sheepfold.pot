@@ -4174,6 +4174,54 @@ msgstr ""
 msgid "Could not obtain device status."
 msgstr ""
 
+msgid "Automation actions"
+msgstr ""
+
+msgid "Mode"
+msgstr ""
+
+msgid "Maximum automation"
+msgstr ""
+
+msgid "Selective automation"
+msgstr ""
+
+msgid "Maximum automation applies the recommended automatic behavior to all settings below. Selective automation lets you configure each setting separately."
+msgstr ""
+
+msgid "Other country"
+msgstr ""
+
+msgid "Unknown automation mode."
+msgstr ""
+
+msgid "Wi-Fi automation"
+msgstr ""
+
+msgid "Yandex Disk (experimental)"
+msgstr ""
+
+msgid "Google Drive (experimental)"
+msgstr ""
+
+msgid "Experimental feature: verify authorization, revocation, storage limits, and restore on your own account before relying on cloud copies."
+msgstr ""
+
+msgid "Terminate all sessions"
+msgstr ""
+
+msgid "Terminate all phone sessions for administrator"
+msgstr ""
+
+msgid "The account and assigned devices will remain, but every phone will have to pair again."
+msgstr ""
+
+msgid "All administrator phone sessions have been terminated."
+msgstr ""
+
+msgid "Could not terminate administrator sessions."
+msgstr ""
+
 msgid "Online: now (seen in the last 15 minutes)"
 msgstr ""
 

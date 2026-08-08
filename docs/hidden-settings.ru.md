@@ -23,6 +23,7 @@ UCI-параметры и секции Sheepfold, которые **сущест�
 | `log_days`, `log_max_dir_kb`, `log_max_device_kb` | `global` | Лимиты приватных журналов AI Support |
 | `activity_log_enabled` | `device` / `group` | Локальная область сбора; действует только вместе с глобальным `ai_individual_logs=1` |
 | `no_restrictions_auto_assign` | `global` | Автоназначение в «Без ограничений»; задаётся только вместе с `detection_mode` |
+| `personal_devices_auto_assign` | `global` | Автоназначение в «Персональные устройства»; входит в профиль максимальной автоматизации |
 | `detector_watch_interval_seconds` | `global` | Интервал чтения текущего ARP/Wi-Fi/DHCP online-снимка; 10 секунд по умолчанию (§detlife1) |
 | `detector_offline_grace_seconds` | `global` | Grace-период 90 секунд перед реальным offline; подавляет ложные новые подключения из-за сна Wi-Fi/roaming, backend ограничивает 30-900 (§detlife1) |
 | `detector_interval_seconds` | `global` | Страховочный проход только по подтверждённо online-устройствам; 86400 секунд (раз в сутки) по умолчанию (§detlife1) |
@@ -51,7 +52,7 @@ UCI-параметры и секции Sheepfold, которые **сущест�
 | `blocked_page_port`, `blocked_page_enabled` | `global` | Страница блокировки HTTP |
 | `pairing_diagnostics` | `global` | Расширенный RAM-журнал QR-сопряжения (`0` по умолчанию, `1` только на время диагностики) |
 | `block_on_boot` | `global` | Глобальная блокировка при загрузке |
-| `auto_configure` | `global` | Включена автонастройка; в UI только `detection_mode` |
+| `auto_configure` | `global` | Служебная часть видимой настройки автонастройки новых устройств |
 | `description` | `list` / `group` | Служебные описания секций |
 | `protected`, `personal`, `auto_assignable`, `allowlist_only` | `group` | Часть полей групп задаётся при создании, не все редактируются в модалке |
 | `password_hash`, `password_setup_required`, `role` | `administrator` | Пароль и роль; в overview нет редактора пароля |
@@ -86,7 +87,7 @@ UCI-параметры и секции Sheepfold, которые **сущест�
 
 ## Отображаются в LuCI (для сверки)
 
-`language`, `country_profile`, `new_device_policy`, `detection_mode`, `device_monitoring_mode`, `update_check_install_mode`, `domain_allowlist_for_blocklist`, `site_*`, `site_filter_backend`, `adguard_auto_manage`, `adguard_health_interval_seconds`, AdGuard Home (`url`, `username`, `password`), `app_port`, `sim_change_notifications`, `child_wifi_network_notifications`, messenger tokens, `integration_mode`, emergency sites, Wi-Fi auto, NTP/timezone, WPS, LED, `log_storage`, log retention, offline cleanup, USB, Yandex Disk (`login`, `password`, `root_folder`, `quota_mb`), AI keys/flags, `export_mode`, `blocked_page_text`, группы/устройства/списки MAC.
+`language`, `country_profile`, `automation_mode`, `new_device_policy`, `detection_mode`, `device_monitoring_mode`, `update_check_install_mode`, `domain_allowlist_for_blocklist`, `site_*`, `site_filter_backend`, `adguard_auto_manage`, `adguard_health_interval_seconds`, AdGuard Home (`url`, `username`, `password`), `app_port`, `sim_change_notifications`, `child_wifi_network_notifications`, messenger tokens, `integration_mode`, emergency sites, Wi-Fi auto, NTP/timezone, WPS, LED, `log_storage`, log retention, offline cleanup, USB, Yandex Disk (`login`, `password`, `root_folder`, `quota_mb`), AI keys/flags, `export_mode`, `blocked_page_text`, группы/устройства/списки MAC.
 
 ## Исторические ловушки UI
 

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepfold.example/schemas/ai/action-draft.schema.json",
+  "title": "Untrusted action proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["actionId", "actionType", "summary", "arguments", "approval", "expiresAt"],
+  "properties": {
+    "actionId": { "type": "string", "minLength": 8, "maxLength": 80 },
+    "actionType": { "enum": ["applyExistingSchedule", "assignOrdinaryGroup", "draftMessage", "suggestAppointment", "other"] },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "arguments": { "type": "object" },
+    "approval": { "enum": ["required", "autoModeEligible", "forbidden"] },
+    "expiresAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "scheduleArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheduleId", "targetType", "targetId"],
+      "properties": {
+        "scheduleId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "targetType": { "enum": ["device", "group"] },
+        "targetId": { "type": "string", "minLength": 1, "maxLength": 80 }
+      }
+    },
+    "groupArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deviceId", "groupId"],
+      "properties": {
+        "deviceId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "groupId": { "type": "string", "minLength": 1, "maxLength": 80 }
+      }
+    },
+    "messageArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recipientRef", "draftText"],
+      "properties": {
+        "recipientRef": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "draftText": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      }
+    },
+    "appointmentArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["specialty", "reason"],
+      "properties": {
+        "specialty": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "forbiddenArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "actionType": { "const": "applyExistingSchedule" } } },
+      "then": {
+        "properties": {
+          "arguments": { "$ref": "#/$defs/scheduleArgs" },
+          "approval": { "enum": ["required", "autoModeEligible"] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "actionType": { "const": "assignOrdinaryGroup" } } },
+      "then": {
+        "properties": {
+          "arguments": { "$ref": "#/$defs/groupArgs" },
+          "approval": { "enum": ["required", "autoModeEligible"] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "actionType": { "const": "draftMessage" } } },
+      "then": {
+        "properties": {
+          "arguments": { "$ref": "#/$defs/messageArgs" },
+          "approval": { "const": "required" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "actionType": { "const": "suggestAppointment" } } },
+      "then": {
+        "properties": {
+          "arguments": { "$ref": "#/$defs/appointmentArgs" },
+          "approval": { "const": "required" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "actionType": { "const": "other" } } },
+      "then": {
+        "properties": {
+          "arguments": { "$ref": "#/$defs/forbiddenArgs" },
+          "approval": { "const": "forbidden" }
+        }
+      }
+    }
+  ]
+}

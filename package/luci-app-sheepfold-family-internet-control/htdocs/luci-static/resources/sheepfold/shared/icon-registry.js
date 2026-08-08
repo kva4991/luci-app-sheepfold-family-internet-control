@@ -65,6 +65,221 @@ var definitions = {
 		],
 		"thinPaths": []
 	},
+	"actionSignOut": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M10 4H4v16h6",
+			"M14 8l4 4-4 4",
+			"M18 12H8"
+		],
+		"thinPaths": []
+	},
+	"navigationControl": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M12 2v10",
+			"M6.3 5.3a8 8 0 1 0 11.4 0"
+		],
+		"thinPaths": []
+	},
+	"navigationMenu": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M4 4h6v6H4z",
+			"M14 4h6v6h-6z",
+			"M4 14h6v6H4z",
+			"M14 14h6v6h-6z"
+		],
+		"thinPaths": []
+	},
+	"navigationDevices": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M3 4h13v10H3z",
+			"M8 18h3",
+			"M9.5 14v4",
+			"M18 7h3v13h-6v-4h3z"
+		],
+		"thinPaths": []
+	},
+	"navigationLists": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M8 6h13",
+			"M8 12h13",
+			"M8 18h13",
+			"M3 6l1 1 2-2",
+			"M3 12l1 1 2-2",
+			"M3 18l1 1 2-2"
+		],
+		"thinPaths": []
+	},
+	"navigationAllowlist": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z",
+			"M8.5 12l2.2 2.2 4.8-5"
+		],
+		"thinPaths": []
+	},
+	"navigationBlocklist": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z",
+			"M9 9l6 6",
+			"M15 9l-6 6"
+		],
+		"thinPaths": []
+	},
+	"navigationSchedules": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M4 5h16v15H4z",
+			"M8 3v4",
+			"M16 3v4",
+			"M4 9h16",
+			"M12 12v3l2 1"
+		],
+		"thinPaths": []
+	},
+	"navigationGroups": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",
+			"M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+			"M22 21v-2a4 4 0 0 0-3-3.9",
+			"M16 3.1a4 4 0 0 1 0 7.8"
+		],
+		"thinPaths": []
+	},
+	"navigationAdministrators": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z",
+			"M12 8a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z",
+			"M8.5 17a3.5 3.5 0 0 1 7 0"
+		],
+		"thinPaths": []
+	},
+	"navigationWifi": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M3 9a14 14 0 0 1 18 0",
+			"M6 12a9 9 0 0 1 12 0",
+			"M9 15a4.5 4.5 0 0 1 6 0",
+			"M12 19h.01"
+		],
+		"thinPaths": []
+	},
+	"navigationAiAssistant": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M9.5 4A3.5 3.5 0 0 0 6 7.5v.7A3.8 3.8 0 0 0 5 15.5v.5a3 3 0 0 0 5.7 1.3L12 18l1.3 2.8A3 3 0 0 0 19 19v-3.5a3.8 3.8 0 0 0-1-7.3v-.7A3.5 3.5 0 0 0 14.5 4",
+			"M12 4v14",
+			"M8 9h4",
+			"M12 13h4"
+		],
+		"thinPaths": []
+	},
+	"navigationLogs": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M6 3h12v18H6z",
+			"M9 7h6",
+			"M9 11h6",
+			"M9 15h4"
+		],
+		"thinPaths": []
+	},
+	"navigationInformation": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z",
+			"M12 10v7",
+			"M12 7h.01"
+		],
+		"thinPaths": []
+	},
+	"navigationFeedback": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M4 4h16v12H8l-4 4z",
+			"M8 8h8",
+			"M8 12h5"
+		],
+		"thinPaths": []
+	},
+	"navigationSettings": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.5-2.4 1a8 8 0 0 0-2.6-1.5L14 2h-4l-.4 3a8 8 0 0 0-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 2.6 1.5l.4 3h4l.4-3a8 8 0 0 0 2.6-1.5l2.4 1 2-3.5z",
+			"M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"
+		],
+		"thinPaths": []
+	},
+	"navigationDonation": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"
+		],
+		"thinPaths": []
+	},
+	"navigationIntegrations": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M8 3h3v4h2V3h3a2 2 0 0 1 2 2v3h3v3h-3v2h3v3h-3v3a2 2 0 0 1-2 2h-3v-4h-2v4H8a2 2 0 0 1-2-2v-3H3v-3h3v-2H3V8h3V5a2 2 0 0 1 2-2z"
+		],
+		"thinPaths": []
+	},
+	"navigationMessenger": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M3 4l18 8-18 8 4-8z",
+			"M7 12h14"
+		],
+		"thinPaths": []
+	},
+	"navigationNotifications": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9",
+			"M10 21h4"
+		],
+		"thinPaths": []
+	},
+	"navigationEmergencySites": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z",
+			"M12 8v8",
+			"M8 12h8"
+		],
+		"thinPaths": []
+	},
+	"navigationMisc": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M4 6h8",
+			"M16 6h4",
+			"M4 12h3",
+			"M11 12h9",
+			"M4 18h10",
+			"M18 18h2",
+			"M12 4v4",
+			"M7 10v4",
+			"M14 16v4"
+		],
+		"thinPaths": []
+	},
+	"navigationStorage": {
+		"viewBox": "0 0 24 24",
+		"paths": [
+			"M4 6c0-2 3.6-3 8-3s8 1 8 3-3.6 3-8 3-8-1-8-3z",
+			"M4 6v6c0 2 3.6 3 8 3s8-1 8-3V6",
+			"M4 12v6c0 2 3.6 3 8 3s8-1 8-3v-6"
+		],
+		"thinPaths": []
+	},
 	"sortUnsorted": {
 		"viewBox": "0 0 24 24",
 		"paths": [

@@ -86,16 +86,19 @@ valid_mac "$client_mac" || {
 device_section="$(device_section_for_mac "$client_mac" 2>/dev/null || true)"
 [ -n "$device_section" ] || {
     new_device_policy="$(uci -q get sheepfold.global.new_device_policy 2>/dev/null || printf allow)"
-    if [ "$new_device_policy" = restrict ]; then
-        print_kv status restricted
-        print_kv reason new_device_policy
-    else
-        # Пока detector создаёт карточку, реальный доступ уже определяется
-        # глобальной политикой новых устройств. Нельзя показывать ребёнку
-        # «неизвестно» или «отключено», когда firewall пропускает трафик.
-        print_kv status allow
-        print_kv reason new_device_policy_allow
-    fi
+    case "$new_device_policy" in
+        restrict|restrict_until_configured)
+            print_kv status restricted
+            print_kv reason new_device_policy
+            ;;
+        *)
+            # Пока detector создаёт карточку, реальный доступ уже определяется
+            # глобальной политикой новых устройств. Нельзя показывать ребёнку
+            # «неизвестно» или «отключено», когда firewall пропускает трафик.
+            print_kv status allow
+            print_kv reason new_device_policy_allow
+            ;;
+    esac
     print_kv mac "$client_mac"
     exit 0
 }
@@ -110,7 +113,10 @@ device_group="$(uci -q get "sheepfold.$device_section.group" 2>/dev/null || true
 no_restrictions_group="$(uci -q get sheepfold.no_restrictions.name 2>/dev/null || printf 'No restrictions')"
 global_block="$(uci -q get sheepfold.global.block_on_boot 2>/dev/null || printf 0)"
 new_device_policy="$(uci -q get sheepfold.global.new_device_policy 2>/dev/null || printf allow)"
-[ "$new_device_policy" = restrict ] || new_device_policy=allow
+case "$new_device_policy" in
+    restrict|restrict_until_configured) new_device_policy=restrict ;;
+    *) new_device_policy=allow ;;
+esac
 now="$(date +%s)"
 
 case "$temp_access_until" in ''|*[!0-9]*) temp_access_until=0 ;; esac

@@ -281,6 +281,34 @@ ensure_global_option detection_mode 'full'
 ensure_global_option device_monitoring_mode 'automatic'
 ensure_global_option no_restrictions_auto_assign '1'
 ensure_global_option personal_devices_auto_assign '1'
+[ "$(uci -q get sheepfold.global.new_device_policy 2>/dev/null || true)" != 'restrict' ] || \
+        uci -q set sheepfold.global.new_device_policy='restrict_until_configured'
+automation_mode="$(uci -q get sheepfold.global.automation_mode 2>/dev/null || true)"
+if [ -z "$automation_mode" ]; then
+        if [ "$(uci -q get sheepfold.global.new_device_policy 2>/dev/null || printf allow)" = 'allow' ] && \
+           [ "$(uci -q get sheepfold.global.auto_configure 2>/dev/null || printf 1)" = '1' ] && \
+           [ "$(uci -q get sheepfold.global.detection_mode 2>/dev/null || printf full)" = 'full' ] && \
+           [ "$(uci -q get sheepfold.global.device_monitoring_mode 2>/dev/null || printf automatic)" = 'automatic' ] && \
+           [ "$(uci -q get sheepfold.global.no_restrictions_auto_assign 2>/dev/null || printf 1)" = '1' ] && \
+           [ "$(uci -q get sheepfold.global.personal_devices_auto_assign 2>/dev/null || printf 1)" = '1' ]; then
+                automation_mode='maximum'
+        else
+                automation_mode='selective'
+        fi
+        uci -q set sheepfold.global.automation_mode="$automation_mode"
+fi
+case "$automation_mode" in
+        maximum)
+                uci -q set sheepfold.global.new_device_policy='allow'
+                uci -q set sheepfold.global.auto_configure='1'
+                uci -q set sheepfold.global.detection_mode='full'
+                uci -q set sheepfold.global.device_monitoring_mode='automatic'
+                uci -q set sheepfold.global.no_restrictions_auto_assign='1'
+                uci -q set sheepfold.global.personal_devices_auto_assign='1'
+                ;;
+        selective) ;;
+        *) uci -q set sheepfold.global.automation_mode='selective' ;;
+esac
 ensure_global_option detector_watch_interval_seconds '10'
 ensure_global_option detector_interval_seconds '86400'
 ensure_global_option detector_connection_delay_seconds '20'

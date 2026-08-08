@@ -17,7 +17,7 @@
     "quality:structure": "node scripts/inspectStructure.mjs --git origin/main",
     "quality:matrix": "node tools/quality/printRuntimeMatrix.mjs",
     "security:audit:manual": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/security/runVvaharnessAudit.ps1",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node scripts/runAllTests.mjs",
     "test:list": "node scripts/run-test-category.mjs --list",
     "test:category": "node scripts/run-test-category.mjs",
     "test:smoke": "node scripts/run-test-category.mjs smoke",

@@ -29,6 +29,7 @@ const api = readFileSync(
   resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control/root/www/cgi-bin/sheepfold-api'),
   'utf8',
 );
+const updaterSource = readFileSync(updater, 'utf8');
 const testTmp = join(repoRoot, '.build', 'test-tmp');
 mkdirSync(testTmp, { recursive: true });
 const shellPath = process.platform === 'win32'
@@ -83,6 +84,18 @@ function runUpdater(command, env, input = '') {
 }
 
 describe('site list updater resilience', () => {
+  it('allows HTTPS sources and local loopback HTTP only', () => {
+    const validator = updaterSource.slice(
+      updaterSource.indexOf('valid_source_url()'),
+      updaterSource.indexOf('source_record()'),
+    );
+    assert.match(validator, /https:\/\/\*/);
+    assert.match(validator, /http:\/\/127\.0\.0\.1/);
+    assert.match(validator, /vsu_port.*-ge 1/);
+    assert.match(validator, /vsu_port.*-le 65535/);
+    assert.doesNotMatch(validator, /http:\/\/\*/);
+  });
+
   it('keeps valid domains while ignoring malformed individual entries', () => {
     const root = mkdtempSync(join(testTmp, 'sheepfold-list-normalize-'));
     const result = runUpdater('normalize', {

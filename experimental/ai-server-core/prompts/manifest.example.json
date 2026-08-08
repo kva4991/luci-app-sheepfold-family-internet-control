@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "experiment-core-2026-08-08",
+  "createdAt": "2026-08-08T00:00:00Z",
+  "status": "draft",
+  "blocks": [
+    {
+      "blockId": "corePolicy",
+      "version": "0.1.0",
+      "role": "corePolicy",
+      "file": "system-core.ru.md",
+      "sha256": "507fdb004d5a75a044983c8eb181b33e4a6427f967cfc752653c94228c2cfcf3",
+      "owner": "Sheepfold experimental AI",
+      "approvedAt": null,
+      "compatibleSchemas": [1]
+    },
+    {
+      "blockId": "responseReviewer",
+      "version": "0.1.1",
+      "role": "reviewer",
+      "file": "response-reviewer.ru.md",
+      "sha256": "d3a39e947ca5340f75b563571e04a36224141671e26999ec6cace007df551368",
+      "owner": "Sheepfold experimental AI",
+      "approvedAt": null,
+      "compatibleSchemas": [1]
+    },
+    {
+      "blockId": "composerRules",
+      "version": "0.1.0",
+      "role": "composer",
+      "file": "composition.ru.md",
+      "sha256": "a08573865ada198e158db734cd59a8a15222463d4c40b5db32be5e6c749fe631",
+      "owner": "Sheepfold experimental AI",
+      "approvedAt": null,
+      "compatibleSchemas": [1]
+    }
+  ]
+}

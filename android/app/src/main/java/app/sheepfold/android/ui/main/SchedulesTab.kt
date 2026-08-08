@@ -44,7 +44,7 @@ import app.sheepfold.android.router.RouterSchedule
 import app.sheepfold.android.router.RouterTimeRange
 import kotlinx.coroutines.launch
 
-private val weekdayDefinitions = listOf(
+internal val weekdayDefinitions = listOf(
     "mon" to R.string.weekday_mon,
     "tue" to R.string.weekday_tue,
     "wed" to R.string.weekday_wed,
@@ -81,7 +81,11 @@ fun SchedulesTab(
     val deletedText = stringResource(R.string.schedule_deleted_success)
     val copySuffix = stringResource(R.string.action_copy_suffix)
 
-    fun applyMutation(block: suspend () -> RouterAdminConfig, successText: String) {
+    fun applyMutation(
+        block: suspend () -> RouterAdminConfig,
+        successText: String,
+        afterSuccess: () -> Unit = {}
+    ) {
         isSaving = true
         message = null
         scope.launch {
@@ -94,6 +98,7 @@ fun SchedulesTab(
                         successText
                     }
                     messageIsError = updated.mutation?.runtimeApplied == false
+                    afterSuccess()
                 }
                 .onFailure {
                     message = it.message ?: changeFailedText
@@ -118,6 +123,7 @@ fun SchedulesTab(
         Text(stringResource(R.string.schedule_router_contract_note))
         Button(
             onClick = {
+                message = null
                 val firstGroup = groups.firstOrNull()?.section
                 val firstDevice = devices.firstOrNull { !it.isAdministrator }?.id
                 val targetType = if (firstGroup != null) "group" else "device"
@@ -175,7 +181,10 @@ fun SchedulesTab(
                         Text(schedule.timeRanges.joinToString(", ") { "${it.start}–${it.end}" })
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
-                                onClick = { editor = schedule },
+                                onClick = {
+                                    message = null
+                                    editor = schedule
+                                },
                                 enabled = canWrite && !isSaving,
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -183,6 +192,7 @@ fun SchedulesTab(
                             }
                             OutlinedButton(
                                 onClick = {
+                                    message = null
                                     editor = schedule.copy(
                                         section = "",
                                         name = schedule.name + " " + copySuffix
@@ -214,13 +224,17 @@ fun SchedulesTab(
             devices = devices,
             groups = groups,
             isSaving = isSaving,
-            onDismiss = { editor = null },
+            backendError = message.takeIf { messageIsError },
+            onDismiss = {
+                editor = null
+                message = null
+            },
             onSave = { updated ->
                 applyMutation(
                     block = { client.saveSchedule(config, updated) },
-                    successText = savedText
+                    successText = savedText,
+                    afterSuccess = { editor = null }
                 )
-                editor = null
             }
         )
     }
@@ -258,6 +272,7 @@ private fun ScheduleEditorDialog(
     devices: List<RouterDevice>,
     groups: List<RouterGroup>,
     isSaving: Boolean,
+    backendError: String?,
     onDismiss: () -> Unit,
     onSave: (RouterSchedule) -> Unit
 ) {
@@ -308,6 +323,7 @@ private fun ScheduleEditorDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                backendError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 validationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 conflictingSchedule?.let {
                     Text(
@@ -473,55 +489,4 @@ private fun scheduleTargetText(
 private fun scheduleDaysText(schedule: RouterSchedule): String {
     val labels = weekdayDefinitions.filter { it.first in schedule.weekdays }.map { stringResource(it.second) }
     return stringResource(R.string.schedule_days_format, labels.joinToString(", "))
-}
-
-private fun findOppositeScheduleConflict(
-    draft: RouterSchedule,
-    schedules: List<RouterSchedule>
-): String? {
-    if (!draft.enabled) return null
-    val draftTargets = draft.targets.toSet()
-    val draftWindows = scheduleWindows(draft)
-    return schedules.firstOrNull { existing ->
-        existing.enabled &&
-            existing.section != draft.section &&
-            existing.action != draft.action &&
-            existing.targetType == draft.targetType &&
-            existing.targets.any { it in draftTargets } &&
-            windowsOverlap(draftWindows, scheduleWindows(existing))
-    }?.name
-}
-
-private fun scheduleWindows(schedule: RouterSchedule): List<Pair<Int, Int>> {
-    return schedule.weekdays.flatMap { day ->
-        val dayIndex = weekdayDefinitions.indexOfFirst { it.first == day }
-        if (dayIndex < 0) return@flatMap emptyList()
-        schedule.timeRanges.mapNotNull { range ->
-            val start = timeToMinutes(range.start)
-            var end = timeToMinutes(range.end)
-            if (start < 0 || end < 0 || start == end) return@mapNotNull null
-            if (end < start) end += 24 * 60
-            dayIndex * 24 * 60 + start to dayIndex * 24 * 60 + end
-        }
-    }
-}
-
-private fun windowsOverlap(left: List<Pair<Int, Int>>, right: List<Pair<Int, Int>>): Boolean {
-    val week = 7 * 24 * 60
-    return left.any { first ->
-        right.any { second ->
-            listOf(-week, 0, week).any { shift ->
-                first.first < second.second + shift && second.first + shift < first.second
-            }
-        }
-    }
-}
-
-private fun timeToMinutes(value: String): Int {
-    val parts = value.split(':')
-    if (parts.size != 2) return -1
-    val hours = parts[0].toIntOrNull() ?: return -1
-    val minutes = parts[1].toIntOrNull() ?: return -1
-    if (hours !in 0..23 || minutes !in 0..59) return -1
-    return hours * 60 + minutes
 }

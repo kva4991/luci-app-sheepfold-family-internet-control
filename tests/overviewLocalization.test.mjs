@@ -115,4 +115,12 @@ describe('overview localization', () => {
       assert.deepEqual(clientEntries, poEntries, `${jsonPath} differs from ${sourcePath}`);
     }
   });
+
+  it('does not ship question-mark placeholders in the Chinese catalog', () => {
+    const catalog = JSON.parse(readFileSync(zhHansJsonPath, 'utf8'));
+    const placeholders = Object.entries(catalog).filter(([, value]) => /\?\?/.test(value));
+
+    assert.deepEqual(placeholders, []);
+    assert.equal(catalog['Network compatibility'], '网络兼容性');
+  });
 });

@@ -221,7 +221,10 @@ collect_state() {
         now="$(date +%s)"
         global_block="$(uci -q get sheepfold.global.block_on_boot 2>/dev/null || printf 0)"
         new_device_policy="$(uci -q get sheepfold.global.new_device_policy 2>/dev/null || printf allow)"
-        [ "$new_device_policy" = restrict ] || new_device_policy=allow
+        case "$new_device_policy" in
+                restrict|restrict_until_configured) new_device_policy=restrict ;;
+                *) new_device_policy=allow ;;
+        esac
         for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
                 mac="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
                 valid_mac "$mac" || continue

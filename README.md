@@ -19,7 +19,7 @@ It is being built as an OpenWRT router application with a LuCI web interface, ba
 ## Installation
 
 The installer performs the first-run questions, detects AdGuard Home/Podkop, downloads the matching package from the latest stable release, and installs it with the native OpenWrt package manager: `.ipk` through `opkg` on 24.10 and older, or an OpenWrt `.apk` through apk v3 on 25.12 and newer.
-It first asks for application language (`ru` by default, `en` for English), then the Sheepfold product, user-agreement consent, and automatic setup mode. Full automatic setup is the default and may assign confidently detected infrastructure devices to the `No restrictions` group. Reduced mode can be selected explicitly for routers with very little free space; it avoids heavy port checks but can still auto-assign confidently detected infrastructure devices.
+It first asks for application language (`ru` by default, `en` for English), country profile, the Sheepfold product, user-agreement consent, and automation mode. `Maximum automation` is the default and applies the coherent recommended profile for new-device access, full detection, automatic system groups, and identity monitoring. `Selective automation` exposes the individual choices in LuCI and starts with reduced device detection.
 
 ```sh
 wget -O /tmp/sheepfold-install.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/install.sh

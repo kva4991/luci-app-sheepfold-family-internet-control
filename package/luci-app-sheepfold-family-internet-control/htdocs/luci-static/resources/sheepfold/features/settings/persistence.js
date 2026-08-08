@@ -58,6 +58,13 @@ function create(deps) {
 		var match;
 		var username;
 		var password;
+		var automationMode;
+
+		if (hasOwn(options, 'automation_mode')) {
+			automationMode = String(options.automation_mode || '');
+			if (automationMode !== 'maximum' && automationMode !== 'selective')
+				throw new Error(_('Unknown automation mode.'));
+		}
 
 		if (hasOwn(options, 'log_cache_path') &&
 			(!/^\/tmp\/[A-Za-z0-9_./-]+$/.test(options.log_cache_path || '') ||
@@ -124,6 +131,18 @@ function create(deps) {
 	function stage(options) {
 		var values = partition(options);
 
+		if (values.global.automation_mode === 'maximum') {
+			/* Максимальный профиль записывается здесь повторно, чтобы один изменённый
+			 * DOM-контрол не смог сохранить противоречащие скрытые значения. §autoact1 */
+			Object.assign(values.global, {
+				new_device_policy: 'allow',
+				auto_configure: '1',
+				detection_mode: 'full',
+				no_restrictions_auto_assign: '1',
+				personal_devices_auto_assign: '1',
+				device_monitoring_mode: 'automatic'
+			});
+		}
 		if (hasOwn(values.global, 'language'))
 			values.global.language = deps.normalizeLanguage(values.global.language);
 		Object.keys(values.global).forEach(function (option) {

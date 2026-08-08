@@ -20,7 +20,7 @@ function openSettings(deps, groupName, section, onSave) {
 	var nameField = deps.inputControl(_('Group name'), groupName, section && section.protected === '1' ? { 'readonly': 'readonly' } : {});
 	var colorField = deps.inputControl(_('Group color'), deps.groupColor(groupName, section), { 'type': 'color' });
 	var deviceSelector = deps.createDeviceSelector({ selectedIds: deps.currentDeviceIds(groupName) });
-	var scheduleSelector = deps.scheduleCheckboxes(deps.listValues(section && section.schedules));
+	var scheduleSelector = deps.scheduleCheckboxes(groupName, section);
 	var allowlistOnlyField = deps.checkboxControl(
 		_('Allow only selected whitelist sources for this group'),
 		section && section.allowlist_only === '1',

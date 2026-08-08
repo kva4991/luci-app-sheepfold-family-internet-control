@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepfold.example/schemas/ai/memory-draft.schema.json",
+  "title": "Untrusted memory proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["draftId", "subjectRef", "memoryTier", "category", "summary", "provenance", "visibility", "retention", "sourceRefs", "confidence", "counterEvidence", "reviewAt", "confirmationRequired"],
+  "properties": {
+    "draftId": { "type": "string", "minLength": 8, "maxLength": 80 },
+    "subjectRef": {
+      "const": "speaker",
+      "description": "The model may propose memory only for the authenticated speaker. A trusted local gateway resolves the real subject ID."
+    },
+    "memoryTier": { "enum": ["lifeArchive", "importantMemory", "currentTopic"] },
+    "category": { "enum": ["general", "healthReport", "relationship", "event", "workingHypothesis", "secret"] },
+    "summary": { "type": "string", "maxLength": 1500 },
+    "provenance": { "enum": ["userReported", "documentReported", "verifiedExternal", "modelHypothesis"] },
+    "visibility": { "enum": ["self", "familyShared", "sessionOnly"] },
+    "retention": { "enum": ["session", "twoYearsInactive", "reviewRequired", "lifeArchive"] },
+    "sourceRefs": { "type": "array", "maxItems": 20, "uniqueItems": true, "items": { "type": "string", "maxLength": 100 } },
+    "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "counterEvidence": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "type": "string", "maxLength": 800 } },
+    "reviewAt": { "type": ["string", "null"], "format": "date-time" },
+    "confirmationRequired": { "const": true }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "memoryTier": { "const": "lifeArchive" } } },
+      "then": { "properties": { "retention": { "const": "lifeArchive" } } }
+    },
+    {
+      "if": { "properties": { "memoryTier": { "const": "importantMemory" } } },
+      "then": { "properties": { "retention": { "const": "reviewRequired" } } }
+    },
+    {
+      "if": { "properties": { "memoryTier": { "const": "currentTopic" } } },
+      "then": { "properties": { "retention": { "enum": ["session", "twoYearsInactive"] } } }
+    },
+    {
+      "if": { "properties": { "category": { "const": "workingHypothesis" } } },
+      "then": {
+        "properties": {
+          "memoryTier": { "enum": ["importantMemory", "currentTopic"] },
+          "provenance": { "const": "modelHypothesis" },
+          "retention": { "enum": ["reviewRequired", "session", "twoYearsInactive"] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "provenance": { "const": "modelHypothesis" } } },
+      "then": { "properties": { "visibility": { "const": "self" } } }
+    },
+    {
+      "if": { "properties": { "category": { "const": "secret" } } },
+      "then": { "properties": { "visibility": { "const": "self" } } }
+    }
+  ]
+}

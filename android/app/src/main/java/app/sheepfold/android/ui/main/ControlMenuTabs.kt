@@ -1,5 +1,6 @@
 package app.sheepfold.android.ui.main
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,7 +38,8 @@ import app.sheepfold.android.R
 
 data class MainMenuItem(
     val key: String,
-    val title: String
+    val title: String,
+    @DrawableRes val iconRes: Int
 )
 
 @Composable
@@ -146,20 +148,29 @@ fun MenuTab(items: List<MainMenuItem>, onOpen: (String) -> Unit) {
                 shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(14.dp),
-                    verticalArrangement = Arrangement.Center
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(item.title, style = MaterialTheme.typography.titleMedium)
-                    Spacer(
-                        Modifier
-                            .padding(top = 8.dp)
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                    Icon(
+                        painter = painterResource(item.iconRes),
+                        contentDescription = null,
+                        modifier = Modifier.size(34.dp),
+                        tint = MaterialTheme.colorScheme.primary
                     )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                        Text(item.title, style = MaterialTheme.typography.titleMedium)
+                        Spacer(
+                            Modifier
+                                .padding(top = 8.dp)
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                        )
+                    }
                 }
             }
         }

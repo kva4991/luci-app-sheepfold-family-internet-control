@@ -67,7 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
@@ -156,7 +156,10 @@ fun SafeRouterSetupScreen(
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (step) {
-                SetupStep.AGREEMENT -> AgreementStep { step = SetupStep.NETWORK }
+                SetupStep.AGREEMENT -> AgreementStep {
+                    AgreementAcceptanceStore.accept(context)
+                    step = SetupStep.NETWORK
+                }
                 SetupStep.NETWORK -> NetworkStep(
                     state = networkState,
                     discovery = discovery,
@@ -250,7 +253,7 @@ private fun AgreementStep(onNext: () -> Unit) {
                     modifier = Modifier.weight(1f).clickable {
                         opening = true
                         context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(
-                            "https://github.com/kva4991/luci-app-sheepfold-family-internet-control/blob/main/docs/user-agreement.ru.md"
+                            AGREEMENT_URL
                         )))
                         scope.launch { delay(1000); opening = false }
                     }

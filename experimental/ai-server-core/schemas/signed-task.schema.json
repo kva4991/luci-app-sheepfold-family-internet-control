@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepfold.example/schemas/ai/signed-task.schema.json",
+  "title": "Signed AI task transport wrapper",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "compactJws"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "compactJws": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 131072,
+      "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+      "description": "Compact JWS with protected typ, cty, alg and kid headers."
+    }
+  }
+}

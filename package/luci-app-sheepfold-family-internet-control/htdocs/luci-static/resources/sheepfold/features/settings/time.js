@@ -21,6 +21,11 @@ var COUNTRY_PROFILES = {
 		label: 'China',
 		timezone: 'Asia/Shanghai|CST-8',
 		servers: 'cn.pool.ntp.org ntp.aliyun.com time1.cloud.tencent.com'
+	},
+	other: {
+		label: 'Other country',
+		timezone: 'UTC|UTC0',
+		servers: 'pool.ntp.org'
 	}
 };
 
@@ -243,7 +248,7 @@ function create(deps) {
 		render: render,
 		notice: notice,
 		setCountry: function (value) {
-			selectedCountry = COUNTRY_PROFILES[value] ? value : 'ru';
+			selectedCountry = COUNTRY_PROFILES[value] ? value : 'other';
 			updateRecommendationText();
 		}
 	};

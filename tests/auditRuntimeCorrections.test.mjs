@@ -40,7 +40,10 @@ describe('audited runtime corrections §ovaudit1', () => {
     adapter.supplement(grouped, [{ id: '7', mac: 'aa:bb:cc:dd:ee:ff', group: 'Family' }]);
     assert.equal(grouped.Family.length, 1);
     assert.match(adapter.automaticColor('Family'), /^#[0-9a-f]{6}$/i);
+    assert.deepEqual(Array.from(adapter.palette()), ['#111111']);
+    assert.equal(adapter.nextAvailableColor('Family'), '#333333');
     assert.doesNotMatch(source('sheepfold/features/groups/naming.js'), /colorForName/);
+    assert.doesNotMatch(source('sheepfold/features/groups/naming.js'), /#dbeafe/);
   });
 
   it('keeps pre-commit schedule failure on a Promise and emits the original error', async () => {
@@ -59,6 +62,31 @@ describe('audited runtime corrections §ovaudit1', () => {
     assert.equal(typeof result.then, 'function');
     await result;
     assert.deepEqual(notices, [['commit failed', 'warning']]);
+  });
+
+  it('warns a group only about real opposite overlapping schedules', () => {
+    const model = loadModule('sheepfold/features/schedules/model.js');
+    const module = loadModule('sheepfold/features/schedules/controller.js');
+    const schedules = [
+      { '.name': 'block_evening', enabled: '1', action: 'block', target_type: 'group', weekdays: ['mon'], time_ranges: ['20:00-21:00'] },
+      { '.name': 'allow_overlap', enabled: '1', action: 'allow', target_type: 'group', weekdays: ['mon'], time_ranges: ['20:30-21:30'] },
+      { '.name': 'block_overlap', enabled: '1', action: 'block', target_type: 'group', weekdays: ['mon'], time_ranges: ['20:30-21:30'] },
+      { '.name': 'allow_tuesday', enabled: '1', action: 'allow', target_type: 'group', weekdays: ['tue'], time_ranges: ['20:30-21:30'] },
+      { '.name': 'allow_disabled', enabled: '0', action: 'allow', target_type: 'group', weekdays: ['mon'], time_ranges: ['20:30-21:30'] },
+      { '.name': 'allow_night', enabled: '1', action: 'allow', target_type: 'group', weekdays: ['mon'], time_ranges: ['23:00-01:00'] },
+      { '.name': 'block_after_midnight', enabled: '1', action: 'block', target_type: 'group', weekdays: ['tue'], time_ranges: ['00:30-02:00'] },
+    ];
+    const controller = module.create({
+      model,
+      sections: (_config, type) => type === 'schedule' ? schedules : [],
+      listValues: (value) => Array.isArray(value) ? value : value ? [value] : [],
+    });
+
+    assert.equal(controller.hasSelectedConflict(['block_evening', 'allow_overlap']), true);
+    assert.equal(controller.hasSelectedConflict(['block_evening', 'block_overlap']), false);
+    assert.equal(controller.hasSelectedConflict(['block_evening', 'allow_tuesday']), false);
+    assert.equal(controller.hasSelectedConflict(['block_evening', 'allow_disabled']), false);
+    assert.equal(controller.hasSelectedConflict(['allow_night', 'block_after_midnight']), true);
   });
 
   it('rejects asynchronous UCI stage callbacks and cleans the owned local state', async () => {
@@ -134,6 +162,46 @@ describe('audited runtime corrections §ovaudit1', () => {
     await assert.rejects(make([{ '.name': 'p', '.type': 'group', name: 'P', protected: '1' }]).remove('p'), (e) => e.errorCode === 'group_protected');
     await assert.rejects(make([{ '.name': 'g', '.type': 'group', name: 'G' }], [{ '.name': 'd', '.type': 'device', group: 'G' }]).remove('g'), (e) => e.errorCode === 'group_has_devices');
     await assert.rejects(make([{ '.name': 'g', '.type': 'group', name: 'G' }], [], [{ '.name': 's', '.type': 'schedule', target_type: 'group', targets: ['g'] }]).remove('g'), (e) => e.errorCode === 'group_referenced_by_schedule');
+  });
+
+  it('keeps group schedule links in canonical schedule targets and preserves unrelated targets', () => {
+    const module = loadModule('sheepfold/features/groups/persistence.js');
+    const schedules = [
+      { '.name': 'old_rule', '.type': 'schedule', target_type: 'group', targets: ['Old name', 'other_group'] },
+      { '.name': 'new_rule', '.type': 'schedule', target_type: 'group', targets: ['second_group'] },
+      { '.name': 'device_rule', '.type': 'schedule', target_type: 'device', targets: ['7'] },
+      { '.name': 'legacy_rule', '.type': 'schedule', target_type: 'group', targets: [] },
+    ];
+    const listWrites = [];
+    const unsetWrites = [];
+    const adapter = module.create({
+      uci: { unset: (...args) => unsetWrites.push(args) },
+      persistence: {
+        sections: (_config, type) => type === 'schedule' ? schedules : [],
+        replaceList: (_config, section, option, values) => listWrites.push([section, option, Array.from(values)]),
+      },
+      normalizeGroupName: (value) => String(value || ''),
+      listValues: (value) => Array.isArray(value) ? value : [],
+    });
+
+    assert.deepEqual(
+      Array.from(adapter.selectedScheduleIds('group_1', 'Old name', ['legacy_rule'])),
+      ['old_rule', 'legacy_rule'],
+    );
+    adapter.stageScheduleLinks('group_1', {
+      oldName: 'Old name', newName: 'New name', selectedSchedules: ['new_rule'],
+    });
+    assert.deepEqual(listWrites, [
+      ['old_rule', 'targets', ['other_group']],
+      ['new_rule', 'targets', ['second_group', 'group_1']],
+    ]);
+    assert.deepEqual(unsetWrites, [['sheepfold', 'group_1', 'schedules']]);
+    assert.throws(
+      () => adapter.stageScheduleLinks('group_1', {
+        oldName: 'New name', newName: 'New name', selectedSchedules: ['device_rule'],
+      }),
+      (error) => error.errorCode === 'group_schedule_type_forbidden',
+    );
   });
 
   it('uses MAC-only quick-allowlist identity and catches rejected polling reads', () => {

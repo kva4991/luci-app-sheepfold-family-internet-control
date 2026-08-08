@@ -68,7 +68,9 @@ function create(deps) {
 				E('div', { 'class': 'sf-grid two' }, networks.map(box)) :
 				E('div', { 'class': 'sf-note sf-note-warning' },
 					_('No active Wi-Fi networks were found in the router wireless config.')),
-			networks.length ? editor.saveBar() : ''
+			networks.length ? editor.saveBar() : '',
+			deps.automationPanel(),
+			deps.settingsSaveBar(false)
 		]);
 	}
 

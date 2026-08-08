@@ -131,6 +131,13 @@ admin_config_message() {
         protected_group|protected_group_name) printf '%s' 'This system group cannot be deleted or renamed.' ;;
         administrator_group_forbidden) printf '%s' 'Administrator devices cannot be assigned to a family group.' ;;
         administrator_schedule_forbidden) printf '%s' 'Administrator devices cannot be restricted by a schedule.' ;;
+        administrator_device_forbidden) printf '%s' 'Administrator devices must keep administrator access settings.' ;;
+        device_not_found) printf '%s' 'This device no longer exists. Refresh and try again.' ;;
+        device_save_failed) printf '%s' 'The router could not apply the device settings.' ;;
+        invalid_device_name|invalid_device_group|invalid_device_type|invalid_device_status|invalid_device_profile_flag)
+            printf '%s' 'Check the device name, group, type and access status.' ;;
+        invalid_wifi_automation_mode|invalid_wifi_automation_time)
+            printf '%s' 'Check the Wi-Fi automation mode and time.' ;;
         confirmation_required) printf '%s' 'Explicit confirmation is required.' ;;
         wifi_control_failed) printf '%s' 'The router could not apply the Wi-Fi command.' ;;
         wifi_reload_failed) printf '%s' 'Wi-Fi could not restart, so the previous wireless configuration was restored.' ;;
@@ -365,6 +372,27 @@ case "$path_info" in
         require_admin
         read_admin_body
         run_admin_config wifi-control "$ADMIN_BODY"
+        ;;
+    /api/v1/admin-config/wifi-automation/save|/admin-config/wifi-automation/save)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 20 300
+        require_admin
+        read_admin_body
+        run_admin_config wifi-automation-save "$ADMIN_BODY"
+        ;;
+    /api/v1/admin-config/notifications/save|/admin-config/notifications/save)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 20 300
+        require_admin
+        read_admin_body
+        run_admin_config notification-settings-save "$ADMIN_BODY"
+        ;;
+    /api/v1/admin-config/device/save|/admin-config/device/save)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 30 300
+        require_admin
+        read_admin_body
+        run_admin_config device-save "$ADMIN_BODY"
         ;;
     /log)
         [ "$method" = "GET" ] || method_not_allowed

@@ -61,6 +61,18 @@ describe('change impact advisor §impact1', () => {
     assert.equal(unknown.risk, 'medium');
   });
 
+  it('maps the isolated AI server experiment to AI and security checks', () => {
+    const report = inspectChanges([
+      'experimental/ai-server-core/src/sheepfold_ai_core/pipeline.py',
+      'experimental/ai-server-core/modules/memory-and-visibility.ru.md',
+    ]);
+
+    assert.deepEqual(report.categories, ['ai', 'security']);
+    assert.deepEqual(report.unknown, []);
+    assert.equal(report.risk, 'high');
+    assert.ok(report.areas.some((area) => area.name === 'Экспериментальное серверное ядро ИИ'));
+  });
+
   it('recognizes repository entry points instead of reporting avoidable unknown paths', () => {
     const report = inspectChanges([
       '.gitignore',
@@ -117,6 +129,17 @@ describe('change impact advisor §impact1', () => {
     assert.deepEqual(report.unknown, []);
     assert.ok(report.areas.some((area) => area.name === 'Локализация интерфейса'));
     assert.ok(recommendedCommands(report).manual.includes('npm.cmd run router:frontend'));
+  });
+
+  it('maps country profile data to backend, package and site-policy checks', () => {
+    const report = inspectChanges([
+      'package/luci-app-sheepfold-family-internet-control/root/usr/share/sheepfold/country-profiles/other.json',
+    ]);
+
+    assert.deepEqual(report.categories, ['backendFast', 'packaging', 'sites']);
+    assert.deepEqual(report.unknown, []);
+    assert.ok(report.areas.some((area) => area.name === 'Профили стран'));
+    assert.ok(recommendedCommands(report).manual.includes('npm.cmd run router:readOnly'));
   });
 
   it('keeps both sides of a rename and runs an edited test directly', () => {

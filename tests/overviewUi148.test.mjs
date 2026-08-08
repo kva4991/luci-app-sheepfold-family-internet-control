@@ -13,6 +13,7 @@ const wifiCardsPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfol
 const wifiEditorPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/wifi/editor.js');
 const wifiControllerPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/wifi/controller.js');
 const wifiPersistencePath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/wifi/persistence.js');
+const settingsMiscPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/settings/misc.js');
 const logPanelPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/logs/panel.js');
 const pageShellPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/page/shell.js');
 const settingsControllerPath = resolve(packageDir, 'htdocs/luci-static/resources/sheepfold/features/settings/controller.js');
@@ -34,6 +35,7 @@ describe('overview UI release 148', () => {
     const wifiEditor = readFileSync(wifiEditorPath, 'utf8');
     const wifiController = readFileSync(wifiControllerPath, 'utf8');
     const wifiPersistence = readFileSync(wifiPersistencePath, 'utf8');
+    const settingsMisc = readFileSync(settingsMiscPath, 'utf8');
 
     assert.match(overview, /require sheepfold\.features\.wifi\.editor as wifiEditorModel/);
     assert.match(overview, /wifiControllerModel\.create/);
@@ -42,6 +44,11 @@ describe('overview UI release 148', () => {
     assert.match(wifiPersistence, /persistence\.mutate\(\['wireless'\], stage\)/);
     assert.match(wifiPersistence, /deps\.exec\('\/sbin\/wifi', args/);
     assert.match(wifiController, /editor\.saveBar\(\)/);
+    assert.match(wifiController, /deps\.automationPanel\(\)/);
+    assert.match(wifiController, /deps\.settingsSaveBar\(false\)/);
+    assert.match(settingsMisc, /function renderWifiAutomation\(\)/);
+    const miscRender = settingsMisc.slice(settingsMisc.indexOf('function render()'), settingsMisc.indexOf('\n\treturn {'));
+    assert.doesNotMatch(miscRender, /renderWifiAutomation\(\)/);
     assert.match(wifiEditor, /data-wifi-save/);
     assert.match(wifiCards, /enabledInput/);
     assert.match(wifiCards, /current\.enabled !== editor\.original\.enabled/);

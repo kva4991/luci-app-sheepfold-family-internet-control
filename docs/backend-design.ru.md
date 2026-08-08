@@ -18,8 +18,8 @@
 └────────────────────┬────────────────────────┘
                      │ exec
 ┌────────────────────▼────────────────────────┐
-│   /usr/libexec/sheepfold/sheepfold-router-   │  бизнес-логика
-│   control  (POSIX shell/ucode)               │
+│   router-control / api-admin-config          │  бизнес-логика
+│   и их доменные POSIX shell-модули            │
 └────────┬────────────────────┬───────────────┘
          │ uci                │ nftables/iptables
 ┌────────▼────┐    ┌──────────▼──────────────┐
@@ -63,6 +63,13 @@ Sheepfold использует штатные package-author drop-in файлы 
 ---
 
 ## CGI-эндпоинты (`/cgi-bin/sheepfold-api/`)
+
+CGI-шлюз выполняет аутентификацию, rate limit и ограничение тела запроса. Простые
+операционные команды передаются центральному `sheepfold-router-control`. Версионные
+редакторы родительского APK идут через `sheepfold-api-admin-config`: его read-model,
+общая UCI-транзакция и домены расписаний, групп, Wi-Fi, уведомлений и устройств
+разделены на `sheepfold-lib-admin-config-*`, но загружаются в один процесс. Поэтому
+блокировка, revision check, commit и rollback остаются едиными (§apicon1).
 
 ### Обязательные эндпоинты MVP
 

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepfold.example/schemas/ai/risk-assessment.schema.json",
+  "title": "Risk assessment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "level", "concerns", "normalFlowAllowed", "humanReviewRequired", "safeNextSteps"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "level": { "enum": ["routine", "sensitive", "high", "immediate"] },
+    "concerns": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "observation", "uncertainty"],
+        "properties": {
+          "category": { "type": "string", "maxLength": 80 },
+          "observation": { "type": "string", "maxLength": 1200 },
+          "uncertainty": { "type": "string", "maxLength": 800 }
+        }
+      }
+    },
+    "normalFlowAllowed": { "type": "boolean" },
+    "humanReviewRequired": { "type": "boolean" },
+    "safeNextSteps": { "type": "array", "maxItems": 5, "items": { "type": "string", "maxLength": 800 } }
+  }
+}

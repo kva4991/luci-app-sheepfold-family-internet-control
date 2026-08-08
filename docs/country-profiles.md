@@ -30,11 +30,15 @@ Country profiles prevent hardcoding Russia-specific assumptions into the whole p
 
 ## Implemented Storage
 
-Profiles `ru`, `by`, and `cn` live in `root/usr/share/sheepfold/country-profiles/*.json`.
+Profiles `ru`, `by`, `cn`, and the neutral `other` live in `root/usr/share/sheepfold/country-profiles/*.json`.
 The `sheepfold-country-profile` backend parses them with OpenWrt `jshn`, validates
 the schema, domains, field sizes, and duplicates, then replaces only UCI sections
 marked with `source=country_profile`. The country is selected during installation
 and under `Settings -> General`.
+
+The `other` profile intentionally has no factory emergency-site entries. It removes
+entries owned by the previous country profile while preserving family-created entries
+and exclusions, and it makes no country-specific legal or network-availability claim.
 
 ## Russia Profile
 
@@ -66,14 +70,15 @@ Russia starter list:
 | `mos.ru` | Moscow public services | City services for Moscow users. |
 | `school.mos.ru` | Moscow school portal | Moscow Electronic School. |
 | `dnevnik.ru` | School diary | Electronic diary and school communication. |
-| `ya.ru` | Yandex simple search | Minimal Yandex search entrypoint. |
 | `2gis.ru` | 2GIS maps | Maps, addresses, organizations, and routes. |
 | `mchs.gov.ru` | EMERCOM of Russia | Official emergency and safety information. |
 | `psi.mchs.gov.ru` | EMERCOM psychological aid | Crisis assistance information. |
 | `minzdrav.gov.ru` | Russian Ministry of Health | Official public health information. |
 | `rzd.ru` | Russian Railways | Train schedules and travel information. |
 
-Do not add broad `yandex.ru` to the Russia starter list. See `AGENTS.md` and `docs/domain-allowlist.md`.
+Do not add `ya.ru` or broad `yandex.ru` to the Russia starter list. Search results
+provide a path to much broader external content; a parent may add a domain manually.
+See `AGENTS.md` and `docs/domain-allowlist.md`.
 
 ### Transport Suggestions
 

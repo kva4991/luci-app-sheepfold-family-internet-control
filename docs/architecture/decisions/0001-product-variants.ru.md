@@ -17,7 +17,7 @@
 
 ## Решение
 
-Из общего кода собираются Standard и AI Support с одним внутренним package identity. Android выпускает только родительский и детский APK; AI UI открывается лишь после положительной capability роутера. Переход между редакциями сохраняет UCI-конфиг.
+Из общего кода собираются Standard и AI Support с одним внутренним package identity. Android выпускает только родительский и детский APK; AI UI открывается лишь после положительной capability роутера. Переход между редакциями сохраняет UCI-конфиг. При повторном запуске установщика пустой ответ сохраняет уже установленную редакцию; Standard не может выбираться молча вместо AI Support как заводское значение первого запуска.
 
 ## Последствия
 
@@ -27,7 +27,7 @@
 
 ## Проверка
 
-`productVariants.test.mjs`, `openWrtVariantFeed.test.mjs` и `openWrtBuildWorkflow.test.mjs`. Локальные тесты не заменяют установку release-пакетов на поддерживаемых OpenWrt.
+`productVariants.test.mjs`, `installSettingsPreservation.test.mjs`, `openWrtVariantFeed.test.mjs` и `openWrtBuildWorkflow.test.mjs`. Локальные тесты не заменяют установку release-пакетов на поддерживаемых OpenWrt.
 
 ## Когда пересматривать
 

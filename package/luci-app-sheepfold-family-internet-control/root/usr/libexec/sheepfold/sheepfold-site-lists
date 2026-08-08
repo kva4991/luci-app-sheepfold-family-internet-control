@@ -77,6 +77,32 @@ value_from_file() {
 	sed -n "s/^$key=//p" "$file" 2>/dev/null | sed -n '1p'
 }
 
+valid_source_url() {
+	vsu_url="$1"
+	case "$vsu_url" in
+		https://*)
+			vsu_rest="${vsu_url#https://}"
+			vsu_authority="${vsu_rest%%/*}"
+			[ -n "$vsu_authority" ] || return 1
+			# Учётные данные в URL не нужны источнику списков и легко попадают в
+			# диагностику. Секреты должны храниться отдельным защищённым способом.
+			case "$vsu_authority" in *'@'*) return 1 ;; esac
+			return 0
+			;;
+		http://127.0.0.1|http://127.0.0.1/*)
+			return 0
+			;;
+		http://127.0.0.1:[0-9]*/*)
+			vsu_rest="${vsu_url#http://127.0.0.1:}"
+			vsu_port="${vsu_rest%%/*}"
+			case "$vsu_port" in ''|*[!0-9]*) return 1 ;; esac
+			[ "$vsu_port" -ge 1 ] 2>/dev/null && [ "$vsu_port" -le 65535 ] 2>/dev/null
+			return
+			;;
+		*) return 1 ;;
+	esac
+}
+
 source_record() {
 	line="$(printf '%s' "$1" | trim)"
 	[ -n "$line" ] || return 1
@@ -91,9 +117,9 @@ source_record() {
 			url="$line"
 			;;
 	esac
-	case "$url" in http://*|https://*) ;; *) return 1 ;; esac
 	case "$url" in *[[:space:]]*) return 1 ;; esac
 	[ "${#url}" -le 2048 ] || return 1
+	valid_source_url "$url" || return 1
 	[ -n "$label" ] || label="$url"
 	printf '%s\t%s\n' "$(safe_text "$label")" "$url"
 }

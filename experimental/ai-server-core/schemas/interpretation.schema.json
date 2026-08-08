@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepfold.example/schemas/ai/interpretation.schema.json",
+  "title": "Interpretation result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "normalizedRequest",
+    "hypotheses",
+    "directClaims",
+    "assumptions",
+    "conflicts",
+    "missingInfo",
+    "clarifyingQuestions",
+    "primaryDomain",
+    "confidence"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "normalizedRequest": { "type": "string", "maxLength": 4000 },
+    "hypotheses": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["summary", "confidence", "basis", "alternatives"],
+        "properties": {
+          "summary": { "type": "string", "maxLength": 1200 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "basis": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 500 } },
+          "alternatives": { "type": "array", "maxItems": 4, "items": { "type": "string", "maxLength": 500 } }
+        }
+      }
+    },
+    "directClaims": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 1000 } },
+    "assumptions": { "type": "array", "maxItems": 12, "items": { "type": "string", "maxLength": 1000 } },
+    "conflicts": { "type": "array", "maxItems": 12, "items": { "type": "string", "maxLength": 1000 } },
+    "missingInfo": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 500 } },
+    "clarifyingQuestions": { "type": "array", "maxItems": 3, "items": { "type": "string", "maxLength": 500 } },
+    "primaryDomain": { "enum": ["general", "education", "familySupport", "health", "safety", "router"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}

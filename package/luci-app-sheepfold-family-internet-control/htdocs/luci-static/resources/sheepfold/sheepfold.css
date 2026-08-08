@@ -466,6 +466,10 @@
 
 .sf-tab {
         flex: 1 1 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
         border: 1px solid var(--sf-border);
         background: #fff;
         color: #263141;
@@ -474,6 +478,21 @@
         white-space: nowrap;
         cursor: pointer;
         text-align: center;
+}
+
+.sf-tab-icon {
+        flex: 0 0 auto;
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+}
+
+.sf-tab-label {
+        min-width: 0;
 }
 
 .sf-tab.active {

@@ -20,7 +20,7 @@ trap cleanup EXIT INT TERM
 
 valid_country() {
 	case "${1:-}" in
-		ru|by|cn) return 0 ;;
+		ru|by|cn|other) return 0 ;;
 		*) return 1 ;;
 	esac
 }
@@ -106,7 +106,13 @@ parse_profile() {
 	[ "$sites_type" = array ] || return 1
 	json_select emergencySites
 	json_get_keys site_keys
-	[ -n "$site_keys" ] || { json_select ..; return 1; }
+	if [ -z "$site_keys" ]; then
+		json_select ..
+		# Нейтральный профиль намеренно не навязывает ни одного государственного
+		# или коммерческого сайта; ручные карточки при этом сохраняются. §country1
+		[ "$country" = other ] && return 0
+		return 1
+	fi
 
 	for site_key in $site_keys; do
 		entry_type=''
@@ -150,7 +156,26 @@ mark_legacy_profile_site() {
 	$UCI_HELPER -q set "sheepfold.$section.profile_id=$profile_id"
 }
 
+remove_legacy_broad_ya_site() {
+	[ "$($UCI_HELPER -q get sheepfold.global.broad_ya_emergency_migrated 2>/dev/null || printf 0)" = 1 ] && return 0
+	section='emergency_ya_ru'
+	# Удаляем только точную старую заводскую карточку. Одноразовый флаг защищает
+	# осознанно добавленный позднее ya.ru от повторного удаления при обновлении. §country1
+	if [ "$($UCI_HELPER -q get "sheepfold.$section" 2>/dev/null || true)" = emergency_site ] &&
+			[ "$($UCI_HELPER -q get "sheepfold.$section.domain" 2>/dev/null || true)" = ya.ru ] &&
+			[ "$($UCI_HELPER -q get "sheepfold.$section.name" 2>/dev/null || true)" = 'Поиск Яндекса' ] &&
+			[ "$($UCI_HELPER -q get "sheepfold.$section.description" 2>/dev/null || true)" = 'Узкая точка входа в поиск' ]; then
+		source="$($UCI_HELPER -q get "sheepfold.$section.source" 2>/dev/null || true)"
+		profile_id="$($UCI_HELPER -q get "sheepfold.$section.profile_id" 2>/dev/null || true)"
+		case "$source:$profile_id" in
+			:|country_profile:ya_search) $UCI_HELPER -q delete "sheepfold.$section" ;;
+		esac
+	fi
+	$UCI_HELPER -q set sheepfold.global.broad_ya_emergency_migrated='1'
+}
+
 migrate_legacy_profile_sites() {
+	remove_legacy_broad_ya_site
 	[ "$($UCI_HELPER -q get sheepfold.global.country_profile_migrated 2>/dev/null || printf 0)" = 1 ] && return 0
 	# Только точное совпадение старой заводской карточки признаётся профильным.
 	# Любая изменённая пользователем запись навсегда остаётся ручной.
@@ -159,7 +184,6 @@ migrate_legacy_profile_sites() {
 	mark_legacy_profile_site emergency_mos_ru mos.ru 'Услуги Москвы' 'Городские сервисы' mos
 	mark_legacy_profile_site emergency_school_mos_ru school.mos.ru 'Московская школа' 'Доступ к школе' school_mos
 	mark_legacy_profile_site emergency_dnevnik_ru dnevnik.ru 'Дневник.ру' 'Школьный дневник' dnevnik
-	mark_legacy_profile_site emergency_ya_ru ya.ru 'Поиск Яндекса' 'Узкая точка входа в поиск' ya_search
 	mark_legacy_profile_site emergency_2gis_ru 2gis.ru '2ГИС' 'Карты и организации' 2gis
 	$UCI_HELPER -q set sheepfold.global.country_profile_migrated='1'
 }
@@ -313,7 +337,7 @@ case "$command" in
 		status_profile
 		;;
 	*)
-		echo "Usage: sheepfold-country-profile <apply [ru|by|cn]|migrate|status>" >&2
+		echo "Usage: sheepfold-country-profile <apply [ru|by|cn|other]|migrate|status>" >&2
 		exit 2
 		;;
 esac

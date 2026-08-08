@@ -1,0 +1,387 @@
+#!/bin/sh
+
+# Модель чтения родительского API: единообразно читает UCI, вычисляет ревизии
+# и строит JSON-снимок. Файл подключается через точку; запись, блокировки и
+# rollback остаются в sheepfold-api-admin-config. §apicon1
+#
+# Контракт владельца: до подключения задать UCI_BIN и SCHEMA_VERSION. Библиотека
+# не выполняет действий при загрузке и не имеет права записывать UCI.
+
+uci_read() {
+    "$UCI_BIN" "$@"
+}
+
+uci_get() {
+    uci_read -q get "$1" 2>/dev/null || true
+}
+
+sections_of_type() {
+    local type
+    type="$1"
+    uci_read -q show sheepfold 2>/dev/null |
+        sed -n "s/^sheepfold\.\([^.=]*\)=$type$/\1/p"
+}
+
+sections_of_config_type() {
+    local config type
+    config="$1"
+    type="$2"
+    uci_read -q show "$config" 2>/dev/null |
+        sed -n "s/^$config\.\([^.=]*\)=$type$/\1/p"
+}
+
+json_escape() {
+    printf '%s' "${1:-}" |
+        tr '\r\n\t' '   ' |
+        sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+json_string() {
+    printf '"%s"' "$(json_escape "${1:-}")"
+}
+
+json_bool() {
+    [ "${1:-0}" = 1 ] && printf true || printf false
+}
+
+json_word_array() {
+    local values first value
+    values="${1:-}"
+    first=1
+    printf '['
+    for value in $values; do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_string "$value"
+    done
+    printf ']'
+}
+
+json_time_ranges() {
+    local section values start end first range
+    section="$1"
+    values="$(uci_get "sheepfold.$section.time_ranges")"
+    if [ -z "$values" ]; then
+        start="$(uci_get "sheepfold.$section.start_time")"
+        end="$(uci_get "sheepfold.$section.end_time")"
+        [ -z "$start" ] || [ -z "$end" ] || values="$start-$end"
+    fi
+
+    first=1
+    printf '['
+    for range in $values; do
+        start="${range%%-*}"
+        end="${range#*-}"
+        [ "$first" = 1 ] || printf ','
+        first=0
+        printf '{"start":'
+        json_string "$start"
+        printf ',"end":'
+        json_string "$end"
+        printf '}'
+    done
+    printf ']'
+}
+
+hash_state() {
+    local state
+    state="$1"
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$state" | sha256sum | awk '{ print $1 }'
+    elif command -v openssl >/dev/null 2>&1; then
+        printf '%s' "$state" | openssl dgst -sha256 | awk '{ print $NF }'
+    else
+        printf '%s\n' revision_hash_unavailable >&2
+        return 1
+    fi
+}
+
+config_revision() {
+    hash_state "$(uci_read -q show sheepfold 2>/dev/null || true)"
+}
+
+wifi_revision() {
+    hash_state "$(uci_read -q show wireless 2>/dev/null || true)"
+}
+
+json_schedule() {
+    local section target_type
+    section="$1"
+    printf '{"section":'
+    json_string "$section"
+    printf ',"name":'
+    json_string "$(uci_get "sheepfold.$section.name")"
+    printf ',"description":'
+    json_string "$(uci_get "sheepfold.$section.description")"
+    printf ',"enabled":'
+    [ "$(uci_get "sheepfold.$section.enabled")" = 0 ] && printf false || printf true
+    printf ',"action":'
+    json_string "$(uci_get "sheepfold.$section.action")"
+    printf ',"targetType":'
+    target_type="$(uci_get "sheepfold.$section.target_type")"
+    [ -n "$target_type" ] || target_type=group
+    json_string "$target_type"
+    printf ',"targets":'
+    json_word_array "$(uci_get "sheepfold.$section.targets")"
+    printf ',"weekdays":'
+    json_word_array "$(uci_get "sheepfold.$section.weekdays")"
+    printf ',"timeRanges":'
+    json_time_ranges "$section"
+    printf '}'
+}
+
+json_group_device_ids() {
+    local section group_name first device_section device_group device_id
+    section="$1"
+    group_name="$(uci_get "sheepfold.$section.name")"
+    first=1
+    printf '['
+    for device_section in $(sections_of_type device); do
+        device_group="$(uci_get "sheepfold.$device_section.group")"
+        [ "$device_group" = "$group_name" ] || [ "$device_group" = "$section" ] || continue
+        device_id="$(uci_get "sheepfold.$device_section.id")"
+        [ -n "$device_id" ] || continue
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_string "$device_id"
+    done
+    printf ']'
+}
+
+json_group_schedule_ids() {
+    local section group_name first schedule target target_type legacy_id linked
+    section="$1"
+    group_name="$(uci_get "sheepfold.$section.name")"
+    first=1
+    printf '['
+    for schedule in $(sections_of_type schedule); do
+        target_type="$(uci_get "sheepfold.$schedule.target_type")"
+        [ -n "$target_type" ] || target_type=group
+        [ "$target_type" = group ] || continue
+        linked=0
+        for target in $(uci_get "sheepfold.$schedule.targets"); do
+            if [ "$target" = "$section" ] || [ "$target" = "$group_name" ]; then
+                linked=1
+                break
+            fi
+        done
+        if [ "$linked" != 1 ]; then
+            for legacy_id in $(uci_get "sheepfold.$section.schedules"); do
+                [ "$legacy_id" = "$schedule" ] || continue
+                linked=1
+                break
+            done
+        fi
+        [ "$linked" = 1 ] || continue
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_string "$schedule"
+    done
+    printf ']'
+}
+
+json_group() {
+    local section
+    section="$1"
+    printf '{"section":'
+    json_string "$section"
+    printf ',"name":'
+    json_string "$(uci_get "sheepfold.$section.name")"
+    printf ',"description":'
+    json_string "$(uci_get "sheepfold.$section.description")"
+    printf ',"color":'
+    json_string "$(uci_get "sheepfold.$section.color")"
+    printf ',"personal":'
+    json_bool "$(uci_get "sheepfold.$section.personal")"
+    printf ',"protected":'
+    json_bool "$(uci_get "sheepfold.$section.protected")"
+    printf ',"autoAssignable":'
+    json_bool "$(uci_get "sheepfold.$section.auto_assignable")"
+    printf ',"allowlistOnly":'
+    json_bool "$(uci_get "sheepfold.$section.allowlist_only")"
+    printf ',"deviceIds":'
+    json_group_device_ids "$section"
+    printf ',"scheduleIds":'
+    json_group_schedule_ids "$section"
+    printf '}'
+}
+
+json_administrator() {
+    local section
+    section="$1"
+    # Отдаём только нужные экрану поля. Внутренняя роль, хеш пароля и состояние
+    # одноразовой привязки не должны расширять публичный контракт приложения.
+    printf '{"section":'
+    json_string "$section"
+    printf ',"id":'
+    json_string "$(uci_get "sheepfold.$section.id")"
+    printf ',"displayName":'
+    json_string "$(uci_get "sheepfold.$section.display_name")"
+    printf ',"login":'
+    json_string "$(uci_get "sheepfold.$section.login")"
+    printf ',"allowChildAccessRequests":'
+    json_bool "$(uci_get "sheepfold.$section.allow_child_access_requests")"
+    printf '}'
+}
+
+json_wifi_network() {
+    local section device mode interface_disabled radio_disabled enabled band channel
+    section="$1"
+    device="$(uci_get "wireless.$section.device")"
+    mode="$(uci_get "wireless.$section.mode")"
+    [ -z "$mode" ] || [ "$mode" = ap ] || return 1
+    interface_disabled="$(uci_get "wireless.$section.disabled")"
+    radio_disabled=0
+    [ -z "$device" ] || radio_disabled="$(uci_get "wireless.$device.disabled")"
+    enabled=true
+    [ "$interface_disabled" = 1 ] && enabled=false
+    [ "$radio_disabled" = 1 ] && enabled=false
+    band="$(uci_get "wireless.$device.band")"
+    [ -n "$band" ] || band="$(uci_get "wireless.$device.hwmode")"
+    channel="$(uci_get "wireless.$device.channel")"
+    [ -n "$channel" ] || channel=auto
+
+    printf '{"section":'
+    json_string "$section"
+    printf ',"device":'
+    json_string "$device"
+    printf ',"ssid":'
+    json_string "$(uci_get "wireless.$section.ssid")"
+    # Endpoint закрыт администраторским токеном и HTTPS pinning. Ключ нужен
+    # только для того же QR и редактора сети, которые уже доступны в LuCI.
+    printf ',"password":'
+    json_string "$(uci_get "wireless.$section.key")"
+    printf ',"encryption":'
+    json_string "$(uci_get "wireless.$section.encryption")"
+    printf ',"channel":'
+    json_string "$channel"
+    printf ',"enabled":%s' "$enabled"
+    printf ',"band":'
+    json_string "$band"
+    printf '}'
+}
+
+json_wifi_networks() {
+    local first section mode
+    first=1
+    printf '['
+    for section in $(sections_of_config_type wireless wifi-iface); do
+        mode="$(uci_get "wireless.$section.mode")"
+        [ -z "$mode" ] || [ "$mode" = ap ] || continue
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_wifi_network "$section"
+    done
+    printf ']'
+}
+
+json_notification_settings() {
+	local sim_mode wifi_mode
+	sim_mode="$(uci_get sheepfold.global.sim_change_notifications)"
+	wifi_mode="$(uci_get sheepfold.global.child_wifi_network_notifications)"
+	[ -n "$sim_mode" ] || sim_mode=new_only
+	[ -n "$wifi_mode" ] || wifi_mode=off
+    printf '{"simChangeMode":'
+    json_string "$sim_mode"
+    printf ',"childWifiMode":'
+    json_string "$wifi_mode"
+    printf '}'
+}
+
+json_wifi_automation() {
+    local enable_mode enable_time disable_mode disable_time
+    enable_mode="$(uci_get sheepfold.global.wifi_auto_enable_mode)"
+    enable_time="$(uci_get sheepfold.global.wifi_auto_enable_time)"
+    disable_mode="$(uci_get sheepfold.global.wifi_auto_disable_mode)"
+    disable_time="$(uci_get sheepfold.global.wifi_auto_disable_time)"
+    case "$enable_mode" in never|time) ;; *) enable_mode=never ;; esac
+    case "$disable_mode" in never|time) ;; *) disable_mode=never ;; esac
+    valid_time "$enable_time" || enable_time=07:00
+    valid_time "$disable_time" || disable_time=23:00
+    printf '{"enableMode":'
+    json_string "$enable_mode"
+    printf ',"enableTime":'
+    json_string "$enable_time"
+    printf ',"disableMode":'
+    json_string "$disable_mode"
+    printf ',"disableTime":'
+    json_string "$disable_time"
+    printf '}'
+}
+
+wifi_enabled() {
+    local found radio
+    found=0
+    for radio in $(uci_read -q show wireless 2>/dev/null | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\1/p'); do
+        found=1
+        [ "$(uci_read -q get "wireless.$radio.disabled" 2>/dev/null || printf 0)" = 1 ] || return 0
+    done
+    [ "$found" = 0 ] && return 1
+    return 1
+}
+
+admin_config_json() {
+    local mutation_kind runtime_applied revision current_wifi_revision bedtime first section
+    mutation_kind="${1:-}"
+    runtime_applied="${2:-1}"
+    revision="$(config_revision)" || exit 70
+    current_wifi_revision="$(wifi_revision)" || exit 70
+
+    printf '{"app":"sheepfold","ok":true,"schemaVersion":%s,"revision":' "$SCHEMA_VERSION"
+    json_string "$revision"
+    printf ',"wifiRevision":'
+    json_string "$current_wifi_revision"
+    printf ',"bedtime":'
+    bedtime="$(uci_get sheepfold.global.bedtime)"
+    [ -n "$bedtime" ] || bedtime=21:00
+    json_string "$bedtime"
+    printf ',"wifiEnabled":'
+    wifi_enabled && printf true || printf false
+    printf ',"capabilities":{"scheduleWrite":true,"groupWrite":true,"deviceWrite":true,"wifiControl":true,"wifiAutomationWrite":true,"notificationWrite":true,"administratorRead":true,"logRead":true,"logClear":true}'
+    if [ -n "$mutation_kind" ]; then
+        printf ',"mutation":{"kind":'
+        json_string "$mutation_kind"
+        printf ',"runtimeApplied":'
+        [ "$runtime_applied" = 1 ] && printf true || printf false
+        printf '}'
+    fi
+
+    printf ',"schedules":['
+    first=1
+    for section in $(sections_of_type schedule); do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_schedule "$section"
+    done
+    printf '],"groups":['
+    first=1
+    for section in $(sections_of_type group); do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_group "$section"
+    done
+    printf '],"administrators":['
+    first=1
+    for section in $(sections_of_type administrator); do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_administrator "$section"
+    done
+    printf '],"wifiNetworks":'
+    json_wifi_networks
+    printf ',"wifiAutomation":'
+    json_wifi_automation
+    printf ',"notificationSettings":'
+    json_notification_settings
+    printf '}\n'
+}
+
+valid_time() {
+    local value hours
+    value="${1:-}"
+    case "$value" in [0-2][0-9]:[0-5][0-9]) ;; *) return 1 ;; esac
+    hours="${value%%:*}"
+    hours="${hours#0}"
+    [ -n "$hours" ] || hours=0
+    [ "$hours" -le 23 ]
+}

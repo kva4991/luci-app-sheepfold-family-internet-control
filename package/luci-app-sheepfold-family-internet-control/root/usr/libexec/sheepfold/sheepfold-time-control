@@ -45,7 +45,7 @@ valid_hostname() {
 }
 
 normalize_country() {
-	case "${1:-}" in ru|by|cn) printf '%s\n' "$1" ;; *) printf 'ru\n' ;; esac
+	case "${1:-}" in ru|by|cn|other) printf '%s\n' "$1" ;; *) printf 'other\n' ;; esac
 }
 
 country_defaults() {
@@ -53,6 +53,7 @@ country_defaults() {
 		ru) printf '%s\n' 'Europe/Moscow|MSK-3|ntp1.vniiftri.ru ntp2.ntp-servers.net 3.openwrt.pool.ntp.org' ;;
 		by) printf '%s\n' 'Europe/Minsk|+03-3|by.pool.ntp.org pool.ntp.org' ;;
 		cn) printf '%s\n' 'Asia/Shanghai|CST-8|cn.pool.ntp.org ntp.aliyun.com time1.cloud.tencent.com' ;;
+		other) printf '%s\n' 'UTC|UTC0|pool.ntp.org' ;;
 	esac
 }
 

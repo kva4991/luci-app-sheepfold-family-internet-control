@@ -214,7 +214,7 @@ describe('test IPK executable permissions', () => {
     const ipkPath = buildTestIpk();
 
     assert.equal(tarMode(ipkPath, './usr/libexec/sheepfold/sheepfold-country-profile'), '0o755');
-    for (const country of ['ru', 'by', 'cn'])
+    for (const country of ['ru', 'by', 'cn', 'other'])
       assert.equal(tarMode(ipkPath, `./usr/share/sheepfold/country-profiles/${country}.json`), '0o644');
   });
 

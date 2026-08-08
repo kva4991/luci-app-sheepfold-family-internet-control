@@ -209,6 +209,7 @@ var wifiPersistence = wifiPersistenceModel.create({ uci: uci, persistence: uciPe
 var schedulePersistence = schedulePersistenceModel.create({
 	uci: uci,
 	persistence: uciPersistence,
+	listValues: deviceInventory.listValues,
 	newSectionName: function () { return 'schedule_' + Date.now().toString(36); },
 	run: runCommand,
 	ensureOk: environment.ensureOk,
@@ -430,7 +431,9 @@ wifiController = wifiControllerModel.create({
 	icon: sharedIcons.named,
 	palette: groupNaming.palette,
 	payload: wifiPayload,
-	qrCode: environment.qrCode
+	qrCode: environment.qrCode,
+	automationPanel: function () { return settingsController.renderWifiAutomation(); },
+	settingsSaveBar: function (top) { return settingsController.renderSaveBar(top); }
 });
 var deviceTypeControl = deviceTypeControlModel.create({
 	byValue: deviceTypes.byValue,
@@ -547,6 +550,7 @@ administratorController = administratorControllerModel.create({
 	errorText: environment.errorText,
 	notify: environment.notify,
 	notifyCentered: environment.notifyCentered,
+	confirm: window.confirm.bind(window),
 	reloadDevices: deviceController.reload,
 	refreshDevices: function () { pageRefresh.userLists(); pageRefresh.groups(); },
 	discovery: routerDiscovery,
@@ -620,6 +624,7 @@ var overviewView = pageShellModel.create({
 	administrators: administratorController,
 	wifi: wifiController,
 	settings: settingsController,
+	icon: sharedIcons.named,
 	emergency: emergencyPanel,
 	emergencySectionType: emergencySiteModel.sectionType,
 	logPanel: logPanel,

@@ -146,7 +146,7 @@ describe('final cumulative hardening experiments §ovaudit4', () => {
     const module = loadModule('sheepfold/features/groups/persistence.js');
     let selectedIds;
     const adapter = module.create({
-      uci: { set() {} }, groupModel: { hash: () => 1, membershipChanges: (_devices, _old, _next, ids) => { selectedIds = ids; return []; } },
+      uci: { set() {}, unset() {} }, groupModel: { hash: () => 1, membershipChanges: (_devices, _old, _next, ids) => { selectedIds = ids; return []; } },
       persistence: { sections: () => [], ensureSection: () => 'group_1', replaceList() {} },
       devicePersistence: { ensureDeviceSection: () => 'device_1' }, normalizeMac: (value) => value,
       normalizeGroupName: (value) => value, notConfiguredGroup: 'Not configured', noRestrictionsGroupName: () => 'No restrictions',

@@ -88,6 +88,7 @@ function create(deps) {
 		var currentValue = deps.value(option, value);
 		var select = E('select', {
 			'class': 'cbi-input-select',
+			'data-setting-option': option,
 			'change': function (event) {
 				deps.setOption(option, event.currentTarget.value);
 			}

@@ -42,6 +42,8 @@
 
 Системные промпты остаются в [`../ai-assistant-prompt-for-support-parent/`](../ai-assistant-prompt-for-support-parent/). Общие продуктовые требования остаются в [`../product-requirements.md`](../product-requirements.md), а правила передачи контекста — в [`../ai-context-sharing.ru.md`](../ai-context-sharing.ru.md). Эта папка не дублирует их, а соединяет в будущую реализацию.
 
+Отдельный [`экспериментальный серверный каркас`](../../experimental/ai-server-core/README.ru.md) проверяет возможную техническую сборку этих контрактов. Он не является частью поставки и не может переопределять документы этой папки.
+
 ## Общая схема взаимодействия
 
 ```mermaid

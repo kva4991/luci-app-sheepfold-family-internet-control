@@ -90,7 +90,15 @@ function create(deps) {
 			inputControl: deps.forms.inputControl,
 			checkboxControl: deps.forms.checkboxControl,
 			createDeviceSelector: deps.createDeviceSelector,
-			scheduleCheckboxes: function (values) { return deps.schedules().checkboxList(values); },
+			scheduleCheckboxes: function (groupName, section) {
+				var sectionName = section && section['.name'] || '';
+				var selected = deps.persistence.selectedScheduleIds(
+					sectionName,
+					groupName,
+					deps.listValues(section && section.schedules)
+				);
+				return deps.schedules().checkboxList(selected, 'group');
+			},
 			listValues: deps.listValues,
 			currentDeviceIds: function (name) {
 				return deps.naming.currentDeviceIds(name, deps.devices());
@@ -101,7 +109,7 @@ function create(deps) {
 			validColor: deps.naming.validColor,
 			automaticColor: deps.naming.automaticColor,
 			nextColor: deps.naming.nextAvailableColor,
-			schedulesConflict: function (values) { return deps.schedules().hasMultiple(values); },
+			schedulesConflict: function (values) { return deps.schedules().hasSelectedConflict(values); },
 			showScheduleConflict: function (onContinue) { return deps.schedules().showConflict(onContinue); },
 			persistSettings: persistSettings,
 			persistNew: persistNew

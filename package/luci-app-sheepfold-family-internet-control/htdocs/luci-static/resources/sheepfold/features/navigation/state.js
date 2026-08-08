@@ -2,46 +2,46 @@
 'require baseclass';
 
 var TOP_TABS = [
-	['users', 'User lists'],
-	['management', 'User management'],
-	['wifi', 'Wi-Fi'],
-	['logs', 'Logs'],
-	['settings', 'Settings'],
-	['donation', 'Donation']
+	['users', 'User lists', 'navigationLists'],
+	['management', 'User management', 'navigationGroups'],
+	['wifi', 'Wi-Fi', 'navigationWifi'],
+	['logs', 'Logs', 'navigationLogs'],
+	['settings', 'Settings', 'navigationSettings'],
+	['donation', 'Donation', 'navigationDonation']
 ];
 
 var SETTINGS_PRIMARY_TABS = [
-	['info', 'Information'],
-	['general', 'General'],
-	['integrations', 'Integrations'],
-	['messenger', 'Messenger'],
-	['notifications', 'Notifications'],
-	['emergency', 'Emergency-useful sites'],
-	['misc', 'Misc'],
-	['feedback', 'Feedback / suggestions']
+	['info', 'Information', 'navigationInformation'],
+	['general', 'General', 'navigationSettings'],
+	['integrations', 'Integrations', 'navigationIntegrations'],
+	['messenger', 'Messenger', 'navigationMessenger'],
+	['notifications', 'Notifications', 'navigationNotifications'],
+	['emergency', 'Emergency-useful sites', 'navigationEmergencySites'],
+	['misc', 'Misc', 'navigationMisc'],
+	['feedback', 'Feedback / suggestions', 'navigationFeedback']
 ];
 
 var SETTINGS_SECONDARY_TABS = [
 	/* SHEEPFOLD_AI_BEGIN */
-	['ai', 'AI assistant'],
+	['ai', 'AI assistant', 'navigationAiAssistant'],
 	/* SHEEPFOLD_AI_END */
-	['storage', 'Router memory management']
+	['storage', 'Router memory management', 'navigationStorage']
 ];
 
 var USER_LIST_TABS = [
-	['devices', 'All devices'],
-	['allowlist', 'Allowlist'],
-	['blocklist', 'Blocklist']
+	['devices', 'All devices', 'navigationDevices'],
+	['allowlist', 'Allowlist', 'navigationAllowlist'],
+	['blocklist', 'Blocklist', 'navigationBlocklist']
 ];
 
 var MANAGEMENT_TABS = [
-	['schedules', 'Schedules'],
-	['groups', 'Groups'],
-	['admins', 'Administrators']
+	['schedules', 'Schedules', 'navigationSchedules'],
+	['groups', 'Groups', 'navigationGroups'],
+	['admins', 'Administrators', 'navigationAdministrators']
 ];
 
 function cloneTabs(tabs) {
-	return tabs.map(function (item) { return [item[0], item[1]]; });
+	return tabs.map(function (item) { return [item[0], item[1], item[2]]; });
 }
 
 function contains(tabs, key) {

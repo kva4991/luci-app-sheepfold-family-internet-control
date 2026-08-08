@@ -1,10 +1,11 @@
 'use strict';
 'require baseclass';
 
-/* §frontmod §coordclean1 §ovaudit3
+/* §frontmod §coordclean1 §ovaudit3 §grpsch1
  * Секции групп и членство подготавливаются внутри одной последовательной UCI-мутации.
  * Создаваемые имена секций защищены от коллизий, а удаление отклоняется, пока на
- * группу ссылается расписание.
+ * группу ссылается расписание. Связь хранится только в schedule.targets: второе
+ * зеркало group.schedules неизбежно расходилось бы с runtime-вычислителем.
  */
 function create(deps) {
 	function configured(value) { return typeof value === 'function' ? value() : value; }
@@ -50,6 +51,71 @@ function create(deps) {
 		throw codedError('group_section_collision', 'group_section_collision');
 	}
 
+	function uniqueValues(values) {
+		var seen = Object.create(null);
+		return (values || []).map(function (value) { return String(value || ''); }).filter(function (value) {
+			if (!value || seen[value])
+				return false;
+			seen[value] = true;
+			return true;
+		});
+	}
+
+	function groupAliases(sectionName, names) {
+		var aliases = [sectionName];
+		(names || []).forEach(function (name) {
+			aliases.push(name);
+			aliases.push(deps.normalizeGroupName(name));
+		});
+		return uniqueValues(aliases);
+	}
+
+	function selectedScheduleIds(sectionName, groupName, legacyIds) {
+		var aliases = groupAliases(sectionName, [groupName]);
+		var legacy = uniqueValues(legacyIds);
+		return deps.persistence.sections('sheepfold', 'schedule').filter(function (schedule) {
+			if ((schedule.target_type || 'group') !== 'group')
+				return false;
+			return legacy.indexOf(schedule['.name']) !== -1 || deps.listValues(schedule.targets).some(function (target) {
+				return aliases.indexOf(target) !== -1;
+			});
+		}).map(function (schedule) { return schedule['.name']; });
+	}
+
+	function stageScheduleLinks(sectionName, payload) {
+		var schedules = deps.persistence.sections('sheepfold', 'schedule');
+		var selectedIds = uniqueValues(payload.selectedSchedules);
+		var selected = Object.create(null);
+		var aliases = groupAliases(sectionName, [payload.oldName, payload.newName]);
+
+		selectedIds.forEach(function (scheduleId) {
+			var schedule = schedules.filter(function (item) { return item['.name'] === scheduleId; })[0] || null;
+			if (!schedule)
+				throw codedError('schedule_not_found', 'schedule_not_found');
+			if ((schedule.target_type || 'group') !== 'group')
+				throw codedError('group_schedule_type_forbidden', 'group_schedule_type_forbidden');
+			selected[scheduleId] = true;
+		});
+
+		schedules.forEach(function (schedule) {
+			var currentTargets;
+			var nextTargets;
+			if ((schedule.target_type || 'group') !== 'group')
+				return;
+			currentTargets = uniqueValues(deps.listValues(schedule.targets));
+			nextTargets = currentTargets.filter(function (target) { return aliases.indexOf(target) === -1; });
+			if (selected[schedule['.name']])
+				nextTargets.push(sectionName);
+			if (currentTargets.join('\n') !== nextTargets.join('\n'))
+				deps.persistence.replaceList('sheepfold', schedule['.name'], 'targets', nextTargets);
+		});
+
+		// Старое зеркало удаляем в той же транзакции только после подготовки
+		// канонических целей расписаний. Так сбой не оставит связь потерянной.
+		deps.uci.unset('sheepfold', sectionName, 'schedules');
+		return selectedIds;
+	}
+
 	function stageSettings(payload, section, devices) {
 		var selectedDevices = payload.selectedDevices || [];
 		if (selectedDevices.some(function (device) { return deps.isAdminDevice && deps.isAdminDevice(device); }))
@@ -72,7 +138,7 @@ function create(deps) {
 		});
 		deps.uci.set('sheepfold', sectionName, 'name', payload.newName);
 		deps.uci.set('sheepfold', sectionName, 'color', payload.color);
-		deps.persistence.replaceList('sheepfold', sectionName, 'schedules', payload.selectedSchedules || []);
+		stageScheduleLinks(sectionName, payload);
 		deps.uci.set('sheepfold', sectionName, 'allowlist_only', payload.allowlistOnly ? '1' : '0');
 		/* SHEEPFOLD_AI_BEGIN */
 		deps.uci.set('sheepfold', sectionName, 'activity_log_enabled', payload.activityLogEnabled ? '1' : '0');
@@ -224,6 +290,8 @@ function create(deps) {
 
 	return {
 		ensureGroupSection: ensureGroupSection,
+		selectedScheduleIds: selectedScheduleIds,
+		stageScheduleLinks: stageScheduleLinks,
 		stageSettings: stageSettings,
 		persistSettings: persistSettings,
 		persistNew: persistNew,

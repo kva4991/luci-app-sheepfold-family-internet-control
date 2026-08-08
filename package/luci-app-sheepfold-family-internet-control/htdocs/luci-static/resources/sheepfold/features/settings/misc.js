@@ -234,11 +234,16 @@ function create(deps) {
 		]);
 	}
 
+	function renderWifiAutomation() {
+		return E('div', { 'class': 'sf-flat-form sf-wifi-automation-settings' }, [
+			deps.fields.settingsDivider(_('Wi-Fi automation')),
+			timeAutomationField(_('Enable Wi-Fi automatically'), 'wifi_auto_enable_mode', 'wifi_auto_enable_time', '07:00'),
+			timeAutomationField(_('Disable Wi-Fi automatically'), 'wifi_auto_disable_mode', 'wifi_auto_disable_time', '23:00')
+		]);
+	}
+
 	function render() {
 		return E('div', { 'class': 'sf-flat-form sf-misc-actions' }, [
-			deps.fields.settingsDivider(_('Wi-Fi settings')),
-			timeAutomationField(_('Enable Wi-Fi automatically'), 'wifi_auto_enable_mode', 'wifi_auto_enable_time', '07:00'),
-			timeAutomationField(_('Disable Wi-Fi automatically'), 'wifi_auto_disable_mode', 'wifi_auto_disable_time', '23:00'),
 			deps.fields.settingsDivider(_('Router time and NTP')),
 			deps.timeSettings(),
 			deps.fields.settingsDivider(_('Network compatibility')),
@@ -302,6 +307,7 @@ function create(deps) {
 		timeAutomationField: timeAutomationField,
 		accessPriorityField: accessPriorityField,
 		scheduleConflictPolicyField: scheduleConflictPolicyField,
+		renderWifiAutomation: renderWifiAutomation,
 		render: render
 	};
 }

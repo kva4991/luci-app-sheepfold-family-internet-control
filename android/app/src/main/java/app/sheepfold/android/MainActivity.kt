@@ -40,6 +40,8 @@ import app.sheepfold.android.security.AppProtectionStore
 import app.sheepfold.android.ui.main.OperationalMainScreen
 import app.sheepfold.android.ui.security.AppUnlockScreen
 import app.sheepfold.android.ui.setup.SafeRouterSetupScreen
+import app.sheepfold.android.ui.setup.AgreementAcceptanceStore
+import app.sheepfold.android.ui.setup.AgreementRenewalScreen
 import app.sheepfold.android.ui.theme.SheepfoldTheme
 import app.sheepfold.android.ui.theme.LanguagePreferenceStore
 import app.sheepfold.android.ui.theme.ThemePreferenceStore
@@ -129,6 +131,7 @@ private fun SheepfoldRoot(
     var setupComplete by remember {
         mutableStateOf(SheepfoldConnectionStore.hasConnection(storedConnection))
     }
+    var agreementCurrent by remember { mutableStateOf(AgreementAcceptanceStore.isCurrent(context)) }
     var connection by remember { mutableStateOf(storedConnection) }
     var unlocked by remember { mutableStateOf(!AppProtectionStore.requiresAuthentication(context)) }
     var pairingLoss by remember { mutableStateOf(SheepfoldConnectionStore.consumePairingLoss(context)) }
@@ -175,6 +178,9 @@ private fun SheepfoldRoot(
                             onUnlocked = { unlocked = true }
                         )
                     }
+                    setupComplete && connection != null && !agreementCurrent -> {
+                        AgreementRenewalScreen { agreementCurrent = true }
+                    }
                     setupComplete && connection != null -> {
                         OperationalMainScreen(
                             connection = connection!!,
@@ -212,6 +218,7 @@ private fun SheepfoldRoot(
                             revokeCameraPermissionAfterPairing(context)
                             connection = request
                             setupComplete = true
+                            agreementCurrent = AgreementAcceptanceStore.isCurrent(context)
                             pairingLoss = null
                             // The user has just completed setup or an explicit repair.
                             unlocked = true

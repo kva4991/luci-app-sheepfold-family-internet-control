@@ -103,10 +103,10 @@ esac
     SHEEPFOLD_NOTIFICATION_HELPER: toPosix(join(bin, 'notifier')),
   };
   const payload = `version=1\nsim=0|${'a'.repeat(64)}|+79991234567|250|01\n`;
-  const run = () => spawnSync('bash', [resolve(monitorPath), 'report', '192.168.4.20'], {
+  const run = (input = payload) => spawnSync('bash', [resolve(monitorPath), 'report', '192.168.4.20'], {
     cwd: process.cwd(),
     env,
-    input: payload,
+    input,
     encoding: 'utf8',
   });
 
@@ -115,11 +115,13 @@ esac
     const firstLog = readFileSync(log, 'utf8');
     const firstNotifications = readFileSync(notifications, 'utf8');
     const second = run();
+    const sameNumberMove = run(`version=1\nsim=1|${'b'.repeat(64)}|+79991234567|250|01\n`);
     return {
       first,
       firstLog,
       firstNotifications,
       second,
+      sameNumberMove,
       finalLog: readFileSync(log, 'utf8'),
       finalNotifications: readFileSync(notifications, 'utf8'),
       finalState: readFileSync(state, 'utf8'),
@@ -187,15 +189,25 @@ describe('SIM change monitoring contract', () => {
     assert.match(monitor, /MAX_PHONE_HISTORY=16/);
     assert.match(monitor, /sim_known_fingerprints/);
     assert.match(monitor, /sim_phone_history/);
+    assert.match(monitor, /sim_current_phones/);
     assert.match(monitor, /Android иногда сообщает номер не сразу/);
     assert.match(monitor, /snapshot_hash" = "\$previous_hash"[\s\S]*changed":false/);
+  });
+
+  it('does not report a SIM replacement when every reported phone number is unchanged', () => {
+    const result = runFirstSimRuntime();
+    assert.equal(result.sameNumberMove.status, 0, result.sameNumberMove.stderr);
+    assert.match(result.sameNumberMove.stdout, /"changed":false/);
+    assert.match(result.sameNumberMove.stdout, /"sameReportedNumbers":true/);
+    assert.equal(result.finalLog, result.firstLog);
+    assert.equal(result.finalNotifications, result.firstNotifications);
   });
 
   it('exposes the LuCI notification modes with new-only as the default', () => {
     assert.match(settings, /sim_change_notifications/);
     assert.match(settings, /\['all',[\s\S]*\['new_only',[\s\S]*\['off'/);
     assert.match(settings, /first SIM found after child-app installation/);
-    assert.match(overview, /\['notifications', 'Notifications'\]/);
+    assert.match(overview, /\['notifications', 'Notifications', 'navigationNotifications'\]/);
     assert.match(settingsController, /function renderNotifications\(\)/);
     assert.match(settingsController, /panel\('notifications', renderNotifications\(\), active\)/);
     assert.match(defaults, /option sim_change_notifications 'new_only'/);

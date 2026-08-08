@@ -53,6 +53,13 @@
 - Contextual help for non-obvious settings and risky actions, opened by a visible `?` help control.
 - Optional per-device site activity history as a separate opt-in feature, not part of the default administrative log, excluded for administrator devices and allowlisted devices.
 
+For the parent APK `1.0`, full editors are required for devices and device lists, schedules, groups, Wi-Fi, the administrative journal, and notifications. Administrator-account editing and advanced Wi-Fi operations may remain LuCI-only when the APK provides a clear authenticated route to the corresponding page.
+
+The first supported OpenWrt release families are 24.10 (`opkg`/IPK) and 25.12
+(`apk` v3/OpenWrt APK). Both are part of the product contract, but each family
+must pass a clean install, upgrade, runtime, and removal test on real hardware
+before the first stable release claims verified support (§pkgmgr1, §owrtci1).
+
 ## Current Implementation Status
 
 This document is the product target. For the exact current package state, see [Current implementation status](current-implementation-status.md).
@@ -87,6 +94,8 @@ Country profiles should control:
 - default timezone and NTP server preferences.
 
 Manual user entries must not be deleted when the country changes.
+
+The selectable profiles are Russia, Belarus, China, and a neutral `Other country`. The neutral profile must not inject country-specific emergency-useful sites. Only country profiles verified on real networks may be advertised as tested. `ya.ru` is not a factory emergency-useful site because a general search entry point exposes substantially broader content; the parent may add it manually.
 
 Provider availability must be configuration-driven because legal and network availability can change.
 
@@ -142,6 +151,7 @@ Android app local authentication:
 
 - first setup screen order must be: agreement, home Wi-Fi connection, real Wi-Fi MAC check/guidance, router connection setup by QR/manual entry, then local app password/PIN;
 - before continuing setup, require agreement checkbox: `Я принимаю пользовательское соглашение и даю согласие на обработку персональных и технических данных, необходимых для работы Sheepfold.`;
+- persist the accepted agreement revision and acceptance time locally; after a materially changed agreement revision, require a new explicit acceptance without repeating unrelated Android permissions, router pairing, or app-protection setup;
 - ask for app-lock method after successful router pairing;
 - recommend password or PIN by default;
 - allow fingerprint/face unlock if supported, but do not recommend it as the safest parental-control default;
@@ -157,6 +167,7 @@ Android connectivity:
 - without a developer-operated cloud service, the Android app must not promise full remote router management outside the local network.
 - first Android pairing should be initiated locally from LuCI by an owner/admin using a QR code or manual settings;
 - the pairing payload must contain a short-lived one-time token scoped to one administrator and one admin device, never a router root password.
+- the resulting parent-device Bearer credential has no calendar expiry and remains valid until explicit revocation, administrator-device unbinding, or a security migration; a timeout or temporary router outage must not revoke it.
 
 Android Wi-Fi MAC check:
 
@@ -193,6 +204,8 @@ Requirements:
 - manual pairing codes should be easy to transfer by hand but hard to guess. The router backend must generate them with a cryptographically secure random source: 10 random characters from safe lowercase letters `abcdefghkmnpqrstuvwxyz`, safe uppercase letters `ABCDEFGHKMNPQRSTUVWXYZ`, safe digits `2456789`, and safe special characters `+-*()[]{}<>?@#$%^&:;.,`, with at most 3 special characters;
 - pairing must not expose router root credentials, LuCI session cookies, bot tokens, AI keys, or other unrelated secrets;
 - pairing events must be written to the administrative action log with masking.
+- an administrator account has a confirmed `Terminate all sessions` action that revokes every parent-device Bearer token issued to that administrator and forces those phones to pair again; it does not delete the account, device records, settings, or family rules;
+- after a legitimate router HTTPS-certificate replacement, a fresh local QR pairing is the only supported trust-reset flow for the parent APK in 1.0; there is no manual long-fingerprint acceptance screen.
 
 The LuCI interface must include an `Administrators` tab.
 
@@ -225,6 +238,14 @@ restrict_until_configured
 ```
 
 Default: `allow`.
+
+### Action automation profile
+
+`Settings -> General` contains an `Automation actions` section with `Maximum automation` as the default and `Selective automation` as the advanced mode (§autoact1).
+
+Maximum automation hides the three user-facing child settings and applies `new_device_policy=allow`, full automatic device setup with both protected automatic groups enabled, and `device_monitoring_mode=automatic`. Selective automation exposes `New device behavior`, `New device automatic setup`, and `Device monitoring and setup` without silently replacing an existing parent choice. The installer selects the maximum profile by default. During upgrade, any old non-default child value must be preserved by selecting the selective profile.
+
+The device blocklist, administrator authorization, fingerprint quarantine, and all other security invariants remain authoritative regardless of this convenience profile.
 
 Global "Block internet" means blocking all devices except administrator devices, allowlisted devices, and devices in the protected `No restrictions` group.
 
@@ -288,7 +309,7 @@ Operational behavior:
 - A strong identity match or two matching weak families on a different MAC may only create a parent-facing resemblance suggestion. Sheepfold must not link the records or copy administrator rights, lists, groups, schedules, or temporary access automatically (§devident1).
 - If the same self-reported UUID appears on two currently online MAC records, the lower numeric device ID remains unchanged and only the newer record receives the indefinite identity quarantine. The parent notification identifies the new IP and older `#ID`; no rights are copied (§devident1, §detlife1).
 - Numeric device IDs are permanent audit references: allocate them monotonically, preserve gaps and never reuse or compact an ID after deletion (§deviceid2).
-- A future parent-confirmed merge is complete rather than field-by-field: all linked MACs become one logical device with one policy, the lower permanent ID remains primary, the absorbed ID remains an audit alias, and policy conflicts are shown before confirmation. Administrator pairing secrets are revoked and QR pairing is repeated (§merge01).
+- A future parent-confirmed merge starts from the device card and then lets the parent select the second record. It is complete rather than field-by-field: all linked MACs become one logical device with one policy, the lower permanent ID remains primary, the absorbed ID remains an audit alias, and policy conflicts are shown before confirmation. Administrator pairing secrets are revoked and QR pairing is repeated (§merge01).
 - Full detection may use a peer-pinned UPnP description and bounded LAN-only WS-Discovery. Ordinary WS-Discovery passes are passive; one active Probe is allowed only for a newly connected device. UPnP LOCATION must use the exact numeric sender IPv4 with no DNS, redirects, router-self access, unbounded body or control URL. WS-Discovery XAddrs must never be fetched. UPnP is self-reported secondary evidence and cannot grant elevated policy by itself. SNMP is outside the product scope (§devident1, §detload).
 - Passive traffic must never be presented as revealing a Google, Yandex or other user account. Sheepfold does not perform TLS interception; any future account association requires explicit OAuth consent and is not a LAN identity factor (§devident1).
 - Automatic assignment to `No restrictions` is security-sensitive because the group bypasses global shutdown and schedules. It requires strong detection evidence, visible reasoning, and the existing one-time exclusion after a parent removes a device from the group. It never bypasses the device blocklist.
@@ -303,17 +324,21 @@ Child devices may optionally show `Request 30 minutes of internet`. The router e
 
 The child status screen shows only the router-local `HH:mm` of the next schedule boundary that actually changes effective access. It does not display a countdown or reveal rule names. Future-boundary evaluation runs on child status requests, not in the minute-by-minute firewall synchronization path (§b5wkq2e).
 
-The explicitly installed child APK may report a best-effort active-SIM snapshot to the home router. LuCI provides `all`, `new_only` (default), and `off` administrator-notification modes. A SIM present in the first valid report is journaled and, when enabled, notified with the explicit note that it was found during app installation. Only an initial report with no active SIM creates a silent empty baseline. Every later detected change is written to the local administrative journal, while phone/messenger delivery follows the selected mode. Android may omit the phone number. Sheepfold keeps at most 16 local subscription fingerprints and 16 fingerprint/available-number history entries; readable export masks this long-term field. Sheepfold must not request ICCID, IMSI, or IMEI and must identify the reporting device from router-side IP/DHCP/ARP data (§simchg1).
+The explicitly installed child APK may report a best-effort active-SIM snapshot to the home router. LuCI provides `all`, `new_only` (default), and `off` administrator-notification modes. A SIM present in the first valid report is journaled and, when enabled, notified with the explicit note that it was found during app installation. Only an initial report with no active SIM creates a silent empty baseline. Every later detected change is written to the local administrative journal, while phone/messenger delivery follows the selected mode. When every available phone number in the previous and current snapshots is identical, moving the same SIM between slots updates technical state without creating a change event. Android may omit the phone number. Sheepfold keeps at most 16 local subscription fingerprints and 16 fingerprint/available-number history entries; readable export masks this long-term field. Sheepfold must not request ICCID, IMSI, or IMEI and must identify the reporting device from router-side IP/DHCP/ARP data (§simchg1).
+
+An administrator notification becomes read only after the parent opens it in the
+parent APK or LuCI, or explicitly presses `Read` in Telegram. Dismissing an Android
+system notification is not an acknowledgement and must not consume the shared event.
 
 Optional child Wi-Fi reports and their phone coordinates expire on the router after 90 days. Raw BSSID is never transmitted; disabling collection clears the pending phone queue, and LuCI provides an explicit history-clear action (§childwifi1).
 
 Installer mode:
 
-- the OpenWRT installer must ask `Apply Sheepfold automatic setup?` / `Применить автонастройку программы?`;
-- full automatic setup is the default because it is the useful path for most families;
-- if the parent/admin presses Enter or answers `yes`, `y`, or `да`, set `auto_configure=1`, `detection_mode=full`, and `no_restrictions_auto_assign=1`;
+- the OpenWRT installer must ask for `Maximum automation` or `Selective automation`;
+- maximum automation is the default because it is the useful path for most families;
+- if the parent/admin presses Enter or answers `yes`, `y`, or `да`, apply the complete maximum profile defined above;
 - full automatic setup may add confidently detected infrastructure devices to the `No restrictions` group automatically;
-- if the parent/admin explicitly answers `no`, `n`, or `нет`, set or keep `auto_configure=1`, `detection_mode=reduced`, and `no_restrictions_auto_assign=1`;
+- if the parent/admin explicitly answers `no`, `n`, or `нет`, select the editable profile and initially keep reduced detection with automatic groups enabled;
 - reduced mode uses only lightweight metadata detection and avoids heavy port checks, but it may still auto-assign confidently detected infrastructure devices to the `No restrictions` group.
 
 Update checks:
@@ -427,12 +452,20 @@ Advanced collapsible controls:
 
 Changing Wi-Fi settings must require confirmation because it can disconnect current users. Sheepfold must not hide or remove standard OpenWRT wireless settings; it only provides a simpler family-facing shortcut.
 
+LuCI and the parent Android app must expose the same all-radio automation contract:
+
+- automatic enable: `never` or a router-local `HH:MM` time;
+- automatic disable: `never` or a router-local `HH:MM` time;
+- saving a newly enabled automatic shutdown requires a non-skippable ten-second warning;
+- after confirmation the selected mode/time must remain intact rather than reverting to `never`;
+- the warning explains that a phone connected only through this Wi-Fi cannot turn it back on and recommends configuring messenger or WPS recovery first.
+
 ## Router Interface Access
 
 The application should include security settings for local router access:
 
 - blocklisted devices cannot access the OpenWRT router LuCI interface, SSH, or the Sheepfold local API;
-- globally blocked devices may access the router only if `allow_router_for_blocked` is enabled;
+- a global internet shutdown does not by itself close the local LuCI login page; router-management access is governed separately by authentication, the device blocklist, and identity quarantine;
 - emergency-useful sites mode can optionally allow selected public domains for blocked devices.
 
 An ordinary device that is neither blocklisted nor in unresolved identity quarantine may reach the
@@ -442,6 +475,11 @@ parent using a new device and break legitimate local diagnostics. Unresolved ide
 always denies LuCI, SSH and Sheepfold API regardless of automatic/manual internet treatment.
 
 Emergency-useful sites may also be enabled for blocklisted devices by a separate setting, but this must not grant access to LuCI, SSH, or Sheepfold API.
+
+The factory site-blocklist mode is enabled for ordinary managed devices and excludes
+administrator devices and the device allowlist. Its domain-level enforcement is a
+best-effort 1.0 feature: bypass prevention for external DNS, DoH/DoT, QUIC, VPN,
+proxy, and direct IP is a documented known limitation, not a false security promise.
 
 ## First-Open Router Password Gate
 
@@ -523,7 +561,13 @@ If the user wants a full backup including secrets, Sheepfold should require encr
 
 Live one-time pairing codes are transient state and must not appear in either readable or encrypted backups. A non-secret random router installation ID distinguishes a same-router restore from migration. Migration to another router keeps permanent numeric device IDs, groups, schedules and access lists, but clears identity HMAC values, unresolved identity quarantine and administrator-phone bindings because the local identity secret is intentionally not exported. Administrator accounts remain and their phones must be paired again (§cfgbak1).
 
-Offline known devices should be cleaned after a configurable number of inactive days. Default: `90` days.
+Offline known devices should be cleaned after a configurable number of inactive days. Default: `90` days. Automatic cleanup may delete only fully unconfigured devices; any list membership, group, schedule, administrator binding, manual name/type, static lease, or other parent choice preserves the record and its permanent `#ID`.
+
+When the router clock is clearly implausible, Sheepfold should first trigger the
+configured NTP client and recheck the clock. If NTP is disabled or synchronization
+still fails, show a persistent LuCI warning and enqueue a parent-APK notification;
+schedules must not silently pretend that an unreliable wall clock is correct. The
+device blocklist remains enforced regardless of time validity.
 
 ## Messaging
 

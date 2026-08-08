@@ -122,4 +122,10 @@ describe('quality assistant modules §qassist', () => {
     assert.match(docs, /quality:plan[\s\S]*quality:changed[\s\S]*quality:gate/);
     assert.match(read('docs/dev/tag-map.md'), /§qassist/);
   });
+
+  it('routes the strict full gate through the isolated canonical test runner', () => {
+    const qualityRunner = read('scripts/runQualityChecks.mjs');
+    assert.match(qualityRunner, /scripts', 'runAllTests\.mjs'/);
+    assert.doesNotMatch(qualityRunner, /readdirSync\(resolve\(repoRoot, 'tests'\)/);
+  });
 });

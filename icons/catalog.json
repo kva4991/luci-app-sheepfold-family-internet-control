@@ -6,6 +6,7 @@
       "name": "actionSettings",
       "category": "Действия",
       "title": "Настроить",
+      "androidVector": "android/app/src/main/res/drawable/ic_action_settings.xml",
       "paths": [
         "M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.5-2.4 1a8 8 0 0 0-2.6-1.5L14 2h-4l-.4 3a8 8 0 0 0-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 2.6 1.5l.4 3h4l.4-3a8 8 0 0 0 2.6-1.5l2.4 1 2-3.5z",
         "M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"
@@ -18,7 +19,8 @@
             "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/administrators/controller.js",
             "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/groups/view.js",
             "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js",
-            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/emergency/panel.js"
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/emergency/panel.js",
+            "android/app/src/main/java/app/sheepfold/android/ui/main/GroupsTab.kt"
           ]
         }
       ]
@@ -44,7 +46,8 @@
             "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/view.js",
             "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/schedules/editor.js",
             "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/emergency/panel.js",
-            "android/app/src/main/java/app/sheepfold/android/ui/main/SchedulesTab.kt"
+            "android/app/src/main/java/app/sheepfold/android/ui/main/SchedulesTab.kt",
+            "android/app/src/main/java/app/sheepfold/android/ui/main/GroupsTab.kt"
           ]
         }
       ]
@@ -144,6 +147,451 @@
           "place": "Отправка сообщения в ИИ-помощнике детского Android-приложения",
           "files": [
             "android-child/app/src/main/java/com/example/sheepfoldchild/ui/AiChatScreen.kt"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "actionSignOut",
+      "category": "Действия",
+      "title": "Завершить все сеансы",
+      "paths": [
+        "M10 4H4v16h6",
+        "M14 8l4 4-4 4",
+        "M18 12H8"
+      ],
+      "uses": [
+        {
+          "place": "Отзыв всех телефонных токенов выбранного администратора",
+          "files": [
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/administrators/controller.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationControl",
+      "category": "Навигация",
+      "title": "Управление",
+      "paths": [
+        "M12 2v10",
+        "M6.3 5.3a8 8 0 1 0 11.4 0"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_control.xml",
+      "uses": [
+        {
+          "place": "Вкладка управления интернетом в родительском Android-приложении",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationMenu",
+      "category": "Навигация",
+      "title": "Меню",
+      "paths": [
+        "M4 4h6v6H4z",
+        "M14 4h6v6h-6z",
+        "M4 14h6v6H4z",
+        "M14 14h6v6h-6z"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_menu.xml",
+      "uses": [
+        {
+          "place": "Вкладка меню родительского Android-приложения",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationDevices",
+      "category": "Навигация",
+      "title": "Устройства",
+      "paths": [
+        "M3 4h13v10H3z",
+        "M8 18h3",
+        "M9.5 14v4",
+        "M18 7h3v13h-6v-4h3z"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_devices.xml",
+      "uses": [
+        {
+          "place": "Вкладка и карточка списка устройств в Android и LuCI",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationLists",
+      "category": "Навигация",
+      "title": "Списки",
+      "paths": [
+        "M8 6h13",
+        "M8 12h13",
+        "M8 18h13",
+        "M3 6l1 1 2-2",
+        "M3 12l1 1 2-2",
+        "M3 18l1 1 2-2"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_lists.xml",
+      "uses": [
+        {
+          "place": "Вкладка списков устройств и верхняя вкладка LuCI",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationAllowlist",
+      "category": "Навигация",
+      "title": "Белый список устройств",
+      "paths": [
+        "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z",
+        "M8.5 12l2.2 2.2 4.8-5"
+      ],
+      "uses": [
+        {
+          "place": "Подвкладка белого списка устройств в LuCI",
+          "files": [
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationBlocklist",
+      "category": "Навигация",
+      "title": "Чёрный список устройств",
+      "paths": [
+        "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z",
+        "M9 9l6 6",
+        "M15 9l-6 6"
+      ],
+      "uses": [
+        {
+          "place": "Подвкладка чёрного списка устройств в LuCI",
+          "files": [
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationSchedules",
+      "category": "Навигация",
+      "title": "Расписания",
+      "paths": [
+        "M4 5h16v15H4z",
+        "M8 3v4",
+        "M16 3v4",
+        "M4 9h16",
+        "M12 12v3l2 1"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_schedules.xml",
+      "uses": [
+        {
+          "place": "Вкладка расписаний в Android и LuCI",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationGroups",
+      "category": "Навигация",
+      "title": "Группы и управление пользователями",
+      "paths": [
+        "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",
+        "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+        "M22 21v-2a4 4 0 0 0-3-3.9",
+        "M16 3.1a4 4 0 0 1 0 7.8"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_groups.xml",
+      "uses": [
+        {
+          "place": "Вкладка групп в Android и раздел управления пользователями в LuCI",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationAdministrators",
+      "category": "Навигация",
+      "title": "Администраторы",
+      "paths": [
+        "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z",
+        "M12 8a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z",
+        "M8.5 17a3.5 3.5 0 0 1 7 0"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_administrators.xml",
+      "uses": [
+        {
+          "place": "Вкладка администраторов в Android и LuCI",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationWifi",
+      "category": "Навигация",
+      "title": "Wi-Fi",
+      "paths": [
+        "M3 9a14 14 0 0 1 18 0",
+        "M6 12a9 9 0 0 1 12 0",
+        "M9 15a4.5 4.5 0 0 1 6 0",
+        "M12 19h.01"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_wifi.xml",
+      "uses": [
+        {
+          "place": "Вкладка Wi-Fi в Android и LuCI",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationAiAssistant",
+      "category": "Навигация",
+      "title": "ИИ-помощник",
+      "paths": [
+        "M9.5 4A3.5 3.5 0 0 0 6 7.5v.7A3.8 3.8 0 0 0 5 15.5v.5a3 3 0 0 0 5.7 1.3L12 18l1.3 2.8A3 3 0 0 0 19 19v-3.5a3.8 3.8 0 0 0-1-7.3v-.7A3.5 3.5 0 0 0 14.5 4",
+        "M12 4v14",
+        "M8 9h4",
+        "M12 13h4"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_ai_assistant.xml",
+      "uses": [
+        {
+          "place": "Вкладка ИИ-помощника в Android и LuCI AI Support",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/ProductFeature.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationLogs",
+      "category": "Навигация",
+      "title": "Журнал",
+      "paths": [
+        "M6 3h12v18H6z",
+        "M9 7h6",
+        "M9 11h6",
+        "M9 15h4"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_logs.xml",
+      "uses": [
+        {
+          "place": "Вкладка журнала в Android и LuCI",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationInformation",
+      "category": "Навигация",
+      "title": "Информация",
+      "paths": [
+        "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z",
+        "M12 10v7",
+        "M12 7h.01"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_information.xml",
+      "uses": [
+        {
+          "place": "Вкладка информации в Android и настройках LuCI",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationFeedback",
+      "category": "Навигация",
+      "title": "Отзыв и предложения",
+      "paths": [
+        "M4 4h16v12H8l-4 4z",
+        "M8 8h8",
+        "M8 12h5"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_feedback.xml",
+      "uses": [
+        {
+          "place": "Вкладка отзывов в Android и настройках LuCI",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationSettings",
+      "category": "Навигация",
+      "title": "Настройки и общие параметры",
+      "extends": "actionSettings",
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_settings.xml",
+      "uses": [
+        {
+          "place": "Вкладка настроек в Android и LuCI, вкладка Общие",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationDonation",
+      "category": "Навигация",
+      "title": "Поддержать проект",
+      "paths": [
+        "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"
+      ],
+      "uses": [
+        {
+          "place": "Вкладка Donation в LuCI",
+          "files": [
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationIntegrations",
+      "category": "Навигация",
+      "title": "Интеграции",
+      "paths": [
+        "M8 3h3v4h2V3h3a2 2 0 0 1 2 2v3h3v3h-3v2h3v3h-3v3a2 2 0 0 1-2 2h-3v-4h-2v4H8a2 2 0 0 1-2-2v-3H3v-3h3v-2H3V8h3V5a2 2 0 0 1 2-2z"
+      ],
+      "uses": [
+        {
+          "place": "Вкладка интеграций LuCI",
+          "files": [
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationMessenger",
+      "category": "Навигация",
+      "title": "Мессенджер",
+      "paths": [
+        "M3 4l18 8-18 8 4-8z",
+        "M7 12h14"
+      ],
+      "uses": [
+        {
+          "place": "Вкладка мессенджера LuCI",
+          "files": [
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationNotifications",
+      "category": "Навигация",
+      "title": "Уведомления",
+      "paths": [
+        "M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9",
+        "M10 21h4"
+      ],
+      "androidVector": "android/app/src/main/res/drawable/ic_navigation_notifications.xml",
+      "uses": [
+        {
+          "place": "Вкладка уведомлений в Android и LuCI",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationEmergencySites",
+      "category": "Навигация",
+      "title": "Аварийно-полезные сайты",
+      "paths": [
+        "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z",
+        "M12 8v8",
+        "M8 12h8"
+      ],
+      "uses": [
+        {
+          "place": "Вкладка аварийно-полезных сайтов LuCI",
+          "files": [
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationMisc",
+      "category": "Навигация",
+      "title": "Разное",
+      "paths": [
+        "M4 6h8",
+        "M16 6h4",
+        "M4 12h3",
+        "M11 12h9",
+        "M4 18h10",
+        "M18 18h2",
+        "M12 4v4",
+        "M7 10v4",
+        "M14 16v4"
+      ],
+      "uses": [
+        {
+          "place": "Вкладка Разное LuCI",
+          "files": [
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "navigationStorage",
+      "category": "Навигация",
+      "title": "Управление памятью роутера",
+      "paths": [
+        "M4 6c0-2 3.6-3 8-3s8 1 8 3-3.6 3-8 3-8-1-8-3z",
+        "M4 6v6c0 2 3.6 3 8 3s8-1 8-3V6",
+        "M4 12v6c0 2 3.6 3 8 3s8-1 8-3v-6"
+      ],
+      "uses": [
+        {
+          "place": "Вкладка управления памятью роутера LuCI",
+          "files": [
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
           ]
         }
       ]
@@ -349,6 +797,7 @@
       "name": "deviceTypeUnknown",
       "category": "Типы устройств",
       "title": "Неизвестный тип",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_unknown.xml",
       "paths": [
         "M9.09 9a3 3 0 1 1 5.82 1c0 2-3 3-3 3",
         "M12 17h.01",
@@ -368,6 +817,7 @@
       "name": "deviceTypePhone",
       "category": "Типы устройств",
       "title": "Телефон",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_phone.xml",
       "paths": [
         "M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z",
         "M11 18h2"
@@ -385,6 +835,7 @@
       "name": "deviceTypeTablet",
       "category": "Типы устройств",
       "title": "Планшет",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_tablet.xml",
       "paths": [
         "M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
         "M12 17h.01"
@@ -402,6 +853,7 @@
       "name": "deviceTypeComputer",
       "category": "Типы устройств",
       "title": "Компьютер",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_computer.xml",
       "paths": [
         "M2 5h14v10H2z",
         "M5 19h8",
@@ -422,6 +874,7 @@
       "name": "deviceTypeTelevision",
       "category": "Типы устройств",
       "title": "Телевизор",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_television.xml",
       "paths": [
         "M8 2l4 4 4-4",
         "M3 6h18v10H3z",
@@ -441,6 +894,7 @@
       "name": "deviceTypeMediaPlayer",
       "category": "Типы устройств",
       "title": "Медиаплеер",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_media_player.xml",
       "paths": [
         "M4 5h16v14H4z",
         "M10 9l6 3-6 3z"
@@ -458,6 +912,7 @@
       "name": "deviceTypeSmartWatch",
       "category": "Типы устройств",
       "title": "Умные часы",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_smart_watch.xml",
       "paths": [
         "M9 2h6l1 4h2v12h-2l-1 4H9l-1-4H6V6h2z"
       ],
@@ -478,6 +933,7 @@
       "name": "deviceTypeGameConsole",
       "category": "Типы устройств",
       "title": "Игровая приставка",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_game_console.xml",
       "paths": [
         "M7 8h10a5 5 0 0 1 4.5 7.2l-.9 3.4a2 2 0 0 1-3.3.9L15 17H9l-2.3 2.5a2 2 0 0 1-3.3-.9l-.9-3.4A5 5 0 0 1 7 8z",
         "M5.5 13h4",
@@ -498,6 +954,7 @@
       "name": "deviceTypePrinter",
       "category": "Типы устройств",
       "title": "Принтер",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_printer.xml",
       "paths": [
         "M7 8V3h10v5",
         "M6 17H4v-6h16v6h-2",
@@ -516,6 +973,7 @@
       "name": "deviceTypeServer",
       "category": "Типы устройств",
       "title": "Сервер",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_server.xml",
       "paths": [
         "M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z",
         "M8 7h8",
@@ -538,6 +996,7 @@
       "name": "deviceTypeCamera",
       "category": "Типы устройств",
       "title": "Камера",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_camera.xml",
       "paths": [
         "M4 7h4l2-3h4l2 3h4v13H4z",
         "M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"
@@ -555,6 +1014,7 @@
       "name": "deviceTypeSmartSpeaker",
       "category": "Типы устройств",
       "title": "Умная колонка",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_smart_speaker.xml",
       "paths": [
         "M8 6a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-2a3 3 0 0 1-3-3z",
         "M10 8h4",
@@ -576,6 +1036,7 @@
       "name": "deviceTypeRobotVacuum",
       "category": "Типы устройств",
       "title": "Робот-пылесос",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_robot_vacuum.xml",
       "paths": [
         "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18",
         "M4 6 2 4",
@@ -609,6 +1070,7 @@
       "name": "deviceTypeSmartHome",
       "category": "Типы устройств",
       "title": "Умный дом",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_smart_home.xml",
       "paths": [
         "M3 11l9-8 9 8",
         "M5 10v10h14V10"
@@ -632,6 +1094,7 @@
       "name": "deviceTypeEngineering",
       "category": "Типы устройств",
       "title": "Инженерное устройство",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_engineering.xml",
       "paths": [
         "M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
         "M7 20v2",
@@ -655,6 +1118,7 @@
       "name": "deviceTypeSmartDevice",
       "category": "Типы устройств",
       "title": "Умное устройство",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_smart_device.xml",
       "paths": [
         "M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z",
         "M9 2v3",
@@ -686,6 +1150,7 @@
       "name": "deviceTypeNetwork",
       "category": "Типы устройств",
       "title": "Сетевое устройство",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_network.xml",
       "paths": [
         "M6 2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z",
         "M12 16v2",
@@ -713,6 +1178,7 @@
       "name": "deviceTypeRouter",
       "category": "Типы устройств",
       "title": "Роутер или точка доступа",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_router.xml",
       "paths": [
         "M4 12h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z",
         "M12 12V7",
@@ -736,6 +1202,7 @@
       "name": "deviceTypeNetworkSwitch",
       "category": "Типы устройств",
       "title": "Сетевой свич",
+      "androidVector": "android/app/src/main/res/drawable/ic_device_type_network_switch.xml",
       "paths": [
         "M3 6h18a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"
       ],
