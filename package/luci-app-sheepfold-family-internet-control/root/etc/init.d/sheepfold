@@ -2,6 +2,24 @@
 
 START=90
 USE_PROCD=1
+INSTALL_MARKER='/tmp/sheepfold/package-installing'
+
+package_install_in_progress() {
+        local created_at now age
+        [ -r "$INSTALL_MARKER" ] || return 1
+        created_at="$(cat "$INSTALL_MARKER" 2>/dev/null || true)"
+        now="$(date +%s)"
+        case "$created_at:$now" in
+                *[!0-9:]*|:*) rm -f "$INSTALL_MARKER"; return 1 ;;
+        esac
+        age=$((now - created_at))
+        if [ "$age" -ge -300 ] && [ "$age" -le 600 ]; then
+                return 0
+        fi
+        # Оборванная установка не должна навсегда запрещать обычный запуск. §pkgstart1
+        rm -f "$INSTALL_MARKER"
+        return 1
+}
 
 valid_port() {
         case "$1" in ''|*[!0-9]*) return 1 ;; esac
@@ -50,6 +68,10 @@ apply_ipv6_settings() {
 
 start_service() {
         local port https_port
+
+        # apk выполняет промежуточный auto-start до завершения postinst. В этот
+        # момент часть миграций и прав ещё не готова; финальный restart сделает postinst.
+        package_install_in_progress && return 0
 
         restore_usb_storage
         apply_led_repair

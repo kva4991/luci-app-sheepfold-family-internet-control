@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=280
+PKG_RELEASE:=281
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -24,6 +24,9 @@ define Package/$(PKG_NAME)/preinst
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 case "$$1" in
 	upgrade|install)
+		mkdir -p /tmp/sheepfold
+		date +%s > /tmp/sheepfold/package-installing
+		chmod 600 /tmp/sheepfold/package-installing 2>/dev/null || true
 		if [ -s /etc/config/sheepfold ]; then
 			mkdir -p /etc/sheepfold/migrations
 			cp /etc/config/sheepfold /etc/sheepfold/migrations/sheepfold.config.pre-upgrade
@@ -36,6 +39,15 @@ endef
 
 define Package/$(PKG_NAME)/postinst
 #!/bin/sh
+install_marker='/tmp/sheepfold/package-installing'
+cleanup_install_marker() {
+	rm -f "$$install_marker"
+}
+if [ -z "$${IPKG_INSTROOT}" ]; then
+	# apk может автоматически запустить init.d сразу после распаковки, пока
+	# postinst ещё мигрирует конфиг и права. Маркер снимается и при ошибке. §pkgstart1
+	trap cleanup_install_marker 0 1 2 3 15
+fi
 hardener="$${IPKG_INSTROOT}/usr/libexec/sheepfold/sheepfold-runtime-hardening"
 if [ -f "$$hardener" ]; then
 	/bin/sh "$$hardener" "$${IPKG_INSTROOT}" || exit 1
@@ -588,6 +600,8 @@ rm -f /tmp/luci-indexcache* 2>/dev/null || true
 rm -f /tmp/luci-modulecache/* 2>/dev/null || true
 [ -x /etc/init.d/rpcd ] && /etc/init.d/rpcd reload || true
 [ -x /etc/init.d/sheepfold ] && /etc/init.d/sheepfold enable || true
+cleanup_install_marker
+trap - 0 1 2 3 15
 [ -x /etc/init.d/sheepfold ] && /etc/init.d/sheepfold restart || true
 cleanup_opkg_conffile_artifacts
 cleanup_stale_update_artifacts

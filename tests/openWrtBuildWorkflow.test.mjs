@@ -18,6 +18,10 @@ const packageMakefile = readFileSync(
   join(root, 'package/luci-app-sheepfold-family-internet-control/Makefile'),
   'utf8',
 );
+const sheepfoldInit = readFileSync(
+  join(root, 'package/luci-app-sheepfold-family-internet-control/root/etc/init.d/sheepfold'),
+  'utf8',
+);
 
 describe('OpenWrt GitHub Actions build §owrtci1', () => {
   it('builds both product editions for current IPK and APK releases', () => {
@@ -78,6 +82,25 @@ describe('OpenWrt GitHub Actions build §owrtci1', () => {
       0,
       syntaxCheck.error?.message || syntaxCheck.stderr || syntaxCheck.stdout,
     );
+  });
+
+  it('defers the intermediate package-manager start until postinst is complete §pkgstart1', () => {
+    const preinst = packageMakefile.match(
+      /define Package\/\$\(PKG_NAME\)\/preinst\n([\s\S]*?)\nendef/,
+    )?.[1] ?? '';
+    const postinst = packageMakefile.match(
+      /define Package\/\$\(PKG_NAME\)\/postinst\n([\s\S]*?)\nendef/,
+    )?.[1] ?? '';
+    const marker = '/tmp/sheepfold/package-installing';
+
+    assert.match(preinst, new RegExp(marker.replaceAll('/', '\\/')));
+    assert.match(postinst, /trap cleanup_install_marker 0 1 2 3 15/);
+    assert.ok(
+      postinst.indexOf('cleanup_install_marker') < postinst.lastIndexOf('/etc/init.d/sheepfold restart'),
+      'the marker must be removed before the final service restart',
+    );
+    assert.match(sheepfoldInit, /package_install_in_progress && return 0/);
+    assert.match(sheepfoldInit, /age.*-le 600/);
   });
 
   it('publishes only a complete verified matrix and scopes release writes', () => {
