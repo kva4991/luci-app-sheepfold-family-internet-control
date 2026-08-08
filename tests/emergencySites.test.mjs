@@ -34,7 +34,7 @@ const firewall = read('package/luci-app-sheepfold-family-internet-control/root/u
 const nft = read('package/luci-app-sheepfold-family-internet-control/root/usr/share/nftables.d/table-pre/30-sheepfold.nft');
 const routerControl = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-router-control-legacy');
 
-describe('emergency-useful sites persistence and enforcement §emerg1', () => {
+describe('emergency-useful sites persistence and enforcement §emerg1 §bbxsort1', () => {
   it('normalizes web input to a safe domain and rejects addresses and shell text', () => {
     const model = loadModel();
 
@@ -127,6 +127,9 @@ describe('emergency-useful sites persistence and enforcement §emerg1', () => {
     assert.match(helper, /dnsmasq_supports_nftset/);
     assert.match(helper, /section="\$\{DHCP_PREFIX\}_\$index"/);
     assert.match(helper, /add_list "dhcp\.\$section\.domain=\$domain"/);
+    assert.match(helper, /sort -u "\$DOMAINS_FILE" > "\$sorted_domains"/);
+    assert.match(helper, /mv -f "\$sorted_domains" "\$DOMAINS_FILE"/);
+    assert.doesNotMatch(helper, /sort[^\n]* -o(?:\s|$)/);
     assert.match(helper, /command -v resolveip/);
     assert.match(helper, /nslookup "\$domain"/);
     assert.match(helper, /Name:/);

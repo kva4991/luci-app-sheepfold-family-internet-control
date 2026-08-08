@@ -34,7 +34,7 @@ append_unique() {
 }
 
 collect_domains() {
-        local section enabled domain legacy
+        local section enabled domain legacy sorted_domains
         : > "$DOMAINS_FILE"
 
         for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=emergency_site$/\1/p'); do
@@ -49,7 +49,18 @@ collect_domains() {
                 domain="$(printf '%s' "$legacy" | tr 'A-Z' 'a-z')"
                 valid_domain "$domain" && append_unique "$DOMAINS_FILE" "$domain"
         done
-        sort -u "$DOMAINS_FILE" -o "$DOMAINS_FILE"
+        # BusyBox sort в OpenWrt не поддерживает GNU-ключ -o: он печатает список
+        # в stdout и оставляет исходный файл без дедупликации. Сортируем через
+        # соседний файл и заменяем результат атомарно. §emerg1 §bbxsort1
+        sorted_domains="$DOMAINS_FILE.sorted.$$"
+        if ! sort -u "$DOMAINS_FILE" > "$sorted_domains"; then
+                rm -f "$sorted_domains"
+                return 1
+        fi
+        mv -f "$sorted_domains" "$DOMAINS_FILE" || {
+                rm -f "$sorted_domains"
+                return 1
+        }
 }
 
 dnsmasq_supports_nftset() {

@@ -4,8 +4,9 @@
  * Статические границы и sh -n не доказывают применение UCI, firewall или реальную доставку API.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 const root = 'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold';
@@ -18,6 +19,14 @@ const firewall = read('sheepfold-firewall');
 const luciAction = read('sheepfold-luci-action');
 const googleDrive = read('sheepfold-google-drive');
 const yandexDisk = read('sheepfold-yandex-disk');
+const packageRoot = 'package/luci-app-sheepfold-family-internet-control/root';
+
+function walkFiles(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? walkFiles(path) : (entry.isFile() ? [path] : []);
+  });
+}
 
 function functionBody(source, name, nextName) {
   const start = source.indexOf(`${name}()`);
@@ -26,7 +35,7 @@ function functionBody(source, name, nextName) {
   return source.slice(start, end);
 }
 
-describe('portable shell and child-status audit corrections §awkport1', () => {
+describe('portable shell and child-status audit corrections §awkport1 §bbxsort1', () => {
   it('keeps interval regex validation outside awk dialect differences', () => {
     const emitRules = functionBody(adguard, 'emit_domain_rules', 'generate_feed');
     const phoneHistory = functionBody(simMonitor, 'merge_phone_history', 'report_snapshot');
@@ -69,6 +78,13 @@ describe('portable shell and child-status audit corrections §awkport1', () => {
     ]) {
       const result = spawnSync('sh', ['-n', `${root}/${name}`], { encoding: 'utf8' });
       assert.equal(result.status, 0, `${name}\n${result.stderr}`);
+    }
+  });
+
+  it('forbids GNU sort -o in the shipped OpenWrt rootfs', () => {
+    for (const path of walkFiles(packageRoot)) {
+      const source = readFileSync(path, 'utf8');
+      assert.doesNotMatch(source, /\bsort[^\r\n]*\s-o(?:\s|$)/, path);
     }
   });
 });
