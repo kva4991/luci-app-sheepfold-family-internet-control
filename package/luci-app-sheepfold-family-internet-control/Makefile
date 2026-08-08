@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=281
+PKG_RELEASE:=282
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -22,18 +22,16 @@ LUCI_LANG.zh_Hans:=中文 (简体)
 define Package/$(PKG_NAME)/preinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
-case "$$1" in
-	upgrade|install)
-		mkdir -p /tmp/sheepfold
-		date +%s > /tmp/sheepfold/package-installing
-		chmod 600 /tmp/sheepfold/package-installing 2>/dev/null || true
-		if [ -s /etc/config/sheepfold ]; then
-			mkdir -p /etc/sheepfold/migrations
-			cp /etc/config/sheepfold /etc/sheepfold/migrations/sheepfold.config.pre-upgrade
-			chmod 600 /etc/config/sheepfold/migrations/sheepfold.config.pre-upgrade 2>/dev/null || true
-		fi
-		;;
-esac
+# OpenWrt apk вызывает pre-install/pre-upgrade без позиционного действия. Нельзя
+# проверять первый аргумент: барьер не создастся именно при реальной установке. §pkgstart1
+mkdir -p /tmp/sheepfold
+date +%s > /tmp/sheepfold/package-installing
+chmod 600 /tmp/sheepfold/package-installing 2>/dev/null || true
+if [ -s /etc/config/sheepfold ]; then
+	mkdir -p /etc/sheepfold/migrations
+	cp /etc/config/sheepfold /etc/sheepfold/migrations/sheepfold.config.pre-upgrade
+	chmod 600 /etc/sheepfold/migrations/sheepfold.config.pre-upgrade 2>/dev/null || true
+fi
 exit 0
 endef
 

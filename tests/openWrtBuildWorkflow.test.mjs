@@ -92,8 +92,17 @@ describe('OpenWrt GitHub Actions build §owrtci1', () => {
       /define Package\/\$\(PKG_NAME\)\/postinst\n([\s\S]*?)\nendef/,
     )?.[1] ?? '';
     const marker = '/tmp/sheepfold/package-installing';
+    const executablePreinst = preinst
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
 
     assert.match(preinst, new RegExp(marker.replaceAll('/', '\\/')));
+    assert.doesNotMatch(
+      executablePreinst,
+      /(?:\$\$1|\$\$\{1\}|\$1|\$\{1\})/,
+      'OpenWrt apk invokes pre-install/pre-upgrade without a positional action',
+    );
     assert.match(postinst, /trap cleanup_install_marker 0 1 2 3 15/);
     assert.ok(
       postinst.indexOf('cleanup_install_marker') < postinst.lastIndexOf('/etc/init.d/sheepfold restart'),
