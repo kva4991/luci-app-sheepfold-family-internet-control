@@ -1,0 +1,389 @@
+# Протокол роутера и сервера временной техподдержки
+
+<!-- §rsup001 -->
+
+Статус: проектный контракт `v1`. Общий envelope, строгий JSON, state machine, synthetic golden vector и автономный claim/session lifecycle simulator реализованы только как Node.js reference-модель в [`tools/remoteSupport/`](../tools/remoteSupport/README.ru.md). Это не router/server runtime и не обещание совместимости. LuCI-заглушка остаётся заблокированной до появления предметных схем всех `payload`, двустороннего signed-message simulator, backend и живого transport PoC.
+
+Документ определяет сообщения между Sheepfold на роутере и будущим control plane. FRP переносит зашифрованный поток, но не решает выдачу разрешения, сроки, отзыв, защиту от replay и аутентификацию сотрудника.
+
+## Цели протокола
+
+- сервер не может создать доступ без локально открытого claim;
+- роутер и сервер однозначно узнают друг друга криптографически;
+- повтор сообщения, reconnect и reboot не создают второй доступ и не продлевают первый;
+- код можно безопасно продиктовать, но он не является паролем, портом или transport credential;
+- удаление сервера из сети не мешает локально закрыть доступ;
+- старый клиент отвергает неизвестную опасную команду;
+- все ошибки имеют стабильный машинный код и не требуют разбирать текст;
+- реализация подходит OpenWRT 24.10/25.12 и минимальному роутеру Xiaomi AX3000T после измерений.
+
+## Разделение каналов
+
+| Канал | Назначение | Доверие |
+|---|---|---|
+| Control HTTPS | Enrollment, claim, подписанные команды, heartbeat, revoke, relay map | TLS с обычной проверкой имени и закреплённым корнем; сообщения дополнительно подписаны |
+| FRP transport | Исходящая доставка TCP к relay | Взаимный TLS с отдельным короткоживущим сертификатом одного роутера/сеанса |
+| Reverse SSH | Фактическая работа техподдержки | SSH от bastion до Dropbear роутера с временным ключом заявки |
+| LuCI/Android/мессенджер | Статус, уведомление и отзыв | Существующие локальные Sheepfold API и права; они не заменяют local claim |
+
+Успешный control HTTPS не открывает SSH. Успешный FRP login не открывает server route. Доступ появляется только после атомарного принятия claim, установки временного SSH-ключа и подтверждения обеими сторонами.
+
+## Порты и маршрутизация
+
+### `transportPort`
+
+Relay имеет небольшой заранее известный набор исходящих TLS-портов, например основной `443` и резервный. Роутер соединяется с ним сам. Этот порт не секретен; его безопасность обеспечивают TLS, client identity и проверка протокола.
+
+Direct-WAN правило Sheepfold разрешает только сочетание:
+
+```text
+UID sheepfold_support + подписанный IP relay + разрешённый transportPort
+```
+
+Совпадение только по порту, адресу или packet mark запрещено.
+
+### `sessionRoutePort`
+
+После успешного claim control plane случайно выделяет порт из внутреннего server-side pool. Он:
+
+- относится только к одному `sessionId`;
+- слушает только loopback/private-интерфейс relay;
+- доступен только закрытому bastion;
+- удаляется при revoke/expiry;
+- может смениться после восстановления server-side route без изменения срока сеанса;
+- не считается фактором аутентификации.
+
+Если выбранная версия `frps` не позволяет доказуемо закрыть proxy bind от публичного интерфейса, transport PoC считается неуспешным. Открывать случайный высокий порт в интернет вместо исправления изоляции запрещено.
+
+### Почему порт не входит в код
+
+12-значный код состоит только из криптографически случайных цифр. В нём нет `routerId`, порта, relay, контрольной суммы с обратимыми данными или номера заявки. Постоянный порт на каждый роутер запрещён: это стабильный идентификатор, ограниченный 16-битным диапазоном и обнаруживаемый сканированием.
+
+Control plane сам связывает код с `claimId`, `routerId`, заявкой и внутренним route. Сотруднику достаточно номера заявки и кода; порт он не диктует и не вводит.
+
+## Криптографические личности и ключи
+
+### Корень Sheepfold
+
+Подписанный пакет содержит только публичный офлайн-корень Sheepfold. Он проверяет версионированный server key manifest. Приватный корневой ключ не находится на control plane и не используется для ежедневной подписи сообщений.
+
+### Роутер
+
+При явном включении модуля router backend:
+
+1. создаёт отдельную Ed25519 identity-пару локально;
+2. сохраняет приватный ключ root-only вне UCI, backup/export и argv;
+3. доказывает владение ключом, подписывая server challenge;
+4. получает случайный `routerId`, не содержащий MAC, serial, SSID или адрес владельца;
+5. регистрирует только публичный ключ.
+
+До регистрации server ещё не знает router public key, поэтому используется единственное узкое bootstrap-исключение:
+
+1. `POST /v1/enrollment/start` передаётся только внутри HTTPS с полной проверкой имени и закреплённого корня;
+2. строгий body содержит ровно `identityPublicKey`, случайный `clientNonce` и `supportedVersions`, не содержит MAC, serial, SSID, пароля или команды;
+3. server ограничивает размер/rate, вычисляет `candidateKeyId` и хранит pending public key не дольше пяти минут;
+4. подписанный server-сообщением `enrollChallenge` использует временный `streamId=enrollmentId` и `routerId=null`;
+5. ответ `enrollProof` имеет envelope `keyId=candidateKeyId`, поэтому server находит pending public key и проверяет внешнюю подпись до разбора payload;
+6. после успешного proof server удаляет pending challenge и отправляет подписанный `enrollAccepted` с новым `routerId` и control `streamId`.
+
+Любое другое router -> server сообщение без проверяемой внешней подписи запрещено. Bootstrap не создаёт claim, transport credential, SSH-ключ или доступ.
+
+Компрометация одного router identity не открывает другие роутеры. Перенос настройки на другой роутер не переносит identity автоматически.
+
+### Сервер
+
+Control plane подписывает сообщения отдельным online Ed25519-ключом. Его публичная часть и срок находятся в manifest, подписанном офлайн-корнем. Ротация требует нового действующего manifest; команда от неизвестного online key не может сама объявить этот ключ доверенным.
+
+### Transport
+
+Для каждого открытого ожидания либо принятого сеанса роутер создаёт отдельную transport keypair и CSR. Control plane возвращает короткоживущий клиентский сертификат, ограниченный `routerId`, `sessionId` и deadline. Приватный transport key остаётся на роутере. Общий FRP token для всех установок запрещён.
+
+PoC обязан подтвердить поддержку взаимного TLS выбранной сборкой `frpc/frps`. Если она отсутствует или не проходит проверку hostname/CA/client certificate, нельзя молча перейти на один общий token.
+
+### SSH
+
+Bastion создаёт отдельную временную SSH-пару для принятой заявки. Router backend получает только публичный ключ в подписанной команде и добавляет его с маркером `sessionId`. Приватный ключ не выдаётся control plane API, LuCI или сотруднику как скачиваемый файл; соединение создаёт bastion.
+
+## Формат подписанного сообщения
+
+Внешний envelope содержит ровно четыре поля:
+
+```json
+{
+  "protocolVersion": 1,
+  "keyId": "server-2026-01",
+  "signedPayload": "<base64url exact UTF-8 JSON bytes>",
+  "signature": "<base64url Ed25519 signature>"
+}
+```
+
+Подпись проверяется до разбора JSON над однозначным бинарным preimage:
+
+```text
+ASCII "SheepfoldRemoteSupport\\0"
++ uint32be protocolVersion
++ uint16be длина keyId
++ uint32be длина signedPayload
++ ASCII keyId
++ точные декодированные байты signedPayload
+```
+
+Так подпись одновременно связывает версию, `keyId` и payload. Подпись только над `signedPayload` запрещена: внешние поля не должны жить отдельно от подписанного контекста. Точные байты payload исключают расхождения из-за порядка ключей, пробелов и повторной сериализации. После успешной подписи payload разбирается строгой схемой.
+
+Обязательные поля payload:
+
+```json
+{
+  "messageType": "sessionCommand",
+  "routerId": "<128-bit random id>",
+  "streamId": "<128-bit replay scope>",
+  "messageId": "<128-bit random id>",
+  "sequence": 7,
+  "issuedAt": 1787421000,
+  "notBefore": 1787421000,
+  "expiresAt": 1787421060,
+  "payload": {
+    "sessionId": "<128-bit support session id>"
+  }
+}
+```
+
+Правила разбора:
+
+- имена ключей регистрозависимы;
+- `protocolVersion` является целым числом, а не строкой;
+- время передаётся Unix timestamp в секундах UTC;
+- `expiresAt` является исключающей границей: при `now >= expiresAt` сообщение, claim или сеанс уже просрочены;
+- `sequence` является неотрицательным целым в совместимом диапазоне JSON `0..2^53-1`; этого достаточно для одного временного сеанса и не вызывает потери точности в JavaScript/ucode;
+- `streamId` всегда содержит ровно 128 случайных бит и задаёт область `sequence`/replay; для сообщения активной техподдержки он равен `sessionId`, а для enrollment является отдельным временным ID;
+- `routerId=null` допустим только для `enrollChallenge`/`enrollProof`, пока сервер ещё не выдал идентификатор; после enrollment `routerId` обязателен;
+- остальные ID содержат ровно 128 случайных бит и передаются как 22 символа canonical base64url без `=` и пользовательских данных;
+- повторяющиеся JSON-ключи, NUL, неправильный UTF-8, лишние критические поля и значения вне диапазона отклоняются;
+- общий подписанный payload ограничен 16 КБ, глубиной 16, 64 полями объекта и 128 элементами массива; более узкая предметная схема может уменьшать эти пределы;
+- неизвестный `messageType` не выполняется;
+- неизвестная major-версия не получает fallback на `v1`;
+- текст ошибки не участвует в логике клиента.
+
+Подписанные payload создаёт один server-side serializer. Golden vectors фиксируют точные байты, подписи, допустимый разбор и набор испорченных вариантов.
+
+## Версия и capabilities
+
+`protocolVersion=1` означает major-версию. Совместимые добавления объявляются через capabilities, например:
+
+```json
+{
+  "supportedVersions": [1],
+  "capabilities": [
+    "claimV1",
+    "mutualTlsTransportV1",
+    "localRevokeV1",
+    "signedRelayMapV1"
+  ]
+}
+```
+
+Capability сообщает только уже реализованное поведение. Отсутствующее значение означает `не поддерживается`, а не разрешение угадать по версии пакета. Security-critical capability нельзя включить server-side feature flag без поддержки router backend.
+
+## Типы сообщений `v1`
+
+| `messageType` | Направление | Назначение | Идемпотентность |
+|---|---|---|---|
+| `enrollChallenge` | server -> router | Случайный challenge для регистрации public key | Новый challenge отменяет прежний после срока |
+| `enrollProof` | router -> server | Подпись challenge и public identity | Один proof создаёт не более одного `routerId` |
+| `enrollAccepted` | server -> router | Выданные `routerId`, identity key ID и новый control stream | Повтор для того же enrollment возвращает прежний результат |
+| `capabilityReport` | router -> server | Версии, возможности и безопасные сведения transport | Повтор заменяет только ту же revision |
+| `relayMap` | server -> router | Подписанный список relay, IP, портов и срока | Принимается только более новая revision |
+| `claimOpen` | router -> server | Открытие 72-часового ожидания после local action | Один idempotency key создаёт один claim |
+| `claimOpened` | server -> router | Подтверждение server-side verifier/deadline | Не изменяет первоначальный deadline |
+| `claimAccepted` | server -> router | Заявка, срок 24 часа, SSH public key и transport lease | Один `sessionId` добавляет один ключ/route |
+| `sessionReady` | router -> server | Ключ установлен, `frpc` готов, локальный срок принят | Повтор не создаёт новый route |
+| `sessionActive` | server -> router | Bastion подтвердил новый SSH handshake | Только это состояние позволяет UI показать подключение |
+| `heartbeat` | router -> server | Состояние manager/transport и sequence | Не продлевает deadline |
+| `sessionCommand` | server -> router | Закрытый enum безопасных управляющих действий | Строго по sequence и allowlist |
+| `revokeRequest` | router -> server | Сообщение о локальном отзыве | Повтор безопасен |
+| `revokeConfirmed` | server -> router | Server route закрыт и credential отозван | Повтор безопасен |
+| `statusQuery` | обе стороны | Сверка фактического состояния | Не меняет состояние |
+
+`sessionCommand` не содержит shell-строку, URL для произвольного скачивания или произвольный путь к файлу. Для `v1` разрешены только перечисленные операции:
+
+- `activateAcceptedSession`;
+- `revokeSession`;
+- `replaceSignedRelayMap`;
+- `rotateTransportCertificate`;
+- `confirmSafeApplyResult`.
+
+Добавление операции, способной выполнить произвольный код, изменить семейные правила или создать claim, требует новой версии/ADR и отдельного security review.
+
+## Открытие claim
+
+1. Локальный backend проверяет root password gate, LuCI ACL, lock, наличие WAN и установленный transport.
+2. Роутер создаёт `sessionId`, CSPRNG-код из 12 цифр и неизменяемый `claimExpiresAt <= now + 72h`.
+3. Подписанный `claimOpen` отправляется через аутентифицированный TLS. Открытый код передаётся серверу один раз только внутри этого запроса и запрещён для access/error logs.
+4. Server немедленно вычисляет verifier через отдельный server-side secret/pepper, очищает открытое значение из request context и подтверждает срок.
+5. Локальный LuCI показывает код группами `0000 0000 0000`; runtime-файл доступен только root и удаляется после claim/expiry/revoke.
+
+Роутер не хранит код в UCI. Server backup не содержит открытого кода. Для поиска active claim используется keyed lookup tag, а не обычный быстрый хеш 12 цифр.
+
+## Принятие claim
+
+1. Сотрудник проходит служебную аутентификацию и MFA, выбирает/создаёт номер заявки и вводит код.
+2. Server применяет лимиты по claim, учётной записи, IP/сессии bastion и общему сервису. После пяти неверных попыток claim необратимо блокируется; владелец создаёт новый.
+3. Принятие выполняется одной транзакцией `open -> claimed`; два параллельных запроса не могут победить одновременно.
+4. Code verifier удаляется, code lookup tag помещается в короткий replay denylist до конца retention.
+5. Создаются `accessStartsAt` и `accessExpiresAt <= accessStartsAt + 24h`. Остаток 72-часового окна не используется.
+6. Bastion создаёт временный SSH-ключ, relay выделяет независимый случайный `sessionRoutePort`, server выпускает transport certificate.
+7. Подписанный `claimAccepted` доставляет только необходимые public/lease данные. Роутер ещё не показывает `подключилась`.
+8. После `sessionReady` bastion выполняет SSH handshake. Только подписанный `sessionActive` переводит UI в активное состояние и создаёт уведомление.
+
+Номер порта не показывается владельцу и сотруднику, не входит в код и не сохраняется после закрытия.
+
+## Сроки и неверные часы
+
+- Server time является окончательным для claim/access deadlines.
+- Внутри одного boot роутер дополнительно хранит связь signed server time с monotonic uptime.
+- Перевод локальных часов назад не увеличивает оставшийся срок.
+- После reboot действующий сеанс остаётся закрытым, пока server не подтвердит прежний `sessionId`, deadline и transport lease.
+- Незабранный claim хранит открытый код только в volatile runtime и отменяется после reboot; владелец создаёт новый код.
+- После reboot временный SSH-ключ устанавливается заново только по действующему подписанному server status; одного восстановления TCP/FRP недостаточно.
+- Если server недоступен, локальный backend может только сохранить более строгий исход: закрыть просроченное или отозванное. Он не создаёт новый доступ офлайн.
+- Heartbeat, reconnect и safe-apply подтверждение никогда не меняют `accessExpiresAt`.
+
+## Sequence, nonce и повторы
+
+- Server и router ведут отдельную возрастающую `sequence` на каждый `streamId` и направление. Для сообщений сервисного сеанса `streamId` совпадает с вложенным `sessionId`; enrollment использует отдельный временный stream.
+- Новая последовательность каждого направления начинается с `0`; после restart принимающая сторона восстанавливает последний подтверждённый номер из защищённого состояния, а не создаёт пустое окно посреди сеанса.
+- `messageId`/nonce хранится в ограниченном replay cache как минимум до `expiresAt` сообщения.
+- Значение ниже уже подтверждённого sequence отклоняется.
+- Повтор последнего idempotent message может вернуть прежний результат, но не повторяет side effect.
+- Пропуск sequence вызывает `sequenceGap` и явный status sync, а не выполнение более новой опасной команды вслепую.
+- Новый transport socket не обнуляет sequence.
+- Factory reset создаёт новую router identity; старый `routerId` не восстанавливает support session.
+
+## State machine роутера
+
+```text
+disabled
+  -> moduleReady
+  -> waitingForWan
+  -> claimOpening
+  -> claimOpen
+  -> claimBlocked | claimExpired
+  -> sessionPreparing
+  -> sessionReady
+  -> sessionActive
+  -> reconnecting | failingOver
+  -> revoking
+  -> revoked | sessionExpired | securityBlocked
+```
+
+Переход выполняет один manager под lock. LuCI только читает структурированный status и вызывает узкие backend-операции. Если local state и signed server status противоречат друг другу, выбирается более закрытое состояние и запускается сверка.
+
+## Стабильные ошибки `v1`
+
+| `errorCode` | Смысл | Безопасное действие клиента |
+|---|---|---|
+| `protocolUnsupported` | Версия не поддерживается | Не соединяться, предложить совместимое обновление |
+| `signatureInvalid` | Подпись/ключ не прошли | Немедленно блокировать сообщение и transport |
+| `serverIdentityInvalid` | TLS/manifest не подтверждены | Не использовать адрес и не отключать проверку |
+| `routerUnknown` | `routerId` не зарегистрирован/отозван | Требовать локального повторного enrollment |
+| `messageMalformed` | Строгая схема не пройдена | Не применять частичные поля |
+| `messageNotYetValid` | Срок действия подписанного сообщения ещё не начался | Не выполнять сообщение, сверить время/status |
+| `messageExpired` | Срок сообщения истёк | Запросить новый status |
+| `sequenceReplay` | Старый/повторный side effect | Вернуть прежний результат без выполнения |
+| `sequenceGap` | Пропущена команда | Выполнить status sync |
+| `claimNotOpen` | Локального ожидания нет | Не создавать его server-side |
+| `claimCodeInvalid` | Введённый код не соответствует открытому claim | Учесть неудачную попытку без раскрытия дополнительных данных |
+| `claimExpired` | Прошло 72 часа | Удалить локальный код |
+| `claimAlreadyUsed` | Код уже сгорел | Не выдавать новый доступ |
+| `claimAttemptsExceeded` | Превышен лимит | Заблокировать claim, попросить владельца создать новый |
+| `sessionExpired` | Прошло 24 часа | Удалить ключ/route/credential |
+| `sessionRevoked` | Одна сторона отозвала доступ | Выполнить идемпотентную локальную очистку |
+| `transportUnavailable` | Relay/FRP недоступен | Bounded retry без продления срока |
+| `relayMapInvalid` | Карта просрочена/не подписана | Оставить последнюю действующую карту |
+| `clockUntrusted` | Нельзя безопасно определить срок | Не восстанавливать активный доступ |
+| `packageMissing` | Optional transport не установлен | Оставить режим неактивным |
+| `stateConflict` | Router/server расходятся | Выбрать более закрытое и сверить status |
+| `rateLimited` | Лимит control API | Подождать указанное безопасное время |
+| `securityBlocked` | Нарушен security-инвариант | Закрыть transport до локального решения |
+| `internalError` | Неизвестная серверная ошибка | Не считать действие выполненным |
+
+Локализованный текст формируется отдельно. Ветвление backend/Android/LuCI по русской или английской фразе запрещено.
+
+## Локальный отзыв
+
+`revoke` сначала выполняется на роутере:
+
+1. manager под lock переходит в `revoking`;
+2. удаляет временный SSH-ключ;
+3. останавливает session proxy/transport credential;
+4. удаляет Sheepfold-owned session route и runtime secret;
+5. фиксирует локальный `revokedAt`;
+6. затем отправляет `revokeRequest` серверу с повторами до подтверждения.
+
+Недоступность сервера не оставляет локальный вход открытым. Server expiry/revoke независимо закрывает bastion route. Повтор операции возвращает подтверждённое закрытое состояние.
+
+## Safe-apply
+
+Control protocol не передаёт shell-команды сетевой настройки. Safe-apply запускается внутри уже открытого SSH-сеанса локальным Sheepfold helper по отдельному manifest затрагиваемых файлов. Server только подтверждает, что после изменения увидел новый подписанный heartbeat и новый SSH handshake для прежнего `sessionId`.
+
+Локальный exit code, старый socket или один heartbeat без SSH не отменяют rollback timer.
+
+## Журналирование и приватность
+
+Разрешено сохранять:
+
+- `routerId` в безопасном локальном/серверном формате;
+- `sessionId`, номер заявки, actor `Sheepfold Support`;
+- переходы состояния, сроки, relay ID и безопасный `errorCode`;
+- fingerprint временного SSH public key;
+- факт локального или серверного отзыва.
+
+Запрещено сохранять:
+
+- открытый код и verifier;
+- приватные identity/transport/SSH keys;
+- client certificate private material;
+- shell-команды, terminal transcript и LuCI cookies;
+- raw UCI, SSID, MAC/IP домашних клиентов и журнал посещений;
+- секрет в URL query, process argv, push или обычном экспорте.
+
+## Совместимость и обновление
+
+- Router и server объявляют поддерживаемые major-версии до claim.
+- Обновление manager во время активного сеанса по умолчанию откладывается.
+- Если protocol update несовместим, владелец сначала закрывает сеанс.
+- Server поддерживает старую major-версию только в объявленный срок; после него старый клиент получает `protocolUnsupported`, а не ослабленный режим.
+- Downgrade не восстанавливает старый ключ, код или session state.
+- Новая реализация должна уметь полностью удалить свои `v1` runtime-артефакты без знания будущей версии.
+
+## Обязательные golden vectors и тесты
+
+1. Корректная server/router подпись для фиксированных synthetic keys.
+2. Изменение одного байта payload, `keyId`, подписи и protocol version.
+3. Повтор JSON-ключа, неверный регистр, NUL, invalid UTF-8, лишнее критическое поле и число вне диапазона.
+4. Replay одинакового `messageId`, старого sequence и одновременный claim из двух запросов.
+5. Reconnect и смена `sessionRoutePort` без изменения `sessionId/accessExpiresAt`.
+6. Доказательство, что code generation не зависит от порта/router ID/заявки.
+7. Пять ошибочных кодов блокируют claim; верный код после блокировки не оживляет его.
+8. Неверное время, reboot и server outage не продлевают доступ.
+9. Local revoke закрывает ключ/route при недоступном server.
+10. WAN-скан не видит `sessionRoutePort`; bastion видит только свой session.
+11. Credential одного роутера не проходит как identity другого.
+12. Журнал, UCI, `ps`, export и crash report не содержат synthetic secrets.
+
+Unit/golden тесты доказывают только формат и переходы. mTLS, bind interface, firewall isolation, resource budget и реальный SSH path подтверждаются отдельно на relay и тестовом Xiaomi AX3000T.
+
+Reference-модель и схемы запускаются командой:
+
+```powershell
+node --test tests/remoteSupportProtocol.test.mjs tests/remoteSupportArchitecture.test.mjs
+```
+
+## Вопросы перед фиксацией production `v1`
+
+- Подтвердить точную поддержку Ed25519 и mTLS пакетами OpenWRT 24.10/25.12 на минимальном роутере.
+- Выбрать server-side HSM/secret storage для online signing key и claim pepper.
+- Подтвердить, что выбранный `frps` связывает reverse proxy только с loopback/private адресом; иначе выбрать другой способ внутренней доставки.
+- Определить срок server audit retention и процедуру удаления данных заявки.
+- Подготовить ротацию offline root/online key без удалённого небезопасного доверия новому ключу.
+- Решить, когда одна общая учётная запись будет заменена персональными аккаунтами сотрудников.

@@ -1,0 +1,82 @@
+# Связь Sheepfold с закрытым сервером техподдержки
+
+<!-- §rsuppeer -->
+
+Статус: спроектирована граница двух репозиториев. Production server и router runtime ещё не включены.
+
+## Репозитории
+
+- этот публичный клиентский проект: <https://github.com/kva4991/luci-app-sheepfold-family-internet-control>;
+- закрытый server/control/operator project: <https://github.com/kva4991/sheepfold-support-server>.
+
+Если у агента есть доступ только к Sheepfold, этот документ, `tools/remoteSupport/peer-project.json` и `§rsup001` дают полную границу взаимодействия. Недоступность private repo не разрешает придумывать server behavior или объявлять его готовым.
+
+## Архитектура
+
+```text
+Домашний Sheepfold
+  -> исходящий HTTPS/mTLS: отчёты и control messages
+  -> временный FRP transport: только принятый support session
+
+Публичный OpenWRT-узел с белым IPv4
+  -> хранит encrypted report queue и минимальные metadata
+  -> проверяет claim/MFA/deadline/sequence
+  -> соединяет router и operator, но не создаёт доступ сам
+
+Операторский ноутбук с серым IP
+  -> сам подключается к server
+  -> локально расшифровывает отчёты
+  -> запускает supportctl и ограниченный Codex bridge
+```
+
+Публичный сервер не получает root password, LuCI cookie, Android Bearer, домашнюю LAN route или ключ расшифрования баг-репортов.
+
+## Владение контрактами
+
+| Область | Source of truth |
+|---|---|
+| Signed router/control protocol, claim/session state, golden vectors | этот public repo |
+| Router consent, local expiry/revoke, package/firewall integration | этот public repo |
+| Encrypted report envelope и очередь | private server repo |
+| Control persistence, operator MFA, relay/bastion | private server repo |
+| supportctl, JSON CLI и local Codex MCP bridge | private server repo |
+
+## Работа Codex
+
+Codex не подключается к публичному control plane напрямую. На операторском ноутбуке запускается локальный `supportctl` и будущий MCP bridge. Он выдаёт модели только типизированные действия, допустимые в текущем session:
+
+- список и чтение расшифрованных баг-репортов;
+- состояние принятого router session;
+- versioned diagnostic recipes;
+- подготовка плана изменения;
+- применение exact plan hash после подтверждения пользователя и с rollback;
+- установка только проверенного подписанного Sheepfold package;
+- немедленный revoke.
+
+Универсального `runShell` в MCP v1 нет. Неизвестный случай требует ручного терминала сотрудника и отдельного будущего ADR для one-shot command approval.
+
+## Как агент открывает второй проект
+
+Private repo нельзя добавлять submodule в public Sheepfold. Агент с GitHub-доступом клонирует его рядом:
+
+```powershell
+gh repo clone kva4991/sheepfold-support-server C:\path\to\sheepfold-support-server
+node tools\remoteSupport\checkPeerContract.mjs --peer C:\path\to\sheepfold-support-server
+```
+
+В обратную сторону private repo содержит `docs/sheepfold-client-integration.ru.md` и аналогичный `peer:check`.
+
+## Порядок совместимого изменения
+
+1. Обновить public schema/golden vectors на отдельной ветке без включения runtime.
+2. Обновить server adapter и pinned public revision.
+3. Выполнить cross-runtime tests.
+4. Сначала развернуть backward-compatible server.
+5. Затем выпустить router client, который может отправлять новую версию.
+6. Major удаляется только после объявленного срока поддержки.
+
+## Баг-репорты
+
+Sheepfold показывает владельцу preview, маскирует диагностику и шифрует payload для operator key до отправки. Central server видит только report/router IDs, timestamps, size и delivery state. Он не должен расшифровывать пользовательский текст, логи, модель роутера или версии внутри payload.
+
+Получение отчёта не даёт удалённый доступ. Support session по-прежнему требует отдельного локального 12-значного claim, служебной аутентификации/MFA и сгорает через 24 часа после принятия.

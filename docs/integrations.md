@@ -118,6 +118,14 @@ Avoid automatic destructive changes:
 - do not reset firewall rules outside Sheepfold-owned chains/sets;
 - do not restart major services without warning.
 
+## Temporary Remote Support
+
+Settings -> Integrations currently shows only a disabled preview for future temporary help from Sheepfold support. The preview is intentionally inert: it does not store a remote-support mode, install `frpc`, call a backend, contact a server, or change firewall, Podkop, AdGuard Home, DNS, routes, or IPv6. The common Save action therefore cannot activate it accidentally.
+
+The planned function is a narrowly scoped, owner-initiated outgoing support channel, not general remote router management. A production relay needs a stable public IPv4; the home router does not. Enabling remote support must never automatically select `Disable IPv6 on the router`. That existing automatic setting remains exclusively tied to current Podkop compatibility.
+
+The complete use case and phases are in [`remote-support-access-plan.ru.md`](remote-support-access-plan.ru.md); the dedicated threat model and draft `v1` contract are in [`remote-support-threat-model.ru.md`](remote-support-threat-model.ru.md) and [`remote-support-protocol.ru.md`](remote-support-protocol.ru.md), alongside ADR-0022 (§rsup001). A random per-session port may isolate an internal bastion route, but it is not a secret and is never encoded in the spoken code. Do not replace the disabled controls until the router backend and support server expose a versioned fail-closed status/revoke contract.
+
 ## AdGuard Home
 
 Sheepfold should not replace AdGuard Home. The intended chain is:

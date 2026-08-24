@@ -156,7 +156,7 @@ Avoid:
 - `docs/agent-playbook.ru.md` is the detailed repository-wide task brief for AI agents.
 - Keep it synchronized with `AGENTS.md`, `docs/product-requirements.md`, and `docs/developer-task.ru.md` whenever core product decisions change.
 - If an agent is unsure whether to add a feature, prefer the stricter/smaller interpretation until the project owner explicitly expands scope.
-- Never implement a convenience feature that weakens privacy, opens entertainment/marketplace access by default, bypasses the blocklist, adds hidden child-device behavior, or introduces full remote router management.
+- Never implement a convenience feature that weakens privacy, opens entertainment/marketplace access by default, bypasses the blocklist, adds hidden child-device behavior, or introduces permanent full remote router management. The only approved tunnel exception is the explicit temporary technical-support session in `§rsup001`.
 
 ## Emergency-Useful Sites
 
@@ -205,7 +205,7 @@ Avoid:
 - Immediately after language, ask for the router country profile (`ru`, `by`, or `cn`; preserve the current profile on update). Country-profile code may replace only entries marked `source=country_profile`; manually added or edited emergency-useful sites must survive country changes, and a deleted generated entry must stay excluded (§country1).
 - The agreement must be visible before first use in LuCI/Android when practical.
 - Do not claim that the agreement is final legal advice; production releases should be reviewed by a qualified lawyer.
-- Sheepfold remains self-hosted for family management. The only developer-operated cloud exception currently approved is the optional feedback channel described by `§feedback`: it must never become a dependency for router control and may send only user-entered fields plus a separately consented diagnostic report built from an explicit safe-field allowlist. Never send a raw UCI export, device identifiers/names, SSIDs, logs, browsing history, passwords, tokens, or API keys.
+- Sheepfold remains self-hosted for family management. Developer-operated cloud components require an explicit ADR and must stay optional. The approved exceptions are the isolated feedback channel in `§feedback` and the owner-initiated temporary support transport in `§rsup001`. Feedback never participates in router control and may send only user-entered fields plus a separately consented safe-field diagnostic report. Remote support follows its narrower security contract and is not a data-upload exception. Never send a raw UCI export, device identifiers/names, SSIDs, logs, browsing history, passwords, tokens, or API keys through feedback or unrelated cloud paths.
 - The main Android app in `android/` is for parent/admin devices only. A separate child app in `android-child/` is allowed only as an explicitly installed status/helper client without administrative functions; never design hidden child-phone installation flows (§z5ck8mv).
 - If app-store publication is added later, prepare store-specific privacy disclosures before release.
 - Do not collect website visit history as part of the normal administrative log. If per-device site activity history is added later, it must be a separate opt-in feature, off by default, excluded for administrator devices and allowlisted devices, and documented in privacy/legal text. See `docs/site-activity-logs.ru.md`.
@@ -226,10 +226,19 @@ Avoid:
 
 ## Remote Access Scope
 
-- Do not design, document, or promise full Android/LuCI management through WireGuard, VPN tunnels, or any other tunnel to the router.
+- Do not design, document, or promise permanent full Android/LuCI management through WireGuard, VPN tunnels, or any other general-purpose tunnel to the router.
 - Full Android and LuCI management is local-network only.
 - Remote management outside the home network is limited to short confirmed commands and notifications through the single configured messenger adapter.
-- Do not add VPN setup helpers, WireGuard profiles, tunnel health checks, or VPN-based onboarding unless the project owner explicitly reverses this decision later.
+- The only approved exception is a temporary owner-initiated technical-support session described by `docs/remote-support-access-plan.ru.md` and ADR-0022 (§rsup001). It is off by default, installs its module only after explicit enablement, exposes no WAN LuCI/SSH, routes no home subnet, uses a short-lived support key instead of the owner's root password, and must be immediately revocable.
+- A 72-hour support code is only a waiting/claim window. The first authenticated claim by the single `Sheepfold Support` service account burns the code and starts a separate 24-hour administrative session. The code alone never authenticates support.
+- Give every router a separate cryptographic identity and every support transport a short-lived mTLS credential; a shared FRP token for all installations is forbidden. A random per-session relay port may isolate a private bastion route, but it is not a secret and must never be derived from or encoded in the spoken support code. The detailed threat and message contracts are in `docs/remote-support-threat-model.ru.md` and `docs/remote-support-protocol.ru.md` (§rsup001).
+- Treat `tools/remoteSupport/` as a Node.js test-only reference contract. Never import it into LuCI/router packages or describe it as a working server. Production adapters must match its golden vectors and stricter message-specific schemas before the disabled UI is activated (§rsup001).
+- The private `kva4991/sheepfold-support-server` repository owns the encrypted report queue, control-plane persistence, relay/bastion isolation, operator CLI and local Codex bridge. This public repository remains canonical for router-side protocol, consent, expiry/revoke and golden vectors. Read `docs/remote-support-server-integration.ru.md` and compare both `peer-project.json` manifests before changing the shared boundary; never add the private repository as a submodule (§rsuppeer).
+- The Sheepfold support transport may bypass Podkop only for verified relay endpoints through Sheepfold-owned rules. Never rewrite Podkop configuration or create a broad direct-WAN bypass.
+- Run the support client under a dedicated UID and match UID, verified relay endpoint and port together. Restore the narrow route through firewall4/netifd lifecycle hooks; do not couple it to client-list rebuilds.
+- Keep support session identity/deadlines outside a single frpc socket. A small connection manager owns signed multi-relay failover, explicit states, bounded exponential backoff with jitter and idempotent server sequence; reconnect never extends the 24-hour access window (§rsup001).
+- While support is active, network/firewall/DNS/Podkop changes require a rollback timer armed before mutation. Cancel rollback only after the relay confirms a new authenticated router heartbeat and restored support session; a local command exit code is insufficient (§rsup001).
+- Do not add unrelated VPN setup helpers, WireGuard profiles, tunnel health checks, VPN-based Android onboarding, or a permanent support backdoor.
 
 ## Administrators And Roles
 

@@ -2247,6 +2247,7 @@
         margin: 0 0 10px;
 }
 
+.sf-inline-status,
 .sf-messenger-status {
         display: grid;
         gap: 3px;
@@ -2257,6 +2258,7 @@
         background: #f8fafc;
 }
 
+.sf-inline-status-label,
 .sf-messenger-status-label {
         color: var(--sf-muted);
         font-size: 12px;
@@ -2283,6 +2285,7 @@
         color: #7a4f01;
 }
 
+.sf-inline-status-muted,
 .sf-messenger-status-muted {
         border-left-color: #94a3b8;
         background: #f8fafc;

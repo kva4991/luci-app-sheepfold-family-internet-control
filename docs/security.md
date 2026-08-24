@@ -5,13 +5,19 @@
 - Do not allow Sheepfold setup to continue when the OpenWRT root password is empty/not configured.
 - Use API tokens or session-based authentication.
 - Restrict management API access to the local network by default.
-- Sheepfold is a family self-hosted tool by default; do not require a developer-operated cloud service. The optional `§feedback` endpoint is isolated from router control and its failure must not affect family rules.
+- Sheepfold is a family self-hosted tool by default; do not require a developer-operated cloud service. Optional cloud components need an explicit ADR. The `§feedback` endpoint is isolated from router control, while the separately enabled temporary support transport follows `§rsup001`; failure of either must not affect family rules.
 - The main Android app in `android/` is for parent/admin devices only. The separate `android-child/` app, when used, must be an explicitly installed status/helper client without administrative functions, not a hidden installation flow (§z5ck8mv).
 - Validate MAC addresses, IP addresses, hostnames, and domains.
 - Avoid shell injection.
 - Avoid duplicate nftables rules.
 - Restore rules after `fw4 restart` and router reboot.
 - Target `firewall4` / `nftables`; do not add legacy `firewall3` / `iptables` compatibility unless explicitly required later.
+
+## Temporary Technical Support
+
+The only permitted tunnel exception is an owner-initiated, expiring support session under ADR-0022 (§rsup001). The current LuCI control is an inert disabled preview; no router backend, transport or external server is active.
+
+The target design uses a separate router identity, short-lived mutual-TLS transport credentials, one authenticated and MFA-protected support account, a one-time claim code and an independently expiring SSH key. A per-session relay port may isolate the internal route, but it is never public, never derived from the spoken code and never treated as encryption or authentication. See the Russian canonical [use-case plan](remote-support-access-plan.ru.md), [threat model](remote-support-threat-model.ru.md) and [wire protocol](remote-support-protocol.ru.md).
 
 ## Android App Authentication
 

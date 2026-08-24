@@ -1,0 +1,12 @@
+{
+  "description": "Synthetic Ed25519 vector for Sheepfold remote-support protocol v1. Never use this key outside tests.",
+  "seedHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "publicKeySpkiBase64": "MCowBQYDK2VwAyEAA6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+  "payloadUtf8": "{\"messageType\":\"sessionCommand\",\"routerId\":\"EREREREREREREREREREREQ\",\"streamId\":\"IiIiIiIiIiIiIiIiIiIiIg\",\"messageId\":\"MzMzMzMzMzMzMzMzMzMzMw\",\"sequence\":7,\"issuedAt\":1787421000,\"notBefore\":1787421000,\"expiresAt\":1787421060,\"payload\":{\"sessionId\":\"IiIiIiIiIiIiIiIiIiIiIg\",\"command\":\"revokeSession\",\"reason\":\"ownerRequested\"}}",
+  "envelope": {
+    "protocolVersion": 1,
+    "keyId": "server-test-2026-01",
+    "signedPayload": "eyJtZXNzYWdlVHlwZSI6InNlc3Npb25Db21tYW5kIiwicm91dGVySWQiOiJFUkVSRVJFUkVSRVJFUkVSRVJFUkVRIiwic3RyZWFtSWQiOiJJaUlpSWlJaUlpSWlJaUlpSWlJaUlnIiwibWVzc2FnZUlkIjoiTXpNek16TXpNek16TXpNek16TXpNdyIsInNlcXVlbmNlIjo3LCJpc3N1ZWRBdCI6MTc4NzQyMTAwMCwibm90QmVmb3JlIjoxNzg3NDIxMDAwLCJleHBpcmVzQXQiOjE3ODc0MjEwNjAsInBheWxvYWQiOnsic2Vzc2lvbklkIjoiSWlJaUlpSWlJaUlpSWlJaUlpSWlJZyIsImNvbW1hbmQiOiJyZXZva2VTZXNzaW9uIiwicmVhc29uIjoib3duZXJSZXF1ZXN0ZWQifX0",
+    "signature": "Y2eRa8JFpoZCZ6h7Ot0P02oFgUYqXtfdeShGGySjv8-eyTHB4ZOxpdDM7c2EzBbeqfDUoR_yjtBr65_yEj3YBw"
+  }
+}

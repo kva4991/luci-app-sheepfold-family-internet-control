@@ -43,6 +43,7 @@
 | Yandex Disk, зеркалирование журнала, бэкапы | [`docs/yandex-disk-storage.ru.md`](yandex-disk-storage.ru.md) |
 | Продуктовые решения, scope | [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) |
 | Стиль кода, тесты, ревью | [`CODING_RULES.md`](../CODING_RULES.md) |
+| Временная удалённая техподдержка, claim, relay, серверный проект и порты | [`docs/remote-support-access-plan.ru.md`](remote-support-access-plan.ru.md), [`docs/remote-support-threat-model.ru.md`](remote-support-threat-model.ru.md), [`docs/remote-support-protocol.ru.md`](remote-support-protocol.ru.md), [`docs/remote-support-server-integration.ru.md`](remote-support-server-integration.ru.md) (§rsup001, §rsuppeer) |
 | Категории автотестов и условия полного прогона | [`docs/test-strategy.ru.md`](test-strategy.ru.md) (§testcat) |
 | Быстрый вход нового агента без повторного чтения всего проекта | [`docs/agent-fast-start.ru.md`](agent-fast-start.ru.md) |
 | Как понимать владельца и формулировать ответы | [`docs/owner-communication-profile.ru.md`](owner-communication-profile.ru.md) (§usrcomm) |
@@ -190,6 +191,12 @@
 - Число `device.id` является постоянной пользовательской и аудиторской ссылкой. Не ищите минимальный свободный номер, не переиспользуйте ID удалённой карточки и не уплотняйте последовательность при обновлении: старые журналы, расписания и токены должны продолжать означать то же устройство. Формат `D-0012` можно нормализовать в `12` с MAC-привязанным `legacy_ids`, но валидный числовой ID не меняется (§deviceid2).
 - Ошибка QR-сопряжения должна различать «API недоступен», «телефон ещё не найден в DHCP/neighbour/ARP», использованный код и blocklist; пустые `null`/`undefined` пользователю не показываются.
 - При определении MAC по IP сначала используйте DHCP lease, затем `ip neigh`, затем `/proc/net/arp`: на современных OpenWrt neighbour-запись может появиться раньше старой ARP-таблицы.
+
+### Временная удалённая техподдержка
+
+- Случайный или отдельный порт не является шифром: сканирование его обнаружит, а связь порта с продиктованным кодом ослабит оба значения. У каждого роутера нужна отдельная криптографическая identity, transport использует короткоживущий mTLS credential, а случайный `sessionRoutePort` существует только внутри закрытого relay/bastion и не кодируется в 12-значном номере (§rsup001).
+- `tools/remoteSupport/` нельзя подключать к LuCI или пакету: это Node.js reference-контракт для тестов. Он фиксирует точные байты и общие инварианты; production router/server обязан реализовать тот же протокол своими адаптерами и пройти cross-runtime golden vectors (§rsup001).
+- Закрытый `sheepfold-support-server` не добавляется submodule и не является runtime-зависимостью установки Sheepfold. Общая граница сверяется через два `peer-project.json`; router protocol и golden vectors изменяются сначала здесь, а server queue/operator/Codex bridge - в закрытом репозитории (§rsuppeer).
 
 ### Telegram: опасные команды
 

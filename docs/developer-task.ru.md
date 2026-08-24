@@ -181,6 +181,11 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 | [`docs/testing-cases.ru.md`](testing-cases.ru.md) | Тест-кейсы |
 | [`docs/live-router-testing.ru.md`](live-router-testing.ru.md) | Тестирование на роутере |
 | [`docs/messaging.ru.md`](messaging.ru.md) | Интеграция мессенджеров |
+| [`docs/remote-support-access-plan.ru.md`](remote-support-access-plan.ru.md) | Архитектура временного доступа техподдержки, FRP, Podkop bypass и отзыв (§rsup001) |
+| [`docs/remote-support-threat-model.ru.md`](remote-support-threat-model.ru.md) | Активы, угрозы, fail-closed controls и блокирующие условия выпуска техподдержки (§rsup001) |
+| [`docs/remote-support-protocol.ru.md`](remote-support-protocol.ru.md) | Проектный protocol `v1`: identity, подписи, сроки, порты, replay, состояния и error codes (§rsup001) |
+| [`docs/remote-support-server-integration.ru.md`](remote-support-server-integration.ru.md) | Граница публичного router client и закрытого server/operator проекта, владение контрактами и cross-repo проверка (§rsuppeer) |
+| [`tools/remoteSupport/README.ru.md`](../tools/remoteSupport/README.ru.md) | Test-only reference-модель envelope/state machine и golden vector; не является router/server runtime (§rsup001) |
 | [`docs/privacy.ru.md`](privacy.ru.md) | Политика конфиденциальности |
 | [`docs/ai-assistant-development/README.md`](ai-assistant-development/README.md) | Архитектура будущего ИИ-помощника и карта модулей |
 - [Фоновые задания обслуживания](maintenance-jobs.ru.md) — ротация RAM-журнала, консервативная очистка offline-карточек и только уведомительная проверка обновлений (§maintjob1).

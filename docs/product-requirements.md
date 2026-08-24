@@ -161,10 +161,13 @@ Android connectivity:
 
 - local router connection is the default full-interface mode;
 - Telegram/VK bot is the remote command and notification path;
-- full Android/LuCI management must remain local-network only;
-- do not support or document full remote management through WireGuard, VPN tunnels, or any other tunnel to the router;
+- full Android/LuCI management must remain local-network only during ordinary use;
+- do not support permanent full remote management through WireGuard, VPN tunnels, or any other general-purpose tunnel to the router;
 - outside the local network, remote management is limited to short confirmed commands and notifications through the single configured messenger adapter;
-- without a developer-operated cloud service, the Android app must not promise full remote router management outside the local network.
+- one narrow exception is the owner-initiated temporary technical-support session in ADR-0022 (§rsup001): it is off by default, uses an outbound support transport, an authenticated technician, a one-time claim code and a separately expiring administrative session, and never publishes LuCI/SSH or the home subnet on WAN;
+- the support code may wait for up to 72 hours, but it is not a router password and burns on first authenticated claim by the single service account; the actual support session lasts 24 hours, notifies the administrator, writes an audit event and supports immediate revoke;
+- every router uses an independent cryptographic identity and short-lived mTLS transport credential; an internal random relay port may isolate one session, but it is not public, is not an authentication factor and is never encoded into the spoken code;
+- without the optional support service, the Android app must not promise full remote router management outside the local network.
 - first Android pairing should be initiated locally from LuCI by an owner/admin using a QR code or manual settings;
 - the pairing payload must contain a short-lived one-time token scoped to one administrator and one admin device, never a router root password.
 - the resulting parent-device Bearer credential has no calendar expiry and remains valid until explicit revocation, administrator-device unbinding, or a security migration; a timeout or temporary router outage must not revoke it.

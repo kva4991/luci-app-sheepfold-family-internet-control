@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "contractId": "sheepfold.remote-support.peer.v1",
+  "thisProject": {
+    "name": "luci-app-sheepfold-family-internet-control",
+    "repository": "https://github.com/kva4991/luci-app-sheepfold-family-internet-control",
+    "visibility": "public"
+  },
+  "peerProject": {
+    "name": "sheepfold-support-server",
+    "repository": "https://github.com/kva4991/sheepfold-support-server",
+    "visibility": "private"
+  },
+  "protocol": {
+    "name": "sheepfold-remote-support",
+    "major": 1,
+    "canonicalRepository": "https://github.com/kva4991/luci-app-sheepfold-family-internet-control",
+    "canonicalPaths": [
+      "docs/remote-support-protocol.ru.md",
+      "docs/remote-support-threat-model.ru.md",
+      "tools/remoteSupport/schemas",
+      "tools/remoteSupport/fixtures/protocol-v1-golden.json"
+    ]
+  },
+  "ownership": {
+    "client": [
+      "router identity",
+      "router state machine",
+      "LuCI consent flow",
+      "router-side expiry and revoke",
+      "client protocol schemas and golden vectors"
+    ],
+    "server": [
+      "encrypted report queue",
+      "control-plane persistence",
+      "operator authentication and MFA",
+      "relay and bastion isolation",
+      "operator CLI and Codex bridge"
+    ]
+  }
+}

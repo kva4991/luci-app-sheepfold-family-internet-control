@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepfold.example/schemas/remote-support/signed-envelope-v1.schema.json",
+  "title": "Sheepfold remote-support signed envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "keyId", "signedPayload", "signature"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "keyId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "signedPayload": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "contentEncoding": "base64url"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$",
+      "contentEncoding": "base64url"
+    }
+  }
+}

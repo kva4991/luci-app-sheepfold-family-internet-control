@@ -133,6 +133,7 @@ See:
 - [Privacy policy](docs/privacy.md)
 - [Donation](docs/donation.md)
 - [OpenWRT router comparison](https://hattabbi4.github.io/openwrt-router-compare/)
+- [OpenWrt router buying guide for 2025 (Russian)](https://itdog.info/kakoj-router-dlya-openwrt-kupit-v-2025-godu/)
 
 ## Support
 

@@ -157,6 +157,51 @@ function siteFilteringBox(deps) {
 	return container;
 }
 
+/*
+ * Это намеренно только видимая заглушка. До появления модели угроз, серверного
+ * протокола и backend роутера нельзя сохранять фиктивный режим или устанавливать
+ * транспортный пакет из LuCI. §rsup001
+ */
+function remoteSupportPlaceholder() {
+	var unavailableNote = _('This button will become available after the router and support-server parts are implemented.');
+
+	return E('div', { 'class': 'sf-settings-section sf-remote-support-placeholder' }, [
+		E('p', { 'class': 'sf-section-intro' },
+			_('This section previews temporary help from Sheepfold support. The feature is not available yet.')),
+		E('div', { 'class': 'sf-filter-backend-row' }, [
+			E('label', { 'class': 'sf-field sf-field-wide sf-filter-backend-control' }, [
+				E('span', {}, _('Mode')),
+				E('select', {
+					'class': 'cbi-input-select',
+					'disabled': 'disabled',
+					'aria-describedby': 'sf-remote-support-placeholder-note'
+				}, [
+					E('option', { 'selected': 'selected' }, _('Off for now'))
+				]),
+				E('small', { 'id': 'sf-remote-support-placeholder-note' },
+					_('No remote access module is installed and no connection to a support server is created.'))
+			]),
+			E('div', {
+				'class': 'sf-inline-status sf-inline-status-muted',
+				'role': 'status'
+			}, [
+				E('span', { 'class': 'sf-inline-status-label' }, _('Status')),
+				E('strong', {}, _('Planned'))
+			])
+		]),
+		E('div', { 'class': 'sf-action-stack' }, [
+			E('button', {
+				'class': 'sf-action sf-action-positive sf-action-muted',
+				'type': 'button',
+				'disabled': 'disabled',
+				'title': unavailableNote,
+				'aria-describedby': 'sf-remote-support-placeholder-note'
+			}, _('Give access')),
+			E('small', { 'class': 'sf-muted' }, unavailableNote)
+		])
+	]);
+}
+
 function render(deps) {
 	var mode = deps.value('integration_mode', 'none');
 	var note = E('span', {}, modeNote(mode));
@@ -202,7 +247,9 @@ function render(deps) {
 		]),
 		E('div', { 'class': 'sf-note' }, [E('strong', {}, _('Mode notes')), note]),
 		deps.divider(_('Site filtering')),
-		siteFilteringBox(deps)
+		siteFilteringBox(deps),
+		deps.divider(_('Remote help from Sheepfold support')),
+		remoteSupportPlaceholder()
 	]);
 }
 
@@ -213,5 +260,6 @@ return baseclass.extend({
 	syncIpv6Draft: syncIpv6Draft,
 	ipv6Field: ipv6Field,
 	siteFilteringBox: siteFilteringBox,
+	remoteSupportPlaceholder: remoteSupportPlaceholder,
 	render: render
 });

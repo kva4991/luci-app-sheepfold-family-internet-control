@@ -4948,3 +4948,24 @@ msgstr "Все телефонные сеансы администратора з
 
 msgid "Could not terminate administrator sessions."
 msgstr "Не удалось завершить сеансы администратора."
+
+msgid "Remote help from Sheepfold support"
+msgstr "Удалённая помощь техподдержки Sheepfold"
+
+msgid "This section previews temporary help from Sheepfold support. The feature is not available yet."
+msgstr "Этот раздел показывает, как будет выглядеть временная помощь техподдержки Sheepfold. Функция пока недоступна."
+
+msgid "Off for now"
+msgstr "Пока выключена"
+
+msgid "No remote access module is installed and no connection to a support server is created."
+msgstr "Модуль удалённого доступа не установлен, соединение с сервером техподдержки не создаётся."
+
+msgid "Planned"
+msgstr "Планируется"
+
+msgid "This button will become available after the router and support-server parts are implemented."
+msgstr "Кнопка станет доступна после реализации частей на роутере и сервере техподдержки."
+
+msgid "Give access"
+msgstr "Дать доступ"

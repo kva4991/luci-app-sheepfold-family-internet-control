@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepfold.example/schemas/remote-support/signed-payload-v1.schema.json",
+  "title": "Sheepfold remote-support common signed payload v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "messageType",
+    "routerId",
+    "streamId",
+    "messageId",
+    "sequence",
+    "issuedAt",
+    "notBefore",
+    "expiresAt",
+    "payload"
+  ],
+  "properties": {
+    "messageType": {
+      "enum": [
+        "enrollChallenge",
+        "enrollProof",
+        "enrollAccepted",
+        "capabilityReport",
+        "relayMap",
+        "claimOpen",
+        "claimOpened",
+        "claimAccepted",
+        "sessionReady",
+        "sessionActive",
+        "heartbeat",
+        "sessionCommand",
+        "revokeRequest",
+        "revokeConfirmed",
+        "statusQuery"
+      ]
+    },
+    "routerId": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" }
+      ]
+    },
+    "streamId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
+    "messageId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "issuedAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "notBefore": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "expiresAt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "payload": {
+      "description": "A messageType-specific schema is mandatory before runtime use.",
+      "type": "object",
+      "maxProperties": 32
+    }
+  }
+}

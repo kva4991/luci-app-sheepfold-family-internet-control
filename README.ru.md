@@ -134,6 +134,7 @@ uninstall.sh                                         удаление с роу�
 - [Политика приватности](docs/privacy.ru.md)
 - [Donation](docs/donation.md)
 - [Сравнение роутеров с поддержкой OpenWRT](https://hattabbi4.github.io/openwrt-router-compare/)
+- [Какой роутер для OpenWrt купить в 2025 году?](https://itdog.info/kakoj-router-dlya-openwrt-kupit-v-2025-godu/)
 
 ## Поддержать проект
 

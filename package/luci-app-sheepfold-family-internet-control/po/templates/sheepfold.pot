@@ -4230,3 +4230,24 @@ msgstr ""
 
 msgid "Online: no presence data yet"
 msgstr ""
+
+msgid "Remote help from Sheepfold support"
+msgstr ""
+
+msgid "This section previews temporary help from Sheepfold support. The feature is not available yet."
+msgstr ""
+
+msgid "Off for now"
+msgstr ""
+
+msgid "No remote access module is installed and no connection to a support server is created."
+msgstr ""
+
+msgid "Planned"
+msgstr ""
+
+msgid "This button will become available after the router and support-server parts are implemented."
+msgstr ""
+
+msgid "Give access"
+msgstr ""
