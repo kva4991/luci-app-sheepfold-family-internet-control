@@ -8,7 +8,7 @@
 
 [Презентация проекта Sheepfold](docs/project-presentation.ru.md)
 
-[Настройка канала отзывов: Yandex Cloud + YDB](docs/yandex-cloud-ydb-feedback.ru.md)
+[Зашифрованные баг-репорты родительского приложения](docs/support-report-transport.ru.md) · [Переходный канал LuCI: Yandex Cloud + YDB](docs/yandex-cloud-ydb-feedback.ru.md)
 
 [Как собираются официальные IPK и OpenWrt APK](docs/github-actions-openwrt-build.ru.md)
 

@@ -29,4 +29,3 @@ notification_settings_save() {
     audit_event "настройки уведомлений сохранены"
     admin_config_json notification-settings-save 1
 }
-

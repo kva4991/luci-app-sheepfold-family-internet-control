@@ -1,0 +1,224 @@
+#!/bin/sh
+# Получает резервный адрес сервера баг-репортов из фиксированного файла проекта на GitHub.
+# Адрес принимается только после Ed25519-проверки офлайн-ключом и защиты от отката версии.
+# Manifest не имеет права менять HPKE keyset, токены или любые настройки семейных правил. §srepdisc1
+set -eu
+
+CONFIG='sheepfold.global'
+IDENTITY_DIR='/etc/sheepfold/support-report'
+STATE_FILE="$IDENTITY_DIR/discovery-state"
+RUNTIME_DIR="${SHEEPFOLD_SUPPORT_RUNTIME_DIR:-/tmp/sheepfold/support-report}"
+CANDIDATE_FILE="$RUNTIME_DIR/discovery-candidate"
+DISCOVERY_URL='https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/docs/runtime-manifests/support-report-endpoint-v1.txt'
+MAX_MANIFEST_BYTES=2048
+MAX_SEQUENCE=2147483647
+
+uci_get() {
+	uci -q get "$CONFIG.$1" 2>/dev/null || printf '%s' "${2:-}"
+}
+
+valid_base64url() {
+	value="$1"
+	[ -n "$value" ] || return 1
+	printf '%s' "$value" | grep -Eq '^[A-Za-z0-9_-]+$'
+}
+
+valid_endpoint() {
+	value="$1"
+	printf '%s' "$value" |
+		grep -Eq '^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~:/?%&=+-]*)?$'
+}
+
+valid_sequence() {
+	value="$1"
+	case "$value" in
+		''|0|0*|*[!0-9]*) return 1 ;;
+	esac
+	[ "${#value}" -le 10 ] && [ "$value" -le "$MAX_SEQUENCE" ]
+}
+
+base64url_encode() {
+	openssl base64 -A | tr '+/' '-_' | tr -d '='
+}
+
+base64url_decode() {
+	value="$1"
+	case $((${#value} % 4)) in
+		0) padding='' ;;
+		2) padding='==' ;;
+		3) padding='=' ;;
+		*) return 1 ;;
+	esac
+	printf '%s%s' "$value" "$padding" | sed 's/-/+/g; s#_#/#g' | openssl base64 -d -A
+}
+
+file_size() {
+	bytes="$(wc -c < "$1" | tr -d ' ')"
+	case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
+	printf '%s' "$bytes"
+}
+
+decode_canonical() {
+	encoded="$1"
+	output="$2"
+	expected_bytes="$3"
+	valid_base64url "$encoded" || return 1
+	base64url_decode "$encoded" > "$output" 2>/dev/null || return 1
+	[ "$(file_size "$output")" -eq "$expected_bytes" ] || return 1
+	[ "$(base64url_encode < "$output")" = "$encoded" ]
+}
+
+prepare_dirs() {
+	umask 077
+	mkdir -p "$IDENTITY_DIR" "$RUNTIME_DIR"
+	chmod 700 "$IDENTITY_DIR" "$RUNTIME_DIR" 2>/dev/null || true
+}
+
+cleanup_runtime_files() {
+	rm -f "${manifest_file:-}" "${signed_file:-}" "${signature_file:-}" \
+		"${public_key_file:-}" "${candidate_temp:-}" "${state_temp:-}"
+}
+
+verify_manifest() {
+	manifest_file="$1"
+	public_key_value="$2"
+	manifest_bytes="$(file_size "$manifest_file")"
+	[ "$manifest_bytes" -ge 1 ] && [ "$manifest_bytes" -le "$MAX_MANIFEST_BYTES" ] || {
+		printf 'error=manifest_size\n' >&2
+		return 1
+	}
+	# Строгий ASCII и ровно четыре строки не позволяют незаметно добавить второй endpoint
+	# или интерпретировать prose/JSON как команду роутеру.
+	if LC_ALL=C grep -q '[^ -~]' "$manifest_file"; then
+		printf 'error=manifest_encoding\n' >&2
+		return 1
+	fi
+	[ "$(wc -l < "$manifest_file" | tr -d ' ')" -eq 4 ] || {
+		printf 'error=manifest_lines\n' >&2
+		return 1
+	}
+
+	format_line="$(sed -n '1p' "$manifest_file")"
+	sequence_line="$(sed -n '2p' "$manifest_file")"
+	endpoint_line="$(sed -n '3p' "$manifest_file")"
+	signature_line="$(sed -n '4p' "$manifest_file")"
+	[ "$format_line" = 'sheepfold-support-endpoint-v1' ] || {
+		printf 'error=manifest_version\n' >&2
+		return 1
+	}
+	case "$sequence_line" in sequence=*) manifest_sequence="${sequence_line#sequence=}" ;; *) return 1 ;; esac
+	case "$endpoint_line" in endpoint=*) manifest_endpoint="${endpoint_line#endpoint=}" ;; *) return 1 ;; esac
+	case "$signature_line" in signature=*) manifest_signature="${signature_line#signature=}" ;; *) return 1 ;; esac
+	valid_sequence "$manifest_sequence" || { printf 'error=manifest_sequence\n' >&2; return 1; }
+	valid_endpoint "$manifest_endpoint" || { printf 'error=manifest_endpoint\n' >&2; return 1; }
+	[ "${#public_key_value}" -eq 59 ] || { printf 'error=discovery_key\n' >&2; return 1; }
+	[ "${#manifest_signature}" -eq 86 ] || { printf 'error=manifest_signature\n' >&2; return 1; }
+
+	signed_file="$RUNTIME_DIR/discovery-signed.$$"
+	signature_file="$RUNTIME_DIR/discovery-signature.$$"
+	public_key_file="$RUNTIME_DIR/discovery-public-key.$$"
+	head -n 3 "$manifest_file" > "$signed_file"
+	decode_canonical "$public_key_value" "$public_key_file" 44 || {
+		printf 'error=discovery_key\n' >&2
+		return 1
+	}
+	decode_canonical "$manifest_signature" "$signature_file" 64 || {
+		printf 'error=manifest_signature\n' >&2
+		return 1
+	}
+	openssl pkey -pubin -inform DER -in "$public_key_file" -noout >/dev/null 2>&1 || {
+		printf 'error=discovery_key\n' >&2
+		return 1
+	}
+	openssl pkeyutl -verify -rawin -pubin -keyform DER -inkey "$public_key_file" \
+		-sigfile "$signature_file" -in "$signed_file" >/dev/null 2>&1 || {
+		printf 'error=manifest_signature\n' >&2
+		return 1
+	}
+}
+
+read_accepted_state() {
+	accepted_sequence=0
+	accepted_endpoint=''
+	[ -e "$STATE_FILE" ] || return 0
+	[ -f "$STATE_FILE" ] && [ "$(file_size "$STATE_FILE")" -le 1024 ] || return 1
+	[ "$(wc -l < "$STATE_FILE" | tr -d ' ')" -eq 2 ] || return 1
+	state_sequence_line="$(sed -n '1p' "$STATE_FILE")"
+	state_endpoint_line="$(sed -n '2p' "$STATE_FILE")"
+	case "$state_sequence_line" in sequence=*) accepted_sequence="${state_sequence_line#sequence=}" ;; *) return 1 ;; esac
+	case "$state_endpoint_line" in endpoint=*) accepted_endpoint="${state_endpoint_line#endpoint=}" ;; *) return 1 ;; esac
+	valid_sequence "$accepted_sequence" && valid_endpoint "$accepted_endpoint"
+}
+
+resolve_endpoint() {
+	prepare_dirs
+	public_key_value="$(uci_get support_report_discovery_public_key '')"
+	[ -n "$public_key_value" ] || { printf 'error=discovery_not_configured\n' >&2; return 2; }
+	manifest_file="$RUNTIME_DIR/discovery-manifest.$$"
+	trap cleanup_runtime_files EXIT INT TERM
+	if ! curl -fsS --connect-timeout 5 --max-time 10 --max-filesize "$MAX_MANIFEST_BYTES" \
+		--proto '=https' --noproxy '*' -o "$manifest_file" "$DISCOVERY_URL" 2>/dev/null; then
+		printf 'error=discovery_unavailable\n' >&2
+		return 3
+	fi
+	verify_manifest "$manifest_file" "$public_key_value" || return 4
+	read_accepted_state || { printf 'error=discovery_state\n' >&2; return 5; }
+	[ "$manifest_sequence" -ge "$accepted_sequence" ] || {
+		printf 'error=manifest_rollback\n' >&2
+		return 5
+	}
+	if [ "$manifest_sequence" -eq "$accepted_sequence" ] && \
+		[ -n "$accepted_endpoint" ] && [ "$manifest_endpoint" != "$accepted_endpoint" ]; then
+		printf 'error=manifest_sequence_conflict\n' >&2
+		return 5
+	fi
+
+	candidate_temp="$CANDIDATE_FILE.$$"
+	printf 'sequence=%s\nendpoint=%s\n' "$manifest_sequence" "$manifest_endpoint" > "$candidate_temp"
+	chmod 600 "$candidate_temp"
+	mv "$candidate_temp" "$CANDIDATE_FILE"
+	printf 'endpoint=%s\nsequence=%s\n' "$manifest_endpoint" "$manifest_sequence"
+}
+
+accept_endpoint() {
+	endpoint="$1"
+	sequence="$2"
+	prepare_dirs
+	valid_endpoint "$endpoint" && valid_sequence "$sequence" || return 2
+	[ -f "$CANDIDATE_FILE" ] && [ "$(file_size "$CANDIDATE_FILE")" -le 1024 ] || return 3
+	[ "$(sed -n '1p' "$CANDIDATE_FILE")" = "sequence=$sequence" ] || return 3
+	[ "$(sed -n '2p' "$CANDIDATE_FILE")" = "endpoint=$endpoint" ] || return 3
+	[ "$(wc -l < "$CANDIDATE_FILE" | tr -d ' ')" -eq 2 ] || return 3
+
+	# Сначала фиксируем принятую версию, затем UCI. При потере питания между шагами старый
+	# endpoint ещё раз вызовет тот же подписанный fallback; обратный порядок оставил бы UCI
+	# без rollback-state. Обе записи делаются только после HTTP success нового сервера.
+	state_temp="$STATE_FILE.$$"
+	trap cleanup_runtime_files EXIT INT TERM
+	printf 'sequence=%s\nendpoint=%s\n' "$sequence" "$endpoint" > "$state_temp"
+	chmod 600 "$state_temp"
+	mv "$state_temp" "$STATE_FILE"
+	uci -q set "$CONFIG.support_report_endpoint=$endpoint" || return 4
+	uci -q commit sheepfold || return 4
+	rm -f "$CANDIDATE_FILE"
+	logger -t sheepfold "Адрес сервера баг-репортов обновлён по подписанному manifest: версия $sequence"
+}
+
+verify_file() {
+	[ "$#" -ge 1 ] && [ "$#" -le 2 ] || return 2
+	umask 077
+	mkdir -p "$RUNTIME_DIR"
+	chmod 700 "$RUNTIME_DIR" 2>/dev/null || true
+	public_key_value="${2:-$(uci_get support_report_discovery_public_key '')}"
+	manifest_file="$1"
+	trap cleanup_runtime_files EXIT INT TERM
+	verify_manifest "$manifest_file" "$public_key_value"
+	printf 'endpoint=%s\nsequence=%s\n' "$manifest_endpoint" "$manifest_sequence"
+}
+
+case "${1:-}" in
+	resolve) [ "$#" -eq 1 ] || exit 2; resolve_endpoint ;;
+	accept) [ "$#" -eq 3 ] || exit 2; accept_endpoint "$2" "$3" ;;
+	verify-file) shift; verify_file "$@" ;;
+	*) printf 'error=unknown_command\n' >&2; exit 1 ;;
+esac

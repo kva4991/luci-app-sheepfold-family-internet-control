@@ -2,7 +2,10 @@
 
 <!-- §rsuppeer -->
 
-Статус: спроектирована граница двух репозиториев. Production server и router runtime ещё не включены.
+Статус: спроектирована граница двух репозиториев. В private repo уже есть отключённый по
+умолчанию loopback-only OpenWrt PoC очереди зашифрованных отчётов и read-only operator CLI.
+Production TLS endpoint, рабочая пара ключей расшифрования и runtime удалённого управления ещё
+не включены.
 
 ## Репозитории
 
@@ -31,13 +34,23 @@
 
 Публичный сервер не получает root password, LuCI cookie, Android Bearer, домашнюю LAN route или ключ расшифрования баг-репортов.
 
+Родительский APK уже использует отдельный report plane: plaintext формируется и показывается
+на телефоне, затем шифруется HPKE до домашнего роутера; роутер только подписывает ciphertext.
+Точный контракт и переходное отличие LuCI описаны в
+[документе зашифрованных баг-репортов](support-report-transport.ru.md) (§srep001).
+При отказе сохранённого report endpoint роутер может проверить отдельный Ed25519-signed manifest
+по фиксированному пути GitHub. Публичный проект владеет форматом и verifier, private проект —
+offline signer; manifest не имеет права менять HPKE keyset (§srepdisc1).
+
 ## Владение контрактами
 
 | Область | Source of truth |
 |---|---|
 | Signed router/control protocol, claim/session state, golden vectors | этот public repo |
 | Router consent, local expiry/revoke, package/firewall integration | этот public repo |
+| Формат и router verifier подписанного резервного report endpoint | этот public repo |
 | Encrypted report envelope и очередь | private server repo |
+| Offline signer резервного endpoint и церемония его ключа | private server repo |
 | Control persistence, operator MFA, relay/bastion | private server repo |
 | supportctl, JSON CLI и local Codex MCP bridge | private server repo |
 

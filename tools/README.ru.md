@@ -101,6 +101,25 @@ android-child\gradlew.bat -p android-child assembleDebug --stacktrace
 
 Эти каталоги не должны попадать в коммиты. Версии и требования проекта фиксируются в `tools/toolchain.json`.
 
+## Ручной Android-стенд
+
+<!-- §andlab1 -->
+
+Сценарии `tools/android-testing/` создают только выделенные AVD Sheepfold API
+28/35 и запускаются отдельно от обычного CI:
+
+```powershell
+npm.cmd run androidLab:setup -- -Install -AcceptAndroidLicenses
+npm.cmd run androidLab:doctor
+npm.cmd run androidLab:smoke
+npm.cmd run androidLab:full
+```
+
+Для выделенного физического телефона нужен точный serial и явное подтверждение
+очистки данных debug APK. Подробная архитектура, профили, ограничения эмулятора и
+сквозные проверки с OpenWrt находятся в
+[`../docs/android-test-lab.ru.md`](../docs/android-test-lab.ru.md).
+
 ## Живой тестовый OpenWrt-роутер
 
 <!-- §routerharness -->

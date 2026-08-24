@@ -260,22 +260,29 @@ class RouterAdminClient(
         Unit
     }
 
-    suspend fun submitFeedback(
-        category: String,
-        subject: String,
-        message: String,
-        contact: String,
-        includeDiagnostics: Boolean
+    suspend fun loadSupportReportConfig(): SupportReportConfig = withContext(Dispatchers.IO) {
+        val json = request("GET", "/support-report/config")
+        SupportReportConfig(
+            recipientKeyId = json.optString("recipientKeyId"),
+            recipientPublicKeyset = json.optString("recipientPublicKeyset"),
+            cryptoSuite = json.optString("cryptoSuite"),
+            maxCiphertextBytes = json.optInt("maxCiphertextBytes")
+        )
+    }
+
+    /** Роутер получает только HPKE-ciphertext и не видит текст подтверждённого отчёта. */
+    suspend fun submitSupportReport(
+        reportId: String,
+        recipientKeyId: String,
+        ciphertext: String
     ) = withContext(Dispatchers.IO) {
         request(
             method = "POST",
-            path = "/feedback",
+            path = "/support-report",
             form = mapOf(
-                "category" to category,
-                "subject" to subject,
-                "message" to message,
-                "contact" to contact,
-                "includeDiagnostics" to includeDiagnostics.flag()
+                "reportId" to reportId,
+                "recipientKeyId" to recipientKeyId,
+                "ciphertext" to ciphertext
             )
         )
         Unit
@@ -490,6 +497,12 @@ class RouterAdminClient(
         "invalid_wifi_automation_mode", "invalid_wifi_automation_time" ->
             "Проверьте режим и время автоматизации Wi-Fi."
         "config_commit_failed", "config_verify_failed" -> "Роутер не подтвердил сохранение и восстановил прежнюю конфигурацию."
+        "support_report_not_configured" -> "Отправка защищённых баг-репортов пока не настроена владельцем проекта."
+        "support_report_rate_limited" -> "Слишком много отчётов. Повторите отправку позже."
+        "invalid_support_report" -> "Роутер отклонил повреждённый зашифрованный отчёт."
+        "support_report_identity_failed" -> "Роутер не смог подписать отчёт. Проверьте OpenSSL и журнал Sheepfold."
+        "support_report_server_maintenance" -> "Отказано, ведутся работы на сервере."
+        "support_report_delivery_failed" -> "Сервер поддержки не принял отчёт. Повторите отправку позже."
         else -> fallback
     }
 

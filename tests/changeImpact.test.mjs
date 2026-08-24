@@ -117,6 +117,19 @@ describe('change impact advisor §impact1', () => {
     assert.ok(recommendedCommands(report).manual.includes('npm.cmd run router:readOnly'));
   });
 
+  it('treats the OpenWrt init service as a critical lifecycle boundary', () => {
+    const report = inspectChanges([
+      'package/luci-app-sheepfold-family-internet-control/root/etc/init.d/sheepfold',
+    ]);
+
+    assert.deepEqual(report.categories, ['backendFast', 'packaging', 'security']);
+    assert.deepEqual(report.unknown, []);
+    assert.equal(report.risk, 'critical');
+    assert.equal(report.fullTest, true);
+    assert.ok(recommendedCommands(report).manual.includes('npm.cmd run router:readOnly'));
+    assert.ok(recommendedCommands(report).manual.includes('npm.cmd run router:fullSafe'));
+  });
+
   it('maps PO, POT and client JSON catalogs to localization checks', () => {
     const report = inspectChanges([
       'package/luci-app-sheepfold-family-internet-control/po/ru/sheepfold.po',

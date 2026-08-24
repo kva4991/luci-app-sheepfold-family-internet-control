@@ -242,4 +242,3 @@ wifi_automation_save() {
     audit_event "расписание Wi-Fi сохранено"
     admin_config_json wifi-automation-save 1
 }
-

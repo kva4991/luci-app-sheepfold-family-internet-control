@@ -43,6 +43,8 @@
 | [`docs/integrations.md`](integrations.md) | AdGuard Home, Podkop |
 | [`docs/github-install-setup.md`](github-install-setup.md) | Установка и обновление |
 | [`docs/yandex-cloud-ydb-feedback.ru.md`](yandex-cloud-ydb-feedback.ru.md) | Развёртывание необязательного канала отзывов через Yandex Cloud + YDB (§feedback) |
+| [`docs/support-report-transport.ru.md`](support-report-transport.ru.md) | Сквозное шифрование баг-репортов родительского APK и граница закрытого сервера (§srep001) |
+| [`docs/runtime-manifests/README.ru.md`](runtime-manifests/README.ru.md) | Строго подписанные runtime-манифесты и резервный адрес сервера баг-репортов (§srepdisc1) |
 
 ### Android
 
@@ -117,6 +119,9 @@
 | Файл | Тема |
 |---|---|
 | [`docs/testing-cases.ru.md`](testing-cases.ru.md) | Тест-кейсы (чеклист перед PR) |
+| [`docs/test-strategy.ru.md`](test-strategy.ru.md) | Категории тестов, условия полного прогона и обязательный формат runbook (§testcat, §docops1) |
+| [`docs/mandatory-companion-changes.ru.md`](mandatory-companion-changes.ru.md) | Нормативная матрица кода, документов и проверок, которые меняются вместе (§cmpchg1) |
+| [`docs/testing-support-endpoint-discovery.ru.md`](testing-support-endpoint-discovery.ru.md) | Точный запуск тестов резервного адреса баг-репортов, ожидаемые результаты и ошибки (§srepdisc1) |
 | [`docs/live-router-testing.ru.md`](live-router-testing.ru.md) | Тестирование на живом роутере |
 | [`docs/agent-environment.ru.md`](agent-environment.ru.md) | Окружение агента, нужные программы, сборка IPK/APK и рабочие команды проверок |
 | [`docs/troubleshooting.ru.md`](troubleshooting.ru.md) | Справочник ошибок Windows, тестов, Android, IPK/OpenWRT, UCI, LuCI, Git и сети |

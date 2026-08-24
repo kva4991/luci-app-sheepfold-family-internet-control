@@ -419,6 +419,18 @@ case "$path_info" in
         require_admin
         run_legacy
         ;;
+    /support-report/config)
+        [ "$method" = "GET" ] || method_not_allowed
+        require_admin
+        enforce_rate_limit admin_read 120 60
+        run_legacy
+        ;;
+    /support-report)
+        [ "$method" = "POST" ] || method_not_allowed
+        require_admin
+        enforce_rate_limit support_report 3 3600
+        run_legacy
+        ;;
     /settings/save)
         header_json "410 Gone"
         printf '{"app":"sheepfold","ok":false,"error":"legacy_settings_writer_disabled","message":"Use authenticated LuCI UCI forms with typed validation."}\n'

@@ -6,19 +6,35 @@
 
 ## Текущий статус реализации
 
-### POST `/cgi-bin/sheepfold-api/feedback`
+### GET `/cgi-bin/sheepfold-api/support-report/config`
 
-Авторизованный endpoint родительского APK для формы «Отзыв / предложения» (§feedback). Клиент передаёт Bearer-токен; числовой ID и MAC привязанного админского устройства backend получает из собственной записи токена и сверяет с UCI и адресом телефона, наблюдаемым роутером. Формат `application/x-www-form-urlencoded`:
+Авторизованный endpoint родительского APK возвращает public-only Tink HPKE keyset, key ID,
+crypto suite и максимальный размер ciphertext (§feedback, §srep001). Private key на роутере
+отсутствует. При пустой production-конфигурации ответ содержит
+`support_report_not_configured`.
+
+### POST `/cgi-bin/sheepfold-api/support-report`
+
+После точного предпросмотра APK шифрует `support-report-v1` на телефоне и передаёт только:
 
 ```text
-category=idea|bug|question|other
-subject=до 120 символов
-message=от 10 до 4000 символов
-contact=необязательно, до 200 символов
-includeDiagnostics=0|1
+reportId=canonical base64url, 16 случайных байт
+recipientKeyId=ID публичного операторского ключа
+ciphertext=canonical base64url HPKE payload
 ```
 
-Роутер не принимает от APK готовый объект диагностики. При `includeDiagnostics=1` он сам добавляет только версию/вариант Sheepfold, модель роутера и версию OpenWrt, затем отправляет данные в настроенный Yandex Cloud endpoint. Ограничение: не более трёх попыток в час на роутере.
+Роутер не принимает plaintext, контакт, диагностику или флаг её включения. Он проверяет поля,
+подписывает envelope отдельным Ed25519-ключом и отправляет его на HTTPS endpoint без redirect.
+Ограничение: не более трёх попыток в час. Полный контракт, whitelist диагностики и ротация
+ключей описаны в [документе транспорта](support-report-transport.ru.md).
+
+Если центральный сервер достиг безопасного лимита хранения, роутер возвращает HTTP `503`,
+`error=support_report_server_maintenance` и сообщение «Отказано, ведутся работы на сервере.».
+Android сохраняет заполненную форму и позволяет повторить отправку позже; повторное сопряжение с
+роутером для этой ошибки не требуется.
+
+Legacy `POST /feedback` остаётся только для LuCI и прежнего Yandex Cloud канала. Родительское
+APK его больше не вызывает; детское APK не содержит ни один feedback/report маршрут.
 
 Этот документ описывает целевой контракт. В текущей ветке уже есть локальный сервис на порту `5201`, discovery-файл `/.well-known/sheepfold.json` и CGI endpoint `/cgi-bin/sheepfold-api`, который отдаёт базовые сведения о роутере, версии, порте и пути API, диагностический снимок `/cgi-bin/sheepfold-api/router-info`, привязку админского телефона `/cgi-bin/sheepfold-api/pair` и ранний endpoint ИИ-помощника `/cgi-bin/sheepfold-api/ai-assistant`.
 

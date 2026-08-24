@@ -4,7 +4,7 @@
 
 Правила кодинга, стиль и ревью — в [`CODING_RULES.md`](../CODING_RULES.md). Здесь только то, что не помещается в комментарий кода, но влияет на поведение продукта, сборку или отладку.
 
-Причины устойчивых архитектурных решений находятся в [`docs/architecture/decisions/`](architecture/decisions/README.ru.md), а порядок расследования дефекта и карта соседних проверок — в [`debugging-and-verification.ru.md`](debugging-and-verification.ru.md) и [`change-impact-review.ru.md`](change-impact-review.ru.md) (§adrproc, §debug01, §impact1).
+Причины устойчивых архитектурных решений находятся в [`docs/architecture/decisions/`](architecture/decisions/README.ru.md), порядок расследования дефекта и автоматическая карта соседних проверок — в [`debugging-and-verification.ru.md`](debugging-and-verification.ru.md) и [`change-impact-review.ru.md`](change-impact-review.ru.md), а обязательная матрица сопутствующих изменений — в [`mandatory-companion-changes.ru.md`](mandatory-companion-changes.ru.md) (§adrproc, §debug01, §impact1, §cmpchg1).
 
 - Две редакции роутерного пакета не означают два репозитория или четыре Android-сборки: Standard физически не содержит AI/activity-backend, а два единых Android APK скрывают ИИ до положительной capability роутера. Каждая редакция отдельно собирается в IPK для 24.10 и apk-tools v3 APK для 25.12 (§prodvar, §owrtci1).
 
@@ -45,6 +45,8 @@
 | Стиль кода, тесты, ревью | [`CODING_RULES.md`](../CODING_RULES.md) |
 | Временная удалённая техподдержка, claim, relay, серверный проект и порты | [`docs/remote-support-access-plan.ru.md`](remote-support-access-plan.ru.md), [`docs/remote-support-threat-model.ru.md`](remote-support-threat-model.ru.md), [`docs/remote-support-protocol.ru.md`](remote-support-protocol.ru.md), [`docs/remote-support-server-integration.ru.md`](remote-support-server-integration.ru.md) (§rsup001, §rsuppeer) |
 | Категории автотестов и условия полного прогона | [`docs/test-strategy.ru.md`](test-strategy.ru.md) (§testcat) |
+| Обязательные изменения кода, документации и тестов рядом с правкой | [`docs/mandatory-companion-changes.ru.md`](mandatory-companion-changes.ru.md) (§cmpchg1) |
+| Точный прогон резервного адреса баг-репортов и известные ложные ошибки | [`docs/testing-support-endpoint-discovery.ru.md`](testing-support-endpoint-discovery.ru.md) (§srepdisc1, §docops1) |
 | Быстрый вход нового агента без повторного чтения всего проекта | [`docs/agent-fast-start.ru.md`](agent-fast-start.ru.md) |
 | Как понимать владельца и формулировать ответы | [`docs/owner-communication-profile.ru.md`](owner-communication-profile.ru.md) (§usrcomm) |
 | Архитектура памяти, БД, модулей и диалога ИИ-помощника | [`docs/ai-assistant-development/README.md`](ai-assistant-development/README.md) (§aiarch1) |
@@ -165,6 +167,20 @@
 - Полный перечень UCI без полей в UI: [`docs/hidden-settings.ru.md`](hidden-settings.ru.md).
 
 ### Android: автопоиск и QR-сопряжение
+
+- Зелёный эмуляторный тест не доказывает камеру, private MAC, SIM, OEM background
+  behavior или связь с OpenWrt. Использовать ручные профили из
+  [`android-test-lab.ru.md`](android-test-lab.ru.md); тяжёлый стенд не добавлять в
+  обычный CI (§andlab1).
+- В Windows PowerShell 5 `sdkmanager` и `emulator` могут писать обычные warnings
+  в stderr при exit code 0. Android lab сохраняет этот поток, но определяет
+  неуспех native-команды по exit code; не возвращать автоматическое падение на
+  любой `NativeCommandError` (§andlab1).
+- Для `adb shell am instrument` финальный `INSTRUMENTATION_CODE: -1` означает
+  успешный AndroidJUnitRunner protocol report. На Windows host exit code может
+  отличаться; принимать результат можно только при одновременных свежих `OK (N
+  tests)`, `N > 0`, code `-1` и отсутствии `FAILURES`/`INSTRUMENTATION_FAILED`
+  (§andlab1).
 
 - Служебный `sheepfold-hash-common` предназначен только для состояния, кэша и дедупликации. Не подключать его к QR/pairing: `sheepfold-pair-common` сохраняет отдельный `pair_sha256`, а Android обязан URL-кодировать временный код, особенно символ `+`. Замена алгоритма или form-кодирования на одной стороне снова сделает правильный QR недействительным. (§dscqr01)
 - В публичном CGI не разбирайте `application/x-www-form-urlencoded` через `tr | while read`: поведение цикла в конвейере различается между shell и версиями BusyBox `ash`. Разбирайте пары `&`/`=` параметрическим раскрытием POSIX shell и проверяйте реальным POST через `uhttpd`; иначе непустое тело превращается в отсутствующие `login`/`code`. (§dscqr01)

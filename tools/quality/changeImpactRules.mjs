@@ -142,6 +142,16 @@ export const impactRules = Object.freeze([
     review: 'Проверить BusyBox-совместимость, validation, lock, exit code и структурированный JSON.',
   }),
   Object.freeze({
+    id: 'routerService',
+    area: 'Служба OpenWrt',
+    pattern: /^package\/luci-app-[^/]+\/root\/etc\/init\.d\/sheepfold$/,
+    categories: ['backendFast', 'packaging', 'security'],
+    checks: ['routerReadOnly', 'routerFullSafe'],
+    risk: 'critical',
+    review: 'Проверить procd lifecycle, порядок запуска, права процесса и восстановление после reboot.',
+    full: true,
+  }),
+  Object.freeze({
     id: 'rpcAcl',
     area: 'LuCI rpcd ACL',
     pattern: /package\/luci-app-[^/]+\/root\/usr\/share\/rpcd\/acl\.d\/[^/]+\.json$/,

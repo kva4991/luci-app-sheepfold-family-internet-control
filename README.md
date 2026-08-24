@@ -8,7 +8,7 @@
 
 [Project presentation](docs/project-presentation.md)
 
-[Feedback backend setup: Yandex Cloud + YDB](docs/yandex-cloud-ydb-feedback.ru.md)
+[Encrypted parent-app bug reports](docs/support-report-transport.ru.md) · [Legacy LuCI channel: Yandex Cloud + YDB](docs/yandex-cloud-ydb-feedback.ru.md)
 
 [How official IPK and OpenWrt APK packages are built](docs/github-actions-openwrt-build.ru.md)
 

@@ -38,7 +38,7 @@ import app.sheepfold.android.R
  * для локального аудита согласия; ни редакция, ни время не отправляются наружу.
  */
 object AgreementAcceptanceStore {
-    const val CURRENT_REVISION = "2026-07-02"
+    const val CURRENT_REVISION = "2026-08-24"
     private const val PREFS = "sheepfold_agreement"
     private const val KEY_REVISION = "accepted_revision"
     private const val KEY_ACCEPTED_AT = "accepted_at_millis"

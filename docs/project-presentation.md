@@ -40,7 +40,7 @@ Sheepfold is built as a local-first, self-hosted system. Full management is inte
 
 Sensitive data — device identifiers, child names, logs, router settings, and similar private details — must not be sent to AI providers automatically. Extended AI context requires a preview screen and explicit user confirmation before anything beyond the parent's own text is shared.
 
-The project avoids a mandatory central cloud backend and is designed to work alongside existing OpenWrt services instead of silently taking control of them. An optional, user-triggered feedback form may send the displayed message fields to the project owner's Yandex Cloud endpoint.
+The project avoids a mandatory central cloud backend and is designed to work alongside existing OpenWrt services instead of silently taking control of them. The optional parent-app report form previews the exact report and encrypts it on the phone before the router forwards the ciphertext to the private support queue. LuCI temporarily keeps a separate legacy Yandex Cloud feedback route.
 
 ## Integration philosophy
 

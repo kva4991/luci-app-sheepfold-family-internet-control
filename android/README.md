@@ -108,7 +108,7 @@ The repository has one Android build root: `android/`.
 
 Inside it, `android/app/` is the application module, not a second separate project. Run Gradle from `android/` so the build always uses `android/settings.gradle.kts`.
 
-The application uses Kotlin and Jetpack Compose. It includes the first-run agreement and permission flow, network discovery, Wi-Fi/MAC guidance, camera and file QR scanning, manual pairing, one-time router pairing, TLS pinning, encrypted connection storage, password/PIN/biometric app protection, router-backed device actions, notifications, widgets, and the parent AI assistant routed through OpenWRT. The evolving API contract is documented in `docs/android-openwrt-api.ru.md`.
+The application uses Kotlin and Jetpack Compose. It includes the first-run agreement and permission flow, network discovery, Wi-Fi/MAC guidance, camera and file QR scanning, manual pairing, one-time router pairing, TLS pinning, encrypted connection storage, password/PIN/biometric app protection, router-backed device actions, notifications, widgets, an HPKE-encrypted support-report form, and the parent AI assistant routed through OpenWRT. Support reports use Google Tink and are encrypted on the phone before the home router; the evolving API contract is documented in `docs/android-openwrt-api.ru.md` and `docs/support-report-transport.ru.md`.
 
 ## Build
 

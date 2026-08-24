@@ -1,0 +1,4 @@
+sheepfold-support-endpoint-v1
+sequence=1
+endpoint=https://support.example/v1/reports
+signature=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA

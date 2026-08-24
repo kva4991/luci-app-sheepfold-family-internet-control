@@ -1381,7 +1381,7 @@ time_status() {
 
 router_info() {
         local status_json wan_state wan_reason ping_ms ping_ya_ru_ms ping_gosuslugi_ru_ms ping_ntp_vniiftri_ru_ms any_ping_ok
-        local firmware release model kernel
+        local firmware release model kernel architecture product_variant integration_mode
         local sheepfold_version podkop_version adguard_version podkop_version_status
         local lan_ports lan_count uptime_text load_avg memory_text storage_text
         local wifi_radios wifi_index radio
@@ -1425,6 +1425,10 @@ router_info() {
         load_avg="$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || printf unknown)"
         memory_text="$(awk '/MemTotal:/ { t=$2 } /MemAvailable:/ { a=$2 } END { if (t>0) printf "%.0f MB free / %.0f MB total", a/1024, t/1024; else print "unknown" }' /proc/meminfo 2>/dev/null || printf unknown)"
         storage_text="$(storage_summary_text)"
+        product_variant="$(uci -q get sheepfold.global.product_variant 2>/dev/null || printf sheepfold)"
+        case "$product_variant" in sheepfold|sheepfoldAi) ;; *) product_variant=sheepfold ;; esac
+        integration_mode="$(uci -q get sheepfold.global.integration_mode 2>/dev/null || printf none)"
+        case "$integration_mode" in none|adguard|podkop|adguard_podkop) ;; *) integration_mode=none ;; esac
 
         [ -n "$sheepfold_version" ] || sheepfold_version="$(global_get ui_asset_version unknown)"
 
@@ -1444,6 +1448,13 @@ router_info() {
                 release="$(router_board_field version)"
                 [ -n "$release" ] || release="unknown"
         fi
+
+        # Не выводим весь release-файл: для баг-репорта достаточно архитектуры
+        # пакетов, а произвольные vendor-поля могут содержать локальные данные.
+        architecture="${DISTRIB_ARCH:-}"
+        [ -n "$architecture" ] || architecture="$(apk --print-arch 2>/dev/null || true)"
+        [ -n "$architecture" ] || architecture="$(opkg print-architecture 2>/dev/null | awk '$2 != "all" { value=$2 } END { print value }')"
+        [ -n "$architecture" ] || architecture="$(uname -m 2>/dev/null || printf unknown)"
 
         if [ -n "$status_json" ]; then
                 local up available device
@@ -1481,6 +1492,9 @@ router_info() {
         print_kv openwrt_release     "$release"
         print_kv kernel_version      "$kernel"
         print_kv router_model        "$model"
+        print_kv architecture        "$architecture"
+        print_kv product_variant     "$product_variant"
+        print_kv integration_mode    "$integration_mode"
         print_kv uptime              "$uptime_text"
         print_kv load_average        "$load_avg"
         print_kv memory              "$memory_text"

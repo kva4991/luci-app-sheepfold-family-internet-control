@@ -6,4 +6,3 @@ requires-python = ">=3.11"
 
 [tool.unittest]
 start-directory = "tests"
-

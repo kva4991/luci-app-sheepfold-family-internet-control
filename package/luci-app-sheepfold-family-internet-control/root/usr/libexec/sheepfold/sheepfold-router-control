@@ -11,6 +11,7 @@ DEVICE_RECLASSIFY="/usr/libexec/sheepfold/sheepfold-device-reclassify"
 DEVICE_PRESENCE="/usr/libexec/sheepfold/sheepfold-device-presence"
 LED_CONTROL="/usr/libexec/sheepfold/sheepfold-led-control"
 FEEDBACK="/usr/libexec/sheepfold/sheepfold-feedback"
+SUPPORT_REPORT="/usr/libexec/sheepfold/sheepfold-support-report"
 IPV6_CONTROL="/usr/libexec/sheepfold/sheepfold-ipv6-control"
 CHILD_WIFI_MONITOR="/usr/libexec/sheepfold/sheepfold-child-wifi-monitor"
 TLS_FINGERPRINT="/usr/libexec/sheepfold/sheepfold-tls-fingerprint"
@@ -270,6 +271,16 @@ case "$command" in
     feedback-submit)
         shift
         exec "$FEEDBACK" submit "$@"
+        ;;
+    support-report-status)
+        exec "$SUPPORT_REPORT" status
+        ;;
+    support-report-config)
+        exec "$SUPPORT_REPORT" config
+        ;;
+    support-report-submit)
+        shift
+        exec "$SUPPORT_REPORT" submit-encrypted "$@"
         ;;
     ipv6-apply)
         exec "$IPV6_CONTROL" apply

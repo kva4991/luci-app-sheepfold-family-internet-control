@@ -283,6 +283,10 @@ ensure_global_option app_port '5201'
 ensure_global_option pairing_diagnostics '0'
 ensure_global_option feedback_endpoint ''
 ensure_global_option feedback_install_id ''
+ensure_global_option support_report_endpoint ''
+ensure_global_option support_report_recipient_key_id ''
+ensure_global_option support_report_recipient_public_keyset ''
+ensure_global_option support_report_discovery_public_key ''
 ensure_router_install_id() {
 	install_id="$$(uci -q get sheepfold.global.router_install_id 2>/dev/null || true)"
 	if printf '%s\n' "$$install_id" | grep -Eq '^[a-f0-9]{32,64}$$'; then

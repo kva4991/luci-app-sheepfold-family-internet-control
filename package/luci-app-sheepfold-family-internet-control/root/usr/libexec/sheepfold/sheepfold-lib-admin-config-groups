@@ -327,4 +327,3 @@ group_delete() {
     audit_event "группа удалена: $group_name"
     admin_config_json group-delete "$runtime_applied"
 }
-

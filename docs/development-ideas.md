@@ -308,10 +308,12 @@
   `android/`: worker существует только в детском APK. Не добавлять MockWebServer
   ради проверки scheduler, пока транспорт сохраняет собственный TLS/local-IP
   контракт; сеть и WorkManager лучше проверять раздельно.
-- **Android instrumentation первого запуска и сопряжения.** Нужен emulator/physical
-  device для back navigation, permission lifecycle, квадратного QR preview,
-  импорта QR из файла и перехода к повторной привязке после отзыва токена.
-  Статические Node-проверки не доказывают Android lifecycle и геометрию.
+- **Android instrumentation первого запуска и сопряжения.** Базовый ручной стенд
+  API 28/35 и smoke первого запуска обоих APK уже реализованы (§andlab1). Следом
+  нужны back navigation, permission lifecycle, импорт QR из файла и переход к
+  повторной привязке после отзыва токена. Квадратный camera preview и реальный QR
+  проверяются на физическом телефоне: статические Node-проверки и AVD не
+  доказывают Android lifecycle, геометрию камеры и OEM-поведение.
 - **Нативный `uci.apply()` LuCI не выбран.** Это не отложенная простая замена: Sheepfold persistence adapter владеет staging, optimistic revision, commit нескольких конфигов, runtime apply, подтверждением результата и восстановлением фактического UCI. Использовать штатные LuCI primitives можно только внутри этого контракта, не вместо него.
 - **Разделить `sheepfold-api-admin-config`, когда появится естественная граница.**
   Сейчас файл немного превысил порог аудита и вручную собирает JSON-фрагменты.

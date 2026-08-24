@@ -25,6 +25,7 @@ const devices = read('android/app/src/main/java/app/sheepfold/android/ui/main/De
 const deviceEditor = read('android/app/src/main/java/app/sheepfold/android/ui/main/DeviceEditorDialog.kt');
 const notifications = read('android/app/src/main/java/app/sheepfold/android/ui/main/NotificationsTab.kt');
 const agreement = read('android/app/src/main/java/app/sheepfold/android/ui/setup/AgreementAcceptance.kt');
+const agreementDocument = read('docs/user-agreement.ru.md');
 const activity = read('android/app/src/main/java/app/sheepfold/android/MainActivity.kt');
 const strings = read('android/app/src/main/res/values/strings.xml');
 const stringsEn = read('android/app/src/main/res/values-en/strings.xml');
@@ -125,7 +126,10 @@ test('device editor distinguishes saved UCI from pending runtime application', (
 });
 
 test('agreement revision and acceptance time are local and re-consent is isolated', () => {
-  assert.match(agreement, /CURRENT_REVISION/);
+  const applicationRevision = agreement.match(/CURRENT_REVISION = "([0-9-]+)"/)?.[1];
+  const documentRevision = agreementDocument.match(/Дата редакции: ([0-9-]+)/)?.[1];
+  assert.ok(applicationRevision);
+  assert.equal(applicationRevision, documentRevision);
   assert.match(agreement, /accepted_at_millis/);
   assert.match(agreement, /System\.currentTimeMillis\(\)/);
   assert.match(agreement, /AgreementRenewalScreen/);

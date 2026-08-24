@@ -10,7 +10,8 @@
 2. Выполнить `git status --short --branch` и посмотреть последние 10 коммитов. Не менять и не откатывать чужие незакоммиченные правки.
 3. На Windows выполнить `powershell -ExecutionPolicy Bypass -File tools\windows\check.ps1`. Если проверка не прошла, использовать полную команду из `tools/README.ru.md` самому; если среда не разрешает установку, дать эту команду пользователю.
 4. Найти код и документацию задачи через установленный общим Windows-скриптом `rg`: `rg -n "ключевое слово|§тег"`. Затем прочитать только найденные focused-документы, связанные вхождения §-тега и действующий ADR из [`architecture/decisions/`](architecture/decisions/README.ru.md), если меняется архитектурная граница (§adrproc).
-5. Перед продолжением общей разработки прочитать [`project-development-roadmap.ru.md`](project-development-roadmap.ru.md) (§roadmap). Перед коммитом или слиянием большого набора изменений дополнительно прочитать `docs/merge-readiness-plan.ru.md`; для обычной узкой задачи весь merge-план не нужен. Сначала проверить настоящее имя ветки и состояние worktree, а не полагаться на старое название из документации.
+5. Для общей или межслойной правки выбрать подходящие строки в [`mandatory-companion-changes.ru.md`](mandatory-companion-changes.ru.md) (§cmpchg1). Автоматический impact-советник помогает найти связи, но не заменяет эту матрицу.
+6. Перед продолжением общей разработки прочитать [`project-development-roadmap.ru.md`](project-development-roadmap.ru.md) (§roadmap). Перед коммитом или слиянием большого набора изменений дополнительно прочитать `docs/merge-readiness-plan.ru.md`; для обычной узкой задачи весь merge-план не нужен. Сначала проверить настоящее имя ветки и состояние worktree, а не полагаться на старое название из документации.
 
 ## Куда смотреть по типу задачи
 
@@ -21,6 +22,7 @@
 | UCI и установка | `root/etc/config/sheepfold`, `root/etc/uci-defaults/`, `install.sh`, `docs/uci-config-migration.ru.md` |
 | Родительский Android | `android/`, `docs/android-config.ru.md`, `docs/android-openwrt-api.ru.md` |
 | Детский Android | `android-child/` и контракт `/client-status` |
+| Android runtime, эмулятор и физические телефоны | `docs/android-test-lab.ru.md`, `tools/android-testing/` (§andlab1) |
 | Автоопределение | detector-скрипты, `docs/device-detection.ru.md` |
 | Сборка и окружение | `tools/README.ru.md`, `docs/agent-environment.ru.md`; публичные IPK/OpenWrt APK — `docs/github-actions-openwrt-build.ru.md` (§owrtci1) |
 | Живой тестовый роутер и LuCI | `docs/live-router-automation.ru.md`, затем полная матрица `docs/live-router-testing.ru.md` (§routerharness) |
@@ -29,17 +31,20 @@
 | Архитектурное решение и причины | `docs/architecture/decisions/README.ru.md`, затем профильный документ (§adrproc) |
 | Дефект между UI, API, UCI и runtime | `docs/debugging-and-verification.ru.md` (§debug01) |
 | Области и тесты затронутой правки | `docs/change-impact-review.ru.md`, `npm.cmd run review:impact` (§impact1) |
+| Обязательные изменения рядом с правкой | `docs/mandatory-companion-changes.ru.md` (§cmpchg1) |
+| Точный запуск теста, ожидаемый результат и известные ошибки | профильный runbook; образец — `docs/testing-support-endpoint-discovery.ru.md` (§docops1) |
 | Единый быстрый quality gate | `docs/quality-assistants/README.ru.md`, `npm.cmd run quality:plan`, затем `quality:changed` (§qassist) |
 | Следующая общая работа | `docs/project-development-roadmap.ru.md`; профильные требования и ADR читать по указанным там §-тегам (§roadmap) |
 
 ## Проверки по слоям
 
-1. Во время правки запускать синтаксическую проверку и ближайший целевой тест.
-2. После завершения подсистемы запускать её набор тестов.
-3. После узкой правки запускать категорию из [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat), при пересечении — объединять категории. Полный `npm.cmd test` запускать перед push/PR/merge/release либо раньше, если изменён общий backend/API/UCI/package/security-контракт. Не повторять долгий полный набор после каждой мелкой правки.
-4. Перед итоговым прогоном выполнить `npm.cmd run quality:plan`; для обычной итерации использовать `quality:changed`, а перед push исполняемого кода `quality:gate`. Неизвестный путь разобрать вручную (§impact1, §qassist).
-5. Android собирать соответствующим wrapper только после Android-изменений: `android\gradlew.bat -p android ...` или `android-child\gradlew.bat -p android-child ...`. Глобальный Gradle не нужен.
-6. Перед коммитом всегда выполнить `git diff --check`, проверить `git diff --stat`, §-теги и отсутствие скачанных SDK, APK, IPK и кэшей в индексе.
+1. До правки выписать подходящие строки обязательной матрицы и границы доказательства нужных тестов (§cmpchg1, §docops1).
+2. Во время правки запускать синтаксическую проверку и ближайший целевой тест.
+3. После завершения подсистемы запускать её набор тестов.
+4. После узкой правки запускать категорию из [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat), при пересечении — объединять категории. Полный `npm.cmd test` запускать перед push/PR/merge/release либо раньше, если изменён общий backend/API/UCI/package/security-контракт. Не повторять долгий полный набор после каждой мелкой правки.
+5. Перед итоговым прогоном выполнить `npm.cmd run quality:plan`; для обычной итерации использовать `quality:changed`, а перед push исполняемого кода `quality:gate`. Неизвестный путь разобрать вручную (§impact1, §qassist).
+6. Android собирать соответствующим wrapper только после Android-изменений: `android\gradlew.bat -p android ...` или `android-child\gradlew.bat -p android-child ...`. Глобальный Gradle не нужен. Ручной `androidLab:smoke` запускать при необходимости Android runtime, а `androidLab:full` — перед выдачей APK/релизом, не после каждой правки (§andlab1).
+7. Перед коммитом всегда выполнить `git diff --check`, проверить `git diff --stat`, §-теги и отсутствие скачанных SDK, APK, IPK и кэшей в индексе.
 
 ## Как не повторять известные ошибки
 

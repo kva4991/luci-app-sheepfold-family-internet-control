@@ -1,0 +1,301 @@
+#!/bin/sh
+# Отправляет только HPKE-ciphertext в отдельную очередь техподдержки (§feedback §rsuppeer).
+# Пользовательский текст приходит уже зашифрованным родительским APK; этот helper
+# создаёт долговременную identity роутера, подписывает envelope и выполняет HTTPS POST.
+set -eu
+
+CONFIG='sheepfold.global'
+IDENTITY_DIR='/etc/sheepfold/support-report'
+PRIVATE_KEY="$IDENTITY_DIR/router-ed25519.pem"
+STATE_DIR='/tmp/sheepfold/support-report'
+ENDPOINT_DISCOVERY='/usr/libexec/sheepfold/sheepfold-support-endpoint-discovery'
+# CGI принимает до 64 KiB form-body. Base64url расширяет бинарный HPKE payload,
+# поэтому лимит ciphertext ниже общего лимита запроса и не обрывает поле посередине.
+MAX_CIPHERTEXT_BYTES=48000
+MAX_CIPHERTEXT_CHARS=64000
+MAX_REPORT_LIFETIME_SECONDS=604800
+CRYPTO_SUITE='HPKE-X25519-HKDF-SHA256-CHACHA20POLY1305'
+
+uci_get() {
+	uci -q get "$CONFIG.$1" 2>/dev/null || printf '%s' "${2:-}"
+}
+
+valid_base64url() {
+	value="$1"
+	[ -n "$value" ] || return 1
+	printf '%s' "$value" | grep -Eq '^[A-Za-z0-9_-]+$'
+}
+
+valid_report_id() {
+	[ "${#1}" -eq 22 ] && valid_base64url "$1"
+}
+
+valid_key_id() {
+	value="$1"
+	[ "${#value}" -ge 1 ] && [ "${#value}" -le 64 ] || return 1
+	printf '%s' "$value" | grep -Eq '^[a-z0-9][a-z0-9._-]*$'
+}
+
+valid_endpoint() {
+	value="$1"
+	# Endpoint задаёт владелец серверного пакета, но всё равно запрещаем credentials,
+	# управляющие символы и downgrade до HTTP, чтобы ошибка настройки не стала SSRF.
+	printf '%s' "$value" |
+		grep -Eq '^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~:/?%&=+-]*)?$'
+}
+
+base64url_encode() {
+	openssl base64 -A | tr '+/' '-_' | tr -d '='
+}
+
+base64url_decode() {
+	value="$1"
+	case $((${#value} % 4)) in
+		0) padding='' ;;
+		2) padding='==' ;;
+		3) padding='=' ;;
+		*) return 1 ;;
+	esac
+	printf '%s%s' "$value" "$padding" | sed 's/-/+/g; s#_#/#g' | openssl base64 -d -A
+}
+
+kv_get() {
+	key="$1"
+	text="$2"
+	printf '%s\n' "$text" | sed -n "s/^${key}=//p" | head -n 1
+}
+
+ensure_identity() {
+	umask 077
+	mkdir -p "$IDENTITY_DIR" "$STATE_DIR"
+	if [ ! -s "$PRIVATE_KEY" ]; then
+		temporary_key="$IDENTITY_DIR/router-ed25519.pem.$$"
+		trap 'rm -f "$temporary_key"' EXIT INT TERM
+		openssl genpkey -algorithm ED25519 -out "$temporary_key" 2>/dev/null || return 1
+		chmod 600 "$temporary_key"
+		mv "$temporary_key" "$PRIVATE_KEY"
+		trap - EXIT INT TERM
+	fi
+	chmod 600 "$PRIVATE_KEY" 2>/dev/null || true
+	openssl pkey -in "$PRIVATE_KEY" -noout -check >/dev/null 2>&1
+}
+
+public_key_raw() {
+	openssl pkey -in "$PRIVATE_KEY" -pubout -outform DER 2>/dev/null | tail -c 32
+}
+
+router_public_key() {
+	public_key_raw | base64url_encode
+}
+
+router_id() {
+	public_key_raw | openssl dgst -sha256 -binary 2>/dev/null | head -c 16 | base64url_encode
+}
+
+configured() {
+	endpoint="$(uci_get support_report_endpoint '')"
+	key_id="$(uci_get support_report_recipient_key_id '')"
+	public_keyset="$(uci_get support_report_recipient_public_keyset '')"
+	valid_endpoint "$endpoint" && valid_key_id "$key_id" &&
+		[ "${#public_keyset}" -ge 64 ] && [ "${#public_keyset}" -le 8192 ] &&
+		valid_base64url "$public_keyset"
+}
+
+status() {
+	if configured; then
+		printf 'configured=1\n'
+	else
+		printf 'configured=0\n'
+	fi
+	printf 'crypto_suite=%s\n' "$CRYPTO_SUITE"
+	printf 'max_ciphertext_bytes=%s\n' "$MAX_CIPHERTEXT_BYTES"
+}
+
+config() {
+	configured || { printf 'error=not_configured\n' >&2; return 2; }
+	printf 'configured=1\n'
+	printf 'recipient_key_id=%s\n' "$(uci_get support_report_recipient_key_id '')"
+	printf 'recipient_public_keyset=%s\n' "$(uci_get support_report_recipient_public_keyset '')"
+	printf 'crypto_suite=%s\n' "$CRYPTO_SUITE"
+	printf 'max_ciphertext_bytes=%s\n' "$MAX_CIPHERTEXT_BYTES"
+}
+
+write_sign_input() {
+	output="$1"
+	cat > "$output" <<EOF
+sheepfold-support-report-envelope-v1
+schemaVersion=1
+reportId=$report_id
+routerId=$router_id_value
+routerPublicKey=$router_public_key_value
+createdAt=$created_at
+expiresAt=$expires_at
+recipientKeyId=$recipient_key_id
+cryptoSuite=$CRYPTO_SUITE
+ciphertext=$ciphertext
+EOF
+}
+
+post_envelope() {
+	target_endpoint="$1"
+	post_http_code='000'
+	# Ответ предыдущей попытки нельзя принять за ответ нового endpoint, если
+	# повторный curl оборвался до получения HTTP-заголовков.
+	(umask 077 && : > "$response_file")
+	if post_http_code="$(curl -sS --connect-timeout 8 --max-time 30 --proto '=https' \
+		--noproxy '*' -o "$response_file" -w '%{http_code}' \
+		-H 'Content-Type: application/json; charset=utf-8' \
+		-H 'User-Agent: Sheepfold-support-report/1' \
+		--data-binary "@$payload_file" "$target_endpoint" 2>/dev/null)"; then
+		:
+	else
+		post_http_code='000'
+	fi
+	printf '%s' "$post_http_code"
+}
+
+response_error_code() {
+	[ -f "$response_file" ] && [ ! -L "$response_file" ] || return 0
+	response_bytes="$(wc -c < "$response_file" | tr -d ' ')"
+	case "$response_bytes" in ''|*[!0-9]*) return 0 ;; esac
+	[ "$response_bytes" -le 4096 ] || return 0
+	json_init
+	json_load "$(cat "$response_file")" 2>/dev/null || return 0
+	json_get_var response_error error
+	case "$response_error" in
+		serverMaintenance) printf '%s\n' "$response_error" ;;
+	esac
+}
+
+should_discover_endpoint() {
+	case "$1" in
+		000|301|302|307|308|404|408|410|500|502|503|504) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+submit_encrypted() {
+	report_id="$1"
+	recipient_key_id="$2"
+	ciphertext="$3"
+	configured || { printf 'error=not_configured\n' >&2; return 2; }
+	valid_report_id "$report_id" || { printf 'error=invalid_report_id\n' >&2; return 3; }
+	[ "$recipient_key_id" = "$(uci_get support_report_recipient_key_id '')" ] || {
+		printf 'error=recipient_key_mismatch\n' >&2
+		return 3
+	}
+	valid_base64url "$ciphertext" || { printf 'error=invalid_ciphertext\n' >&2; return 3; }
+	[ "${#ciphertext}" -le "$MAX_CIPHERTEXT_CHARS" ] || {
+		printf 'error=ciphertext_too_large\n' >&2
+		return 3
+	}
+	ensure_identity || { printf 'error=identity_unavailable\n' >&2; return 5; }
+
+	mkdir -p "$STATE_DIR"
+	umask 077
+	ciphertext_file="$STATE_DIR/ciphertext.$$"
+	sign_input_file="$STATE_DIR/sign-input.$$"
+	signature_file="$STATE_DIR/signature.$$"
+	payload_file="$STATE_DIR/envelope.$$"
+	response_file="$STATE_DIR/response.$$"
+	trap 'rm -f "$ciphertext_file" "$sign_input_file" "$signature_file" "$payload_file" "$response_file"' EXIT INT TERM
+
+	base64url_decode "$ciphertext" > "$ciphertext_file" 2>/dev/null || {
+		printf 'error=invalid_ciphertext\n' >&2
+		return 3
+	}
+	ciphertext_bytes="$(wc -c < "$ciphertext_file" | tr -d ' ')"
+	case "$ciphertext_bytes" in ''|*[!0-9]*) ciphertext_bytes=0 ;; esac
+	[ "$ciphertext_bytes" -ge 32 ] && [ "$ciphertext_bytes" -le "$MAX_CIPHERTEXT_BYTES" ] || {
+		printf 'error=invalid_ciphertext_size\n' >&2
+		return 3
+	}
+	canonical_ciphertext="$(base64url_encode < "$ciphertext_file")"
+	[ "$canonical_ciphertext" = "$ciphertext" ] || {
+		printf 'error=noncanonical_ciphertext\n' >&2
+		return 3
+	}
+
+	created_at="$(date +%s)"
+	case "$created_at" in ''|*[!0-9]*) printf 'error=clock_unavailable\n' >&2; return 5 ;; esac
+	expires_at=$((created_at + MAX_REPORT_LIFETIME_SECONDS))
+	router_public_key_value="$(router_public_key)"
+	router_id_value="$(router_id)"
+	[ "${#router_public_key_value}" -eq 43 ] && [ "${#router_id_value}" -eq 22 ] || {
+		printf 'error=identity_invalid\n' >&2
+		return 5
+	}
+	write_sign_input "$sign_input_file"
+	openssl pkeyutl -sign -rawin -inkey "$PRIVATE_KEY" -in "$sign_input_file" -out "$signature_file" 2>/dev/null || {
+		printf 'error=signing_failed\n' >&2
+		return 5
+	}
+	router_signature="$(base64url_encode < "$signature_file")"
+	[ "${#router_signature}" -eq 86 ] || { printf 'error=signature_invalid\n' >&2; return 5; }
+
+	. /usr/share/libubox/jshn.sh
+	json_init
+	json_add_int schemaVersion 1
+	json_add_string reportId "$report_id"
+	json_add_string routerId "$router_id_value"
+	json_add_string routerPublicKey "$router_public_key_value"
+	json_add_int createdAt "$created_at"
+	json_add_int expiresAt "$expires_at"
+	json_add_string recipientKeyId "$recipient_key_id"
+	json_add_string cryptoSuite "$CRYPTO_SUITE"
+	json_add_string ciphertext "$ciphertext"
+	json_add_string routerSignature "$router_signature"
+	json_dump > "$payload_file"
+
+	endpoint="$(uci_get support_report_endpoint '')"
+	http_code="$(post_envelope "$endpoint")"
+	server_response_error="$(response_error_code)"
+	discovered_endpoint=''
+	discovered_sequence=''
+	discovery_used=0
+	if should_discover_endpoint "$http_code" && [ "$server_response_error" != 'serverMaintenance' ] && \
+		[ -f "$ENDPOINT_DISCOVERY" ]; then
+		discovery_output=''
+		if discovery_output="$(/bin/sh "$ENDPOINT_DISCOVERY" resolve 2>/dev/null)"; then
+			discovered_endpoint="$(kv_get endpoint "$discovery_output")"
+			discovered_sequence="$(kv_get sequence "$discovery_output")"
+			case "$discovered_sequence" in ''|*[!0-9]*) discovered_sequence='' ;; esac
+			if [ -n "$discovered_sequence" ] && valid_endpoint "$discovered_endpoint" && \
+				[ "$discovered_endpoint" != "$endpoint" ]; then
+				http_code="$(post_envelope "$discovered_endpoint")"
+				server_response_error="$(response_error_code)"
+				discovery_used=1
+			fi
+		fi
+	fi
+	if [ "$http_code" = '503' ] && [ "$server_response_error" = 'serverMaintenance' ]; then
+		printf 'error=server_maintenance\n' >&2
+		return 6
+	fi
+	case "$http_code" in
+		200|201|202)
+			if [ "$discovery_used" -eq 1 ]; then
+				# Даже корректно подписанный адрес становится постоянным только после того,
+				# как новый сервер действительно принял этот ciphertext.
+				/bin/sh "$ENDPOINT_DISCOVERY" accept "$discovered_endpoint" "$discovered_sequence" >/dev/null 2>&1 ||
+					logger -t sheepfold 'Отчёт принят новым сервером, но его адрес не удалось сохранить'
+			fi
+			logger -t sheepfold "Зашифрованный баг-репорт отправлен: $report_id"
+			printf 'ok=1\nreport_id=%s\n' "$report_id"
+			;;
+		409) printf 'error=report_conflict\n' >&2; return 6 ;;
+		413) printf 'error=server_rejected_size\n' >&2; return 6 ;;
+		429) printf 'error=server_rate_limited\n' >&2; return 4 ;;
+		*) printf 'error=server_http_%s\n' "$http_code" >&2; return 6 ;;
+	esac
+}
+
+case "${1:-status}" in
+	status) status ;;
+	config) config ;;
+	submit-encrypted)
+		[ "$#" -eq 4 ] || { printf 'error=invalid_arguments\n' >&2; exit 3; }
+		submit_encrypted "$2" "$3" "$4"
+		;;
+	*) printf 'error=unknown_command\n' >&2; exit 1 ;;
+esac

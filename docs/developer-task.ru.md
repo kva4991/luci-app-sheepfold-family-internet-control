@@ -34,16 +34,17 @@ Sheepfold — OpenWRT-пакет для семейного управления 
 17. [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента, сопряжение, детский APK.
 18. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
 19. [`docs/home-network-access.ru.md`](home-network-access.ru.md) — принятый план доступа Android к Sheepfold через разные домашние роутеры, границы firewall/discovery и отложенная поддержка NAT.
-19. [`docs/child-wifi-network-notifications.ru.md`](child-wifi-network-notifications.ru.md) — уведомления о новых Wi-Fi-сетях детского устройства, геолокация, приватность и границы доверия (§childwifi1).
-20. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
-21. [`docs/test-strategy.ru.md`](test-strategy.ru.md) — категории автоматических тестов, быстрые команды и условия обязательного полного прогона. (§testcat)
-22. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
-23. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (раздел 22 объясняет, куда писать мелочи).
-24. [`docs/debugging-and-verification.ru.md`](debugging-and-verification.ru.md), [`docs/change-impact-review.ru.md`](change-impact-review.ru.md), [`docs/api-contracts.ru.md`](api-contracts.ru.md) и [`docs/ui-review-contract.ru.md`](ui-review-contract.ru.md) — доказательная диагностика и рабочие контракты ревью (§debug01, §impact1, §apicon1, §uxrev01).
-25. [`docs/quality-assistants/README.ru.md`](quality-assistants/README.ru.md) — единая точка входа в карту влияния, быстрый/строгий gate, документационный и структурный аудит, all-pairs и read-only LuCI (§qassist).
-26. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
-27. [`docs/icon-catalog.ru.md`](icon-catalog.ru.md) — единый источник собственных значков LuCI/Android, визуальная страница и команды генерации (§iconcat1).
-28. [`utilities/README.ru.md`](../utilities/README.ru.md) — граница для полезных сопутствующих материалов, которые стоит сохранить, но нельзя выдавать за действующий контракт или рабочий инструмент (§utils1).
+20. [`docs/android-test-lab.ru.md`](android-test-lab.ru.md) — ручной гибридный стенд API 28/35, физические телефоны, живой роутер и пределы доказательства (§andlab1).
+21. [`docs/child-wifi-network-notifications.ru.md`](child-wifi-network-notifications.ru.md) — уведомления о новых Wi-Fi-сетях детского устройства, геолокация, приватность и границы доверия (§childwifi1).
+22. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
+23. [`docs/test-strategy.ru.md`](test-strategy.ru.md) — категории автоматических тестов, быстрые команды и условия обязательного полного прогона. (§testcat)
+24. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
+25. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (раздел 22 объясняет, куда писать мелочи).
+26. [`docs/debugging-and-verification.ru.md`](debugging-and-verification.ru.md), [`docs/change-impact-review.ru.md`](change-impact-review.ru.md), [`docs/api-contracts.ru.md`](api-contracts.ru.md) и [`docs/ui-review-contract.ru.md`](ui-review-contract.ru.md) — доказательная диагностика и рабочие контракты ревью (§debug01, §impact1, §apicon1, §uxrev01).
+27. [`docs/quality-assistants/README.ru.md`](quality-assistants/README.ru.md) — единая точка входа в карту влияния, быстрый/строгий gate, документационный и структурный аудит, all-pairs и read-only LuCI (§qassist).
+28. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
+29. [`docs/icon-catalog.ru.md`](icon-catalog.ru.md) — единый источник собственных значков LuCI/Android, визуальная страница и команды генерации (§iconcat1).
+30. [`utilities/README.ru.md`](../utilities/README.ru.md) — граница для полезных сопутствующих материалов, которые стоит сохранить, но нельзя выдавать за действующий контракт или рабочий инструмент (§utils1).
 
 ---
 

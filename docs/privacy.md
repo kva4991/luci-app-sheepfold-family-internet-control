@@ -4,7 +4,7 @@ Current Russian privacy draft:
 
 - [Политика приватности и обработки данных](privacy.ru.md)
 
-Sheepfold is designed as a family self-hosted tool by default: no mandatory developer cloud and no hidden telemetry. The optional feedback form is the narrow exception: it sends only user-entered fields and a separately consented allowlisted diagnostic report to the project owner's Yandex Cloud endpoint. The report excludes raw UCI configuration, device identifiers and names, SSIDs, logs, browsing history, passwords, tokens, and API keys.
+Sheepfold is designed as a family self-hosted tool by default: no mandatory developer cloud and no hidden telemetry. The optional parent-app report form is the narrow exception: it previews the exact report, encrypts it on the phone with the support operator's HPKE public key, and sends only ciphertext through the home router to the private support queue. An independently confirmed allowlisted diagnostic section may be included. The report excludes raw UCI configuration, device identifiers and names, SSIDs, logs, browsing history, passwords, tokens, and API keys. LuCI temporarily retains its separate legacy Yandex Cloud route until a reviewed browser-side HPKE implementation is available (§feedback, §srep001).
 
 Local device detection may inspect bounded DHCP, mDNS, SSDP/UPnP and WS-Discovery metadata. An
 UPnP description may be fetched only from the exact numeric IPv4 sender currently present on LAN,

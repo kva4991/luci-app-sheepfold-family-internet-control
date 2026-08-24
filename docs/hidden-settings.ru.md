@@ -48,7 +48,9 @@ UCI-параметры и секции Sheepfold, которые **сущест�
 | `adguard_integration`, `podkop_compatibility` | `global` | Устаревшие/параллельные флаги интеграций |
 | `require_router_root_password` | `global` | Проверка root-пароля при входе в Sheepfold |
 | `quick_allowlist_window_seconds` | `global` | Длина окна quick add (30 с; в UI не настраивается) |
-| `feedback_install_id` | `global` | Случайный идентификатор установки только для необязательного канала отзывов; не является ID семьи или устройства (§feedback) |
+| `feedback_endpoint`, `feedback_install_id` | `global` | Legacy LuCI/Yandex endpoint и случайный идентификатор установки; родительский APK этот маршрут больше не использует (§feedback) |
+| `support_report_endpoint`, `support_report_recipient_key_id`, `support_report_recipient_public_keyset` | `global` | Operator-managed HTTPS endpoint и public-only HPKE keyset мобильных баг-репортов; пусты по умолчанию, private key на роутере запрещён (§srep001) |
+| `support_report_discovery_public_key` | `global` | Ed25519 SPKI DER в canonical base64url для проверки резервного адреса из фиксированного GitHub manifest. Пустое значение отключает fallback; manifest не может менять HPKE keyset (§srepdisc1) |
 | `blocked_page_port`, `blocked_page_enabled` | `global` | Страница блокировки HTTP |
 | `pairing_diagnostics` | `global` | Расширенный RAM-журнал QR-сопряжения (`0` по умолчанию, `1` только на время диагностики) |
 | `block_on_boot` | `global` | Глобальная блокировка при загрузке |

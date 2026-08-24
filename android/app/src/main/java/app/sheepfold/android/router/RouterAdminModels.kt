@@ -51,6 +51,14 @@ data class RouterSnapshot(
     val wifiModules: List<RouterWifiModule> = emptyList()
 )
 
+/** Публичная часть конфигурации шифрования баг-репортов; секретного ключа здесь нет. */
+data class SupportReportConfig(
+    val recipientKeyId: String,
+    val recipientPublicKeyset: String,
+    val cryptoSuite: String,
+    val maxCiphertextBytes: Int
+)
+
 data class RouterTimeRange(
     val start: String,
     val end: String

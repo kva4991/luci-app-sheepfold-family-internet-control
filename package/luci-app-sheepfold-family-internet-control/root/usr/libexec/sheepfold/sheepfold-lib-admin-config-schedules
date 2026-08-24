@@ -190,4 +190,3 @@ schedule_delete() {
     audit_event "расписание удалено: $section"
     admin_config_json schedule-delete "$runtime_applied"
 }
-

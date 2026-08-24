@@ -250,4 +250,3 @@ audit_event() {
     [ -x "$LOG_HELPER" ] || return 0
     "$LOG_HELPER" "Android ($ADMIN_LOGIN): $*" >/dev/null 2>&1 || true
 }
-

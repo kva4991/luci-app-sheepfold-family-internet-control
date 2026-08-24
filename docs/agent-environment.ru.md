@@ -178,7 +178,7 @@ npm.cmd run test:category -- luci devices
 npm.cmd test
 ```
 
-Выбор предметной категории и условия полного прогона описаны в [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat). Не запускать все долгие HTTP/shell-стенды после каждой локальной правки.
+Выбор предметной категории и условия полного прогона описаны в [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat). Формат точного runbook, ожидаемых результатов, ошибок и запрещённых способов запуска задаёт `§docops1`, а обязательные изменения рядом с правкой перечислены в [`mandatory-companion-changes.ru.md`](mandatory-companion-changes.ru.md) (§cmpchg1). Не запускать все долгие HTTP/shell-стенды после каждой локальной правки.
 
 Android XML:
 
@@ -308,6 +308,20 @@ android-child\gradlew.bat -p android-child assembleDebug --stacktrace
 - Kotlin nullable/type mismatch — реальная ошибка кода, чинить.
 
 Обычная Gradle-сборка оставляет два APK в `app/build/outputs/apk/debug`. Явные задачи `exportDebugApk` и `exportChildDebugApk` копируют их в `SHEEPFOLD_APK_OUTPUT_DIR`; на текущем компьютере это `C:\Users\User\Documents\pesochnica`. Запускать export-задачи только по прямой просьбе. Не коммить `android/app/build` и `android-child/app/build`.
+
+Android runtime не входит в обычный цикл. Для прямой Android-задачи либо полного
+предрелизного прохода использовать ручной стенд:
+
+```powershell
+npm.cmd run androidLab:doctor
+npm.cmd run androidLab:smoke
+npm.cmd run androidLab:full
+```
+
+Если AVD ещё не созданы, один раз выполнить
+`npm.cmd run androidLab:setup -- -Install -AcceptAndroidLicenses`. Физические
+телефоны, очистка debug APK, отчёты и ограничения описаны в
+[`android-test-lab.ru.md`](android-test-lab.ru.md) (§andlab1).
 
 ## GitHub Actions
 

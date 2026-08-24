@@ -133,8 +133,14 @@ config sheepfold 'global'
         option quick_allowlist_window_seconds '30'
         # Адрес добавляет владелец проекта после развёртывания Yandex Cloud.
         # В интерфейсе конечного пользователя технический endpoint не показывается.
-        option feedback_endpoint ''
-        option feedback_install_id ''
+	option feedback_endpoint ''
+	option feedback_install_id ''
+	option support_report_endpoint ''
+	option support_report_recipient_key_id ''
+	option support_report_recipient_public_keyset ''
+	# Ed25519 SPKI DER в canonical base64url. Пустое значение отключает GitHub fallback
+	# до выпуска production-ключа, не ослабляя обычную отправку на сохранённый endpoint.
+	option support_report_discovery_public_key ''
 
 config list 'allowlist'
         option description 'Devices that must never be blocked'

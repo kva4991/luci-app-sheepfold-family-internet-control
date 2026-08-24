@@ -103,4 +103,3 @@ device_save() {
     fi
     admin_config_json device-save "$runtime_applied"
 }
-

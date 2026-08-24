@@ -29,6 +29,9 @@ ADR хранит контекст решения, а профильный док
 | [0021](0021-canonical-group-schedule-links.ru.md) | Группы связываются с расписаниями только через стабильные цели расписания | Принято | `§grpsch1` |
 | [0022](0022-temporary-remote-support-access.ru.md) | Временный reverse SSH для техподдержки с одноразовым разрешением владельца | Принято | `§rsup001` |
 | [0023](0023-private-support-server-boundary.ru.md) | Закрытый серверный проект отделён от публичного router-side протокола | Принято | `§rsup001`, `§rsuppeer` |
+| [0024](0024-manual-hybrid-android-test-lab.ru.md) | Android runtime проверяется ручным гибридным стендом | Принято | `§andlab1`, `§testwhy` |
+| [0025](0025-parent-apk-encrypted-support-reports.ru.md) | Родительское APK шифрует баг-репорт до домашнего роутера | Принято | `§feedback`, `§srep001`, `§rsuppeer` |
+| [0026](0026-signed-github-support-endpoint-discovery.ru.md) | Резервный адрес баг-репортов принимается только из подписанного manifest | Принято | `§srep001`, `§srepdisc1`, `§rsuppeer` |
 
 ## Статусы
 

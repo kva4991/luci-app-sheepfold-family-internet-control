@@ -442,6 +442,52 @@ feedback_json() {
 	printf '{"app":"sheepfold","ok":false,"error":"%s","message":"%s"}\n' "$error" "$message_text"
 }
 
+support_report_config_json() {
+	auth_check
+	output=""
+	if ! output="$(/usr/libexec/sheepfold/sheepfold-router-control support-report-config 2>&1)"; then
+		header_json "503 Service Unavailable"
+		printf '{"app":"sheepfold","ok":false,"error":"support_report_not_configured","message":"Encrypted support reports are not configured."}\n'
+		return 0
+	fi
+	recipient_key_id="$(kv_get recipient_key_id "$output")"
+	recipient_public_keyset="$(kv_get recipient_public_keyset "$output")"
+	crypto_suite="$(kv_get crypto_suite "$output")"
+	max_ciphertext_bytes="$(kv_get max_ciphertext_bytes "$output")"
+	case "$max_ciphertext_bytes" in ''|*[!0-9]*) max_ciphertext_bytes=0 ;; esac
+	header_json "200 OK"
+	printf '{"app":"sheepfold","ok":true,"recipientKeyId":"%s","recipientPublicKeyset":"%s","cryptoSuite":"%s","maxCiphertextBytes":%s}\n' \
+		"$(json_escape "$recipient_key_id")" "$(json_escape "$recipient_public_keyset")" \
+		"$(json_escape "$crypto_suite")" "$max_ciphertext_bytes"
+}
+
+support_report_submit_json() {
+	auth_check
+	body="$(read_request_body_checked)"
+	report_id="$(form_get reportId "$body")"
+	recipient_key_id="$(form_get recipientKeyId "$body")"
+	ciphertext="$(form_get ciphertext "$body")"
+	output=""
+	if output="$(/usr/libexec/sheepfold/sheepfold-router-control support-report-submit \
+		"$report_id" "$recipient_key_id" "$ciphertext" 2>&1)"; then
+		header_json "202 Accepted"
+		printf '{"app":"sheepfold","ok":true,"reportId":"%s","message":"Encrypted support report queued."}\n' \
+			"$(json_escape "$report_id")"
+		return 0
+	fi
+
+	case "$output" in
+		*rate_limited*) status="429 Too Many Requests"; error="support_report_rate_limited"; message_text="Too many reports. Try again later." ;;
+		*not_configured*) status="503 Service Unavailable"; error="support_report_not_configured"; message_text="Encrypted support reports are not configured." ;;
+		*server_maintenance*) status="503 Service Unavailable"; error="support_report_server_maintenance"; message_text="Отказано, ведутся работы на сервере." ;;
+		*invalid_*|*noncanonical_*|*recipient_key_mismatch*) status="400 Bad Request"; error="invalid_support_report"; message_text="The encrypted report is invalid." ;;
+		*identity_*|*signing_failed|*signature_invalid*) status="500 Internal Server Error"; error="support_report_identity_failed"; message_text="The router could not sign the report." ;;
+		*) status="502 Bad Gateway"; error="support_report_delivery_failed"; message_text="Could not deliver the encrypted report. Try again later." ;;
+	esac
+	header_json "$status"
+	printf '{"app":"sheepfold","ok":false,"error":"%s","message":"%s"}\n' "$error" "$message_text"
+}
+
 # ---------------------------------------------------------------------------
 # router_info_json — GET /router-info
 # Диагностический снимок. Без секретов.
@@ -470,6 +516,9 @@ router_info_json() {
 	json_pair openwrtRelease "$(kv_get openwrt_release "$info")" ,
 	json_pair kernelVersion "$(kv_get kernel_version "$info")" ,
 	json_pair routerModel "$(kv_get router_model "$info")" ,
+	json_pair architecture "$(kv_get architecture "$info")" ,
+	json_pair productVariant "$(kv_get product_variant "$info")" ,
+	json_pair integrationMode "$(kv_get integration_mode "$info")" ,
 	json_pair uptime "$(kv_get uptime "$info")" ,
 	json_pair loadAverage "$(kv_get load_average "$info")" ,
 	json_pair memory "$(kv_get memory "$info")" ,
@@ -741,6 +790,9 @@ case "$method" in
 			/router-info)
 				router_info_json
 				;;
+			/support-report/config)
+				support_report_config_json
+				;;
 			/client-status)
 				# Детский APK — без авторизации, идентификация по IP.
 				client_status_json
@@ -786,6 +838,9 @@ case "$method" in
 				;;
 			/feedback)
 				feedback_json
+				;;
+			/support-report)
+				support_report_submit_json
 				;;
 			# SHEEPFOLD_AI_BEGIN
 			/ai-assistant)
