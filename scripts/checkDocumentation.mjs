@@ -6,7 +6,11 @@
 import { readdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { auditDocumentation, formatDocumentationAudit } from '../tools/quality/documentationAudit.mjs';
+import {
+  auditDocumentation,
+  formatDocumentationAudit,
+  hasDocumentationIssues,
+} from '../tools/quality/documentationAudit.mjs';
 import { collectGitChanges, repoRoot } from '../tools/quality/gitChanges.mjs';
 
 // Скачанные SDK, Gradle и browser/tool caches содержат чужие README с ссылками
@@ -49,12 +53,7 @@ export function documentationPaths(args) {
 export function main(args = process.argv.slice(2)) {
   const report = auditDocumentation(documentationPaths(args));
   console.log(formatDocumentationAudit(report));
-  return report.brokenLinks.length
-    || report.unknownTags.length
-    || report.missingTestFiles.length
-    || report.missingNpmScripts.length
-    ? 1
-    : 0;
+  return hasDocumentationIssues(report) ? 1 : 0;
 }
 
 const isDirect = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);

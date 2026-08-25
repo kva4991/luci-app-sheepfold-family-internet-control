@@ -9,8 +9,10 @@ import { run } from 'node:test';
 import { spec } from 'node:test/reporters';
 import { fileURLToPath } from 'node:url';
 import { categoryRows, selectTestNames } from '../tools/quality/testSelection.mjs';
+import { applyTestEnvironment } from '../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+applyTestEnvironment(repoRoot);
 const args = process.argv.slice(2);
 
 function printCategories() {

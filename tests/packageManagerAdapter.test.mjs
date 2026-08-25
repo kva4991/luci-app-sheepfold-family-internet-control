@@ -16,12 +16,11 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { shellTestPath } from '../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 function toShellPath(path) {
-  return path
-    .replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`)
-    .replaceAll('\\', '/');
+  return shellTestPath(path, { cwd: repoRoot });
 }
 
 const helperPath = toShellPath(resolve(
@@ -52,7 +51,7 @@ function runHelper(fakeBin, ...args) {
       helperPath,
       ...args,
     ],
-    { encoding: 'utf8' },
+    { cwd: repoRoot, encoding: 'utf8' },
   );
 }
 
@@ -113,7 +112,7 @@ esac
         helperPath,
         packagePath,
       ],
-      { encoding: 'utf8' },
+      { cwd: repoRoot, encoding: 'utf8' },
     );
 
     assert.equal(manager.stdout.trim(), 'apk');
@@ -132,7 +131,7 @@ esac
     const result = spawnSync(
       'sh',
       ['-c', 'PATH="$1"; export PATH; /bin/sh "$2" manager', 'sh', toShellPath(fakeBin), helperPath],
-      { encoding: 'utf8' },
+      { cwd: repoRoot, encoding: 'utf8' },
     );
 
     assert.equal(result.status, 127);

@@ -22,7 +22,7 @@ function stripAi(source) {
 
 function checkSyntax(source, label) {
   const dir = mkdtempSync(join(tmpdir(), 'sheepfold-settingview-'));
-  const path = join(dir, 'source.js');
+  const path = join(dir, 'source.cjs');
   writeFileSync(path, source);
   const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
   rmSync(dir, { recursive: true, force: true });

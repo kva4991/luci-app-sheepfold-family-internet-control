@@ -147,13 +147,30 @@ npm.cmd run test:category -- access sites security
 
 Для backend-правки сначала использовать `test:backendFast`. Полный `test:backend` включает долгие сетевые стенды и глубокие симуляции. На обычном Windows-компьютере один `adguardIntegration.test.mjs` может идти 6–7 минут, а вся `networkIntegration` — заметно дольше. Для этих команд внешнему runner нужен лимит не меньше 15 минут. Изменение классификатора устройств или вычислителя расписаний требует `test:policySimulation`; изменение AdGuard Home, DNS, nftables или загрузки внешних списков — `test:networkIntegration`. Перед PR/слиянием всё равно действует правило полного прогона (§testcat).
 
-Некоторые Node-тесты запускают Git Bash и создают изолированные fixtures в
-`.build/`. В ограниченной Windows-песочнице такой дочерний shell иногда получает
-`mkdir: ... Permission denied` для пути `/c/Users/...`, хотя рабочее дерево
-доступно самому Node. Это относится, например, к runtime-проверкам команд,
-maintenance jobs и настройки времени/nmap. В таком случае повторить неизменный
-файл или категорию вне песочницы. Успешный внешний повтор подтверждает ограничение
-среды; он не даёт права удалить assertion или ослабить production-путь.
+<!-- §testenv1 -->
+
+Некоторые Node-тесты запускают Git Bash и создают изолированные fixtures. На
+Windows канонические `runAllTests.mjs` и `run-test-category.mjs` направляют
+`TEMP`/`TMP`/`TMPDIR` в абсолютный каталог репозитория `.build/test-tmp`: это
+сохраняет обычный контракт `os.tmpdir()` для Node и Python. Общий test-helper
+передаёт Git Bash локальный fixture уже относительно корня репозитория. В
+ограниченной песочнице `mkdir .build/...` разрешён, но эквивалентный абсолютный
+MSYS-путь `/c/Users/User/.../.build/...` может быть отклонён ещё на сегменте
+`/c/Users/User`. Такая ошибка не означает повреждение NTFS ACL и не исправляется
+повторной установкой Git.
+
+Прямой `node --test ...` обходит подготовку runner. Для него либо использовать
+`npm.cmd run test:category -- --file ИМЯ.test.mjs`, либо заранее задать три
+переменные локальным абсолютным temp-путём по примеру из
+[`agent-environment.ru.md`](agent-environment.ru.md). Если тест намеренно работает
+с абсолютным внешним каталогом, а не с fixture внутри репозитория, повторить его
+вне песочницы. Успешный внешний повтор подтверждает ограничение среды; он не даёт
+права удалить assertion или ослабить production-путь.
+
+Локальный temp находится под корневым `package.json` с `type: module`. Временный
+файл, которым `node --check` имитирует LuCI loader и допускает верхнеуровневый
+`return`, поэтому обязан иметь расширение `.cjs`. Расширение `.js` здесь создаёт
+ложный `SyntaxError: Illegal return statement`; оно не доказывает поломку LuCI.
 
 Имена файлов `*.test.mjs`, внутренних идентификаторов и категорий тестов оформляются в `camelCase`, как имена переменных. Человекочитаемые заголовки `describe()` и `it()` остаются обычными фразами: они предназначены для отчёта, а не для обращения из кода.
 
@@ -231,9 +248,22 @@ Windows-прогон всех 105 файлов по одному заверши�
 
 ## IPK-зависимые тесты на Windows/Codex
 
-Категория `packaging` может запускать Python-сборщик из Node. Тест `aiServerCoreExperiment.test.mjs` аналогично запускает автономный Python-suite экспериментального ядра. В ограниченной песочнице это иногда даёт `spawnSync python EPERM`, хотя Python исправен. AI-core в таком случае проверяется прямой командой из `experimental/ai-server-core`, а package-тесты запускаются вне песочницы либо с заранее собранными пакетами:
+Категория `packaging` может запускать Python-сборщик из Node. Тест `aiServerCoreExperiment.test.mjs` аналогично запускает автономный Python-suite экспериментального ядра. В ограниченной песочнице это иногда даёт `spawnSync python EPERM`, хотя Python исправен. Полный runner теперь проверяет дочерний Python до долгого suite и останавливается с точным объяснением. AI-core в таком случае проверяется прямой командой из `experimental/ai-server-core`, а package-тесты запускаются вне песочницы либо с заранее собранными пакетами.
 
-К этой группе относятся прежде всего `productVariants.test.mjs`, `testIpkI18n.test.mjs`, `testIpkPermissions.test.mjs` и `updateTransportSafety.test.mjs`: без заранее переданного IPK они могут запускать `scripts/build-test-ipk.py` дочерним процессом. Это не тесты реального IPv6, firewall или роутера; им нужен только разрешённый запуск дочернего Python и запись временных архивов. Если среда Codex возвращает `EPERM` или `spawnSync(...).status === null`, запустить их вне песочницы либо использовать заранее собранные IPK по примеру ниже.
+Различать установку и запрет среды нужно двумя проверками:
+
+```powershell
+python --version
+node -e "const {spawnSync}=require('node:child_process'); const r=spawnSync('python',['--version'],{encoding:'utf8'}); console.log({status:r.status,error:r.error?.code,stdout:r.stdout,stderr:r.stderr})"
+```
+
+Если первая команда успешна, а вторая возвращает `error: 'EPERM'` до вывода
+Python, ничего устанавливать не требуется: sandbox либо антивирус запретил именно
+дочерний процесс. `ENOENT` или ошибка обеих команд уже указывает на `PATH`/установку.
+Не считать пустой вывод успехом и не добавлять широкое исключение антивируса только
+ради зелёного теста. (§testenv1)
+
+К этой группе относятся прежде всего `productVariants.test.mjs`, `testIpkI18n.test.mjs`, `testIpkPermissions.test.mjs` и `updateTransportSafety.test.mjs`: без заранее переданного IPK они могут запускать `scripts/build-test-ipk.py` дочерним процессом. Это не тесты реального IPv6, firewall или роутера; им нужен только разрешённый запуск дочернего Python и запись временных архивов. Если среда Codex возвращает `EPERM` или `spawnSync(...).status === null`, запустить их вне песочницы либо использовать заранее собранные IPK по примеру ниже:
 
 `openWrtVariantFeed.test.mjs` аналогично запускает подготовщик SDK feed. В
 ограниченной среде сначала подготовить оба каталога прямым Python, затем передать

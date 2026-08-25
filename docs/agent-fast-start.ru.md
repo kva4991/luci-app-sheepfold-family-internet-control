@@ -34,6 +34,7 @@
 | Обязательные изменения рядом с правкой | `docs/mandatory-companion-changes.ru.md` (§cmpchg1) |
 | Точный запуск теста, ожидаемый результат и известные ошибки | профильный runbook; образец — `docs/testing-support-endpoint-discovery.ru.md` (§docops1) |
 | Единый быстрый quality gate | `docs/quality-assistants/README.ru.md`, `npm.cmd run quality:plan`, затем `quality:changed` (§qassist) |
+| Создание, существенная переработка или ревью документации | `.agents/skills/sheepfold-documentation/SKILL.md`, затем `docs/documentation-writing-standard.ru.md` (§docwrit) |
 | Следующая общая работа | `docs/project-development-roadmap.ru.md`; профильные требования и ADR читать по указанным там §-тегам (§roadmap) |
 
 ## Проверки по слоям

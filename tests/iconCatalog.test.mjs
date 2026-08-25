@@ -68,7 +68,9 @@ describe('Единый каталог значков Sheepfold', () => {
 
     const { icons, outputs } = generatedOutputs();
     const html = readFileSync(resolve(repoRoot, 'icons/catalog.html'), 'utf8');
+    const attributes = readFileSync(resolve(repoRoot, '.gitattributes'), 'utf8');
 
+    assert.match(attributes, /^\*\.html text eol=lf$/m);
     assert.match(html, /Каталог значков Sheepfold/);
     assert.match(html, /class="icon-row"/);
     assert.match(html, /Слева показан значок, справа/);

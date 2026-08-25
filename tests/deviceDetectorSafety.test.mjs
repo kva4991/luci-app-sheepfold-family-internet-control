@@ -11,6 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { shellTestPath } from '../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const detectorPath = resolve(
@@ -39,6 +40,7 @@ const hardeningPath = resolve(
 );
 const validationWorkflowPath = resolve(repoRoot, '.github/workflows/placeholder.yml');
 const temporaryDirectories = [];
+const fixturePath = (path) => shellTestPath(path, { cwd: repoRoot });
 
 afterEach(() => {
   while (temporaryDirectories.length > 0) {
@@ -72,10 +74,23 @@ function classify({
 }) {
   const result = spawnSync(
     'sh',
-    [classifierPath, name, ports, staticName, signalFile, mac, mdnsServices, mdnsProfile, ssdpProfile, wsdProfile, wifiProfile],
+    [
+      fixturePath(classifierPath),
+      name,
+      ports,
+      staticName,
+      signalFile ? fixturePath(signalFile) : '',
+      mac,
+      mdnsServices,
+      mdnsProfile,
+      ssdpProfile,
+      wsdProfile,
+      wifiProfile,
+    ],
     {
+      cwd: repoRoot,
       encoding: 'utf8',
-      env: { ...process.env, SHEEPFOLD_OUI_OVERRIDES: ouiOverridesPath },
+      env: { ...process.env, SHEEPFOLD_OUI_OVERRIDES: fixturePath(ouiOverridesPath) },
     },
   );
 
@@ -158,9 +173,10 @@ mac_in_named_list blocklist '00:11:22:33:44:55' || true
 printf '%s\\n' "$section"
 `, 'utf8');
 
-    const result = spawnSync('sh', [testScriptPath], {
+    const result = spawnSync('sh', [fixturePath(testScriptPath)], {
+      cwd: repoRoot,
       encoding: 'utf8',
-      env: { ...process.env, PATH: `${scriptDirectory}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH}` },
+      env: { ...process.env, PATH: `${fixturePath(scriptDirectory)}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH}` },
     });
 
     assert.equal(result.status, 0, result.stderr);

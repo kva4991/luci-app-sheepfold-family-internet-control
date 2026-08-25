@@ -12,6 +12,8 @@ import {
   auditDocumentation,
   documentedNpmScripts,
   documentedTestFiles,
+  hasDocumentationIssues,
+  markdownStructureIssues,
   markdownTargets,
   registeredTags,
 } from '../tools/quality/documentationAudit.mjs';
@@ -20,6 +22,11 @@ import { selectTestNames } from '../tools/quality/testSelection.mjs';
 import { inspectWhitespace } from '../tools/quality/whitespaceAudit.mjs';
 import { isPackageReleaseOnly } from '../tools/quality/gitChanges.mjs';
 import { diffCheckArgs, parseQualityArgs } from '../scripts/runQualityChecks.mjs';
+import {
+  prepareTestEnvironment,
+  shellTestPath,
+  testTempPath,
+} from '../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
@@ -70,6 +77,40 @@ describe('quality assistant modules §qassist', () => {
     assert.deepEqual(report.missingNpmScripts, [
       { file: 'docs/example.md', script: 'test:removed' },
     ]);
+  });
+
+  it('reports only objective Markdown structure defects', () => {
+    const issues = markdownStructureIssues([
+      '# Main title',
+      '### Skipped level',
+      '![](diagram.svg)',
+      '```text',
+      '# Not a heading inside code',
+    ].join('\n'));
+    assert.deepEqual(issues.map((issue) => issue.code), [
+      'MISSING_IMAGE_ALT',
+      'HEADING_LEVEL_GAP',
+      'UNCLOSED_FENCE',
+    ]);
+    assert.equal(hasDocumentationIssues({
+      brokenLinks: [],
+      unknownTags: [],
+      missingTestFiles: [],
+      missingNpmScripts: [],
+      structureIssues: issues,
+    }), true);
+  });
+
+  it('accepts one H1, ordered headings, described images and closed fences', () => {
+    const source = [
+      '\uFEFF# Main title',
+      '## Procedure',
+      '![Router state](router.png)',
+      '```text',
+      '### This is example text',
+      '```',
+    ].join('\n');
+    assert.deepEqual(markdownStructureIssues(source), []);
   });
 
   it('distinguishes growth, unchanged legacy size and an improving split', () => {
@@ -127,5 +168,28 @@ describe('quality assistant modules §qassist', () => {
     const qualityRunner = read('scripts/runQualityChecks.mjs');
     assert.match(qualityRunner, /scripts', 'runAllTests\.mjs'/);
     assert.doesNotMatch(qualityRunner, /readdirSync\(resolve\(repoRoot, 'tests'\)/);
+  });
+
+  it('keeps Windows test temp and shell fixtures inside the repository', () => {
+    const created = [];
+    const environment = prepareTestEnvironment('C:\\repo', {
+      env: { PATH: 'tools' },
+      platform: 'win32',
+      makeDirectory: (path, options) => created.push({ path, options }),
+    });
+
+    const absoluteTempPath = resolve('C:\\repo', testTempPath);
+    assert.equal(environment.TEMP, absoluteTempPath);
+    assert.equal(environment.TMP, absoluteTempPath);
+    assert.equal(environment.TMPDIR, absoluteTempPath);
+    assert.deepEqual(created, [{ path: absoluteTempPath, options: { recursive: true } }]);
+    assert.equal(
+      shellTestPath('C:\\repo\\.build\\fixture', { cwd: 'C:\\repo', platform: 'win32' }),
+      '.build/fixture',
+    );
+    assert.equal(
+      shellTestPath('D:\\external\\fixture', { cwd: 'C:\\repo', platform: 'win32' }),
+      '/d/external/fixture',
+    );
   });
 });

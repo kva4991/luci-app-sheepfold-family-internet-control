@@ -19,6 +19,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { shellTestPath } from '../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageDir = resolve(repoRoot, 'package/luci-app-sheepfold-family-internet-control');
@@ -28,10 +29,7 @@ function readProjectFile(path) {
 }
 
 function shellPath(path) {
-  const normalized = path.replaceAll('\\', '/');
-  return process.platform === 'win32'
-    ? normalized.replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`)
-    : normalized;
+  return shellTestPath(path, { cwd: repoRoot });
 }
 
 function runPairingCleanupFault({ restoreSnapshot }) {
@@ -74,7 +72,7 @@ pair_transaction_cleanup 6
 `, 'utf8');
   chmodSync(testScript, 0o755);
 
-  const result = spawnSync('sh', [shellPath(testScript)], { encoding: 'utf8' });
+  const result = spawnSync('sh', [shellPath(testScript)], { cwd: repoRoot, encoding: 'utf8' });
   const state = {
     result,
     config: readFileSync(configFile, 'utf8'),
@@ -133,7 +131,7 @@ authenticate_token 'phoneBearer' '192.168.4.201'
 `, 'utf8');
   chmodSync(testScript, 0o755);
 
-  const result = spawnSync('sh', [shellPath(testScript)], { encoding: 'utf8' });
+  const result = spawnSync('sh', [shellPath(testScript)], { cwd: repoRoot, encoding: 'utf8' });
   rmSync(fixtureRoot, { recursive: true, force: true });
   return result;
 }

@@ -8,7 +8,11 @@ import { dirname, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { auditDocumentation, formatDocumentationAudit } from '../tools/quality/documentationAudit.mjs';
+import {
+  auditDocumentation,
+  formatDocumentationAudit,
+  hasDocumentationIssues,
+} from '../tools/quality/documentationAudit.mjs';
 import { formatImpact, inspectChanges, recommendedCommands } from '../tools/quality/changeImpact.mjs';
 import { collectGitChanges, repoRoot } from '../tools/quality/gitChanges.mjs';
 import { formatStructureAudit, inspectStructure } from '../tools/quality/structureAudit.mjs';
@@ -160,12 +164,7 @@ export async function main(args = process.argv.slice(2)) {
   console.log(formatDocumentationAudit(docs));
   steps.push({
     id: 'documentation',
-    status: docs.brokenLinks.length
-      || docs.unknownTags.length
-      || docs.missingTestFiles.length
-      || docs.missingNpmScripts.length
-      ? 'failed'
-      : 'passed',
+    status: hasDocumentationIssues(docs) ? 'failed' : 'passed',
     durationMs: elapsed(docsStartedAt),
     ...docs,
   });

@@ -16,6 +16,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { shellTestPath } from '../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const runtimeDir = resolve(
@@ -30,7 +31,7 @@ const temporaryDirectories = [];
 const flockAvailable = spawnSync('sh', ['-c', 'command -v flock >/dev/null 2>&1']).status === 0;
 
 function shellPath(path) {
-  return path.replaceAll('\\', '/').replaceAll("'", "'\\''");
+  return shellTestPath(path, { cwd: repoRoot }).replaceAll("'", "'\\''");
 }
 
 function waitForFile(path, timeoutMs = 3000) {
@@ -101,14 +102,14 @@ describe('Единая блокировка автоопределения ус�
       'sheepfold_lock_release',
     ].join('\n'), 'utf8');
 
-    const holder = spawn('sh', [holderPath], { stdio: 'pipe' });
+    const holder = spawn('sh', [shellPath(holderPath)], { cwd: repoRoot, stdio: 'pipe' });
     const holderExit = waitForExit(holder);
     await waitForFile(markerPath);
 
     const contender = spawnSync('sh', ['-c', [
       `. '${shellPath(lockCommonPath)}'`,
       `sheepfold_lock_acquire '${shellPath(lockPath)}' 0`,
-    ].join('; ')], { encoding: 'utf8' });
+    ].join('; ')], { cwd: repoRoot, encoding: 'utf8' });
     assert.equal(contender.status, 1, contender.stderr);
 
     const completed = await holderExit;
@@ -118,7 +119,7 @@ describe('Единая блокировка автоопределения ус�
       `. '${shellPath(lockCommonPath)}'`,
       `sheepfold_lock_acquire '${shellPath(lockPath)}' 0`,
       'sheepfold_lock_release',
-    ].join('; ')], { encoding: 'utf8' });
+    ].join('; ')], { cwd: repoRoot, encoding: 'utf8' });
     assert.equal(successor.status, 0, successor.stderr);
   });
 });

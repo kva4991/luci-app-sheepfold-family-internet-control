@@ -11,6 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
+import { shellTestPath } from '../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
@@ -23,12 +24,7 @@ const routerControl = read('package/luci-app-sheepfold-family-internet-control/r
 const adminConfig = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-api-admin-config');
 const adminConfigGroups = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-lib-admin-config-groups');
 
-function posix(path) {
-  const absolute = resolve(path).replace(/\\/g, '/');
-  return process.platform === 'win32'
-    ? absolute.replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`)
-    : absolute;
-}
+const fixturePath = (path) => shellTestPath(path, { cwd: repoRoot });
 
 function executable(path, source) {
   writeFileSync(path, source);
@@ -127,13 +123,13 @@ describe('background maintenance jobs §maintjob1', () => {
     executable(join(bin, 'uci'), simpleUciSource());
 
     const result = runHelper('rotate-log', {
-      TEST_UCI: posix(uci),
-      SHEEPFOLD_UCI_BIN: posix(join(bin, 'uci')),
-      SHEEPFOLD_LOCK_COMMON: posix(join(bin, 'lock-common')),
-      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: posix(runtime),
-      SHEEPFOLD_MAINTENANCE_STATE_DIR: posix(state),
-      SHEEPFOLD_MAINTENANCE_CONFIG_FILE: posix(join(root, 'config')),
-      SHEEPFOLD_MAINTENANCE_DEFAULT_LOG: posix(log),
+      TEST_UCI: fixturePath(uci),
+      SHEEPFOLD_UCI_BIN: fixturePath(join(bin, 'uci')),
+      SHEEPFOLD_LOCK_COMMON: fixturePath(join(bin, 'lock-common')),
+      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: fixturePath(runtime),
+      SHEEPFOLD_MAINTENANCE_STATE_DIR: fixturePath(state),
+      SHEEPFOLD_MAINTENANCE_CONFIG_FILE: fixturePath(join(root, 'config')),
+      SHEEPFOLD_MAINTENANCE_DEFAULT_LOG: fixturePath(log),
       SHEEPFOLD_MAINTENANCE_NOW_EPOCH: '1784678400',
       SHEEPFOLD_MAINTENANCE_TODAY: '2026-07-22',
     });
@@ -244,17 +240,17 @@ DATA
     executable(join(bin, 'firewall'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_FIREWALL_EVENTS"\n');
 
     const result = runHelper('cleanup-devices', {
-      TEST_UCI: posix(uci), TEST_DELETES: posix(deletes),
-      TEST_LOG_EVENTS: posix(logEvents), TEST_FIREWALL_EVENTS: posix(firewallEvents),
-      SHEEPFOLD_UCI_BIN: posix(join(bin, 'uci')),
-      SHEEPFOLD_LOCK_COMMON: posix(join(bin, 'lock-common')),
-      SHEEPFOLD_DEVICE_PRESENCE: posix(join(bin, 'presence')),
-      SHEEPFOLD_LOG_HELPER: posix(join(bin, 'log-helper')),
-      SHEEPFOLD_FIREWALL_HELPER: posix(join(bin, 'firewall')),
-      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: posix(runtime),
-      SHEEPFOLD_MAINTENANCE_STATE_DIR: posix(state),
-      SHEEPFOLD_MAINTENANCE_CONFIG_FILE: posix(config),
-      SHEEPFOLD_CHILD_WIFI_STATE_DIR: posix(childWifiHistory),
+      TEST_UCI: fixturePath(uci), TEST_DELETES: fixturePath(deletes),
+      TEST_LOG_EVENTS: fixturePath(logEvents), TEST_FIREWALL_EVENTS: fixturePath(firewallEvents),
+      SHEEPFOLD_UCI_BIN: fixturePath(join(bin, 'uci')),
+      SHEEPFOLD_LOCK_COMMON: fixturePath(join(bin, 'lock-common')),
+      SHEEPFOLD_DEVICE_PRESENCE: fixturePath(join(bin, 'presence')),
+      SHEEPFOLD_LOG_HELPER: fixturePath(join(bin, 'log-helper')),
+      SHEEPFOLD_FIREWALL_HELPER: fixturePath(join(bin, 'firewall')),
+      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: fixturePath(runtime),
+      SHEEPFOLD_MAINTENANCE_STATE_DIR: fixturePath(state),
+      SHEEPFOLD_MAINTENANCE_CONFIG_FILE: fixturePath(config),
+      SHEEPFOLD_CHILD_WIFI_STATE_DIR: fixturePath(childWifiHistory),
       SHEEPFOLD_MAINTENANCE_NOW_EPOCH: '1784678400',
       SHEEPFOLD_MAINTENANCE_TODAY: '2026-07-22',
     });
@@ -319,13 +315,13 @@ printf 'AA:AA:AA:AA:BB:01\\t1776038400\\t0\\t192.168.1.31\\n'
 
     const before = readFileSync(config, 'utf8');
     const result = runHelper('cleanup-devices', {
-      TEST_UCI: posix(config),
-      SHEEPFOLD_UCI_BIN: posix(join(bin, 'uci')),
-      SHEEPFOLD_LOCK_COMMON: posix(join(bin, 'lock-common')),
-      SHEEPFOLD_DEVICE_PRESENCE: posix(join(bin, 'presence')),
-      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: posix(runtime),
-      SHEEPFOLD_MAINTENANCE_STATE_DIR: posix(state),
-      SHEEPFOLD_MAINTENANCE_CONFIG_FILE: posix(config),
+      TEST_UCI: fixturePath(config),
+      SHEEPFOLD_UCI_BIN: fixturePath(join(bin, 'uci')),
+      SHEEPFOLD_LOCK_COMMON: fixturePath(join(bin, 'lock-common')),
+      SHEEPFOLD_DEVICE_PRESENCE: fixturePath(join(bin, 'presence')),
+      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: fixturePath(runtime),
+      SHEEPFOLD_MAINTENANCE_STATE_DIR: fixturePath(state),
+      SHEEPFOLD_MAINTENANCE_CONFIG_FILE: fixturePath(config),
       SHEEPFOLD_MAINTENANCE_NOW_EPOCH: '1784678400',
       SHEEPFOLD_MAINTENANCE_TODAY: '2026-07-22',
     });
@@ -359,14 +355,14 @@ printf 'available=1\\ncurrent_version=0.1.0-r243\\nlatest_version=0.1.0-r244\\nt
     executable(join(bin, 'notifier'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_NOTIFICATIONS"\n');
 
     const result = runHelper('check-updates', {
-      TEST_UCI: posix(uci), TEST_UPDATER_CALLS: posix(updaterCalls), TEST_NOTIFICATIONS: posix(notifications),
-      SHEEPFOLD_UCI_BIN: posix(join(bin, 'uci')),
-      SHEEPFOLD_LOCK_COMMON: posix(join(bin, 'lock-common')),
-      SHEEPFOLD_UPDATER: posix(join(bin, 'updater')),
-      SHEEPFOLD_NOTIFICATION_HELPER: posix(join(bin, 'notifier')),
-      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: posix(runtime),
-      SHEEPFOLD_MAINTENANCE_STATE_DIR: posix(state),
-      SHEEPFOLD_MAINTENANCE_CONFIG_FILE: posix(join(root, 'config')),
+      TEST_UCI: fixturePath(uci), TEST_UPDATER_CALLS: fixturePath(updaterCalls), TEST_NOTIFICATIONS: fixturePath(notifications),
+      SHEEPFOLD_UCI_BIN: fixturePath(join(bin, 'uci')),
+      SHEEPFOLD_LOCK_COMMON: fixturePath(join(bin, 'lock-common')),
+      SHEEPFOLD_UPDATER: fixturePath(join(bin, 'updater')),
+      SHEEPFOLD_NOTIFICATION_HELPER: fixturePath(join(bin, 'notifier')),
+      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: fixturePath(runtime),
+      SHEEPFOLD_MAINTENANCE_STATE_DIR: fixturePath(state),
+      SHEEPFOLD_MAINTENANCE_CONFIG_FILE: fixturePath(join(root, 'config')),
       SHEEPFOLD_MAINTENANCE_NOW_EPOCH: '1784678400',
       SHEEPFOLD_MAINTENANCE_TODAY: '2026-07-22',
     });
@@ -395,13 +391,13 @@ printf 'available=1\\ncurrent_version=0.1.0-r243\\nlatest_version=0.1.0-r244\\nt
     executable(join(bin, 'updater'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_UPDATER_CALLS"\nexit 99\n');
 
     const env = {
-      TEST_UCI: posix(uci), TEST_UPDATER_CALLS: posix(updaterCalls),
-      SHEEPFOLD_UCI_BIN: posix(join(bin, 'uci')),
-      SHEEPFOLD_LOCK_COMMON: posix(join(bin, 'lock-common')),
-      SHEEPFOLD_UPDATER: posix(join(bin, 'updater')),
-      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: posix(runtime),
-      SHEEPFOLD_MAINTENANCE_STATE_DIR: posix(state),
-      SHEEPFOLD_MAINTENANCE_CONFIG_FILE: posix(join(root, 'config')),
+      TEST_UCI: fixturePath(uci), TEST_UPDATER_CALLS: fixturePath(updaterCalls),
+      SHEEPFOLD_UCI_BIN: fixturePath(join(bin, 'uci')),
+      SHEEPFOLD_LOCK_COMMON: fixturePath(join(bin, 'lock-common')),
+      SHEEPFOLD_UPDATER: fixturePath(join(bin, 'updater')),
+      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: fixturePath(runtime),
+      SHEEPFOLD_MAINTENANCE_STATE_DIR: fixturePath(state),
+      SHEEPFOLD_MAINTENANCE_CONFIG_FILE: fixturePath(join(root, 'config')),
       SHEEPFOLD_MAINTENANCE_NOW_EPOCH: '1784678400',
       SHEEPFOLD_MAINTENANCE_TODAY: '2026-07-22',
     };

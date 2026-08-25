@@ -9,6 +9,7 @@ import { delimiter, dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
+import { shellTestPath } from '../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
@@ -26,12 +27,7 @@ const makefile = read('package/luci-app-sheepfold-family-internet-control/Makefi
 const eslint = read('eslint.config.js');
 const ruCatalog = JSON.parse(read('package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/i18n/ru.json'));
 
-function posix(path) {
-  const absolute = resolve(path).replace(/\\/g, '/');
-  return process.platform === 'win32'
-    ? absolute.replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`)
-    : absolute;
-}
+const fixturePath = (path) => shellTestPath(path, { cwd: repoRoot });
 
 function writeExecutable(path, source) {
   writeFileSync(path, source);
@@ -95,14 +91,14 @@ function runTime(initialLines, args) {
   const env = {
     ...process.env,
     PATH: `${bin}${delimiter}${process.env.PATH || ''}`,
-    SHEEPFOLD_TEST_UCI: posix(state),
-    SHEEPFOLD_LOCK_COMMON: posix(lock),
-    SHEEPFOLD_TIME_LOCK: posix(join(root, 'time.lock')),
-    SHEEPFOLD_TIME_TRANSACTION_ROOT: posix(join(root, 'transactions')),
-    SHEEPFOLD_TIME_SYSTEM_CONFIG: posix(systemConfig),
-    SHEEPFOLD_TIME_APP_CONFIG: posix(appConfig),
-    SHEEPFOLD_SYSNTPD_INIT: posix(join(root, 'missing-sysntpd')),
-    SHEEPFOLD_LOG_HELPER: posix(join(root, 'missing-log')),
+    SHEEPFOLD_TEST_UCI: fixturePath(state),
+    SHEEPFOLD_LOCK_COMMON: fixturePath(lock),
+    SHEEPFOLD_TIME_LOCK: fixturePath(join(root, 'time.lock')),
+    SHEEPFOLD_TIME_TRANSACTION_ROOT: fixturePath(join(root, 'transactions')),
+    SHEEPFOLD_TIME_SYSTEM_CONFIG: fixturePath(systemConfig),
+    SHEEPFOLD_TIME_APP_CONFIG: fixturePath(appConfig),
+    SHEEPFOLD_SYSNTPD_INIT: fixturePath(join(root, 'missing-sysntpd')),
+    SHEEPFOLD_LOG_HELPER: fixturePath(join(root, 'missing-log')),
   };
   const result = spawnSync('sh', [resolve(timeHelperPath), 'save', ...args], {
     cwd: process.cwd(), env, encoding: 'utf8',
@@ -133,26 +129,26 @@ esac
   const env = {
     ...process.env,
     PATH: `${bin}${delimiter}${process.env.PATH || ''}`,
-    SHEEPFOLD_PACKAGE_MANAGER_HELPER: posix('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-package-manager'),
-    SHEEPFOLD_LOCK_COMMON: posix(lock),
-    SHEEPFOLD_NMAP_STATE_DIR: posix(stateDir),
-    SHEEPFOLD_NMAP_INSTALL_LOCK: posix(join(root, 'install.lock')),
+    SHEEPFOLD_PACKAGE_MANAGER_HELPER: fixturePath('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-package-manager'),
+    SHEEPFOLD_LOCK_COMMON: fixturePath(lock),
+    SHEEPFOLD_NMAP_STATE_DIR: fixturePath(stateDir),
+    SHEEPFOLD_NMAP_INSTALL_LOCK: fixturePath(join(root, 'install.lock')),
     SHEEPFOLD_NMAP_FREE_KB: String(freeKb),
     SHEEPFOLD_NMAP_MIN_FREE_KB: '16384',
-    SHEEPFOLD_NMAP_BINARY: posix(nmapBinary),
+    SHEEPFOLD_NMAP_BINARY: fixturePath(nmapBinary),
   };
   const command = start ? 'start' : (install ? 'run-install' : 'status');
   const result = spawnSync('sh', [resolve(detectionHelperPath), command], {
-    cwd: process.cwd(), env, encoding: 'utf8',
+    cwd: repoRoot, env, encoding: 'utf8',
   });
   let status = spawnSync('sh', [resolve(detectionHelperPath), 'status'], {
-    cwd: process.cwd(), env, encoding: 'utf8',
+    cwd: repoRoot, env, encoding: 'utf8',
   });
   if (start) {
     for (let attempt = 0; attempt < 40 && !/state=(?:installed|failed)/.test(status.stdout); attempt += 1) {
       spawnSync('sh', ['-c', 'sleep 0.05']);
       status = spawnSync('sh', [resolve(detectionHelperPath), 'status'], {
-        cwd: process.cwd(), env, encoding: 'utf8',
+        cwd: repoRoot, env, encoding: 'utf8',
       });
     }
   }

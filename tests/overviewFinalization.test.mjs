@@ -34,7 +34,7 @@ function stripAi(source) {
 
 function checkSyntax(source, label) {
   const temp = mkdtempSync(join(tmpdir(), 'sheepfold-overview-final-'));
-  const file = join(temp, 'source.js');
+  const file = join(temp, 'source.cjs');
   try {
     writeFileSync(file, source);
     const result = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });

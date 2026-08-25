@@ -43,6 +43,16 @@ npm.cmd run quality:gate
 APK: такие команды перечисляются в отчёте как отдельные обязательства, потому что
 могут менять внешнее состояние или требуют специального окружения.
 
+На Windows оба канонических test-runner хранят temp в `.build/test-tmp` внутри
+репозитория. Node и Python используют его абсолютный Windows-путь, а test-helper
+преобразует только передаваемые Git Bash fixture-пути в относительные, чтобы shell
+не упирался в sandbox-запрет `/c/Users/User/...`. Полный runner до начала долгих
+групп отдельно проверяет запуск Git Bash и дочернего Python. `Python ... EPERM`
+при успешном прямом `python --version` требует повторить gate вне песочницы, а не
+переустанавливать Python или ослаблять тест. Подробная диагностика:
+[категории тестов](../test-strategy.ru.md#ipk-зависимые-тесты-на-windowscodex).
+<!-- §testenv1 -->
+
 ## Карта инструментов
 
 | Задача | Команда | Скорость | Меняет внешнее состояние |
@@ -107,7 +117,8 @@ flowchart TD
 | `scripts/inspectChangeImpact.mjs` | CLI для просмотра и JSON |
 | `scripts/runQualityChecks.mjs` | последовательный локальный gate и измерение этапов |
 | `tools/quality/testSelection.mjs` | объединение категорий и точечных тестов без дублей |
-| `tools/quality/documentationAudit.mjs` | относительные Markdown-ссылки, §-теги, буквальные имена test-файлов и npm-команд |
+| `tools/quality/testEnvironment.mjs` | локальный Windows temp, относительные Git Bash fixture-пути и единая граница sandbox |
+| `tools/quality/documentationAudit.mjs` | ссылки, §-теги, test/npm-контракты, заголовки, fenced code blocks и alt-текст |
 | `tools/quality/whitespaceAudit.mjs` | пробелы и окончание строк, включая ещё не добавленные в Git файлы |
 | `tools/quality/structureAudit.mjs` | рост крупных изменённых файлов относительно Git-базы |
 | `tools/quality/poCatalog.mjs` | строгий разбор PO для сверки исходного каталога с клиентским JSON без дочернего Python |
@@ -116,6 +127,14 @@ flowchart TD
 | `tools/router-testing/frontendSmoke.mjs` | запуск браузера и запись артефактов |
 
 Подробности: [карта влияния и gate](change-impact-and-gate.ru.md), [документация, структура, матрица и LuCI](matrix-structure-and-ui.ru.md).
+
+## Навык ясной документации
+
+<!-- §docwrit -->
+
+Проектный skill [sheepfold-documentation](../../.agents/skills/sheepfold-documentation/SKILL.md) направляет агента от проверки реального поведения к подходящему типу документа и [стандарту технической документации Sheepfold](../documentation-writing-standard.ru.md). Он применяется при создании страниц, существенной переработке и ревью документации, но не раздувает постоянный контекст `AGENTS.md` полным редакционным справочником.
+
+`quality:docs` намеренно проверяет только детерминированные признаки: локальные ссылки, §-теги, существующие test/npm-контракты, один `H1`, порядок уровней заголовков, закрытые fenced code blocks и непустой alt-текст изображения. Он не пытается regex-правилами оценить ясность русского языка, техническую истинность или статус реализации: эти свойства агент сверяет с кодом, тестами, схемами и runtime-доказательствами.
 
 ## Когда расширять инструменты
 

@@ -88,6 +88,7 @@ Avoid:
 - Architecture-changing work must start with `docs/architecture/decisions/README.ru.md`. ADRs record why a stable choice was made; focused documents still own the detailed current behavior. Supersede an accepted ADR with a new numbered ADR instead of silently rewriting its history, and keep related § tags and regression tests synchronized (§adrproc).
 - Do not dump long technical gotchas into README files; keep README user-facing.
 - If no suitable focused doc exists, create one under `docs/` and link it from `docs/developer-task.ru.md` and `docs/agent-gotchas.ru.md`.
+- For new pages, substantial documentation restructuring, and documentation review, use the project skill `.agents/skills/sheepfold-documentation/SKILL.md` and the canonical writing standard `docs/documentation-writing-standard.ru.md`. Keep technical truth and Sheepfold terminology above general editorial preferences (§docwrit).
 
 ## Implementation Entry Point
 

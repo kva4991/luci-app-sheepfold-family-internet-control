@@ -74,6 +74,8 @@
 | ADR/архитектурное решение | новый ADR или статус замены, ADR index, focused current-state doc, §-tag, contract test | architecture/docs quality | ADR хранит причину, профильный документ — текущее поведение |
 | §-tag или его смысл | все вхождения, строка tag map, дерево связей, связанные docs/tests | `quality:docs:all` + targeted search | Устаревший тег быстрее вводит агента в заблуждение, чем отсутствие тега |
 | Test/npm command в Markdown | реальный `package.json`, cwd, prerequisites, expected result, common errors, anti-patterns | documentation audit + пробный запуск | Непроверенная команда расходует время каждого следующего агента |
+| Test runner, temp-root или child-process boundary | `testEnvironment.mjs`, Windows/sandbox runbook, прямой и runner-запуск, Linux/Windows поведение | `qualityAssistants.test.mjs` + один shell fixture внутри sandbox + полный внешний gate | Нельзя путать запрет среды с дефектом Python/Git Bash или ослаблять тест ради sandbox |
+| Правило или skill технической документации | `documentation-writing-standard.ru.md`, project skill, `AGENTS.md`, fast-start, §-tag и только объективные machine-checks | `qualityAssistants.test.mjs`, `documentationOperations.test.mjs`, `quality:docs:all` | Редакционное правило бесполезно, если агент его не находит, а regex не должен выдавать мнение о тексте за доказанный дефект |
 | Новый устойчивый coupling | эта матрица, impact rules при path-detectable связи, regression test, fast-start navigation | tooling/docs checks | Знание не должно оставаться только в истории чата |
 
 ## Что не считается выполнением матрицы

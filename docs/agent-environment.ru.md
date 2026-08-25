@@ -34,6 +34,7 @@ $scratchTemp = Join-Path $env:SHEEPFOLD_SCRIPT_SCRATCH_ROOT 'sheepfold-temp'
 New-Item -ItemType Directory -Force -Path $scratchTemp | Out-Null
 $env:TEMP = $scratchTemp
 $env:TMP = $scratchTemp
+$env:TMPDIR = $scratchTemp
 ```
 
 `tools/router-testing/` сам использует `SHEEPFOLD_SCRIPT_SCRATCH_ROOT` для
@@ -42,6 +43,29 @@ $env:TMP = $scratchTemp
 выдать готовый файл, его копируют в `C:\Users\User\Documents\pesochnica`, а не
 в `Downloads`. Исходники и `.git` в эту папку переносить не нужно. (§toolwin,
 §routerharness)
+
+Общие router-скрипты используют этот внешний scratch, но канонические Node-runner'ы
+`npm.cmd test` и `npm.cmd run test:category -- ...` на Windows направляют
+`TEMP`, `TMP` и `TMPDIR` в абсолютный каталог репозитория `.build/test-tmp`.
+Node и Python получают нормальный абсолютный Windows-путь, а общий test-helper
+передаёт Git Bash тот же локальный fixture относительно корня репозитория. Это
+важно: ограниченный shell может читать рабочее дерево, но получить
+`Permission denied`, если fixture передан как абсолютный MSYS-путь
+`/c/Users/User/...`. При прямом запуске `node --test ...`, который обходит runner,
+временный каталог можно подготовить вручную:
+
+```powershell
+New-Item -ItemType Directory -Force .build\test-tmp | Out-Null
+$testTemp = (Resolve-Path .build\test-tmp).Path
+$env:TEMP = $testTemp
+$env:TMP = $testTemp
+$env:TMPDIR = $testTemp
+node --test tests\ИМЯ.test.mjs
+```
+
+Это настройка только тестового процесса. Она не переносит репозиторий, не меняет
+Windows ACL и не отменяет необходимость внешнего запуска, если сама песочница
+запрещает Node создавать дочерний `python` с ошибкой `EPERM`. (§testenv1)
 
 На этом компьютере Kaspersky Endpoint Security может после SSH/SCP и установки
 пакета ошибочно поместить запускаемый `runRouterTests.ps1` в карантин как

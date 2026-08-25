@@ -42,9 +42,10 @@ Sheepfold — OpenWRT-пакет для семейного управления 
 25. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (раздел 22 объясняет, куда писать мелочи).
 26. [`docs/debugging-and-verification.ru.md`](debugging-and-verification.ru.md), [`docs/change-impact-review.ru.md`](change-impact-review.ru.md), [`docs/api-contracts.ru.md`](api-contracts.ru.md) и [`docs/ui-review-contract.ru.md`](ui-review-contract.ru.md) — доказательная диагностика и рабочие контракты ревью (§debug01, §impact1, §apicon1, §uxrev01).
 27. [`docs/quality-assistants/README.ru.md`](quality-assistants/README.ru.md) — единая точка входа в карту влияния, быстрый/строгий gate, документационный и структурный аудит, all-pairs и read-only LuCI (§qassist).
-28. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
-29. [`docs/icon-catalog.ru.md`](icon-catalog.ru.md) — единый источник собственных значков LuCI/Android, визуальная страница и команды генерации (§iconcat1).
-30. [`utilities/README.ru.md`](../utilities/README.ru.md) — граница для полезных сопутствующих материалов, которые стоит сохранить, но нельзя выдавать за действующий контракт или рабочий инструмент (§utils1).
+28. [`docs/documentation-writing-standard.ru.md`](documentation-writing-standard.ru.md) — стандарт ясной и доказательной документации и проектный skill для её создания или ревью (§docwrit).
+29. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
+30. [`docs/icon-catalog.ru.md`](icon-catalog.ru.md) — единый источник собственных значков LuCI/Android, визуальная страница и команды генерации (§iconcat1).
+31. [`utilities/README.ru.md`](../utilities/README.ru.md) — граница для полезных сопутствующих материалов, которые стоит сохранить, но нельзя выдавать за действующий контракт или рабочий инструмент (§utils1).
 
 ---
 

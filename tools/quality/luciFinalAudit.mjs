@@ -248,7 +248,9 @@ function syntaxCheckStandard(files) {
   const temp = mkdtempSync(join(tmpdir(), 'sheepfold-standard-audit-'));
   try {
     for (const file of files) {
-      const target = resolve(temp, rel(file).replaceAll('/', '__'));
+      // LuCI loader files allow a top-level return. The repository is ESM, so a
+      // repo-local temporary *.js would be parsed as a module and fail falsely.
+      const target = resolve(temp, `${rel(file).replaceAll('/', '__')}.cjs`);
       writeFileSync(target, stripAi(read(file)));
       const result = spawnSync(process.execPath, ['--check', target], { encoding: 'utf8' });
       stats.standardFiles += 1;

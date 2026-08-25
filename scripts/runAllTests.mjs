@@ -2,15 +2,18 @@
  * Запускает все test-файлы ровно один раз, но изолирует сетевые стенды, глубокие
  * shell-симуляции и упаковщики в небольшие отдельные Node-процессы. Монолитный
  * node --test на Windows удерживал общий процесс более 20 минут, а даже 70 обычных
- * файлов одним процессом не завершались за 6 минут. Скрипт меняет только тестовые
- * fixtures внутри .build; успех не заменяет Android, SDK и live-router проверки.
+ * файлов одним процессом не завершались за 6 минут. Перед долгим suite Windows
+ * preflight отличает sandbox-запрет Python/Git Bash от падения теста. Скрипт меняет
+ * только fixtures внутри .build; успех не заменяет Android, SDK и live-router проверки.
  */
 import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { testCategories } from '../tests/categories.mjs';
+import { prepareTestEnvironment, testTempPath } from '../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const testEnvironment = prepareTestEnvironment(repoRoot);
 const allTests = [...new Set(Object.values(testCategories).flat())].sort();
 const concurrency = Number.parseInt(process.env.SHEEPFOLD_TEST_CONCURRENCY || '4', 10);
 const batchSize = Number.parseInt(process.env.SHEEPFOLD_TEST_BATCH_SIZE || '1', 10);
@@ -28,6 +31,37 @@ if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 60 || timeoutSeconds >
   console.error('SHEEPFOLD_TEST_TIMEOUT_SECONDS должен быть целым числом от 60 до 3600.');
   process.exit(2);
 }
+
+function requireWindowsChild(command, args, label) {
+  if (process.platform !== 'win32') return;
+  const result = spawnSync(command, args, {
+    cwd: repoRoot,
+    env: testEnvironment,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  if (result.status === 0) return;
+
+  const reason = result.error?.code || result.error?.message || result.stderr.trim() || `exit ${result.status}`;
+  console.error(`${label} недоступен дочернему Node-процессу: ${reason}.`);
+  if (result.error?.code === 'EPERM') {
+    console.error('Это запрет песочницы или антивируса до выполнения программы, а не признак отсутствующей установки.');
+    console.error('Повторите quality:gate вне песочницы; не удаляйте тест и не переустанавливайте инструмент вслепую.');
+  }
+  process.exit(126);
+}
+
+requireWindowsChild('sh', [
+  '-c',
+  'probe="$1.$$"; mkdir "$probe" && rmdir "$probe"',
+  'sheepfold-test-host',
+  `${testTempPath}/shell-write-probe`,
+], 'Git Bash');
+requireWindowsChild(
+  process.env.PYTHON_EXECUTABLE || 'python',
+  ['--version'],
+  'Python',
+);
 
 function withoutAssigned(names, assigned) {
   return names.filter((name) => !assigned.has(name));
@@ -72,7 +106,7 @@ for (const [index, group] of testGroups.entries()) {
     ['--test', `--test-concurrency=${concurrency}`, ...group.tests.map((name) => `tests/${name}`)],
     {
       cwd: repoRoot,
-      env: process.env,
+      env: testEnvironment,
       stdio: 'inherit',
       timeout: timeoutSeconds * 1000,
       windowsHide: true,

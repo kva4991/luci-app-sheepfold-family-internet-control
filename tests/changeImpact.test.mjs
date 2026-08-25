@@ -76,6 +76,7 @@ describe('change impact advisor §impact1', () => {
   it('recognizes repository entry points instead of reporting avoidable unknown paths', () => {
     const report = inspectChanges([
       '.gitignore',
+      '.gitattributes',
       'package.json',
       'README.md',
       'README.ru.md',
@@ -83,6 +84,7 @@ describe('change impact advisor §impact1', () => {
       'docs/developer-task.ru.md',
       'docs/project-development-roadmap.ru.md',
       'docs/new-profile-document.ru.md',
+	  '.agents/skills/sheepfold-documentation/SKILL.md',
 	  'utilities/README.ru.md',
 	  'utilities/guides/example.ru.md',
     ]);

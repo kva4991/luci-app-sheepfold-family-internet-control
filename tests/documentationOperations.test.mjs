@@ -58,4 +58,16 @@ describe('operational documentation contract §docops1 §cmpchg1', () => {
     assert.match(tagMap, /§cmpchg1[\s\S]*§impact1/);
     assert.match(tagMap, /§srep001[\s\S]*§srepdisc1/);
   });
+
+  it('routes substantial documentation work through the project writing skill', () => {
+    const agents = read('AGENTS.md');
+    const fastStart = read('docs/agent-fast-start.ru.md');
+    const standard = read('docs/documentation-writing-standard.ru.md');
+    const skill = read('.agents/skills/sheepfold-documentation/SKILL.md');
+    assert.match(agents, /sheepfold-documentation/);
+    assert.match(fastStart, /documentation-writing-standard\.ru\.md/);
+    assert.match(standard, /§docwrit/);
+    assert.match(skill, /^---\r?\nname: sheepfold-documentation\r?\ndescription: .+\r?\n---/);
+    assert.match(skill, /implemented, experimental, planned/);
+  });
 });

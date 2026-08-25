@@ -10,7 +10,7 @@ export const checkCatalog = Object.freeze({
   docs: Object.freeze({
     command: 'npm.cmd run quality:docs',
     automatic: true,
-    description: 'Относительные ссылки и зарегистрированные §-теги изменённой документации.',
+    description: 'Ссылки, §-теги, test/npm-контракты и объективная структура изменённой документации.',
   }),
   lintJs: Object.freeze({
     command: 'npm.cmd run lint:js',
@@ -225,7 +225,7 @@ export const impactRules = Object.freeze([
 	Object.freeze({
 		id: 'architectureDocs',
 		area: 'Архитектура и правила агентов',
-		pattern: /(?:^(?:README(?:\.ru)?|AGENTS|CODING_RULES)\.md$|^(?:docs|utilities)\/)/,
+		pattern: /(?:^(?:README(?:\.ru)?|AGENTS|CODING_RULES)\.md$|^\.agents\/skills\/|^(?:docs|utilities)\/)/,
     categories: ['tooling'],
     checks: ['docs'],
     risk: 'low',
@@ -234,7 +234,7 @@ export const impactRules = Object.freeze([
   Object.freeze({
     id: 'testTooling',
     area: 'Тестовый инструментарий',
-    pattern: /^(?:\.gitignore$|package\.json$|eslint\.config\.js$|tests\/|tools\/|scripts\/)/,
+    pattern: /^(?:\.git(?:ignore|attributes)$|package\.json$|eslint\.config\.js$|tests\/|tools\/|scripts\/)/,
     categories: ['tooling'],
     checks: ['lintJs'],
     risk: 'medium',
