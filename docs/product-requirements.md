@@ -21,6 +21,7 @@
 
 - Manage family internet access through an OpenWRT router and its LuCI web interface.
 - Android companion app.
+- Optional disabled-by-default local-first family message relay for short parent-app commands and notifications; it is not a full remote API.
 - Telegram or VK two-way messenger bot, with VK as the default first-run choice and MAX kept as an optional experimental adapter disabled by default.
 - Only one messenger adapter can be active on one router at a time.
 - Parent/admin roles configured on the router.
@@ -160,10 +161,12 @@ Android app local authentication:
 Android connectivity:
 
 - local router connection is the default full-interface mode;
-- Telegram/VK bot is the remote command and notification path;
+- Telegram/VK bot or the separate optional family message relay may carry short remote commands and notifications;
+- the parent APK relay route policy is `local_preferred`: on home Wi-Fi/Ethernet it first tries the saved local pinned-HTTPS endpoint and uses the relay only when the local route is unavailable; on cellular it skips the local probe;
 - full Android/LuCI management must remain local-network only during ordinary use;
 - do not support permanent full remote management through WireGuard, VPN tunnels, or any other general-purpose tunnel to the router;
-- outside the local network, remote management is limited to short confirmed commands and notifications through the single configured messenger adapter;
+- outside the local network, remote management is limited to short confirmed commands and notifications through the single configured messenger adapter or the optional family message relay;
+- the family message relay is parent-APK-only and disabled by default. Its strict protocol and synthetic-only server pilot behind DNS/TLS/Caddy exist; an unwired Android client foundation is preserved as unfinished handoff code with known gaps. Android production provisioning/UI/lifecycle and device/field gates are incomplete; the OpenWrt runtime is absent pending a separately approved native helper and target/live-router gates. Deployment remains `clientsReady=no`, `realDataAllowed=no`. It uses separate router/phone identities and `HMAC-SHA256+AES-256-GCM` end-to-end encrypted envelopes, never receives the local Android Bearer, does not proxy LuCI/SSH/the full Android API, and cannot make local Wi-Fi depend on the server (§mrelay1);
 - one narrow exception is the owner-initiated temporary technical-support session in ADR-0022 (§rsup001): it is off by default, uses an outbound support transport, an authenticated technician, a one-time claim code and a separately expiring administrative session, and never publishes LuCI/SSH or the home subnet on WAN;
 - the support code may wait for up to 72 hours, but it is not a router password and burns on first authenticated claim by the single service account; the actual support session lasts 24 hours, notifies the administrator, writes an audit event and supports immediate revoke;
 - every router uses an independent cryptographic identity and short-lived mTLS transport credential; an internal random relay port may isolate one session, but it is not public, is not an authentication factor and is never encoded into the spoken code;
@@ -575,6 +578,7 @@ device blocklist remains enforced regardless of time validity.
 ## Messaging
 
 - Telegram and VK should both support two-way chat: notifications, status, device search, temporary access, approvals, and confirmed administrative actions.
+- The parent APK may later use the separate `local_preferred` family message relay from [`android-router-message-relay.ru.md`](android-router-message-relay.ru.md) for the same narrow class of short commands and notifications. The protocol and synthetic-only DNS/TLS/Caddy server pilot exist; an unwired Android client foundation remains unfinished, while Android production/device gates and the whole OpenWrt runtime are incomplete. `clientsReady=no`, `realDataAllowed=no`; the feature is off by default and does not count as the single active messenger adapter (§mrelay1).
 - Telegram infrastructure actions that can cut connectivity or destroy operational state (`internet_off`, `wifi_off`, `clear_logs`, `update`, `reboot`) require a separate one-time confirmation. Temporary access and device-policy mutations (`grant_time`, `block_device`, `unblock_device`, `allowlist_add`, `blocklist_add`) use the same confirmation and preserve only a validated numeric device ID and bounded duration in pending state. Restoring global connectivity (`internet_on`, `wifi_on`) must remain immediately available (§tgconfirm).
 - VK is the default first-run messenger choice. The installed config should keep messenger `active` disabled until credentials and at least one approved administrator are configured.
 - A router can enable only one messenger adapter at a time: Telegram, VK, or experimental MAX.

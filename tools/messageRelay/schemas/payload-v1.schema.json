@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepfold.invalid/schemas/family-message-relay/payload-v1.schema.json",
+  "title": "Sheepfold decrypted family message payload v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "messageType",
+    "action",
+    "actionHash",
+    "requestMessageId",
+    "body"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "messageType": { "enum": ["command", "commandResult", "notification"] },
+    "action": { "type": ["string", "null"] },
+    "actionHash": {
+      "oneOf": [
+        { "$ref": "#/$defs/digest" },
+        { "type": "null" }
+      ]
+    },
+    "requestMessageId": {
+      "oneOf": [
+        { "$ref": "#/$defs/id" },
+        { "type": "null" }
+      ]
+    },
+    "body": { "type": "object" }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "messageType": { "const": "command" },
+        "requestMessageId": { "type": "null" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "action": { "const": "globalInternetSet" },
+            "actionHash": { "$ref": "#/$defs/digest" },
+            "body": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["internetEnabled"],
+              "properties": {
+                "internetEnabled": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "action": { "const": "temporaryAccessGrant" },
+            "actionHash": { "$ref": "#/$defs/digest" },
+            "body": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["deviceMac", "grantUntil"],
+              "properties": {
+                "deviceMac": { "type": "string", "pattern": "^([0-9A-F]{2}:){5}[0-9A-F]{2}$" },
+                "grantUntil": { "$ref": "#/$defs/safeInteger" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "properties": {
+        "messageType": { "const": "commandResult" },
+        "action": { "enum": ["globalInternetSet", "temporaryAccessGrant"] },
+        "actionHash": { "$ref": "#/$defs/digest" },
+        "requestMessageId": { "$ref": "#/$defs/id" },
+        "body": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "errorCode", "completedAt"],
+          "properties": {
+            "status": { "enum": ["executed", "rejected", "expired", "indeterminate"] },
+            "errorCode": {
+              "enum": [
+                null,
+                "actionRejected",
+                "administratorDeviceUnbound",
+                "clockInvalid",
+                "commandExpired",
+                "deviceBlocked",
+                "deviceNotFound",
+                "deviceQuarantined",
+                "stateIndeterminate"
+              ]
+            },
+            "completedAt": { "$ref": "#/$defs/safeIntegerWithZero" }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "status": { "const": "executed" },
+                "errorCode": { "type": "null" }
+              }
+            },
+            {
+              "properties": {
+                "status": { "const": "rejected" },
+                "errorCode": {
+                  "enum": [
+                    "actionRejected",
+                    "administratorDeviceUnbound",
+                    "clockInvalid",
+                    "deviceBlocked",
+                    "deviceNotFound",
+                    "deviceQuarantined"
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "status": { "const": "expired" },
+                "errorCode": { "const": "commandExpired" }
+              }
+            },
+            {
+              "properties": {
+                "status": { "const": "indeterminate" },
+                "errorCode": { "const": "stateIndeterminate" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "properties": {
+        "messageType": { "const": "notification" },
+        "action": { "type": "null" },
+        "actionHash": { "type": "null" },
+        "requestMessageId": { "type": "null" },
+        "body": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["notificationId", "category", "title", "message", "createdAt"],
+          "properties": {
+            "notificationId": { "$ref": "#/$defs/id" },
+            "category": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "title": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "message": { "type": "string", "minLength": 1, "maxLength": 2048 },
+            "createdAt": { "$ref": "#/$defs/safeIntegerWithZero" }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$" },
+    "digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$" },
+    "safeInteger": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "safeIntegerWithZero": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+  }
+}

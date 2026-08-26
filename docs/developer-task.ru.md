@@ -32,20 +32,21 @@ Sheepfold — OpenWRT-пакет для семейного управления 
 15. [`docs/hidden-settings.ru.md`](hidden-settings.ru.md) — UCI-параметры без поля в LuCI; обновлять при появлении/удалении полей.
 16. [`docs/localization.ru.md`](localization.ru.md) — LuCI gettext, `.lmo`, два параметра языка.
 17. [`docs/android-config.ru.md`](android-config.ru.md) — конфигурация Android-клиента, сопряжение, детский APK.
-18. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
-19. [`docs/home-network-access.ru.md`](home-network-access.ru.md) — принятый план доступа Android к Sheepfold через разные домашние роутеры, границы firewall/discovery и отложенная поддержка NAT.
-20. [`docs/android-test-lab.ru.md`](android-test-lab.ru.md) — ручной гибридный стенд API 28/35, физические телефоны, живой роутер и пределы доказательства (§andlab1).
-21. [`docs/child-wifi-network-notifications.ru.md`](child-wifi-network-notifications.ru.md) — уведомления о новых Wi-Fi-сетях детского устройства, геолокация, приватность и границы доверия (§childwifi1).
-22. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
-23. [`docs/test-strategy.ru.md`](test-strategy.ru.md) — категории автоматических тестов, быстрые команды и условия обязательного полного прогона. (§testcat)
-24. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
-25. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (раздел 22 объясняет, куда писать мелочи).
-26. [`docs/debugging-and-verification.ru.md`](debugging-and-verification.ru.md), [`docs/change-impact-review.ru.md`](change-impact-review.ru.md), [`docs/api-contracts.ru.md`](api-contracts.ru.md) и [`docs/ui-review-contract.ru.md`](ui-review-contract.ru.md) — доказательная диагностика и рабочие контракты ревью (§debug01, §impact1, §apicon1, §uxrev01).
-27. [`docs/quality-assistants/README.ru.md`](quality-assistants/README.ru.md) — единая точка входа в карту влияния, быстрый/строгий gate, документационный и структурный аудит, all-pairs и read-only LuCI (§qassist).
-28. [`docs/documentation-writing-standard.ru.md`](documentation-writing-standard.ru.md) — стандарт ясной и доказательной документации и проектный skill для её создания или ревью (§docwrit).
-29. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
-30. [`docs/icon-catalog.ru.md`](icon-catalog.ru.md) — единый источник собственных значков LuCI/Android, визуальная страница и команды генерации (§iconcat1).
-31. [`utilities/README.ru.md`](../utilities/README.ru.md) — граница для полезных сопутствующих материалов, которые стоит сохранить, но нельзя выдавать за действующий контракт или рабочий инструмент (§utils1).
+18. [`docs/android-router-message-relay.ru.md`](android-router-message-relay.ru.md) — точный контракт и текущий частичный статус local-first обмена короткими сообщениями (§mrelay1).
+19. [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API.
+20. [`docs/home-network-access.ru.md`](home-network-access.ru.md) — принятый план доступа Android к Sheepfold через разные домашние роутеры, границы firewall/discovery и отложенная поддержка NAT.
+21. [`docs/android-test-lab.ru.md`](android-test-lab.ru.md) — ручной гибридный стенд API 28/35, физические телефоны, живой роутер и пределы доказательства (§andlab1).
+22. [`docs/child-wifi-network-notifications.ru.md`](child-wifi-network-notifications.ru.md) — уведомления о новых Wi-Fi-сетях детского устройства, геолокация, приватность и границы доверия (§childwifi1).
+23. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
+24. [`docs/test-strategy.ru.md`](test-strategy.ru.md) — категории автоматических тестов, быстрые команды и условия обязательного полного прогона. (§testcat)
+25. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
+26. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (раздел 22 объясняет, куда писать мелочи).
+27. [`docs/debugging-and-verification.ru.md`](debugging-and-verification.ru.md), [`docs/change-impact-review.ru.md`](change-impact-review.ru.md), [`docs/api-contracts.ru.md`](api-contracts.ru.md) и [`docs/ui-review-contract.ru.md`](ui-review-contract.ru.md) — доказательная диагностика и рабочие контракты ревью (§debug01, §impact1, §apicon1, §uxrev01).
+28. [`docs/quality-assistants/README.ru.md`](quality-assistants/README.ru.md) — единая точка входа в карту влияния, быстрый/строгий gate, документационный и структурный аудит, all-pairs и read-only LuCI (§qassist).
+29. [`docs/documentation-writing-standard.ru.md`](documentation-writing-standard.ru.md) — стандарт ясной и доказательной документации и проектный skill для её создания или ревью (§docwrit).
+30. [`docs/owner-open-questions.ru.md`](owner-open-questions.ru.md) — ещё не принятые продуктовые и архитектурные решения с рекомендуемыми вариантами (§ownques).
+31. [`docs/icon-catalog.ru.md`](icon-catalog.ru.md) — единый источник собственных значков LuCI/Android, визуальная страница и команды генерации (§iconcat1).
+32. [`utilities/README.ru.md`](../utilities/README.ru.md) — граница для полезных сопутствующих материалов, которые стоит сохранить, но нельзя выдавать за действующий контракт или рабочий инструмент (§utils1).
 
 ---
 
@@ -183,6 +184,7 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 | [`docs/testing-cases.ru.md`](testing-cases.ru.md) | Тест-кейсы |
 | [`docs/live-router-testing.ru.md`](live-router-testing.ru.md) | Тестирование на роутере |
 | [`docs/messaging.ru.md`](messaging.ru.md) | Интеграция мессенджеров |
+| [`docs/android-router-message-relay.ru.md`](android-router-message-relay.ru.md) | Точные параметры local-first обмена родительского APK с роутером через необязательный relay (§mrelay1) |
 | [`docs/remote-support-access-plan.ru.md`](remote-support-access-plan.ru.md) | Архитектура временного доступа техподдержки, FRP, Podkop bypass и отзыв (§rsup001) |
 | [`docs/remote-support-threat-model.ru.md`](remote-support-threat-model.ru.md) | Активы, угрозы, fail-closed controls и блокирующие условия выпуска техподдержки (§rsup001) |
 | [`docs/remote-support-protocol.ru.md`](remote-support-protocol.ru.md) | Проектный protocol `v1`: identity, подписи, сроки, порты, replay, состояния и error codes (§rsup001) |

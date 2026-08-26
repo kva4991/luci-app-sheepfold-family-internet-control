@@ -221,7 +221,13 @@ location=<latitude>|<longitude>|<accuracy meters>|<Unix time>
 
 - Android дома подключается к роутеру напрямую по локальной сети.
 - Первичное сопряжение выполняется локально: родитель открывает LuCI, создаёт/открывает администратора и сканирует QR-код или вводит ручные данные.
-- Вне дома Android не должен подключаться к роутеру напрямую через VPN/WireGuard. Удалённое управление выполняется через выбранный мессенджер, который настроен на роутере.
+- Полный API, LuCI и SSH остаются локальными. Вне дома Android не должен подключаться к ним через VPN/WireGuard или проксировать их через публичный сервер.
+- Короткие подтверждаемые команды и уведомления смогут проходить через выбранный мессенджер либо отдельный family message relay. Его политика `local_preferred`, credentials, E2E envelope, TTL и fallback заданы в [`android-router-message-relay.ru.md`](android-router-message-relay.ru.md) (§mrelay1).
+- Family message relay выключен по умолчанию. Strict protocol, synthetic-only server pilot и
+  unwired Android client foundation реализованы; Android production provisioning/UI/lifecycle и
+  device/field tests отсутствуют, OpenWrt runtime отсутствует до отдельного native-helper и
+  target/live-router gate. Поэтому `clientsReady=no`, `realDataAllowed=no`. Он не меняет
+  существующие `/api/v1/*` endpoint и никогда не получает локальный Android Bearer.
 - Один роутер может иметь несколько администраторов и несколько привязанных телефонов.
 
 ## Транспорт

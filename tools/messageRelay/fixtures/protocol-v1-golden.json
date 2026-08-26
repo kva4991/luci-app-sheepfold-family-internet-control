@@ -1,0 +1,34 @@
+{
+  "protocolVersion": 1,
+  "cryptoSuite": "HMAC-SHA256+AES-256-GCM",
+  "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "messageKeyHex": "f102d51520fbfcca235fde4f69ceb34ff16c3e9f24fc970f23806a2a47bab99d",
+  "ivHex": "000000000000000000000007",
+  "payloadUtf8": "{\"action\":\"globalInternetSet\",\"actionHash\":\"eGlMcktE496xEE1LydPz8EG5yg0-JaX7vp-UEFtimVo\",\"body\":{\"internetEnabled\":false},\"messageType\":\"command\",\"requestMessageId\":null,\"schemaVersion\":1}",
+  "canonicalUnicodeInput": {
+    "1": "One",
+    "€": "Euro Sign",
+    "\r": "Carriage Return",
+    "דּ": "Hebrew Letter Dalet With Dagesh",
+    "😀": "Emoji: Grinning Face",
+    "": "Control",
+    "ö": "Latin Small Letter O With Diaeresis"
+  },
+  "canonicalUnicodeUtf8": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}",
+  "aadHex": "5368656570666f6c6446616d696c794d65737361676552656c61790000000001010111111111111111111111111111111111222222222222222222222222222222223333333333333333333333333333333344444444444444444444444444444444555555555555555555555555555555550000000000000007000000006a89e148000000006a89e1c0",
+  "envelope": {
+    "direction": "phoneToRouter",
+    "messageClass": "command",
+    "routerId": "EREREREREREREREREREREQ",
+    "phoneId": "IiIiIiIiIiIiIiIiIiIiIg",
+    "streamId": "MzMzMzMzMzMzMzMzMzMzMw",
+    "messageId": "RERERERERERERERERERERA",
+    "sequence": 7,
+    "issuedAt": 1787421000,
+    "expiresAt": 1787421120,
+    "keyId": "VVVVVVVVVVVVVVVVVVVVVQ",
+    "protocolVersion": 1,
+    "cryptoSuite": "HMAC-SHA256+AES-256-GCM",
+    "ciphertext": "3dNGI31fgGnPmDKyCPQgaMOeE0N4leR3aPF_Nq4y3pYM90ZDmXf4ruj1KOmh-kNeT8ZCSWjNY89Dlh-DHmVSRWhhdqLJrYEaQcffJxdwyHmVS_um6UCpQfUfSgi_VI9KUN56dnO3B9olK6JWN0zQ4ND6WDfsWht5s1OT0I_liUYa__U_tfthSdV8Df8-mFxMWogMIBihgy3EZqNpFxSUg7mYyQxGF4UNnB0jS-fmVVxsxHsGG0co7RXRw383t_swX6AoAwAC7BHV9Tcr"
+  }
+}

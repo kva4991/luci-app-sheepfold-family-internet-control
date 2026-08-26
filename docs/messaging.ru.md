@@ -22,6 +22,23 @@ Sheepfold должен поддерживать двухстороннее уп�
 - Все действия мессенджера должны проходить через тот же Sheepfold API, который используют LuCI и Android.
 - Опасные действия должны требовать явного подтверждения в выбранном мессенджере (§m1fqo8a).
 
+## Встроенный relay родительского APK (§mrelay1)
+
+Family message relay — отдельный от Telegram/VK/MAX канал коротких сообщений между уже локально
+сопряжённым родительским APK и роутером. Он не считается активным messenger adapter и выключен по
+умолчанию. Strict protocol и synthetic-only server pilot реализованы; выключенный unwired Android
+client foundation сохранён незавершённым с известными handoff gaps. Android
+provisioning/UI/lifecycle и device/field gates не пройдены;
+OpenWrt runtime отсутствует до отдельного согласования native helper и target/live-router gates.
+Поэтому `clientsReady=no`, `realDataAllowed=no`.
+
+- Android использует политику `local_preferred`: дома сначала проверяет сохранённый локальный pinned-HTTPS endpoint, а relay выбирает только при недоступности локального маршрута; сотовая сеть сразу использует relay.
+- Недоступность сервера не мешает локальному обмену по Wi-Fi. Вне дома при недоступном relay приложение честно остаётся offline.
+- Relay переносит только сквозно зашифрованные и аутентифицированные AES-GCM короткие команды, подтверждения, результаты и уведомления; полный Android API, LuCI, SSH, UCI и выгрузка журналов остаются локальными.
+- Local Android Bearer, bot token и credentials временной техподдержки не переиспользуются.
+
+Точные параметры роутера, Android, серверный контракт и алгоритм fallback: [`android-router-message-relay.ru.md`](android-router-message-relay.ru.md).
+
 ## Двухсторонний чат в Telegram
 
 Telegram должен поддерживать и уведомления, и интерактивное управление родителем.

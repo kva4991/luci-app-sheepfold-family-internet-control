@@ -93,6 +93,38 @@ HTTP fallback не используется: автопоиск и сопряж�
 
 ---
 
+## Local-first family message relay
+
+<!-- §mrelay1 -->
+
+Статус: server synthetic pilot за DNS/TLS/Caddy работает, а в source присутствует выключенный
+незавершённый Android client foundation с Keystore-backed bundle, durable state, pinned-local/public HTTPS
+transport, local-first coordinator, synchronizer и WorkManager worker. Он не подключён к
+production provisioning, UI или app lifecycle и не проверен на instrumented API 28/физическом
+телефоне. OpenWrt runtime отсутствует до отдельного согласования native helper и target/live-router
+проверок. Поэтому `clientsReady=no`, `realDataAllowed=no`; relay предназначен только для
+родительского APK после локального сопряжения и не заменяет локальный Sheepfold API.
+
+- `routePolicy = local_preferred`: на Wi-Fi/Ethernet сначала проверяется сохранённый локальный IP и закреплённый SPKI, затем при недоступности локального маршрута выбирается relay; на сотовой сети локальная проба пропускается;
+- сбой relay не удаляет локальный Bearer и не мешает работе дома по Wi-Fi;
+- relay имеет отдельную Android Keystore identity и не использует alias локального `sheepfold-admin-token`;
+- `401/403` от relay отключает только relay-сессию; `device_unbound`/`revoked` от роутера завершает обе привязки;
+- fallback к public relay разрешён только при доказанном отказе local route до передачи HTTP body;
+- неоднозначный timeout/сбой после возможной передачи body не создаёт новый `messageId`: приложение
+  сохраняет `INDETERMINATE` и выполняет lookup прежней команды. Отсутствие разрешает fallback только
+  при точном аутентифицированном protocol-ответе роутера, а не по пустому/generic HTTP `404`.
+
+**Почему выбран этот способ / нюансы.** Durable отметка local attempt до сетевого I/O и строгая
+граница «body точно не отправлен» не дают fallback выполнить одну команду вторично после crash или
+потерянного ответа. Exact application-level `notFound` нужен потому, что generic `404` может вернуть
+старый endpoint или proxy; до реализации linearized OpenWrt lookup это остаётся integration gate.
+
+Текущий сохранённый Android handoff ещё не реализует request-bound `notFound` и durable marker до
+public enqueue; фактические gaps и порядок продолжения перечислены в
+[`family-message-relay-continuation-plan.ru.md`](family-message-relay-continuation-plan.ru.md).
+
+Точные сохраняемые поля, тайм-ауты, TTL, размеры очередей и server endpoints: [`android-router-message-relay.ru.md`](android-router-message-relay.ru.md).
+
 ## Тема оформления
 
 - Значение по умолчанию: **«следовать системе»** (`system`).
@@ -171,6 +203,7 @@ Android **не хранит** API-ключи. Все запросы к AI про
 ## Связанные документы
 
 - [`docs/android-openwrt-api.ru.md`](android-openwrt-api.ru.md) — полный справочник API-эндпоинтов
+- [`docs/android-router-message-relay.ru.md`](android-router-message-relay.ru.md) — параметры local-first обмена короткими сообщениями через необязательный relay (§mrelay1)
 - [`docs/sim-change-notifications.ru.md`](sim-change-notifications.ru.md) — разрешения, ограничения и доставка событий SIM (§simchg1)
 - [`docs/backend-design.ru.md`](backend-design.ru.md) — архитектура бэкенда роутера
 - [`docs/developer-task.ru.md`](developer-task.ru.md) — точка входа для разработчика

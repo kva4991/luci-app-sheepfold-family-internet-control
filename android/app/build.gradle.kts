@@ -114,6 +114,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.crypto.tink:tink-android:1.23.0")
+    testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.10.00"))

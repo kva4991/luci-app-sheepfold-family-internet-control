@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "contractId": "sheepfold.family-message-relay.peer.v1",
+  "thisProject": {
+    "name": "luci-app-sheepfold-family-internet-control",
+    "repository": "https://github.com/kva4991/luci-app-sheepfold-family-internet-control",
+    "visibility": "public"
+  },
+  "peerProject": {
+    "name": "sheepfold-support-server",
+    "repository": "https://github.com/kva4991/sheepfold-support-server",
+    "visibility": "private"
+  },
+  "protocol": {
+    "name": "sheepfold-family-message-relay",
+    "major": 1,
+    "canonicalRepository": "https://github.com/kva4991/luci-app-sheepfold-family-internet-control",
+    "canonicalPaths": [
+      "docs/android-router-message-relay.ru.md",
+      "tools/messageRelay/README.ru.md",
+      "tools/messageRelay/peer-project.json",
+      "tools/messageRelay/protocolValues.mjs",
+      "tools/messageRelay/strictJson.mjs",
+      "tools/messageRelay/messagePayload.mjs",
+      "tools/messageRelay/relayEnvelope.mjs",
+      "tools/messageRelay/fixtures/protocol-v1-golden.json",
+      "tools/messageRelay/protocolModel.mjs",
+      "tools/messageRelay/schemas/envelope-v1.schema.json",
+      "tools/messageRelay/schemas/payload-v1.schema.json"
+    ],
+    "vendorIntegrity": {
+      "algorithm": "SHA-256",
+      "pathSet": "exact",
+      "coverage": "everyCanonicalPath"
+    }
+  },
+  "ownership": {
+    "client": [
+      "local-first route selection",
+      "end-to-end message keys and encryption",
+      "router-side authorization, replay ledger and side effects",
+      "Android secure credential and outbox storage",
+      "canonical schemas, executable model and golden vectors"
+    ],
+    "server": [
+      "opaque bounded mailboxes",
+      "router and phone relay credentials",
+      "long polling, acknowledgement and expiry",
+      "public TLS ingress and rate limiting"
+    ]
+  }
+}

@@ -42,6 +42,15 @@ Production TLS endpoint, рабочая пара ключей расшифров
 по фиксированному пути GitHub. Публичный проект владеет форматом и verifier, private проект —
 offline signer; manifest не имеет права менять HPKE keyset (§srepdisc1).
 
+Family message relay родительского APK из `§mrelay1` является отдельным message plane. Он не
+переиспользует support claim/session, FRP, report envelope, local Android Bearer или текущий
+`sheepfold.remote-support.peer.v1`. Private repo уже содержит отдельные peer manifest, strict
+vendor-копию protocol v1 и выключенный loopback-only listener `127.0.0.1:8790` с отдельными
+process/UID, storage, keys и rate limits. Listener `127.0.0.1:8787` по-прежнему относится только к
+synthetic support/report трафику. Ни один из них **не является** production endpoint для Android
+или домашнего роутера. Точный статус и параметры клиента описаны в
+[`android-router-message-relay.ru.md`](android-router-message-relay.ru.md).
+
 ## Владение контрактами
 
 | Область | Source of truth |
@@ -53,6 +62,9 @@ offline signer; manifest не имеет права менять HPKE keyset (§
 | Offline signer резервного endpoint и церемония его ключа | private server repo |
 | Control persistence, operator MFA, relay/bastion | private server repo |
 | supportctl, JSON CLI и local Codex MCP bridge | private server repo |
+| Family message relay envelope, payload, AES-GCM vector и router/phone protocol | этот public repo |
+| Family message relay credentials, opaque queue и loopback runtime | private server repo |
+| Family message relay synthetic DNS/TLS/Caddy ingress | private server repo; развёрнут без enrollment и real data, дальнейшие operations ждут client/legal gates |
 
 ## Работа Codex
 

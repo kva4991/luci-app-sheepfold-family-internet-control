@@ -44,6 +44,7 @@
 | Продуктовые решения, scope | [`docs/agent-playbook.ru.md`](agent-playbook.ru.md) |
 | Стиль кода, тесты, ревью | [`CODING_RULES.md`](../CODING_RULES.md) |
 | Временная удалённая техподдержка, claim, relay, серверный проект и порты | [`docs/remote-support-access-plan.ru.md`](remote-support-access-plan.ru.md), [`docs/remote-support-threat-model.ru.md`](remote-support-threat-model.ru.md), [`docs/remote-support-protocol.ru.md`](remote-support-protocol.ru.md), [`docs/remote-support-server-integration.ru.md`](remote-support-server-integration.ru.md) (§rsup001, §rsuppeer) |
+| Local-first сообщения родительского APK через отдельный relay | [`docs/android-router-message-relay.ru.md`](android-router-message-relay.ru.md) (§mrelay1) |
 | Категории автотестов и условия полного прогона | [`docs/test-strategy.ru.md`](test-strategy.ru.md) (§testcat) |
 | Обязательные изменения кода, документации и тестов рядом с правкой | [`docs/mandatory-companion-changes.ru.md`](mandatory-companion-changes.ru.md) (§cmpchg1) |
 | Точный прогон резервного адреса баг-репортов и известные ложные ошибки | [`docs/testing-support-endpoint-discovery.ru.md`](testing-support-endpoint-discovery.ru.md) (§srepdisc1, §docops1) |
@@ -215,6 +216,10 @@
 - Случайный или отдельный порт не является шифром: сканирование его обнаружит, а связь порта с продиктованным кодом ослабит оба значения. У каждого роутера нужна отдельная криптографическая identity, transport использует короткоживущий mTLS credential, а случайный `sessionRoutePort` существует только внутри закрытого relay/bastion и не кодируется в 12-значном номере (§rsup001).
 - `tools/remoteSupport/` нельзя подключать к LuCI или пакету: это Node.js reference-контракт для тестов. Он фиксирует точные байты и общие инварианты; production router/server обязан реализовать тот же протокол своими адаптерами и пройти cross-runtime golden vectors (§rsup001).
 - Закрытый `sheepfold-support-server` не добавляется submodule и не является runtime-зависимостью установки Sheepfold. Общая граница сверяется через два `peer-project.json`; router protocol и golden vectors изменяются сначала здесь, а server queue/operator/Codex bridge - в закрытом репозитории (§rsuppeer).
+
+### Family message relay
+
+- Не пытайтесь проксировать через VPS существующий `/api/v1/*` или передавать туда local Android Bearer. Для `§mrelay1` нужны отдельные router/phone identities, AES-GCM-authenticated E2E envelopes, bounded TTL/deduplication и политика `local_preferred`; недоступность сервера дома должна оставлять локальный pinned HTTPS рабочим. Точные параметры и частичный статус реализации хранятся в [`docs/android-router-message-relay.ru.md`](android-router-message-relay.ru.md).
 
 ### Telegram: опасные команды
 

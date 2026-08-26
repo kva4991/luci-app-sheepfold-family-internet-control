@@ -27,6 +27,31 @@
 
 Полный сценарий и этапы находятся в [`remote-support-access-plan.ru.md`](remote-support-access-plan.ru.md), угрозы и fail-closed controls в [`remote-support-threat-model.ru.md`](remote-support-threat-model.ru.md), а router/server protocol `v1` в [`remote-support-protocol.ru.md`](remote-support-protocol.ru.md).
 
+## Family message relay
+
+<!-- §mrelay1 -->
+
+Это принятая и частично реализованная архитектура необязательного обмена короткими сообщениями
+между родительским APK и роутером. Strict protocol, synthetic-only server pilot за DNS/TLS/Caddy
+и незавершённый выключенный unwired Android client foundation существуют. В нём остаются известные
+handoff gaps; Android provisioning/UI/lifecycle и
+device/field gates не пройдены; OpenWrt runtime отсутствует до отдельного согласования native helper
+и target/live-router gates. Поэтому `clientsReady=no`, `realDataAllowed=no`. Функция выключена и
+не расширяет публичную поверхность домашней сети.
+
+- local Android Bearer, MAC/IP привязки локальной API-сессии, root password, bot tokens и credentials временной техподдержки не передаются relay-серверу и не переиспользуются для него;
+- телефон и роутер получают отдельные от локального API и `§rsup001` identity/keys;
+- payload сквозно шифруется и аутентифицируется `HMAC-SHA256+AES-256-GCM` на конечном устройстве:
+  directional master key выводит отдельный message-key из exact metadata; отдельной подписи в
+  protocol v1 нет, а TLS защищает transport и не называется end-to-end encryption;
+- сервер принимает только непрозрачные bounded envelopes и минимальные metadata, не имеет ключа plaintext и не выполняет команды сам;
+- `messageId`, монотонный `sequence`, TTL, GCM tag и серверная/конечная дедупликация обязательны; неоднозначный timeout опасной команды не повторяет side effect с новым ID;
+- перед каждым чтением результата и каждым side effect роутер проверяет актуальную administrator-device binding, сохранённый MAC против blocklist и identity quarantine; недоставленный server revoke не ослабляет эту проверку;
+- локальный pinned HTTPS имеет приоритет дома и остаётся работоспособным при отказе relay;
+- relay не переносит полный Android API, LuCI, SSH, UCI, домашнюю LAN route или экспорт журналов.
+
+Точный контракт параметров и отказов: [`android-router-message-relay.ru.md`](android-router-message-relay.ru.md). Suite `HMAC-SHA256+AES-256-GCM` и Node golden vector выбраны; до включения требуются API 28/OpenWrt cross-runtime vectors, benchmarks, real-data security/privacy review и живые client tests. Наличие synthetic DNS/TLS/Caddy pilot само по себе не разрешает включать feature.
+
 ## Сопряжение администраторского телефона
 
 ### Разделение доверенных и публичных операций

@@ -6,6 +6,18 @@ Current Russian legal draft:
 
 The Russian version is the primary wording source for now.
 
+The `§mrelay1` family message relay addendum is not active. A strict protocol, enrollment model,
+synthetic-only server pilot behind DNS/TLS/Caddy and unfinished disabled Android handoff code exist.
+The Android foundation has known gaps, production/device gates are incomplete, and the OpenWrt runtime is absent;
+`clientsReady=no`, `realDataAllowed=no`, and no enrollment or real credentials/data have been used.
+A future explicitly enabled version
+may expose only random router/phone/message IDs, bounded timing/size/delivery metadata, ciphertext,
+and a short-lived source IP for in-memory rate limiting; it must not expose plaintext, the local
+Android Bearer, household MAC/IP/SSID/device lists, rules, logs, or passwords. Commands expire
+within 120 seconds and notifications within one day. Activation requires a new effective Russian
+agreement/privacy revision, explicit consent, operator/place-of-processing disclosure, and tested
+revoke/deletion behavior.
+
 Sheepfold never calls, messages, or transfers family data to police, child-protection, emergency dispatch, courts, or another state body. The assistant may show a verified contact and help the person prepare what to say, but the person initiates the call or message (§aigov0). When DeepSeek, Gemini, Grok, or another external AI provider is selected, that operator receives and processes the submitted text under its own terms, privacy policy, and applicable law. Sheepfold therefore cannot guarantee absolute protection from a binding request made directly to that operator. The strictest future privacy mode requires a local model so the conversation remains on user-controlled equipment.
 
 The explicitly installed child app may, after visible Android permission prompts, report a best-effort active-SIM snapshot to the home router. An available phone number can enter bounded long-term local history, the local journal, parent notification queue, configured family messenger, or user-selected log storage. Readable exports mask the local number history, while a full encrypted backup may contain it. Sheepfold does not read calls or SMS and does not request ICCID, IMSI, or IMEI. The user is responsible for lawful authority and any consent required for this monitoring (§simchg1).

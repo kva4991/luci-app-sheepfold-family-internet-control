@@ -6,6 +6,19 @@ Current Russian privacy draft:
 
 Sheepfold is designed as a family self-hosted tool by default: no mandatory developer cloud and no hidden telemetry. The optional parent-app report form is the narrow exception: it previews the exact report, encrypts it on the phone with the support operator's HPKE public key, and sends only ciphertext through the home router to the private support queue. An independently confirmed allowlisted diagnostic section may be included. The report excludes raw UCI configuration, device identifiers and names, SSIDs, logs, browsing history, passwords, tokens, and API keys. LuCI temporarily retains its separate legacy Yandex Cloud route until a reviewed browser-side HPKE implementation is available (§feedback, §srep001).
 
+The `§mrelay1` family message relay addendum is not active. A strict protocol, a synthetic-only
+server pilot behind DNS/TLS/Caddy exist; a disabled unwired Android client foundation is preserved
+as unfinished handoff code with known gaps. Android
+production/device gates are incomplete and the OpenWrt runtime is absent; `clientsReady=no`,
+`realDataAllowed=no`, and no enrollment, real credentials or family data have been used. A
+future opt-in release may expose only random `routerId`/`phoneId`/`messageId`, bounded timing,
+size/delivery metadata, ciphertext, and a short-lived source IP for in-memory rate limiting. It
+must not expose plaintext, the local Android Bearer, household MAC/IP/SSID/device lists, rules,
+logs, passwords, or content keys. Commands expire within 120 seconds, notifications within one
+day, and acknowledged/expired ciphertext is deleted. A new effective privacy/agreement revision,
+explicit consent, operator/place-of-processing disclosure, revoke, and deletion verification are
+required before activation.
+
 Local device detection may inspect bounded DHCP, mDNS, SSDP/UPnP and WS-Discovery metadata. An
 UPnP description may be fetched only from the exact numeric IPv4 sender currently present on LAN,
 without DNS, redirects, router-self access, control URLs, or an unbounded response. WS-Discovery

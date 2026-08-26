@@ -1,6 +1,6 @@
 # Current Implementation Status
 
-Last checked: 2026-08-07.
+Last checked: 2026-08-26.
 
 Automated tests are grouped into overlapping problem categories (`smoke`, `luci`, `access`, `devices`, `sites`, `backend`, `android`, `security`, `messaging`, `ai`, `packaging`, and `tooling`). See [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat); the category-map test prevents new test files from being left unassigned.
 
@@ -137,6 +137,7 @@ equivalent live-router install/runtime pass before a public stable release.
 - Full device detection now reports the explicit state `Full mode without port checks` when the optional `nmap` binary is absent. Core DHCP/neighbor/hostapd/mDNS/UPnP/WS-Discovery detection continues. A separately confirmed button checks the package manager and free overlay space, installs only the named `nmap` package, and verifies the binary; selecting Full mode never installs it automatically (§devpas1, §pkgmgr1).
 - Administrator Bearer-token requests now fail closed unless the request IP and router-observed DHCP/neighbor MAC match the paired device headers. Static contract tests pass; a physical-phone pass on the test router is still required for DHCP renewal, Wi-Fi reconnect and roaming between access points (§pairsec).
 - Temporary remote support currently has only its inert LuCI placeholder, accepted architecture, threat model and draft `v1` message contract. Executable schemas/golden vectors, optional transport package, router state machine, signed relay implementation, external control plane/bastion, mTLS identities, direct-WAN isolation, safe-apply, notifications and live-router security matrix are not implemented (§rsup001).
+- The optional parent-APK family message relay now has an executable strict `HMAC-SHA256+AES-256-GCM` protocol, golden vector, bounded opaque mailbox and a synthetic-only server pilot behind a public DNS/TLS Caddy boundary. Health, negative and reboot gates passed without enrollment, real credentials or family data. Source also contains an unfinished disabled Android client foundation with Keystore-backed secrets/durable state, pinned-local and public HTTPS transports, a local-first coordinator, synchronizer and WorkManager worker. Known crash/lookup gaps remain; it is not wired to production provisioning, UI or app lifecycle and has not passed a completed instrumented API 28, physical-device or field gate. The OpenWrt runtime is absent pending a separately approved native helper and target/live-router gates; deployment remains `clientsReady=no`, `realDataAllowed=no`, and existing local pinned HTTPS remains the only usable Android route (§mrelay1).
 
 ## AdGuard Home resilience
 
