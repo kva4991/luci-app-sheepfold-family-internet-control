@@ -2,7 +2,7 @@
 
 <!-- §mrelay1 -->
 
-Статус на 26 августа 2026 года: **частично реализовано, production-включение запрещено**.
+Статус на 28 августа 2026 года: **частично реализовано, production-включение запрещено**.
 Публичный репозиторий содержит исполнимый protocol v1, строгие схемы и golden vector. Закрытый
 `sheepfold-support-server` обслуживает synthetic-only pilot: runtime остаётся loopback-only за
 публичной DNS/TLS-границей Caddy, а health, negative и reboot gates пройдены. В Android source
@@ -14,10 +14,11 @@ instrumented API 28/физическом телефоне. OpenWrt runtime от�
 native helper и target/live-router gates. Поэтому `clientsReady=no`, `realDataAllowed=no`.
 Enrollment не создавался, реальные credentials и семейные данные не использовались.
 
-Текущий private vendor/deployed pilot ещё предшествует canonical per-message KDF: он принимает
-старый `cryptoSuite=AES-256-GCM`. До client integration нужно синхронизировать public protocol
-closure/manifest в private repo, прогнать server tests и выпустить новый synthetic-only release;
-текущий Android envelope с `HMAC-SHA256+AES-256-GCM` live pilot пока не примет.
+Private vendor синхронизирован с public commit
+`fd41470d7487f8ee702fe3545021b31471c0d5f4`: byte-exact peer gate проверяет 11 канонических
+файлов, а synthetic-only release на VPS уже принимает
+`cryptoSuite=HMAC-SHA256+AES-256-GCM`. Это закрывает только совместимость server protocol;
+Android/OpenWrt clients и разрешение реальных данных по-прежнему не готовы.
 
 ## Точное текущее состояние
 
@@ -25,10 +26,10 @@ closure/manifest в private repo, прогнать server tests и выпуст�
 |---|---|
 | Канонический envelope и payload v1 | реализованы в `tools/messageRelay/` |
 | HMAC-SHA256+AES-256-GCM golden vector | проходит Node-тест |
-| Private vendor source | требует sync: шесть public paths отличаются от прежнего manifest/vendor |
+| Private vendor source | синхронизирован с public commit `fd41470d7487f8ee702fe3545021b31471c0d5f4`; peer gate проверяет 11 файлов |
 | Private server credential store | реализован, токены хешируются на диске |
 | Private server bounded mailbox/long poll/ack | реализованы и покрыты unit/HTTP-тестами |
-| Private server process | synthetic-only pilot работает на loopback за Caddy, но ещё со старым crypto suite |
+| Private server process | synthetic-only pilot работает на loopback за Caddy и принимает канонический `HMAC-SHA256+AES-256-GCM` envelope |
 | Публичная DNS/TLS-граница | развёрнута; health, negative и reboot gates пройдены без реальных данных |
 | Deployment gates | `clientsReady=no`, `realDataAllowed=no` |
 | `sheepfold.message_relay_global` на семейном роутере | отсутствует |
@@ -39,11 +40,12 @@ closure/manifest в private repo, прогнать server tests и выпуст�
 Нельзя указывать в APK или UCI лабораторный `http://<IP>:8790`, открывать `8790` в WAN либо
 считать тестовый IPK доказательством готовности интернет-сервиса.
 
-**Почему выбран этот способ / нюансы.** Android foundation оставлен без production wiring, а
+**Почему выбран этот способ / нюансы.** Byte-exact peer gate отделяет подтверждённую совместимость
+server protocol от ещё неготового client runtime. Android foundation оставлен без production wiring, а
 OpenWrt runtime не подменён shell-заглушкой: зелёный JVM/source test не доказывает Android
 Keystore/WorkManager на API 28, а desktop crypto не доказывает target OpenWrt ABI и поведение после
-power loss. Выключенные defaults позволяют проверять код без enrollment и семейных данных. Явный
-vendor/deploy gate не позволяет принять рабочий HTTPS health за совместимость envelope protocol.
+power loss. Выключенные defaults позволяют проверять код без enrollment и семейных данных; рабочий
+HTTPS health сам по себе всё равно не доказывает client E2E flow.
 
 ## Назначение и границы
 

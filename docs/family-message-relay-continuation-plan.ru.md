@@ -2,11 +2,11 @@
 
 <!-- §mrelay1 -->
 
-Обновлено 26 августа 2026 года после развёртывания synthetic-only server pilot и остановки
-незавершённого Android/OpenWrt client pass по прямому указанию владельца. Этот файл является
-handoff следующему агенту: текущий проход больше не меняет client runtime, а фиксирует факты,
-риски и порядок продолжения. Отдельная команда владельца разрешает текущему агенту commit/push
-этой зафиксированной точки; она не разрешает установку на роутер, enrollment или production-включение.
+Обновлено 28 августа 2026 года после byte-exact синхронизации private vendor и развёртывания
+канонического `HMAC-SHA256+AES-256-GCM` protocol в synthetic-only server pilot. Этот файл является
+handoff следующему агенту: текущий проход не меняет client runtime, а фиксирует факты, риски и
+порядок продолжения. Server compatibility больше не является блокером, но это не разрешает
+установку client runtime на роутер, enrollment или production-включение.
 
 ## Текущая точка
 
@@ -15,14 +15,16 @@ handoff следующему агенту: текущий проход боль�
 - public client: `C:\Users\User\Documents\pesochnica\luci-app-sheepfold-family-internet-control`;
 - private server: `C:\Users\User\Documents\pesochnica\sheepfold-support-server`.
 
-Public working tree содержит незакоммиченные чужие изменения: перед продолжением их нужно снова
-прочитать и сохранить. Deployment state не следует выводить из git status.
+Перед продолжением нужно снова проверить оба worktree и сохранить любые появившиеся
+незакоммиченные изменения. Deployment state не следует выводить из git status.
 
 Уже подготовлены:
 
 - strict public protocol v1, schemas, `HMAC-SHA256+AES-256-GCM` golden vector и per-message KDF;
 - private loopback-only server runtime с отдельными credentials, bounded mailbox, long poll,
   explicit ack, revoke и idempotency;
+- private vendor, синхронизированный с public commit
+  `fd41470d7487f8ee702fe3545021b31471c0d5f4`; byte-exact peer gate проверяет 11 файлов;
 - synthetic-only deployment за публичной DNS/TLS-границей Caddy: relay остаётся loopback-only,
   health, negative и reboot gates пройдены;
 - документация local-first маршрута, 25-секундного poll и целевого начала обработки до 30 секунд;
@@ -38,6 +40,10 @@ app lifecycle, имеет перечисленные ниже незакрыты
 physical-device gate. OpenWrt runtime отсутствует. Поэтому `clientsReady=no`,
 `realDataAllowed=no`; enrollment не создавался, реальные credentials и семейные данные не
 использовались.
+
+Каноническое описание доступных server endpoints, параметров соединения и local-first fallback
+поддерживается в [`android-router-message-relay.ru.md`](android-router-message-relay.ru.md). Этот
+handoff не дублирует его как второй источник истины, а фиксирует только незавершённые client steps.
 
 **Почему выбран этот способ / нюансы.** Уже созданные client files сохранены, потому что владелец
 попросил не удалять внесённые изменения и передать их другому агенту. Они описываются как
@@ -248,29 +254,18 @@ shape без bearer/real IDs; private executable contract и tests остают�
 - current API требует связанный `keyRecord` (`direction + streamId + keyId + keyBytes`);
 - sender обязан durable-резервировать `sequence`, новый stream получает новые направленные ключи;
 - отдельной подписи envelope в protocol v1 нет: сообщение аутентифицирует AES-GCM tag;
-- private vendor manifest перечисляет полный closure и SHA-256, но пока относится к предыдущей
-  public версии с `cryptoSuite=AES-256-GCM` и `sourceRevision=development-uncommitted`.
-
-На момент handoff hash-аудит подтверждает шесть отличающихся public paths:
-
-- `docs/android-router-message-relay.ru.md`;
-- `tools/messageRelay/README.ru.md`;
-- `tools/messageRelay/protocolValues.mjs`;
-- `tools/messageRelay/relayEnvelope.mjs`;
-- `tools/messageRelay/schemas/envelope-v1.schema.json`;
-- `tools/messageRelay/fixtures/protocol-v1-golden.json`.
-
-Следовательно, current private/deployed pilot с прежним `AES-256-GCM` отклонит новый Android
-envelope `HMAC-SHA256+AES-256-GCM`. Vendor gate и client/server compatibility остаются red, пока
-private copy/manifest не обновлены от зафиксированного public commit, tests не зелёные и новый
-synthetic-only release не развёрнут без enrollment.
+- private vendor manifest перечисляет полный closure и SHA-256 для public commit
+  `sourceRevision=fd41470d7487f8ee702fe3545021b31471c0d5f4`;
+- private peer gate проверяет 11 канонических файлов byte-for-byte;
+- current deployed synthetic-only pilot принимает `HMAC-SHA256+AES-256-GCM`; enrollment и реальные
+  данные при синхронизации не создавались.
 
 **Почему выбран этот способ / нюансы.** Per-message KDF защищает от повторения пары AES key/IV при
 rollback sequence state и свежем `messageId`; durable sequence всё равно нужен для replay/order и
-exact retry. Vendor обновляется после public commit, чтобы manifest ссылался на неизменяемую ревизию,
-а не на очередной промежуточный diff. HTTPS health проверяет edge/readiness, но не crypto suite;
-поэтому до sync/redeploy запрещён даже synthetic cross-client test. Старые `nonce`/signature terms
-возвращать нельзя.
+exact retry. Vendor закреплён за неизменяемым public commit, а не промежуточным diff. Peer gate
+доказывает совпадение protocol bytes, тогда как HTTPS health проверяет только edge/readiness;
+synthetic client E2E всё ещё требует готовых Android и OpenWrt runtime. Старые
+`nonce`/signature terms возвращать нельзя.
 
 ## Следующий проход
 
@@ -312,22 +307,22 @@ exact retry. Vendor обновляется после public commit, чтобы 
    **Почему выбран этот способ / нюансы:** wiring делается последним, чтобы незавершённый transport
    не стал доступен пользователю только из-за наличия source classes.
 9. Прогнать один и тот же golden vector на Android API 28 и OpenWrt 24.10/25.12, затем повторить
-   public protocol/architecture tests.
+   public protocol/architecture и private peer tests.
    **Почему выбран этот способ / нюансы:** byte-level vector ловит несовместимость AAD, derived IV,
-   key binding и canonical JSON между runtime. Private vendor check здесь ещё не должен быть green:
-   он проверяет предыдущую server copy до следующего шага.
-10. После публикации зафиксированного public commit обновить private vendor copy/manifest именно из
-    него, повторить private contract/runtime/docs и vendor gates, затем выпустить и развернуть
-    отдельный synthetic-only server release без enrollment.
+   key binding и canonical JSON между runtime. Private peer check уже green для current server
+   revision и должен оставаться зелёным после любой дальнейшей правки public protocol.
+10. Если public protocol bytes изменятся, сначала зафиксировать новый public commit, затем обновить
+    private vendor copy/manifest именно из него, повторить private contract/runtime/docs и peer
+    gates и выпустить отдельный synthetic-only server release без enrollment.
     **Почему выбран этот способ / нюансы:** public repo владеет wire contract, private server хранит
-    проверяемую копию; sync до стабилизации public bytes создаст недостоверную provenance, а E2E до
-    sync/redeploy заведомо встретит несовместимый server crypto suite.
-11. Только после зелёного private vendor gate и synthetic-only redeploy выполнить synthetic
-    end-to-end client flow, затем field matrix с физическими Android и OpenWrt: outage, lost
-    response, revoke, clock skew, reboot/power loss и 30-секундный бюджет.
+    проверяемую копию; нынешняя синхронизация уже выполнена, но будущий односторонний protocol diff
+    снова сделает client/server несовместимыми.
+11. После готовности Android и OpenWrt runtime выполнить synthetic end-to-end client flow, затем
+    field matrix с физическими Android и OpenWrt: outage, lost response, revoke, clock skew,
+    reboot/power loss и 30-секундный бюджет.
     **Почему выбран этот способ / нюансы:** безопасные synthetic identities отделяют transport bugs
-    от риска реальным данным, а server reboot gate не заменяет client-side recovery; обновлённый
-    server является обязательной предпосылкой проверки совместимости clients.
+    от риска реальным данным, а уже обновлённый server и его reboot gate не заменяют client-side
+    recovery и проверку реальных Android/OpenWrt runtime.
 12. Обновить privacy/agreement с отдельным пользовательским согласием и только после всех client
     gates отдельно решать, можно ли менять `clientsReady` и `realDataAllowed`.
     **Почему выбран этот способ / нюансы:** разрешение реальных данных является отдельным
