@@ -5,8 +5,10 @@
 Статус на 28 августа 2026 года: **частично реализовано, production-включение запрещено**.
 Публичный репозиторий содержит исполнимый protocol v1, строгие схемы и golden vector. Закрытый
 `sheepfold-support-server` обслуживает synthetic-only pilot: runtime остаётся loopback-only за
-публичной DNS/TLS-границей Caddy, а health, negative и reboot gates пройдены. В Android source
-сохранён незавершённый выключенный client foundation: strict protocol/KDF, Keystore-backed secrets
+публичной DNS/TLS-границей Caddy. Health/negative gates текущего release пройдены; controlled
+reboot доказан для предыдущего immutable release, а последняя версия с incident journal после
+установки намеренно не перезагружалась. В Android source сохранён незавершённый выключенный client
+foundation: strict protocol/KDF, Keystore-backed secrets
 и durable state, pinned-local/public HTTPS transports, local-first coordinator, synchronizer и
 WorkManager worker. У него есть известные handoff gaps; он не подключён к production provisioning,
 UI или app lifecycle и не проверен на
@@ -15,9 +17,10 @@ native helper и target/live-router gates. Поэтому `clientsReady=no`, `re
 Enrollment не создавался, реальные credentials и семейные данные не использовались.
 
 Wire protocol private vendor синхронизирован с protocol commit
-`fd41470d7487f8ee702fe3545021b31471c0d5f4`, а manifest/byte-exact peer gate закрепляет текущий
-public source revision и проверяет 11 канонических файлов. Synthetic-only release на VPS уже принимает
-`cryptoSuite=HMAC-SHA256+AES-256-GCM`. Это закрывает только совместимость server protocol;
+`fd41470d7487f8ee702fe3545021b31471c0d5f4`, а manifest/byte-exact peer gate закрепляет public
+source revision точным 40-hex в private manifest и проверяет 11 канонических файлов. Synthetic-only
+release на VPS уже принимает `cryptoSuite=HMAC-SHA256+AES-256-GCM`. Это закрывает только
+совместимость server protocol;
 Android/OpenWrt clients и разрешение реальных данных по-прежнему не готовы.
 
 ## Точное текущее состояние
@@ -26,11 +29,11 @@ Android/OpenWrt clients и разрешение реальных данных п
 |---|---|
 | Канонический envelope и payload v1 | реализованы в `tools/messageRelay/` |
 | HMAC-SHA256+AES-256-GCM golden vector | проходит Node-тест |
-| Private vendor source | wire protocol синхронизирован с protocol commit `fd41470d7487f8ee702fe3545021b31471c0d5f4`; manifest/peer gate закрепляет текущий public source revision и проверяет 11 файлов |
+| Private vendor source | wire protocol синхронизирован с protocol commit `fd41470d7487f8ee702fe3545021b31471c0d5f4`; manifest/peer gate закрепляет exact public source revision в private manifest и проверяет 11 файлов |
 | Private server credential store | реализован, токены хешируются на диске |
 | Private server bounded mailbox/long poll/ack | реализованы и покрыты unit/HTTP-тестами |
 | Private server process | synthetic-only pilot работает на loopback за Caddy и принимает канонический `HMAC-SHA256+AES-256-GCM` envelope |
-| Публичная DNS/TLS-граница | развёрнута; health, negative и reboot gates пройдены без реальных данных |
+| Публичная DNS/TLS-граница | развёрнута; health/negative gates текущего release пройдены без реальных данных; reboot evidence относится к предыдущему immutable release |
 | Deployment gates | `clientsReady=no`, `realDataAllowed=no` |
 | `sheepfold.message_relay_global` на семейном роутере | отсутствует |
 | Android client foundation | незавершённый source handoff, выключен; известные gaps перечислены в continuation plan |
@@ -258,8 +261,10 @@ HTTP `200/202 accepted` означает только «ciphertext принят 
 роутер после локальной проверки прав.
 
 Публичная DNS/TLS-граница Caddy развёрнута только для synthetic pilot; сам relay по-прежнему
-слушает `127.0.0.1:8790`, а порт `8790` не открыт в WAN. Health, negative и reboot gates пройдены,
-но это не проверяет Android production/device flow или отсутствующий OpenWrt runtime. Поэтому
+слушает `127.0.0.1:8790`, а порт `8790` не открыт в WAN. Health/negative gates текущей версии
+пройдены; reboot gate относится к предыдущему immutable release, последняя incident-версия не
+перезагружалась. Ни одна из этих server-проверок не проверяет Android production/device flow или
+отсутствующий OpenWrt runtime. Поэтому
 `clientsReady=no`, `realDataAllowed=no`, router-side client UCI `message_relay.enabled` не вводится
 либо остаётся `0`, enrollment не создавался и реальные credentials/семейные данные не использовались.
 
@@ -408,7 +413,8 @@ state хранится постоянно до revoke. Live synthetic pilot хр
    AAD, derived IV и canonical JSON между тремя runtime.
 5. Проверить server outage, lost response, revoke, clock skew, client power loss и 30-секундный
    бюджет на Xiaomi AX3000T или более слабом поддерживаемом роутере.
-   **Почему выбран этот способ / нюансы:** server reboot gate уже пройден, но он не заменяет
+   **Почему выбран этот способ / нюансы:** прежний server release прошёл reboot gate, а текущий
+   incident release имеет только no-reboot post-deploy evidence; ни один server gate не заменяет
    client-side recovery и проверку реального OpenWrt/Android поведения.
 6. Обновить privacy/agreement отдельным пользовательским согласием и только затем показать toggle.
    **Почему выбран этот способ / нюансы:** включение real-data processing является отдельным

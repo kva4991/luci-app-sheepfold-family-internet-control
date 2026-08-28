@@ -23,10 +23,12 @@ handoff следующему агенту: текущий проход не ме
 - strict public protocol v1, schemas, `HMAC-SHA256+AES-256-GCM` golden vector и per-message KDF;
 - private loopback-only server runtime с отдельными credentials, bounded mailbox, long poll,
   explicit ack, revoke и idempotency;
-- private vendor, синхронизированный с public commit
-  `fd41470d7487f8ee702fe3545021b31471c0d5f4`; byte-exact peer gate проверяет 11 файлов;
+- private vendor manifest, закрепляющий exact public source revision внешним 40-hex; wire bytes
+  происходят из protocol commit `fd41470d7487f8ee702fe3545021b31471c0d5f4`, byte-exact peer gate
+  проверяет 11 файлов;
 - synthetic-only deployment за публичной DNS/TLS-границей Caddy: relay остаётся loopback-only,
-  health, negative и reboot gates пройдены;
+  health/negative gates текущего release пройдены; controlled reboot доказан для предыдущего
+  immutable release, а последняя incident-версия после установки не перезагружалась;
 - документация local-first маршрута, 25-секундного poll и целевого начала обработки до 30 секунд;
 - ADR и документационные проверки в обоих проектах;
 - разбор практик Tailscale DERP, Home Assistant Companion, ntfy и OpenWISP;
@@ -254,8 +256,9 @@ shape без bearer/real IDs; private executable contract и tests остают�
 - current API требует связанный `keyRecord` (`direction + streamId + keyId + keyBytes`);
 - sender обязан durable-резервировать `sequence`, новый stream получает новые направленные ключи;
 - отдельной подписи envelope в protocol v1 нет: сообщение аутентифицирует AES-GCM tag;
-- private vendor manifest перечисляет полный closure и SHA-256 для public commit
-  `sourceRevision=fd41470d7487f8ee702fe3545021b31471c0d5f4`;
+- private vendor manifest перечисляет полный closure и SHA-256, а exact public source revision
+  хранит внешним 40-hex без самоссылки public документа на собственный commit; исполняемые wire
+  bytes остаются привязаны к protocol commit `fd41470d7487f8ee702fe3545021b31471c0d5f4`;
 - private peer gate проверяет 11 канонических файлов byte-for-byte;
 - current deployed synthetic-only pilot принимает `HMAC-SHA256+AES-256-GCM`; enrollment и реальные
   данные при синхронизации не создавались.
@@ -321,8 +324,8 @@ synthetic client E2E всё ещё требует готовых Android и Open
     field matrix с физическими Android и OpenWrt: outage, lost response, revoke, clock skew,
     reboot/power loss и 30-секундный бюджет.
     **Почему выбран этот способ / нюансы:** безопасные synthetic identities отделяют transport bugs
-    от риска реальным данным, а уже обновлённый server и его reboot gate не заменяют client-side
-    recovery и проверку реальных Android/OpenWrt runtime.
+    от риска реальным данным. Reboot evidence предыдущего server release и no-reboot gates текущей
+    incident-версии не заменяют client-side recovery и проверку реальных Android/OpenWrt runtime.
 12. Обновить privacy/agreement с отдельным пользовательским согласием и только после всех client
     gates отдельно решать, можно ли менять `clientsReady` и `realDataAllowed`.
     **Почему выбран этот способ / нюансы:** разрешение реальных данных является отдельным

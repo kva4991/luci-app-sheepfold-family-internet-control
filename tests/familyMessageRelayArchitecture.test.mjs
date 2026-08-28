@@ -93,8 +93,10 @@ describe('family message relay architecture §mrelay1', () => {
     assert.match(focused, /confirmation_required/);
     assert.match(focused, /actionHash/);
     assert.match(focused, /`SFMR1-\.\.\.` действует 10 минут/);
-    assert.match(continuation, /sourceRevision=fd41470d7487f8ee702fe3545021b31471c0d5f4/);
-    assert.match(continuation, /peer gate проверяет 11 файлов/);
+    assert.match(continuation, /exact public source revision[\s\S]*40-hex/);
+    assert.match(continuation, /protocol commit `fd41470d7487f8ee702fe3545021b31471c0d5f4`/);
+    assert.doesNotMatch(continuation, /sourceRevision=fd41470d7487f8ee702fe3545021b31471c0d5f4/);
+    assert.match(continuation, /peer gate[\s\S]*проверяет 11 файлов/);
     assert.match(focused, /checkPublicMessageRelayVendor\.mjs --peer/);
     assert.match(decision, /lost-wakeup race/);
     assert.match(decision, /Boot jitter/);
