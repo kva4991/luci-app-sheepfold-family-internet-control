@@ -14,9 +14,9 @@ instrumented API 28/физическом телефоне. OpenWrt runtime от�
 native helper и target/live-router gates. Поэтому `clientsReady=no`, `realDataAllowed=no`.
 Enrollment не создавался, реальные credentials и семейные данные не использовались.
 
-Private vendor синхронизирован с public commit
-`fd41470d7487f8ee702fe3545021b31471c0d5f4`: byte-exact peer gate проверяет 11 канонических
-файлов, а synthetic-only release на VPS уже принимает
+Wire protocol private vendor синхронизирован с protocol commit
+`fd41470d7487f8ee702fe3545021b31471c0d5f4`, а manifest/byte-exact peer gate закрепляет текущий
+public source revision и проверяет 11 канонических файлов. Synthetic-only release на VPS уже принимает
 `cryptoSuite=HMAC-SHA256+AES-256-GCM`. Это закрывает только совместимость server protocol;
 Android/OpenWrt clients и разрешение реальных данных по-прежнему не готовы.
 
@@ -26,7 +26,7 @@ Android/OpenWrt clients и разрешение реальных данных п
 |---|---|
 | Канонический envelope и payload v1 | реализованы в `tools/messageRelay/` |
 | HMAC-SHA256+AES-256-GCM golden vector | проходит Node-тест |
-| Private vendor source | синхронизирован с public commit `fd41470d7487f8ee702fe3545021b31471c0d5f4`; peer gate проверяет 11 файлов |
+| Private vendor source | wire protocol синхронизирован с protocol commit `fd41470d7487f8ee702fe3545021b31471c0d5f4`; manifest/peer gate закрепляет текущий public source revision и проверяет 11 файлов |
 | Private server credential store | реализован, токены хешируются на диске |
 | Private server bounded mailbox/long poll/ack | реализованы и покрыты unit/HTTP-тестами |
 | Private server process | synthetic-only pilot работает на loopback за Caddy и принимает канонический `HMAC-SHA256+AES-256-GCM` envelope |
