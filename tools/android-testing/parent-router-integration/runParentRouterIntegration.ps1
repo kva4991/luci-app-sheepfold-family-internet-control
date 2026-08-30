@@ -4,9 +4,9 @@
 
 .DESCRIPTION
 Стенд не удаляет приложения или данные. Он обновляет только debug APK Sheepfold
-через adb install -r, проверяет локальную достижимость роутера и запускает уже
-существующий ParentFirstLaunchSmokeTest. Реальное QR-сопряжение намеренно остаётся
-ручным, чтобы не создавать и не сохранять bearer-токены в отчёте.
+через adb install -r, проверяет локальную достижимость роутера и запускает
+неразрушающие parent instrumentation-тесты. Реальное QR-сопряжение намеренно
+остаётся ручным, чтобы не создавать и не сохранять bearer-токены в отчёте.
 #>
 [CmdletBinding()]
 param(
@@ -81,6 +81,27 @@ $pingText = & curl.exe --insecure --silent --show-error --fail --max-time 10 $ap
 if ($LASTEXITCODE -ne 0) { throw "Sheepfold API ping недоступен: $apiUrl" }
 $apiPing = $pingText | ConvertFrom-Json
 if (($apiPing.service -ne 'sheepfold') -and ($apiPing.app -ne 'sheepfold')) { throw 'API ping не содержит маркер Sheepfold.' }
+
+function Get-RouterHttpStatus {
+    param([string]$Path)
+    $status = & curl.exe --insecure --silent --output NUL --write-out '%{http_code}' --max-time 10 "$apiRoot$Path"
+    if ($LASTEXITCODE -ne 0) { throw "Не удалось выполнить read-only запрос $Path." }
+    return ([string]$status).Trim()
+}
+
+$apiRoot = "https://$RouterAddress`:$apiPort$apiPath"
+$clientStatus = Get-RouterHttpStatus '/client-status'
+if ($clientStatus -ne '200') { throw "client-status должен отвечать 200, получен $clientStatus." }
+$routerInfo = Get-RouterHttpStatus '/router-info'
+if ($routerInfo -ne '401') { throw "router-info без токена должен отвечать 401, получен $routerInfo." }
+$adminConfig = Get-RouterHttpStatus '/api/v1/admin-config'
+if ($adminConfig -ne '401') { throw "admin-config без токена должен отвечать 401, получен $adminConfig." }
+$devices = Get-RouterHttpStatus '/devices'
+if ($devices -ne '401') { throw "devices без токена должен отвечать 401, получен $devices." }
+$notifications = Get-RouterHttpStatus '/notifications'
+if ($notifications -ne '401') { throw "notifications без токена должен отвечать 401, получен $notifications." }
+$accessRequests = Get-RouterHttpStatus '/access-requests'
+if ($accessRequests -ne '401') { throw "access-requests без токена должен отвечать 401, получен $accessRequests." }
 
 $parentProject = Join-Path $repoRoot 'android'
 $wrapper = Join-Path $parentProject 'gradlew.bat'

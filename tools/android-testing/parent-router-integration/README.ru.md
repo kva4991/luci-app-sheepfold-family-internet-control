@@ -32,9 +32,10 @@ $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
 1. Физический serial действительно находится в состоянии `device`, а не является эмулятором.
 2. Телефон достигает роутера по локальному адресу через `ping`.
 3. Роутер отдаёт `/.well-known/sheepfold.json` и `/cgi-bin/sheepfold-api/ping` с маркером Sheepfold.
-4. Родительский debug APK и его instrumentation APK устанавливаются поверх существующей debug-версии без очистки данных.
-5. Неразрушающие parent instrumentation-тесты запускаются на телефоне, а `MainActivity` стартует.
-6. После запуска сохраняется logcat для диагностики.
+4. Публичный `/client-status` отвечает без административных полей, а административные `/router-info`, `/admin-config`, `/devices`, `/notifications` и `/access-requests` без Bearer-токена отвечают `401`.
+5. Родительский debug APK и его instrumentation APK устанавливаются поверх существующей debug-версии без очистки данных.
+6. Неразрушающие parent instrumentation-тесты запускаются на телефоне, а `MainActivity` стартует.
+7. После запуска сохраняется logcat для диагностики.
 
 ## Ограничения
 

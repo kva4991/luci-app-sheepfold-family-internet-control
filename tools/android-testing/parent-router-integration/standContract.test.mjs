@@ -23,6 +23,12 @@ test('parent-router stand verifies phone reachability and Sheepfold discovery', 
   assert.match(runner, /\.well-known\/sheepfold\.json/);
   assert.match(runner, /service -ne 'sheepfold'/);
   assert.match(runner, /apiPing\.service.*sheepfold|apiPing\.app.*sheepfold/);
+  assert.match(runner, /Get-RouterHttpStatus '\/client-status'/);
+  assert.match(runner, /Get-RouterHttpStatus '\/router-info'/);
+  assert.match(runner, /Get-RouterHttpStatus '\/api\/v1\/admin-config'/);
+  assert.match(runner, /Get-RouterHttpStatus '\/devices'/);
+  assert.match(runner, /Get-RouterHttpStatus '\/notifications'/);
+  assert.match(runner, /Get-RouterHttpStatus '\/access-requests'/);
   assert.match(runner, /am', 'instrument'/);
   assert.match(runner, /SupportReportCryptoTest,app\.sheepfold\.android\.relay\.MessageRelayAndroidTest/);
   assert.match(runner, /MainActivity/);
