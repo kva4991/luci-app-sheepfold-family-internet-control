@@ -97,12 +97,11 @@ HTTP fallback не используется: автопоиск и сопряж�
 
 <!-- §mrelay1 -->
 
-Статус: server synthetic pilot за DNS/TLS/Caddy работает, а в source присутствует выключенный
-незавершённый Android client foundation с Keystore-backed bundle, durable state, pinned-local/public HTTPS
-transport, local-first coordinator, synchronizer и WorkManager worker. Он не подключён к
-production provisioning, UI или app lifecycle и не проверен на instrumented API 28/физическом
-телефоне. OpenWrt runtime отсутствует до отдельного согласования native helper и target/live-router
-проверок. Поэтому `clientsReady=no`, `realDataAllowed=no`; relay предназначен только для
+Статус: Android client foundation в source реализована и проверена unit-level; она сохраняет строгий
+local-first fallback и fail-closed state transitions, но остаётся выключенной для production. relay
+не подключён к production provisioning, UI или app lifecycle и не проверен на instrumented API
+28 / физическом телефоне. OpenWrt runtime отсутствует до отдельного согласования native helper и
+live-router проверок. Поэтому `clientsReady=no`, `realDataAllowed=no`; relay предназначен только для
 родительского APK после локального сопряжения и не заменяет локальный Sheepfold API.
 
 - `routePolicy = local_preferred`: на Wi-Fi/Ethernet сначала проверяется сохранённый локальный IP и закреплённый SPKI, затем при недоступности локального маршрута выбирается relay; на сотовой сети локальная проба пропускается;

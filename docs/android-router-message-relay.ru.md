@@ -2,19 +2,14 @@
 
 <!-- §mrelay1 -->
 
-Статус на 28 августа 2026 года: **частично реализовано, production-включение запрещено**.
-Публичный репозиторий содержит исполнимый protocol v1, строгие схемы и golden vector. Закрытый
-`sheepfold-support-server` обслуживает synthetic-only pilot: runtime остаётся loopback-only за
-публичной DNS/TLS-границей Caddy. Health/negative gates текущего release пройдены; controlled
-reboot доказан для предыдущего immutable release, а последняя версия с incident journal после
-установки намеренно не перезагружалась. В Android source сохранён незавершённый выключенный client
-foundation: strict protocol/KDF, Keystore-backed secrets
-и durable state, pinned-local/public HTTPS transports, local-first coordinator, synchronizer и
-WorkManager worker. У него есть известные handoff gaps; он не подключён к production provisioning,
-UI или app lifecycle и не проверен на
-instrumented API 28/физическом телефоне. OpenWrt runtime отсутствует до отдельного согласования
-native helper и target/live-router gates. Поэтому `clientsReady=no`, `realDataAllowed=no`.
-Enrollment не создавался, реальные credentials и семейные данные не использовались.
+Статус на 29 августа 2026 года: **client foundation реализована и верифицирована на Android unit-level, но production-включение запрещено**.
+В репозитории присутствует исполнимый protocol v1, строгие схемы и golden vector. Android relay
+source содержит fail-closed local-first coordinator, durable state machine, strict URL/endpoint
+validation, SecureStore и WorkManager scheduling. Он проходит целевой Android relay unit-test subset,
+но не подключён к production provisioning, UI или app lifecycle и не проверен на instrumented API
+28 / физическом телефоне. OpenWrt runtime отсутствует до отдельного согласования native helper и
+live-router gates. Поэтому `clientsReady=no`, `realDataAllowed=no`. Enrollment не создавался,
+реальные credentials и семейные данные не использовались.
 
 Wire protocol private vendor синхронизирован с protocol commit
 `fd41470d7487f8ee702fe3545021b31471c0d5f4`, а manifest/byte-exact peer gate закрепляет public

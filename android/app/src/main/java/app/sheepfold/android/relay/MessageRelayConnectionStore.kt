@@ -22,8 +22,37 @@ internal data class MessageRelaySettings(
     val enabled: Boolean = false,
     val baseUrl: String = ""
 ) {
+    fun canonicalBaseUrl(): String = baseUrl.trim().trimEnd('/')
+
+    fun normalized(): MessageRelaySettings {
+        val sanitized = canonicalBaseUrl()
+        val valid = sanitized.isNotBlank() &&
+            runCatching { MessageRelayEndpoint.requirePublicHttpsBaseUrl(sanitized) }.isSuccess
+        return if (valid) {
+            copy(enabled = enabled, baseUrl = MessageRelayEndpoint.requirePublicHttpsBaseUrl(sanitized).toString())
+        } else {
+            copy(enabled = false, baseUrl = "")
+        }
+    }
+
     fun permitsPublicNetwork(): Boolean = enabled && baseUrl.isNotBlank() &&
         runCatching { MessageRelayEndpoint.requirePublicHttpsBaseUrl(baseUrl) }.isSuccess
+
+    companion object {
+        fun fromConfigured(enabled: Boolean, rawBaseUrl: String): MessageRelaySettings {
+            val sanitized = rawBaseUrl.trim()
+            val valid = sanitized.isNotBlank() &&
+                runCatching { MessageRelayEndpoint.requirePublicHttpsBaseUrl(sanitized) }.isSuccess
+            return if (valid) {
+                MessageRelaySettings(
+                    enabled = enabled,
+                    baseUrl = MessageRelayEndpoint.requirePublicHttpsBaseUrl(sanitized).toString()
+                )
+            } else {
+                MessageRelaySettings(enabled = false, baseUrl = "")
+            }
+        }
+    }
 }
 
 internal data class MessageRelaySecrets(
@@ -124,19 +153,20 @@ internal object MessageRelayConnectionStore {
         return MessageRelaySettings(
             enabled = preferences.getBoolean(enabledKey, false),
             baseUrl = preferences.getString(baseUrlKey, "") ?: ""
-        )
+        ).normalized()
     }
 
     internal fun write(context: Context, settings: MessageRelaySettings) {
-        if (settings.enabled) MessageRelayEndpoint.requirePublicHttpsBaseUrl(settings.baseUrl)
+        val normalized = settings.normalized()
+        if (normalized.enabled) MessageRelayEndpoint.requirePublicHttpsBaseUrl(normalized.baseUrl)
         context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).edit()
-            .putBoolean(enabledKey, settings.enabled)
-            .putString(baseUrlKey, settings.baseUrl.trim())
-            .commit()
+            .putBoolean(enabledKey, normalized.enabled)
+            .putString(baseUrlKey, normalized.baseUrl)
+            .apply()
     }
 
     fun clear(context: Context) {
-        context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).edit().clear().commit()
+        context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).edit().clear().apply()
         MessageRelaySecureStore.clear(context)
     }
 }

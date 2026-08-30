@@ -1,6 +1,7 @@
 package app.sheepfold.android.relay
 
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 
@@ -260,10 +261,15 @@ internal object MessageRelayJson {
             if (match.value.startsWith('-') && decimal.compareTo(BigDecimal.ZERO) == 0) {
                 fail("negative zero is forbidden")
             }
-            val integer = runCatching { decimal.toBigIntegerExact().longValueExact() }
-                .getOrElse { fail("JSON numbers must be safe integers") }
-            requireSafeInteger(integer, "JSON number", Long.MIN_VALUE)
-            return RelayJsonValue.IntegerValue(integer)
+            val integer = decimal.toBigIntegerExact()
+            val lowerBound = BigInteger.valueOf(Long.MIN_VALUE)
+            val upperBound = BigInteger.valueOf(Long.MAX_VALUE)
+            if (integer < lowerBound || integer > upperBound) {
+                fail("JSON numbers must be safe integers")
+            }
+            val asLong = integer.toLong()
+            requireSafeInteger(asLong, "JSON number", Long.MIN_VALUE)
+            return RelayJsonValue.IntegerValue(asLong)
         }
 
         private fun <T : RelayJsonValue> readLiteral(literal: String, value: T): T {

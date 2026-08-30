@@ -133,11 +133,25 @@ internal class MessageRelayStateStore(
         entry
     }
 
+    fun beginLocalAttempt(messageId: String): RelayOutboxEntry = synchronized(globalLock) {
+        val state = readState()
+        val current = state.outbox[messageId]
+            ?: throw IllegalArgumentException("Unknown relay outbox messageId")
+        require(current.status == RelayOutboxStatus.READY) {
+            "Local attempt can only start from READY status"
+        }
+        val updated = current.copy(status = RelayOutboxStatus.LOCAL_ATTEMPT)
+        state.outbox[messageId] = updated
+        persist(state)
+        updated
+    }
+
     fun updateOutboundStatus(messageId: String, status: RelayOutboxStatus): RelayOutboxEntry =
         synchronized(globalLock) {
             val state = readState()
             val current = state.outbox[messageId]
                 ?: throw IllegalArgumentException("Unknown relay outbox messageId")
+            validateStatusTransition(current.status, status)
             val updated = current.copy(status = status)
             state.outbox[messageId] = updated
             persist(state)
@@ -301,6 +315,62 @@ internal class MessageRelayStateStore(
         }
         messageIds.forEach(state.inbox::remove)
         persist(state)
+    }
+
+    private fun validateStatusTransition(current: RelayOutboxStatus, next: RelayOutboxStatus) {
+        // Accepted or ambiguous relay states are evidence we already left the local retry path.
+        // They may only move toward acknowledged/terminal outcomes, never back into local submission.
+        val allowed = when (current) {
+            RelayOutboxStatus.READY -> setOf(
+                RelayOutboxStatus.READY,
+                RelayOutboxStatus.LOCAL_ATTEMPT,
+                RelayOutboxStatus.LOCAL_PENDING,
+                RelayOutboxStatus.RELAY_RETRYABLE,
+                RelayOutboxStatus.RELAY_ACCEPTED,
+                RelayOutboxStatus.INDETERMINATE,
+                RelayOutboxStatus.DEFINITE_FAILURE
+            )
+            RelayOutboxStatus.LOCAL_ATTEMPT -> setOf(
+                RelayOutboxStatus.LOCAL_ATTEMPT,
+                RelayOutboxStatus.LOCAL_PENDING,
+                RelayOutboxStatus.READY,
+                RelayOutboxStatus.RELAY_RETRYABLE,
+                RelayOutboxStatus.RELAY_ACCEPTED,
+                RelayOutboxStatus.INDETERMINATE,
+                RelayOutboxStatus.DEFINITE_FAILURE
+            )
+            RelayOutboxStatus.LOCAL_PENDING -> setOf(
+                RelayOutboxStatus.LOCAL_PENDING,
+                RelayOutboxStatus.READY,
+                RelayOutboxStatus.RELAY_RETRYABLE,
+                RelayOutboxStatus.RELAY_ACCEPTED,
+                RelayOutboxStatus.INDETERMINATE,
+                RelayOutboxStatus.DEFINITE_FAILURE
+            )
+            RelayOutboxStatus.RELAY_RETRYABLE -> setOf(
+                RelayOutboxStatus.RELAY_RETRYABLE,
+                RelayOutboxStatus.READY,
+                RelayOutboxStatus.RELAY_ACCEPTED,
+                RelayOutboxStatus.INDETERMINATE,
+                RelayOutboxStatus.DEFINITE_FAILURE
+            )
+            RelayOutboxStatus.RELAY_ACCEPTED -> setOf(
+                RelayOutboxStatus.RELAY_ACCEPTED,
+                RelayOutboxStatus.INDETERMINATE,
+                RelayOutboxStatus.DEFINITE_FAILURE
+            )
+            RelayOutboxStatus.INDETERMINATE -> setOf(
+                RelayOutboxStatus.INDETERMINATE,
+                RelayOutboxStatus.READY,
+                RelayOutboxStatus.RELAY_RETRYABLE,
+                RelayOutboxStatus.RELAY_ACCEPTED,
+                RelayOutboxStatus.DEFINITE_FAILURE
+            )
+            RelayOutboxStatus.DEFINITE_FAILURE -> setOf(RelayOutboxStatus.DEFINITE_FAILURE)
+        }
+        require(next in allowed) {
+            "Invalid relay status transition from $current to $next"
+        }
     }
 
     private fun readState(): RelayState {

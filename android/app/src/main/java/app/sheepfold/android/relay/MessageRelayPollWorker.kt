@@ -17,7 +17,7 @@ class MessageRelayPollWorker(
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
-        val settings = MessageRelayConnectionStore.read(applicationContext)
+        val settings = MessageRelayConnectionStore.read(applicationContext).normalized()
         if (!settings.permitsPublicNetwork()) return Result.success()
         val secrets = try {
             MessageRelaySecureStore.read(applicationContext) ?: return Result.success()
@@ -59,12 +59,16 @@ class MessageRelayPollWorker(
     companion object {
         private const val workName = "sheepfold-family-message-relay-poll"
 
+        internal fun shouldSchedule(
+            settings: MessageRelaySettings,
+            secrets: MessageRelaySecrets?
+        ): Boolean = settings.permitsPublicNetwork() && secrets != null
+
         fun scheduleIfProvisioned(context: Context) {
             val appContext = context.applicationContext
-            val settings = MessageRelayConnectionStore.read(appContext)
-            val provisioned = settings.permitsPublicNetwork() &&
-                runCatching { MessageRelaySecureStore.read(appContext) }.getOrNull() != null
-            if (!provisioned) {
+            val settings = MessageRelayConnectionStore.read(appContext).normalized()
+            val secrets = runCatching { MessageRelaySecureStore.read(appContext) }.getOrNull()
+            if (!shouldSchedule(settings, secrets)) {
                 WorkManager.getInstance(appContext).cancelUniqueWork(workName)
                 return
             }

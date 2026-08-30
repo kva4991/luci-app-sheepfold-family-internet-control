@@ -105,7 +105,7 @@ internal class LocalFirstMessageRelayCoordinator(
                 RelayOutboxStatus.LOCAL_ATTEMPT,
                 RelayOutboxStatus.LOCAL_PENDING
             )) {
-                throw IllegalStateException("Relay command is not awaiting local reconciliation")
+                return RelayCommandRouteResult.RelayUnavailable(messageId)
             }
             val local = localTransport ?: return RelayCommandRouteResult.RelayUnavailable(messageId)
             when (val lookup = local.lookupResult(messageId)) {
@@ -132,7 +132,7 @@ internal class LocalFirstMessageRelayCoordinator(
         now: Long
     ): RelayCommandRouteResult {
         if (localNetworkAvailable && localTransport != null) {
-            val attempting = stateStore.updateOutboundStatus(entry.messageId, RelayOutboxStatus.LOCAL_ATTEMPT)
+            val attempting = stateStore.beginLocalAttempt(entry.messageId)
             return when (val local = localTransport.submit(attempting.envelopeJson)) {
                 is LocalRelayDelivery.Result -> completeFromResult(attempting, local.resultEnvelopeJson, now)
                 LocalRelayDelivery.Pending -> {

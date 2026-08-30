@@ -40,4 +40,32 @@ class MessageRelayEndpointTest {
         assertFalse(MessageRelaySettings().permitsPublicNetwork())
         assertFalse(MessageRelaySettings(enabled = true, baseUrl = "").permitsPublicNetwork())
     }
+
+    @Test
+    fun `configured relay endpoint is canonicalized only when valid and wifi-first remains default`() {
+        val valid = MessageRelaySettings.fromConfigured(
+            enabled = true,
+            rawBaseUrl = " https://Relay.Invalid.Example/ "
+        )
+        assertEquals("https://relay.invalid.example", valid.baseUrl)
+        assertEquals(true, valid.enabled)
+
+        val invalid = MessageRelaySettings.fromConfigured(
+            enabled = true,
+            rawBaseUrl = "https://192.0.2.10"
+        )
+        assertFalse(invalid.enabled)
+        assertEquals("", invalid.baseUrl)
+        assertFalse(invalid.permitsPublicNetwork())
+    }
+
+    @Test
+    fun `persisted stale relay values are rejected on read and fail closed`() {
+        val stale = MessageRelaySettings(enabled = true, baseUrl = "https://192.0.2.10")
+        val normalized = stale.normalized()
+
+        assertFalse(normalized.enabled)
+        assertEquals("", normalized.baseUrl)
+        assertFalse(normalized.permitsPublicNetwork())
+    }
 }

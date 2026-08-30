@@ -78,9 +78,15 @@ class MessageRelayProtocolTest {
     }
 
     @Test
-    fun `strict parser rejects duplicates nonce tag-only and invalid unicode`() {
+    fun `strict parser rejects duplicates nonce tag-only invalid unicode and out-of-range integers`() {
         assertThrows(MessageRelayProtocolException::class.java) {
             MessageRelayJson.parse("{\"a\":1,\"a\":1}".toByteArray(), 100)
+        }
+        assertThrows(MessageRelayProtocolException::class.java) {
+            MessageRelayJson.parse("{\"n\":9223372036854775808}".toByteArray(), 100)
+        }
+        assertThrows(MessageRelayProtocolException::class.java) {
+            MessageRelayJson.parse("{\"n\":-9223372036854775809}".toByteArray(), 100)
         }
         val envelope = MessageRelayProtocol.encrypt(
             goldenMetadata,

@@ -130,6 +130,42 @@ class LocalFirstMessageRelayCoordinatorTest {
     }
 
     @Test
+    fun `disabled settings never schedule background polling`() {
+        val validSettings = MessageRelaySettings(enabled = true, baseUrl = "https://relay.example.com")
+        val secret = relayTestSecrets()
+        assertTrue(MessageRelayPollWorker.shouldSchedule(validSettings, secret))
+        assertFalse(MessageRelayPollWorker.shouldSchedule(validSettings.copy(enabled = false), secret))
+        assertFalse(MessageRelayPollWorker.shouldSchedule(validSettings, null))
+        assertFalse(MessageRelayPollWorker.shouldSchedule(validSettings.copy(baseUrl = ""), secret))
+    }
+
+    @Test
+    fun `local attempt transition is explicit and rejects invalid status jumps`() {
+        val secrets = relayTestSecrets()
+        val state = MessageRelayStateStore(initializedStorage(secrets), secrets.stateGeneration)
+        val sequence = state.reserveOutboundSequence(secrets.outboundKeyRecord())
+        val command = outboundEnvelope(secrets, sequence, relayId(18), now = 13_100)
+        state.enqueueOutbound(command.canonicalJson(), secrets.outboundKeyRecord())
+
+        val started = state.beginLocalAttempt(command.messageId)
+        assertEquals(RelayOutboxStatus.LOCAL_ATTEMPT, started.status)
+        assertEquals(RelayOutboxStatus.LOCAL_ATTEMPT, state.outboxEntry(command.messageId)?.status)
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            state.beginLocalAttempt(command.messageId)
+        }
+        assertEquals("Local attempt can only start from READY status", error.message)
+
+        val terminalFailure = state.updateOutboundStatus(command.messageId, RelayOutboxStatus.DEFINITE_FAILURE)
+        assertEquals(RelayOutboxStatus.DEFINITE_FAILURE, terminalFailure.status)
+
+        val jumpError = assertThrows(IllegalArgumentException::class.java) {
+            state.updateOutboundStatus(command.messageId, RelayOutboxStatus.READY)
+        }
+        assertEquals("Invalid relay status transition from DEFINITE_FAILURE to READY", jumpError.message)
+    }
+
+    @Test
     fun `two commands reserve different durable sequences and message ids`() {
         val fixture = CoordinatorFixture(localSubmit = LocalRelayDelivery.Unreachable())
         val coordinator = fixture.coordinator()
@@ -216,6 +252,87 @@ class LocalFirstMessageRelayCoordinatorTest {
         )
         fixture.state.updateOutboundStatus(pending.messageId, RelayOutboxStatus.INDETERMINATE)
         assertTrue(coordinator.retryRelay(pending.messageId, 17_003) is RelayCommandRouteResult.Indeterminate)
+    }
+
+    @Test
+    fun `accepted relay state cannot be downgraded back into retryable transport state`() {
+        val secrets = relayTestSecrets()
+        val state = MessageRelayStateStore(initializedStorage(secrets), secrets.stateGeneration)
+        val sequence = state.reserveOutboundSequence(secrets.outboundKeyRecord())
+        val command = outboundEnvelope(secrets, sequence, relayId(19), now = 17_100)
+        state.enqueueOutbound(command.canonicalJson(), secrets.outboundKeyRecord())
+
+        state.updateOutboundStatus(command.messageId, RelayOutboxStatus.RELAY_ACCEPTED)
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            state.updateOutboundStatus(command.messageId, RelayOutboxStatus.RELAY_RETRYABLE)
+        }
+        assertEquals("Invalid relay status transition from RELAY_ACCEPTED to RELAY_RETRYABLE", error.message)
+    }
+
+    @Test
+    fun `accepted and ambiguous relay states cannot reopen local attempts`() {
+        val secrets = relayTestSecrets()
+        val state = MessageRelayStateStore(initializedStorage(secrets), secrets.stateGeneration)
+        val sequence = state.reserveOutboundSequence(secrets.outboundKeyRecord())
+        val command = outboundEnvelope(secrets, sequence, relayId(20), now = 17_200)
+        state.enqueueOutbound(command.canonicalJson(), secrets.outboundKeyRecord())
+
+        state.updateOutboundStatus(command.messageId, RelayOutboxStatus.RELAY_ACCEPTED)
+        assertThrows(IllegalArgumentException::class.java) {
+            state.beginLocalAttempt(command.messageId)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            state.updateOutboundStatus(command.messageId, RelayOutboxStatus.READY)
+        }
+
+        state.updateOutboundStatus(command.messageId, RelayOutboxStatus.INDETERMINATE)
+        assertThrows(IllegalArgumentException::class.java) {
+            state.beginLocalAttempt(command.messageId)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            state.updateOutboundStatus(command.messageId, RelayOutboxStatus.LOCAL_ATTEMPT)
+        }
+    }
+
+    @Test
+    fun `retryable public failures cannot reopen a local submission state`() {
+        val secrets = relayTestSecrets()
+        val state = MessageRelayStateStore(initializedStorage(secrets), secrets.stateGeneration)
+        val sequence = state.reserveOutboundSequence(secrets.outboundKeyRecord())
+        val command = outboundEnvelope(secrets, sequence, relayId(21), now = 17_300)
+        state.enqueueOutbound(command.canonicalJson(), secrets.outboundKeyRecord())
+
+        state.updateOutboundStatus(command.messageId, RelayOutboxStatus.RELAY_RETRYABLE)
+        assertThrows(IllegalArgumentException::class.java) {
+            state.updateOutboundStatus(command.messageId, RelayOutboxStatus.LOCAL_PENDING)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            state.beginLocalAttempt(command.messageId)
+        }
+    }
+
+    @Test
+    fun `stale local reconcile cannot reopen a public retryable command`() {
+        val secrets = relayTestSecrets()
+        val state = MessageRelayStateStore(initializedStorage(secrets), secrets.stateGeneration)
+        val sequence = state.reserveOutboundSequence(secrets.outboundKeyRecord())
+        val command = outboundEnvelope(secrets, sequence, relayId(22), now = 17_400)
+        state.enqueueOutbound(command.canonicalJson(), secrets.outboundKeyRecord())
+        state.updateOutboundStatus(command.messageId, RelayOutboxStatus.RELAY_RETRYABLE)
+
+        val coordinator = LocalFirstMessageRelayCoordinator(
+            MessageRelaySettings(true, "https://relay.invalid.example"),
+            secrets,
+            state,
+            object : LocalMessageRelayTransport {
+                override fun submit(envelopeJson: String): LocalRelayDelivery = error("stale local reconcile must not reopen")
+                override fun lookupResult(requestMessageId: String): LocalRelayLookup = LocalRelayLookup.NoRecord
+            },
+            PublicMessageRelayTransportFactory { error("public fallback must not reopen from stale local reconcile") }
+        )
+
+        val result = coordinator.reconcileLocal(command.messageId, 17_401)
+        assertTrue(result is RelayCommandRouteResult.RelayUnavailable)
     }
 }
 
