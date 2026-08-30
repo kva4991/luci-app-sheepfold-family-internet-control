@@ -140,8 +140,8 @@ class SecureRouterConnectionManager {
         require(login.isNotBlank()) { "Укажите логин администратора" }
         require(code.isNotBlank()) { "Укажите временный код сопряжения" }
         val apiUrl = normalizeApiUrl(address)
-        require(LocalRouterAddress.isIpLiteral(URL(apiUrl).host)) {
-            "Для ручного подключения укажите IP-адрес роутера"
+        require(LocalRouterAddress.isLocalIpLiteral(URL(apiUrl).host)) {
+            "Для ручного подключения укажите локальный IP-адрес роутера"
         }
         return RouterConnectionRequest(
             apiUrl = apiUrl,
