@@ -9,6 +9,12 @@ import { formatImpact, inspectChanges, parseNameStatus } from '../scripts/inspec
 import { recommendedCommands } from '../tools/quality/changeImpact.mjs';
 
 describe('change impact advisor §impact1', () => {
+  it('requires security and full verification for the experimental support credential profile', () => {
+    const report = inspectChanges(['tools/remoteSupport/transportClient.mjs']);
+    assert.deepEqual(report.unknown, []);
+    assert.ok(report.categories.includes('security')); assert.ok(report.categories.includes('tooling'));
+    assert.equal(report.fullTest, true); assert.equal(report.risk, 'critical');
+  });
   it('requires a separate native gate for the SFMR1 helper and executable wire model', () => {
     const report = inspectChanges([
       'package/sheepfold-message-relay-crypto/src/relayJson.c',

@@ -13,6 +13,13 @@ Production TLS endpoint, рабочая пара ключей расшифров
 FRP/SSH не добавлены. Команда, ожидаемые результаты и ограничения находятся в
 [`tools/remoteSupport/README.ru.md`](../tools/remoteSupport/README.ru.md).
 
+Следующий экспериментальный slice добавляет отдельные `transportRequest/transportGrant` и
+Node-only `TransportClient`: CSR связывается router-подписью, ответ проверяется по CA/SPKI и
+неизменяемой lease, token/replay остаются в RAM. Это не новый production HTTP endpoint и не
+готовый manager; старые control capabilities по умолчанию не меняются. Точный wire и server-side
+обязательства: [transport-профиль](remote-support-protocol.ru.md#экспериментальный-transport-профиль).
+Private vendor pin обновляется только после review/public commit; живой VPS этим не изменяется.
+
 ## Репозитории
 
 - этот публичный клиентский проект: <https://github.com/kva4991/luci-app-sheepfold-family-internet-control>;

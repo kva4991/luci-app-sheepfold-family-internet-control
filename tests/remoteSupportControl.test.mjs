@@ -24,11 +24,11 @@ const readSchema = (name) => JSON.parse(readFileSync(
   new URL('../tools/remoteSupport/schemas/' + name, import.meta.url), 'utf8',
 ));
 
-function fixture() {
+function fixture(options = {}) {
   const server = generateKeyPairSync('ed25519'); const router = generateKeyPairSync('ed25519');
   const serverKeys = new Map([['server-test', server.publicKey]]);
   let now = 1788000000; let tick = 0; let nextId = 10;
-  const client = new ControlClient({ privateKey: router.privateKey, serverKeys, now: () => now, uptime: () => tick });
+  const client = new ControlClient({ privateKey: router.privateKey, serverKeys, now: () => now, uptime: () => tick, ...options });
   const rawKey = router.publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64url');
   const keyId = identityKeyId(rawKey);
   const routerKeys = new Map([[keyId, router.publicKey]]);
@@ -53,7 +53,8 @@ function fixture() {
     }, enrollmentId)));
     assert.equal(verify(proof).messageType, 'enrollProof');
     client.accept(sign(message('enrollAccepted', { routerId, keyId, profile: controlProfile }, controlId)));
-    assert.deepEqual(verify(client.capabilities()).payload.capabilities, clientCapabilities);
+    assert.deepEqual(verify(client.capabilities()).payload.capabilities,
+      [...clientCapabilities, ...(options.transportCredentials ? ['transportCredentialsV1'] : [])]);
     client.accept(sign(message('statusQuery', { profile: controlProfile, capabilities: ['claimV1'] }, controlId)));
   };
   const open = () => {
@@ -78,6 +79,14 @@ test('controlEnrollmentRequiresConsentAndBindsIdentityNonceAndStream', () => {
   assert.equal(f.client.status().state, 'moduleReady');
   assert.equal(f.client.status().transportReady, false);
   assert.throws(() => f.client.openClaim({ routerHostKey: hostKey() }), { code: 'claimNotOpen' });
+});
+
+test('controlTransportCredentialCapabilityRequiresExplicitBooleanOptIn', () => {
+  const f = fixture({ transportCredentials: true }); f.enroll();
+  assert.deepEqual(f.verify(f.client.capabilities()).payload.capabilities,
+    ['claimV1', 'localRevokeV1', 'transportCredentialsV1']);
+  assert.equal(f.client.status().transportReady, false);
+  for (const value of ['true', 1, null]) { assert.throws(() => fixture({ transportCredentials: value }), TypeError); }
 });
 
 test('controlChallengeRejectsOtherIdentityOrNonce', () => {

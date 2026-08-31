@@ -32,7 +32,9 @@
         "sessionCommand",
         "revokeRequest",
         "revokeConfirmed",
-        "statusQuery"
+        "statusQuery",
+        "transportRequest",
+        "transportGrant"
       ]
     },
     "routerId": {

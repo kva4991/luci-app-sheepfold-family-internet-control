@@ -61,6 +61,8 @@
 
 ## Зафиксированные мелочи
 
+- Transport grant и его signed replay содержат token: только RAM, не HMAC snapshot; `X509Certificate.ca=false` недостаточно для точного CA:FALSE, поэтому Node-клиент проверяет DER BasicConstraints отдельно. Это эксперимент, не SSH-ready: [transport-профиль](remote-support-protocol.ru.md#экспериментальный-transport-профиль) (§rsup001).
+
 Краткий реестр. Подробности — по ссылкам.
 
 ### Локализация LuCI

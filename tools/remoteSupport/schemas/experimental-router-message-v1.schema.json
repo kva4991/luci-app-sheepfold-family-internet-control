@@ -64,7 +64,8 @@
                       "localRevokeV1",
                       "mutualTlsTransportV1",
                       "typedGatewayV1",
-                      "safeApplyV1"
+                      "safeApplyV1",
+                      "transportCredentialsV1"
                     ]
                   }
                 }

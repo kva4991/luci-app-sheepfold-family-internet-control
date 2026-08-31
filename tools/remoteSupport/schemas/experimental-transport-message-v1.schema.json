@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sheepfold.example/schemas/remote-support/experimental-transport-message-v1.schema.json",
+  "title": "Experimental temporary support transport credential messages",
+  "description": "Test-only opt-in profile. Signature, distinct stream, canonical DER, CSR proof of possession, exact deadlines, X.509 CA/SPKI/EKU and volatile replay require runtime validation. This schema grants no SSH access.",
+  "allOf": [
+    { "$ref": "signed-payload-v1.schema.json" },
+    {
+      "properties": {
+        "routerId": { "$ref": "#/$defs/id" },
+        "sequence": { "const": 0 }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "messageType": { "const": "transportRequest" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["profile", "sessionId", "csrDer"],
+              "properties": {
+                "profile": { "const": "sheepfold-support-transport-experimental-1" },
+                "sessionId": { "$ref": "#/$defs/id" },
+                "csrDer": { "$ref": "#/$defs/der" }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "messageType": { "const": "transportGrant" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["profile", "sessionId", "csrSha256", "leaseId", "accessExpiresAt", "leaseExpiresAt", "certificateDer", "proxyName", "proxyPort", "token"],
+              "properties": {
+                "profile": { "const": "sheepfold-support-transport-experimental-1" },
+                "sessionId": { "$ref": "#/$defs/id" },
+                "csrSha256": { "$ref": "#/$defs/hex256" },
+                "leaseId": { "$ref": "#/$defs/id" },
+                "accessExpiresAt": { "$ref": "#/$defs/time" },
+                "leaseExpiresAt": { "$ref": "#/$defs/time" },
+                "certificateDer": { "$ref": "#/$defs/der" },
+                "proxyName": { "type": "string", "pattern": "^support-[a-f0-9]{32}$" },
+                "proxyPort": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+                "token": { "$ref": "#/$defs/hex256" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
+    "hex256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "time": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "der": { "type": "string", "minLength": 4, "maxLength": 5462, "pattern": "^[A-Za-z0-9_-]+$" }
+  }
+}

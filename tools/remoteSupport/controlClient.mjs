@@ -24,16 +24,19 @@ export class ControlClient {
   #routerId = null; #controlId = null; #outgoing = new Map(); #incoming = new ReplayWindow();
   #state = 'disabled'; #session = null; #code = null; #localClosed = false; #serverReady = false;
   #clockBlocked = false;
+  #transportCredentials;
 
   constructor({ privateKey, serverKeys, now = () => Math.floor(Date.now() / 1000),
-    uptime = () => performance.now() / 1000 }) {
+    uptime = () => performance.now() / 1000, transportCredentials = false }) {
     if (privateKey?.type !== 'private' || privateKey.asymmetricKeyType !== 'ed25519' ||
         !(serverKeys instanceof Map) || !serverKeys.size || serverKeys.size > 8 ||
-        [...serverKeys.values()].some((key) => key.type !== 'public' || key.asymmetricKeyType !== 'ed25519')) {
+        [...serverKeys.values()].some((key) => key.type !== 'public' || key.asymmetricKeyType !== 'ed25519') ||
+        typeof transportCredentials !== 'boolean') {
       throw new TypeError('Invalid control client keys');
     }
     this.#privateKey = privateKey; this.#serverKeys = new Map(serverKeys);
     this.#now = now; this.#uptime = uptime;
+    this.#transportCredentials = transportCredentials;
     this.#rawKey = createPublicKey(privateKey).export({ format: 'der', type: 'spki' })
       .subarray(-32).toString('base64url');
     this.#keyId = identityKeyId(this.#rawKey);
@@ -132,7 +135,8 @@ export class ControlClient {
 
   capabilities() {
     if (!this.#controlId || this.#session || this.#localClosed) fail('stateConflict');
-    return this.#build('capabilityReport', { profile: controlProfile, capabilities: [...clientCapabilities] },
+    return this.#build('capabilityReport', { profile: controlProfile,
+      capabilities: [...clientCapabilities, ...(this.#transportCredentials ? ['transportCredentialsV1'] : [])] },
       this.#controlId);
   }
 

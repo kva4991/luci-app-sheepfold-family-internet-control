@@ -2,7 +2,7 @@
 
 <!-- §rsup001 -->
 
-Статус: проектный контракт `v1` и исполняемый экспериментальный control-профиль (31.08.2026).
+Статус: проектный контракт `v1`, экспериментальный control-профиль и отдельный Node transport-клиент (31.08.2026).
 В [`tools/remoteSupport/`](../tools/remoteSupport/README.ru.md) реализованы предметные проверки,
 клиентский Node.js автомат и ручной двусторонний HTTPS-стенд с private server. Это не OpenWrt
 runtime: FRP/SSH, ключевой manifest и manager роутера ещё отсутствуют. LuCI-заглушка остаётся
@@ -159,7 +159,7 @@ ASCII "SheepfoldRemoteSupport\\0"
 - время передаётся Unix timestamp в секундах UTC;
 - `expiresAt` является исключающей границей: при `now >= expiresAt` сообщение, claim или сеанс уже просрочены;
 - `sequence` является неотрицательным целым в совместимом диапазоне JSON `0..2^53-1`; этого достаточно для одного временного сеанса и не вызывает потери точности в JavaScript/ucode;
-- `streamId` всегда содержит ровно 128 случайных бит и задаёт область `sequence`/replay; для сообщения активной техподдержки он равен `sessionId`, а для enrollment является отдельным временным ID;
+- `streamId` всегда содержит ровно 128 случайных бит и задаёт область `sequence`/replay; для сообщения активной техподдержки он равен `sessionId`, а enrollment и отдельный one-shot transport-профиль используют независимый временный ID;
 - `routerId=null` допустим только для `enrollChallenge`/`enrollProof`, пока сервер ещё не выдал идентификатор; после enrollment `routerId` обязателен;
 - остальные ID содержат ровно 128 случайных бит и передаются как 22 символа canonical base64url без `=` и пользовательских данных;
 - повторяющиеся JSON-ключи, NUL, неправильный UTF-8, лишние критические поля и значения вне диапазона отклоняются;
@@ -208,6 +208,8 @@ Capability сообщает только уже реализованное по�
 | `revokeRequest` | router -> server | Сообщение о локальном отзыве | Повтор безопасен |
 | `revokeConfirmed` | server -> router | Server route закрыт и credential отозван | Повтор безопасен |
 | `statusQuery` | обе стороны | Сверка фактического состояния | Не меняет состояние |
+| `transportRequest` | router -> server | Подписанный CSR отдельного экспериментального профиля | Точные исходные bytes только в RAM до срока запроса |
+| `transportGrant` | server -> router | Короткая credential lease отдельного экспериментального профиля | Только точный действующий ответ; не означает SSH-ready |
 
 `sessionCommand` не содержит shell-строку, URL для произвольного скачивания или произвольный путь к файлу. Для `v1` разрешены только перечисленные операции:
 
@@ -255,7 +257,7 @@ Capability сообщает только уже реализованное по�
 
 ## Sequence, nonce и повторы
 
-- Server и router ведут отдельную возрастающую `sequence` на каждый `streamId` и направление. Для сообщений сервисного сеанса `streamId` совпадает с вложенным `sessionId`; enrollment использует отдельный временный stream.
+- Server и router ведут отдельную возрастающую `sequence` на каждый `streamId` и направление. Для сообщений сервисного сеанса `streamId` совпадает с вложенным `sessionId`; enrollment и экспериментальный credential exchange используют отдельный временный stream.
 - Новая последовательность каждого направления начинается с `0`; после restart принимающая сторона восстанавливает последний подтверждённый номер из защищённого состояния, а не создаёт пустое окно посреди сеанса.
 - `messageId`/nonce хранится в ограниченном replay cache как минимум до `expiresAt` сообщения.
 - Значение ниже уже подтверждённого sequence отклоняется.
@@ -424,7 +426,8 @@ Default listener private runtime только `127.0.0.1`; production endpoint �
 на `sessionPreparing`, но не создаёт SSH. Сервер объявляет только реализованную `claimV1`,
 не объявляет рабочую `mutualTlsTransportV1` без транспорта.
 
-Клиент заявки объявляет только `claimV1/localRevokeV1`. Проверка
+Клиент заявки по умолчанию объявляет только `claimV1/localRevokeV1`. Явный Node-only параметр
+`transportCredentials:true` добавляет `transportCredentialsV1`, но не `typedGatewayV1`. Проверка
 `mutualTlsTransportV1/typedGatewayV1` выполняется отдельно при `prepare`, до вызова broker.
 Прежнее требование полного транспорта уже на `claimOpen` не позволяло честному control-only
 клиенту открыть заявку и было исправлено. Смена capabilities не выдаёт transport credential.
@@ -466,10 +469,75 @@ entrypoint, а не разрешение клиенту продлить сро�
 
 **Почему выбран этот способ / нюансы.** Публичный проект остаётся владельцем формата; локальный
 контракт не выдаётся за опубликованную совместимую версию. Схемы `claimAccepted`, реальной
-transport lease/CSR, `sessionActive`, relay map и safe-apply надо согласовать вместе с настоящим
-FRP/bastion adapter. Сейчас они сознательно не входят в server-response schema. После review и
+`sessionActive`, relay map и safe-apply надо согласовать вместе с настоящим
+FRP/bastion adapter. Transport CSR/grant ниже выделен в отдельную schema и не расширяет старую
+control server-response schema. После review и
 public commit private repo обновляет pinned vendor revision/SHA-256; рабочий файл не является
 immutable release. Полный план ADR-0022 этим профилем не отменяется.
+
+## Экспериментальный transport-профиль
+
+`sheepfold-support-transport-experimental-1` — отдельный opt-in контракт для Node-стенда,
+не опубликованный endpoint и не включение LuCI/APK/роутерного runtime. Source of truth:
+[`transportPayload.mjs`](../tools/remoteSupport/transportPayload.mjs),
+[`transportClient.mjs`](../tools/remoteSupport/transportClient.mjs) и
+[`предметная JSON Schema`](../tools/remoteSupport/schemas/experimental-transport-message-v1.schema.json).
+Common envelope/preimage остаются `v1`, golden signature не изменяется. Старый control verifier
+по-прежнему не принимает transport grant и не получает fallback.
+
+Оба сообщения имеют случайный `streamId`, **не равный `sessionId`**, `sequence:0` и срок envelope
+не более 60 секунд. `messageId` является отдельным nonce. Новый запрос не обнуляет старый
+control stream: этот credential exchange имеет собственную одноразовую replay-область.
+
+| Тип | Точные поля вложенного payload |
+| --- | --- |
+| `transportRequest` | `profile`, `sessionId`, `csrDer` |
+| `transportGrant` | `profile`, `sessionId`, `csrSha256`, `leaseId`, `accessExpiresAt`, `leaseExpiresAt`, `certificateDer`, `proxyName`, `proxyPort`, `token` |
+
+`csrDer/certificateDer` — canonical base64url без padding, DER не больше 4096 bytes.
+`csrSha256/token` — ровно 64 lowercase hex, `proxyName` — `support-` и 32 lowercase hex,
+`proxyPort` — integer 1024..65535. ID имеют прежние 16 bytes; все строки именно primitive string,
+без coercion, accessor и дополнительных полей. JSON Schema не заменяет canonical encoding,
+DER framing, криптографию и сравнение сроков.
+
+Сервер проверяет внешнюю router identity-подпись до CSR; затем обязан проверить CSR signature
+(proof-of-possession), отдельный Ed25519 transport key, accepted session и исходные сроки.
+Передача CSR не является подтверждением claim/MFA. Root/transport private key, endpoint, CA
+и SSH key не входят в grant; доверенные адрес/CA устанавливаются отдельно, без wire-ротации.
+
+Клиент связывает ответ с router/session/stream, исходным SHA-256 CSR и заранее подтверждённым
+`accessExpiresAt <= issuedAt + 86400`. `leaseExpiresAt <= issuedAt + 120`, не позже access deadline; envelope истекает
+не позже lease. Сертификат подписан закреплённым CA, содержит отдельный согласованный Ed25519
+SPKI, точный subject `CN=Sheepfold temporary support`, только clientAuth EKU, critical keyUsage
+digitalSignature only и critical BasicConstraints CA:FALSE без pathLen. CA также Ed25519.
+`notAfter` **точно равен** `leaseExpiresAt`, CA действителен на срок leaf.
+Допустимы только BC/KU/EKU/SKI/AKI extensions; SAN/AIA, повторения и повреждённый DER отвергаются.
+
+**Почему выбран этот способ / нюансы.** `X509Certificate.ca` учитывает keyUsage: CA:TRUE вместе
+с digitalSignature без keyCertSign может дать `false`. Поэтому дополнительно проверяется
+ограниченный DER BasicConstraints с точным содержимым `30 00` и keyUsage `03 02 07 80`, а не только этот флаг.
+Подписанные negative fixtures проверяют CA:TRUE, duplicate OID, явный noncanonical FALSE,
+неcritical BC/KU, keyCertSign и неожиданные SAN/AIA.
+CSR framing на клиенте не доказывает владение ключом — proof-of-possession остаётся серверным gate.
+
+`request/retry` хранят точные bytes только в RAM; первый ответ принимается до срока исходного
+запроса. Повтор уже принятого ответа должен совпадать побайтно и всё ещё иметь действующий
+envelope; изменённый/просроченный ответ закрывает grant. После expiry envelope уже принятые
+credentials можно читать до неизменяемой lease, **не вызывая повторный accept**. Отзыв, потеря
+RAM, истечение lease или недостоверные часы не допускают восстановления прежнего разрешения.
+Скачок wall-clock вперёд перебазирует monotonic anchor: если wall-clock затем остановится,
+оставшаяся lease продолжает сокращаться. Иначе старый anchor мог бы задержать локальный expiry.
+Объект не пишет файлы и не запускает watchdog; очистка фактического FRP/SSH остаётся за manager.
+
+Token и весь credential-bearing signed response запрещено сохранять в HMAC snapshot,
+`received.response`, обычном журнале, argv или артефакте: HMAC не является шифрованием.
+Серверу нужны RAM-only replay и durable tombstone без самого ответа. Наличие token/сертификата
+не меняет `transportReady:false`: SSH host key, typed helper и действующее подключение не проверены.
+
+Команды, cleanup, типовые ошибки и границы теста находятся в
+[`runbook Node-клиента`](../tools/remoteSupport/README.ru.md#отдельный-клиент-transport-credentials).
+После public review/commit private проект отдельно обновляет pin/SHA-256 и выполняет обе peer
+проверки и synthetic credential/FRP gate. Наличие локальной схемы не разрешает production rollout.
 
 ## Вопросы перед фиксацией production `v1`
 

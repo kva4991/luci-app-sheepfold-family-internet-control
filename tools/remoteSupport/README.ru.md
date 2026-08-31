@@ -25,19 +25,22 @@ control-профиля. Он проверяет точные байты подп
 - `sessionSimulator.mjs` - автономная модель router/control-plane заявки, которая проверяет MFA gate, сгорание кода, сроки, reboot и локальный отзыв;
 - `experimentalPayload.mjs` - точные поля обеих сторон, canonical ID/SSH key, привязка stream/session и запрет преждевременного active;
 - `controlClient.mjs` - последовательный клиентский автомат enrollment/capabilities/claim/status/revoke; только volatile state, без network/file side effects;
+- `transportPayload.mjs`, `transportClient.mjs` - отдельный экспериментальный CSR/grant-профиль и RAM-only клиент проверки сертификата; не FRP/SSH manager;
 - `labChannel.mjs` - HTTPS исключительно к localhost, CA + hostname + certificate pin, два router route, bounded bytes/timeout, без redirect;
 - `runControlPeer.mjs` - ручной двусторонний стенд с private HTTPS service, отдельным сертификатом оператора и настоящим TOTP; не читает конфигурацию действующего сервера;
 - `schemas/signed-envelope-v1.schema.json` - внешняя JSON Schema;
 - `schemas/signed-payload-v1.schema.json` - общая JSON Schema подписанного сообщения;
 - `schemas/enrollment-start-v1.schema.json` - единственное узкое неподписанное bootstrap-тело до регистрации публичного ключа роутера; оно всё равно передаётся только через проверенный TLS;
 - `schemas/experimental-router-message-v1.schema.json` и `experimental-server-message-v1.schema.json` - рабочие предметные схемы control-профиля; ещё не immutable release;
+- `schemas/experimental-transport-message-v1.schema.json` - отдельный one-shot профиль `transportRequest/transportGrant`, без endpoint, CA и приватных ключей;
 - `fixtures/protocol-v1-golden.json` - синтетический ключ, точные байты и ожидаемая подпись;
 - `peer-project.json` - machine-readable граница с закрытым `sheepfold-support-server`;
 - `checkPeerContract.mjs` - симметричная cross-repo проверка contract ID, protocol major и владельца canonical protocol;
 - `tests/remoteSupportProtocol.test.mjs` и `tests/remoteSupportSessionSimulator.test.mjs` - исполняемые проверки контракта.
 
 Для полного transport-профиля ещё нужны предметные схемы `claimAccepted/sessionActive`,
-CSR/lease, relay map, safe-apply, проверенный native adapter и durable manager. Валидация
+relay map, safe-apply, проверенный native adapter и durable manager. CSR/lease теперь описаны
+отдельным экспериментальным профилем, не включённым в старый control verifier. Валидация
 experimental status намеренно строже общей формы JSON Schema: без transport lease нельзя
 принять `sessionReady/sessionActive/reconnecting` или ненулевую lease. Заглушку LuCI не разблокировать.
 
@@ -83,6 +86,48 @@ Caller будущего backend обязан проверить права до 
 это защита RAM-автомата, не watchdog живого SSH.
 
 ## Проверка
+
+### Отдельный клиент transport credentials
+
+`TransportClient` получает `identityPrivateKey`, `serverKeys`, `routerId`, `sessionId`, заранее
+подтверждённый `accessExpiresAt`, отдельный `transportPublicKey` и закреплённый
+`transportCaCertificate`; необязательные `now/uptime` нужны детерминированному стенду.
+Сертификат CA задаётся как PEM, DER Buffer или `X509Certificate`. Он не принимается из ответа.
+Приватный transport key не является аргументом: caller создаёт CSR и оставляет ключ у себя.
+
+| Метод | Результат |
+| --- | --- |
+| `request(csrDerBuffer)` | подписанная JSON-строка с отдельным случайным stream и sequence 0; только один запрос на экземпляр |
+| `retry()` | исходная строка только до исходного срока запроса; без нового nonce/CSR |
+| `accept(wire)` | проверка подписи, binding, CA/SPKI/EKU/срока; возвращает только безопасный status |
+| `credentials()` | явная RAM-копия grant, включая секретный token и base64url DER; не писать в журнал/backup/argv |
+| `localRevoke()` | очищает pending/reply/grant; поздний ответ не возвращает доступ |
+| `status()` | state, IDs, deadlines и булевы признаки; `transportReady:false`, без token/DER |
+
+Состояния: `idle`, `requestPending`, `grantReady`, `revoked`, `sessionExpired`, `securityBlocked`.
+Полученный сертификат не подтверждает FRP/SSH: для этого нужен ещё не реализованный native manager.
+Expiry проверяется при вызове метода; это не фоновый watchdog. Очистка RAM-ссылок не гарантирует
+немедленное физическое затирание JavaScript strings. Полный wire-контракт и причины ограничений:
+[`экспериментальный transport-профиль`](../../docs/remote-support-protocol.ru.md#экспериментальный-transport-профиль).
+
+`ControlClient({transportCredentials:true,...})` явно добавляет только `transportCredentialsV1`.
+По умолчанию остаются `claimV1/localRevokeV1`; `typedGatewayV1` и готовность SSH не объявляются.
+
+Из корня public checkout, Node.js 20+ и `openssl` в PATH, без сети/private repo:
+
+```powershell
+node --test tests/remoteSupportTransport.test.mjs tests/remoteSupportControl.test.mjs
+```
+
+Ожидается exit 0/fail 0. Тест создаёт только случайный `sheepfold-transport-client-*` в OS temp,
+синтетические Ed25519 keys/CSR/CA/leaves и удаляет каталог в `after`. Ключи не берутся из проекта
+или роутера. После аварийного kill удалять только проверенный каталог завершённого запуска.
+`ENOENT` обычно означает отсутствие OpenSSL; `EPERM/EACCES` — запрет temp/child process.
+Не заменять точный `notAfter` суточным сертификатом ради зелёного теста и не отключать CA/SPKI.
+Проверки не доказывают серверный CSR proof-of-possession, публичный HTTP route, FRP/SSH,
+установку/reboot на OpenWrt, production trust manifest или активацию поддержки.
+
+### Общий reference-контракт
 
 Рабочий каталог: корень public Sheepfold checkout; PowerShell или POSIX shell, Node.js 20+.
 Без private repo и без сети:

@@ -21,6 +21,8 @@ export const messageTypes = Object.freeze([
   'revokeRequest',
   'revokeConfirmed',
   'statusQuery',
+  'transportRequest',
+  'transportGrant',
 ]);
 
 export const sessionStates = Object.freeze([
