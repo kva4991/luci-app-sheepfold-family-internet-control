@@ -505,6 +505,8 @@ class RouterAdminClient(
     private fun friendlyApiMessage(errorCode: String, fallback: String): String = when (errorCode) {
         "home_network_not_allowed" ->
             "Доступ из этой сети не разрешён. Подключитесь к Wi-Fi Sheepfold или подтвердите домашнюю сеть в настройках роутера."
+        "device_source_mismatch" ->
+            "Роутер не узнаёт телефон в этой сети. Вернитесь к Wi-Fi Sheepfold и проверьте, что обе домашние сети используют один MAC устройства. Привязка сохранена."
         "revision_conflict" -> "Настройки изменились на роутере. Обновите экран и повторите действие."
         "config_busy" -> "Роутер уже сохраняет настройки. Повторите действие после обновления."
         "unsupported_schema" -> "Версия API управления не поддерживается. Обновите Sheepfold."

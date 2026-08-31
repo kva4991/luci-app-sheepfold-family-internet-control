@@ -75,4 +75,12 @@ class RouterConnectionSafetyTest {
     fun `temporary server failure does not clear pairing`() {
         assertEquals(null, RouterSessionFailure.fromHttp(503, "server_busy"))
     }
+
+    @Test
+    fun sourceMismatchPreservesPairingButOtherUnauthorizedRepliesDoNot() {
+        assertEquals(null, RouterSessionFailure.fromHttp(401, "device_source_mismatch"))
+        assertEquals(null, RouterSessionFailure.fromHttp(403, "device_source_mismatch"))
+        assertEquals(RouterPairingLoss.TOKEN_REJECTED, RouterSessionFailure.fromHttp(401, "")?.reason)
+        assertEquals(RouterPairingLoss.TOKEN_REJECTED, RouterSessionFailure.fromHttp(403, "token_revoked")?.reason)
+    }
 }

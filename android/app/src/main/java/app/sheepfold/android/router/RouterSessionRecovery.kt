@@ -24,8 +24,7 @@ object RouterSessionFailure {
         "invalid_token",
         "token_invalid",
         "token_expired",
-        "token_revoked",
-        "device_source_mismatch"
+        "token_revoked"
     )
     private val revokedDeviceCodes = setOf(
         "device_unbound",
@@ -38,6 +37,8 @@ object RouterSessionFailure {
         errorCode: String
     ): RouterSessionException? {
         val normalizedCode = errorCode.trim().lowercase()
+        // Другой MAC сети запрещает запрос, но не делает прежний токен отозванным
+        if (normalizedCode == "device_source_mismatch") return null
         val reason = when {
             normalizedCode in revokedDeviceCodes -> RouterPairingLoss.ACCESS_REVOKED
             statusCode == 401 || normalizedCode in rejectedTokenCodes -> RouterPairingLoss.TOKEN_REJECTED
