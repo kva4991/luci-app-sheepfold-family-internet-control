@@ -36,6 +36,7 @@
 
 - этап `globalTest` завершён: PR [#3](https://github.com/kva4991/luci-app-sheepfold-family-internet-control/pull/3) слит fast-forward в `main` на commit `c80cd09`, временная ветка удалена;
 - установлены `r284` и родительский APK `0.1.56`; full local gate, Linux CI, 48 Android UI, 9 paired-read и 13 router read-only проверок успешны;
+- клиентская `gemini_v1` слита fast-forward в `main` до `be8d19c` и отправлена на GitHub; незавершённые ветки private server не включались в это слияние;
 - прежние локальные gate и матрица SDK были успешными, но каждое новое слияние требует своего результата;
 - Standard и AI Support успешно собираются в форматах IPK для OpenWrt 24.10 и APK v3 для OpenWrt 25.12;
 - историческая полная матрица `r241` не подтверждает свежий пакет. Результаты upgrade `r283` → `r284`, LuCI и paired-read сохранены в [живом runbook](live-router-testing.ru.md#обновление-и-проверки-31082026);
