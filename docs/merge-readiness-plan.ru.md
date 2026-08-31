@@ -17,7 +17,8 @@ merge сам по себе не разрешает их публикацию и�
 - Целевой пакет роутера: `0.1.0-r284`; родительский APK `0.1.56` / code `57`;
   детский APK `1.15` / code `16`.
 - До установки на тестовом Cudy WR3000S v1 / OpenWrt 25.12.5 стоял `r283`.
-  Установка новой версии и итоговые проверки записываются ниже только после выполнения.
+  Обновление до `r284` выполнено; подтверждения и ограничения сохранены в
+  [живом runbook](live-router-testing.ru.md#обновление-и-проверки-31082026).
 - Перепроверяются локальная авторизация, bounded detector, beta opt-in, Wi-Fi channel API,
   рабочие панели Android, RAM-черновики и выключенные relay/support foundations.
 - Фильтры устройств меняют только отображение. Носимые включены в персональные и имеют
@@ -40,6 +41,27 @@ merge сам по себе не разрешает их публикацию и�
 Предыдущий физический проход API 30: 48 компонентных/menu/preview tests без skips,
 87 JVM tests и 164 Android-category Node tests. Это историческое доказательство для
 предыдущего debug APK `0.1.55`, не новая установка и не полный релизный gate.
+
+### Подтверждённые проверки текущего коммита
+
+Коммит исходников `32ffa90`, 31.08.2026:
+
+- локальный `quality:gate`: `passed`, все 123 test-файла; один Windows skip для
+  `manualAndBetaOperationsRespectTheSameLiveLock`, без ошибок;
+- [Validate Sheepfold](https://github.com/kva4991/luci-app-sheepfold-family-internet-control/actions/runs/33376493683):
+  793/793 Node tests на Linux, без skips; Lint и сборки обоих Android APK;
+- родитель `0.1.56`: повторные 48/48 component/menu/preview на API 30 и 87/87 JVM;
+  [подробности и границы](android-test-lab.ru.md#повтор-перед-слиянием-на-версии-0156);
+- оба локальных test-IPK собраны; для 25.12 они не используются как установочные APK.
+- [SDK matrix](https://github.com/kva4991/luci-app-sheepfold-family-internet-control/actions/runs/33376490133):
+  все четыре пакета успешны; Standard r284 установлен с backup; 13 router read-only,
+  9 paired-read и LuCI desktop/mobile прошли. Сетевые конфиги и привязка сохранены.
+  Сценарии `writeSafe/fullSafe`, запись Wi-Fi и relay E2E в этот проход не входили.
+
+Изменения далее только в документационных результатах не требуют переустанавливать
+тот же исполняемый пакет. Но любая последующая правка runtime требует нового build
+и соответствующего повторного теста. Постоянная подпись публичного OpenWrt-релиза
+[ещё не настроена](github-actions-openwrt-build.ru.md#подпись-пакетов).
 
 ## Маршрут и обязательные проверки
 

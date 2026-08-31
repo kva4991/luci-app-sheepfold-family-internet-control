@@ -7,13 +7,25 @@ both commands; RAM-only workspace drafts survive Activity recreation and retain 
 revision; Wi-Fi saves require a disconnect warning; notification events precede settings;
 schedules have a weekly rule preview. Shared device cards hide technical details and expose
 seven filter choices. Personal devices include wearables, which also have a narrower filter.
-The latest physical API 30 run passed all 48 selected component/menu/preview tests without
-skips; all 87 parent JVM tests and 164 Android-category Node tests passed. Parent Lint and
-the 249-file documentation audit passed. The same-key debug APK 0.1.55 was installed without
-clearing pairing or settings. Earlier runs and the Wi-Fi QR Unicode fix remain in the runbook.
-This is not a full-project release gate: router writes, camera pairing, Doze, biometrics,
-API 28/35 and relay E2E remain separate checks. The optional authenticated Wi-Fi channel
-endpoint is implemented and locally contract-tested, but was not deployed to the router.
+The same-key parent debug APK `0.1.56` / code `57` is installed without clearing pairing
+or settings. Its repeated API 30 run passed 48/48 component/menu/preview tests and all
+87 parent JVM tests. Standard `0.1.0-r284` from exact-commit official SDK build `32ffa90`
+is installed on the test Cudy WR3000S v1 / OpenWrt 25.12.5. Post-upgrade checks passed:
+13 router read-only checks, 9 paired phone/router checks and LuCI desktop/mobile.
+Network config hashes are unchanged. LuCI retains 124 nonblocking size warnings;
+two additional reports measure the new beta checkbox input rather than its enclosing label.
+The optional authenticated Wi-Fi channel endpoint is now shipped on that router;
+changing a real Wi-Fi channel is not verified by these read-only tests.
+
+Local full quality gate passed all 123 test files with one Windows-only skip;
+Linux CI passed 793/793 tests without skips and built/linted both APKs.
+The documentation audit passed for 248 Markdown files. Child APK `1.15` / code `16`
+was built but not installed on the parent phone; its JVM task reports `NO-SOURCE`.
+Earlier evidence and remaining release checks are kept in the
+[live-router runbook](live-router-testing.ru.md#обновление-и-проверки-31082026).
+Router writes, camera pairing, Doze, biometrics, API 28/35 and relay E2E remain separate gates.
+Permanent OpenWrt release signing keys are not yet configured; the test install does not
+replace that release requirement. No public release was published.
 See the
 [parent runtime runbook](android-test-lab.ru.md#рабочие-панели-родительского-приложения).
 

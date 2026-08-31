@@ -112,6 +112,14 @@ OPENWRT_IPK_SIGNING_KEY
 OPENWRT_APK_PRIVATE_KEY
 ```
 
+На 31.08.2026 проверка `gh secret list --json name,updatedAt` вернула пустой список
+repository secrets. Поэтому успешная текущая SDK-сборка не доказывает постоянную
+подпись проекта. Повторять эту проверку перед релизом, не запрашивая и не выводя
+значения ключей. `apk verify --allow-untrusted` подтверждает целостность контейнера,
+но не доверие к ключу издателя. Установка exact-commit артефакта через тестовый
+harness с `--allow-untrusted` не меняет доверенные ключи системы и не является
+готовой политикой распространения стабильных релизов.
+
 Добавление: `Settings → Secrets and variables → Actions → New repository
 secret`. Первый секрет передаётся только сборке IPK как `KEY_BUILD`, второй —
 только OpenWrt APK как `PRIVATE_KEY`. Секреты нельзя печатать в лог, помещать в
