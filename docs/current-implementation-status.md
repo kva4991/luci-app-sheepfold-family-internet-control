@@ -2,36 +2,44 @@
 
 General inventory checked: 2026-08-26. Focused changes and merge review: 2026-08-31.
 
-Additional local work after the merge (2026-08-31): the parent app now has a manual APK
+Changes delivered to `main` in `821a6bb` (2026-08-31): the parent app now has a manual APK
 update section in Information, with bounded GitHub downloads, digest/package/version/signature
 checks and Android installer confirmation. The parent-device view replaces the administrator
 list, using the new optional `/devices.adminLogin` projection for ownership.
 Parent debug APK `0.1.57` / code `58` is installed on the physical API 30 phone with
 the previous signing certificate and data preserved. All 5 paired read-only integration
 tests passed, including the nine production panels and unchanged saved bearer.
-The router remains on `r284` without `adminLogin`; the owner authorized commit/push and
-an official GitHub SDK build of `r285` for a backed-up test-router upgrade.
-Installation and post-upgrade results are still pending. Parent build and Lint passed;
+Standard `0.1.0-r285` is installed on the test Cudy WR3000S v1 / OpenWrt 25.12.5
+from the exact-commit official SDK build. All 13 router checks, five paired phone tests
+and LuCI desktop/mobile checks passed. Network/TLS hashes are unchanged; both admin
+devices expose a valid owner login, and ordinary devices expose an empty login.
+LuCI retains the same 124 nonblocking size warnings. Backup and build evidence:
+[r285 deployment record](live-router-testing.ru.md#обновление-r285-31082026).
+Parent build and Lint passed;
 102 JVM tests, 166 Android/API category checks and 13 API 28 emulator component tests passed.
 Lint reports 0 errors and 84 warnings; one new advisory concerns conservative usable-space checking.
+The full local quality gate passed all 123 Node test files: 794 passed, two Windows
+`flock` cases skipped. [Linux CI](https://github.com/kva4991/luci-app-sheepfold-family-internet-control/actions/runs/33389723848)
+passed 796/796 without skips and built/linted both Android apps. The full documentation
+audit passed for 250 Markdown files.
 Public parent release assets are absent, so a production-to-production APK update
 has not been tested. See [the update runbook](android-app-updates.ru.md).
 
-Later local-only control refresh polish (2026-08-31): the spinner stays inside the disabled
+Subsequent control refresh polish (2026-08-31): the spinner stays inside the disabled
 refresh button, without moving the internet commands, and repeated refreshes are rejected
 before recomposition. Build/Lint, 102 JVM tests, 15 focused Node checks and all 9
 `ParentControlsTest` cases on API 35 passed; the synthetic screenshot was reviewed.
 This subsequent UI change is not installed on the physical phone.
 
-Focused parent Android verification (2026-08-31, `gemini_v1`): unknown control state disables
+Earlier merge checkpoint (2026-08-31, `gemini_v1`): unknown control state disables
 both commands; RAM-only workspace drafts survive Activity recreation and retain their original
 revision; Wi-Fi saves require a disconnect warning; notification events precede settings;
 schedules have a weekly rule preview. Shared device cards hide technical details and expose
 seven filter choices. Personal devices include wearables, which also have a narrower filter.
-The same-key parent debug APK `0.1.56` / code `57` is installed without clearing pairing
+The same-key parent debug APK `0.1.56` / code `57` was installed without clearing pairing
 or settings. Its repeated API 30 run passed 48/48 component/menu/preview tests and all
 87 parent JVM tests. Standard `0.1.0-r284` from exact-commit official SDK build `32ffa90`
-is installed on the test Cudy WR3000S v1 / OpenWrt 25.12.5. Post-upgrade checks passed:
+was installed on the test Cudy WR3000S v1 / OpenWrt 25.12.5. Post-upgrade checks passed:
 13 router read-only checks, 9 paired phone/router checks and LuCI desktop/mobile.
 Network config hashes are unchanged. LuCI retains 124 nonblocking size warnings;
 two additional reports measure the new beta checkbox input rather than its enclosing label.
