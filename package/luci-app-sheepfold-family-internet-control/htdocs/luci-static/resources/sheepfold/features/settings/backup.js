@@ -239,6 +239,13 @@ function prepareRestore(importedPayload, currentPayload) {
 	global = namedSection(restored, 'global', 'sheepfold');
 	global.options[routerIdOption] = currentId;
 	removeTransientOptions(restored);
+	// Согласие на вход с другой сети не переносим резервной копией, даже на тот же роутер
+	restored.configs.sheepfold.forEach(function (section) {
+		if (section.name === 'home_network_global' || section.type === 'home_network') {
+			section.options.enabled = '0';
+			delete section.options.fingerprint;
+		}
+	});
 	routerTransfer = !sourceId || sourceId !== currentId;
 
 	if (routerTransfer) {

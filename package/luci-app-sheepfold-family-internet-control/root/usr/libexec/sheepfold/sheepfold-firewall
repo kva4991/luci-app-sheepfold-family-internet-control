@@ -14,6 +14,7 @@ STATE_HASH="$STATE_DIR/state.hash"
 FIREWALL_LOCK="${SHEEPFOLD_FIREWALL_LOCK:-/tmp/sheepfold/firewall-sync.flock}"
 SCHEDULE_EVALUATOR="${SHEEPFOLD_SCHEDULE_EVALUATOR:-/usr/libexec/sheepfold/sheepfold-schedule-evaluator}"
 DOMAIN_POLICY_ACTIVE="${SHEEPFOLD_DOMAIN_POLICY_ACTIVE:-/tmp/sheepfold/domain-policy/active}"
+HOME_NETWORK="${SHEEPFOLD_HOME_NETWORK:-/usr/libexec/sheepfold/sheepfold-home-network}"
 
 normalize_mac() {
         printf '%s' "${1:-}" | tr 'a-z' 'A-Z'
@@ -105,6 +106,7 @@ collect_lan_interfaces() {
 
 sets_available() {
         command -v nft >/dev/null 2>&1 || return 1
+        nft list chain inet fw4 sheepfold_home_input >/dev/null 2>&1 &&
         nft list set inet fw4 sheepfold_block_macs >/dev/null 2>&1 &&
         nft list set inet fw4 sheepfold_management_block_macs >/dev/null 2>&1 &&
         nft list set inet fw4 sheepfold_restricted_macs >/dev/null 2>&1 &&
@@ -128,7 +130,7 @@ ensure_sets() {
         # Используем штатную пересборку fw4 только когда package drop-in ещё не загружен.
         # Обычная синхронизация меняет лишь элементы Sheepfold sets и не трогает Podkop marks/table. §v7x2k9p
         [ -x /etc/init.d/firewall ] || return 1
-        /etc/init.d/firewall reload >/dev/null 2>&1 || return 1
+        SHEEPFOLD_FIREWALL_RELOADING=1 /etc/init.d/firewall reload >/dev/null 2>&1 || return 1
         sets_available
 }
 
@@ -347,6 +349,7 @@ collect_state() {
 
 sync_sets() {
         local reset_domain_ips="${1:-0}"
+        local force_sync="${2:-0}" home_rules
         mkdir -p "$STATE_DIR"
         chmod 700 "$STATE_DIR" 2>/dev/null || true
 
@@ -390,10 +393,14 @@ sync_sets() {
                 return 1
         fi
 
-	current_hash="$(state_input "$block_file" "$management_block_file" "$restricted_file" "$exempt_file" "$global_iface_file" "$emergency_mac_file" \
-		"$site_allow_mac_file" "$site_block_exempt_file" "$site_filter_iface_file" | sheepfold_state_hash_stdin)"
+        home_rules='flush chain inet fw4 sheepfold_home_input'
+        if [ -x "$HOME_NETWORK" ]; then
+                home_rules="$("$HOME_NETWORK" rules)" || home_rules='flush chain inet fw4 sheepfold_home_input'
+        fi
+	current_hash="$( { state_input "$block_file" "$management_block_file" "$restricted_file" "$exempt_file" "$global_iface_file" "$emergency_mac_file" \
+		"$site_allow_mac_file" "$site_block_exempt_file" "$site_filter_iface_file"; printf '%s\n' "$home_rules"; } | sheepfold_state_hash_stdin)"
         previous_hash="$(cat "$STATE_HASH" 2>/dev/null || true)"
-        if [ "$reset_domain_ips" != 1 ] && [ "$current_hash" = "$previous_hash" ] && sets_available; then
+        if [ "$force_sync" != 1 ] && [ "$reset_domain_ips" != 1 ] && [ "$current_hash" = "$previous_hash" ] && sets_available; then
                 refresh_empty_emergency_sets
                 return 0
         fi
@@ -430,6 +437,8 @@ sync_sets() {
                 write_add_command mac sheepfold_site_allow_macs "$site_allow_mac_file"
                 write_add_command mac sheepfold_site_block_exempt_macs "$site_block_exempt_file"
                 write_add_command ifname sheepfold_site_filter_ifaces "$site_filter_iface_file"
+                # Допуск API и запреты управления применяются одной атомарной транзакцией
+                printf '%s\n' "$home_rules"
         } > "$batch"
 
         nft -f "$batch" || return 1
@@ -444,6 +453,7 @@ sync_sets() {
 
 clear_sets() {
         sets_available || return 0
+        nft flush chain inet fw4 sheepfold_home_input
         nft flush set inet fw4 sheepfold_block_macs
         nft flush set inet fw4 sheepfold_management_block_macs
         nft flush set inet fw4 sheepfold_restricted_macs
@@ -485,6 +495,7 @@ status() {
 run_command() {
         case "$COMMAND" in
                 ensure|sync) sync_sets ;;
+                home-refresh) sync_sets 0 1 ;;
                 domain-reset) reset_domain_sets ;;
                 clear) clear_sets ;;
                 status) status ;;

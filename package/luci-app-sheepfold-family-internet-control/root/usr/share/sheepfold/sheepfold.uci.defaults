@@ -349,3 +349,6 @@ config pairing 'pairing_global'
         option consume_token_on_success '1'
         option max_attempts '10'
         option attempt_window_seconds '600'
+
+config home_network 'home_network_global'
+        option enabled '0'

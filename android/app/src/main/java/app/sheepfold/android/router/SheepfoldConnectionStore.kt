@@ -14,7 +14,9 @@ object SheepfoldConnectionStore {
     private const val legacyBearerTokenKey = "administratorBearerToken"
     private const val googleAccountKey = "googleAccount"
     private const val pairingLossKey = "routerPairingLoss"
+    private const val homeEndpointsKey = "routerHomeEndpoints"
 
+    @Synchronized
     fun save(context: Context, request: RouterConnectionRequest) {
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
             .edit()
@@ -27,11 +29,13 @@ object SheepfoldConnectionStore {
             .putString(tlsSpkiKey, request.tlsSpkiSha256.orEmpty())
             .remove(legacyBearerTokenKey)
             .remove(pairingLossKey)
+            .remove(homeEndpointsKey)
             .apply()
         request.tlsPinSha256?.let { RouterTlsPin.save(context, it) }
         SecureSecretStore.write(context, request.bearerToken)
     }
 
+    @Synchronized
     fun read(context: Context): RouterConnectionRequest? {
         val preferences = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val apiUrl = preferences.getString(apiUrlKey, "").orEmpty()
@@ -66,12 +70,37 @@ object SheepfoldConnectionStore {
 
     fun hasConnection(context: Context): Boolean = hasConnection(read(context))
 
-    fun updateApiUrl(context: Context, apiUrl: String) {
+    @Synchronized
+    fun updateApiUrl(context: Context, apiUrl: String, expected: RouterConnectionRequest) {
+        if (!sameSession(read(context), expected)) return
+        if (read(context)?.apiUrl == apiUrl) return
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
             .edit()
             .putString(apiUrlKey, apiUrl)
             .apply()
     }
+
+    @Synchronized
+    fun homeEndpoints(context: Context, expected: RouterConnectionRequest): List<String> {
+        if (!sameSession(read(context), expected)) return emptyList()
+        return HomeRouterEndpoints.parse(context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+            .getString(homeEndpointsKey, null)).orEmpty()
+    }
+
+    @Synchronized
+    fun rememberHomeEndpoints(context: Context, expected: RouterConnectionRequest, header: String?) {
+        val endpoints = HomeRouterEndpoints.parse(header) ?: return
+        if (!sameSession(read(context), expected)) return
+        val preferences = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val value = endpoints.joinToString(",")
+        if (preferences.getString(homeEndpointsKey, null) != value)
+            preferences.edit().putString(homeEndpointsKey, value).apply()
+    }
+
+    private fun sameSession(current: RouterConnectionRequest?, expected: RouterConnectionRequest): Boolean =
+        current != null && !expected.bearerToken.isNullOrBlank() &&
+            current.bearerToken == expected.bearerToken && current.deviceId == expected.deviceId &&
+            current.tlsPinSha256 == expected.tlsPinSha256 && current.tlsSpkiSha256 == expected.tlsSpkiSha256
 
     fun clear(context: Context) {
         clearConnection(context)
@@ -98,10 +127,12 @@ object SheepfoldConnectionStore {
         return reason
     }
 
+    @Synchronized
     private fun clearConnection(context: Context) {
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
             .edit()
             .remove(apiUrlKey)
+            .remove(homeEndpointsKey)
             .remove(routerNameKey)
             .remove(adminLoginKey)
             .remove(deviceIdKey)

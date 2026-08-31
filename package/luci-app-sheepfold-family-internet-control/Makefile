@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=285
+PKG_RELEASE:=286
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -281,6 +281,14 @@ fi
 ensure_global_option log_retention '3d'
 ensure_global_option offline_device_retention_days '90'
 ensure_global_option app_port '5201'
+uci -q get sheepfold.home_network_global >/dev/null || uci -q set sheepfold.home_network_global='home_network'
+[ -n "$$(uci -q get sheepfold.home_network_global.enabled)" ] || uci -q set sheepfold.home_network_global.enabled='0'
+# fw4 выполняет include после сборки правил; helper не делает рекурсивный reload
+uci -q set firewall.sheepfold_home_network='include'
+uci -q set firewall.sheepfold_home_network.type='script'
+uci -q set firewall.sheepfold_home_network.path='/usr/libexec/sheepfold/sheepfold-home-firewall'
+uci -q set firewall.sheepfold_home_network.fw4_compatible='1'
+uci commit firewall
 ensure_global_option pairing_diagnostics '0'
 ensure_global_option feedback_endpoint ''
 ensure_global_option feedback_install_id ''
@@ -557,6 +565,7 @@ done
 	/usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || true
 for helper in \
 	/etc/hotplug.d/dhcp/90-sheepfold-device-signals \
+	/etc/hotplug.d/iface/90-sheepfold-home-network \
 	/www/.well-known/sheepfold.json.sh \
 	/www/cgi-bin/sheepfold-api \
 	/www/cgi-bin/sheepfold-blocked \
@@ -614,6 +623,10 @@ endef
 define Package/$(PKG_NAME)/prerm
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
+[ -x /usr/libexec/sheepfold/sheepfold-home-network ] && \
+	/usr/libexec/sheepfold/sheepfold-home-network stop >/dev/null 2>&1 || true
+uci -q delete firewall.sheepfold_home_network || true
+uci commit firewall
 [ -x /usr/libexec/sheepfold/sheepfold-site-lists ] && \
 	/usr/libexec/sheepfold/sheepfold-site-lists cron-remove >/dev/null 2>&1 || true
 [ -x /usr/libexec/sheepfold/sheepfold-domain-policy ] && \

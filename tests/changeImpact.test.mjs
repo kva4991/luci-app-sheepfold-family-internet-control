@@ -34,6 +34,21 @@ describe('change impact advisor §impact1', () => {
     assert.ok(recommendedCommands(report).manual.includes('npm.cmd run router:readOnly'));
   });
 
+  it('keeps isolated home-network helper edits on the critical network boundary', () => {
+    for (const path of [
+      'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-home-network',
+      'package/luci-app-sheepfold-family-internet-control/root/etc/hotplug.d/iface/90-sheepfold-home-network',
+      'android/app/src/main/java/app/sheepfold/android/router/HomeRouterEndpoints.kt',
+    ]) {
+      const report = inspectChanges([path]);
+      assert.deepEqual(report.unknown, []);
+      assert.equal(report.risk, 'critical');
+      assert.equal(report.fullTest, true);
+      assert.ok(report.categories.includes('networkIntegration'));
+      assert.ok(recommendedCommands(report).manual.includes('npm.cmd run router:fullSafe'));
+    }
+  });
+
   it('combines overlapping device frontend and access areas without duplicate categories', () => {
     const report = inspectChanges([
       'package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/devices/editor.js',

@@ -3,6 +3,7 @@
 'require sheepfold.features.settings.fields as settingsFieldsModel';
 'require sheepfold.features.settings.misc as settingsMiscModel';
 'require sheepfold.features.settings.storage as settingsStorageModel';
+'require sheepfold.features.settings.home-network as homeNetworkModel';
 /* SHEEPFOLD_AI_BEGIN */
 'require sheepfold.features.settings.ai as settingsAiModel';
 /* SHEEPFOLD_AI_END */
@@ -210,7 +211,9 @@ function create(deps) {
 			saveFlow.bar(true),
 			panel('info', deps.routerInfo.panel(), active),
 			panel('general', renderGeneral(), active),
-			panel('integrations', deps.integrationPanel.render(integrationUi), active),
+			panel('integrations', [deps.integrationPanel.render(integrationUi), homeNetworkModel.render({
+				run: deps.run, icon: deps.icon, registerSaver: deps.draft.registerSaver, changed: updateSaveButtons
+			})], active),
 			panel('messenger', renderBot(), active),
 			panel('notifications', renderNotifications(), active),
 			panel('emergency', deps.emergency.render(), active),

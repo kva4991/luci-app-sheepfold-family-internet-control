@@ -10,6 +10,7 @@ AI_HANDLER="/usr/libexec/sheepfold/sheepfold-ai-handler"
 # SHEEPFOLD_AI_END
 RATE_LIMIT="/usr/libexec/sheepfold/sheepfold-api-rate-limit"
 TOKEN_COMMON="/usr/libexec/sheepfold/sheepfold-token-common"
+HOME_NETWORK="/usr/libexec/sheepfold/sheepfold-home-network"
 ACCESS_REQUEST="/usr/libexec/sheepfold/sheepfold-access-request"
 ADMIN_NOTIFICATION="/usr/libexec/sheepfold/sheepfold-admin-notification"
 SIM_MONITOR="/usr/libexec/sheepfold/sheepfold-sim-monitor"
@@ -25,6 +26,18 @@ client_ip="${REMOTE_ADDR:-unknown}"
     exit 0
 }
 . "$TOKEN_COMMON"
+
+request_source_checked=0
+ensure_request_source() {
+    [ "$request_source_checked" = 0 ] || return 0
+    # Проверяем источник каждого запроса, включая уже открытое TCP-соединение
+    if ! "$HOME_NETWORK" check-request "$client_ip" "$path_info"; then
+        header_json "403 Forbidden"
+        printf '{"app":"sheepfold","ok":false,"error":"home_network_not_allowed"}\n'
+        exit 0
+    fi
+    request_source_checked=1
+}
 
 header_json() {
     printf 'Status: %s\r\n' "$1"
@@ -49,11 +62,14 @@ enforce_rate_limit() {
     bucket="$1"
     limit="$2"
     window="$3"
-    [ -x "$RATE_LIMIT" ] || return 0
-    "$RATE_LIMIT" check "$bucket" "$client_ip" "$limit" "$window" || rate_limit_exceeded
+    if [ -x "$RATE_LIMIT" ]; then
+        "$RATE_LIMIT" check "$bucket" "$client_ip" "$limit" "$window" || rate_limit_exceeded
+    fi
+    ensure_request_source
 }
 
 require_admin() {
+    ensure_request_source
     bearer=""
     case "${HTTP_AUTHORIZATION:-}" in [Bb]earer\ *) bearer="${HTTP_AUTHORIZATION#* }" ;; esac
     if [ -z "$bearer" ]; then
@@ -95,6 +111,9 @@ require_admin() {
     export SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN
     export SHEEPFOLD_AUTHENTICATED_ADMIN_DEVICE_ID
     export SHEEPFOLD_AUTHENTICATED_ADMIN_MAC
+    # Адреса не содержат credential; APK запоминает их только после pinned HTTPS и успешного ответа
+    home_endpoints="$("$HOME_NETWORK" endpoints 2>/dev/null || true)"
+    [ -z "$home_endpoints" ] || printf 'X-Sheepfold-Home-Endpoints: %s\r\n' "$home_endpoints"
 }
 
 run_legacy() {
@@ -208,6 +227,18 @@ if [ "$method" = "OPTIONS" ]; then
 fi
 
 case "$path_info" in
+    /devices)
+        [ "$method" = "GET" ] || method_not_allowed
+        enforce_rate_limit admin_read 120 60
+        require_admin
+        run_legacy
+        ;;
+    /device/allow|/device/block|/device/temp-access|/global-block)
+        [ "$method" = "POST" ] || method_not_allowed
+        enforce_rate_limit admin_write 30 300
+        require_admin
+        run_legacy
+        ;;
     /ping)
         [ "$method" = "GET" ] || method_not_allowed
         # Discovery имеет свой небольшой лимит. Иначе проверка APK попадает в

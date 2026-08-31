@@ -1,0 +1,5 @@
+#!/bin/sh
+# Смена адреса/шлюза снимает допуск; тяжёлые службы и маршруты не перезапускаются
+[ "${INTERFACE:-}" = wan ] || exit 0
+[ -x /usr/libexec/sheepfold/sheepfold-home-network ] || exit 0
+/usr/libexec/sheepfold/sheepfold-home-network refresh

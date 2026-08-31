@@ -445,7 +445,8 @@
           "place": "Вкладка информации в Android и настройках LuCI",
           "files": [
             "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
-            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js"
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/navigation/state.js",
+            "package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/sheepfold/features/settings/home-network.js"
           ]
         }
       ]

@@ -4984,3 +4984,42 @@ msgstr "Вне бетатеста задаёт период проверки о�
 
 msgid "Invalid beta testing setting."
 msgstr "Некорректное значение настройки участия в бетатесте."
+
+msgid "Loading home network..."
+msgstr "Проверяем домашнюю сеть..."
+
+msgid "Parent app in the main home network"
+msgstr "Родительское приложение в основной домашней сети"
+
+msgid "Allow access from the main home network"
+msgstr "Доступ из основной домашней сети"
+
+msgid "Connection details"
+msgstr "О подключении"
+
+msgid "Enable this only when the WAN cable connects Sheepfold to your own main router. This permits only the parent app API from the displayed network, not LuCI or SSH. The main router and internet rules are not changed."
+msgstr "Включайте только если WAN-кабель соединяет Sheepfold с вашим основным домашним роутером. Разрешается только подключение родительского приложения из показанной сети, без LuCI и SSH. Настройки главного роутера и правила интернета не меняются."
+
+msgid "First open the paired app on Sheepfold Wi-Fi to save both addresses. Use the same phone MAC on both home networks. If the upstream address or gateway changes, confirm the network here again."
+msgstr "Сначала откройте привязанное приложение через Wi-Fi Sheepfold: оно запомнит оба адреса. На обеих домашних сетях используйте MAC устройства, а не случайный MAC. Если адрес Sheepfold в основной сети или шлюз изменится, подтвердите сеть здесь заново."
+
+msgid "Allow the displayed home network"
+msgstr "Разрешить показанную домашнюю сеть"
+
+msgid "Network changed: confirmation required"
+msgstr "Сеть изменилась: требуется подтверждение"
+
+msgid "Sheepfold address"
+msgstr "Адрес Sheepfold"
+
+msgid "Main router"
+msgstr "Главный роутер"
+
+msgid "A directly connected private IPv4 home network was not found. Access stays closed."
+msgstr "Не найдена напрямую подключённая домашняя IPv4-сеть. Доступ остаётся закрытым."
+
+msgid "Could not confirm the home network. Reload settings and try again."
+msgstr "Не удалось подтвердить домашнюю сеть. Откройте настройки заново и повторите."
+
+msgid "Could not read the home network. Reload settings."
+msgstr "Не удалось проверить домашнюю сеть. Откройте настройки заново."

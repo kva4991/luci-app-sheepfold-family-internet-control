@@ -260,7 +260,12 @@ https://<router-host>:5201/api/v1/ping
 
 `/cgi-bin/sheepfold-api` сейчас используется как ранний lightweight endpoint. Боевой вариант должен постепенно перейти к `/.well-known/sheepfold.json` и `/api/v1/ping`.
 
-Целевой доступ через несколько домашних роутеров описан в [`home-network-access.ru.md`](home-network-access.ru.md). Он не означает открытие API в интернет: дополнительный endpoint публикуется только для явно доверенного локального сегмента, а Android принимает его после SPKI-проверки (§homen01).
+Домашний доступ v1 описан в [`home-network-access.ru.md`](home-network-access.ru.md).
+После аутентификации dispatcher добавляет заголовок `X-Sheepfold-Home-Endpoints` с CSV
+из первого IPv4 LAN и разрешённого прямого WAN API URL. Старые клиенты игнорируют его;
+старые роутеры могут не выдавать его. Parent APK сохраняет список только после успешного
+ответа и SPKI-проверки. `403 home_network_not_allowed` означает запрет сетевого источника,
+не отзыв токена. Child API на дополнительной сети закрыт; публичный WAN не открывается (§homen01).
 
 ## Формат
 

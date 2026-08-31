@@ -1,0 +1,224 @@
+#!/bin/sh
+# Только прямой домашний WAN-сегмент, подтверждённый владельцем; не VPN и не NAT relay
+# jshn использует unset-переменные; входы ниже проверяются явно, без shell nounset
+set -e
+
+STATE=/tmp/sheepfold/home-network
+ROOT=/tmp/sheepfold/api-www
+SECTION=sheepfold.home_network_global
+. /usr/share/libubox/jshn.sh
+
+valid_ipv4() {
+    printf '%s\n' "$1" | awk -F. 'NF != 4 { exit 1 } { for (i=1;i<=4;i++) if ($i !~ /^[0-9]+$/ || $i>255 || (length($i)>1 && substr($i,1,1)=="0")) exit 1 }'
+}
+
+private_ipv4() {
+    valid_ipv4 "$1" || return 1
+    printf '%s\n' "$1" | awk -F. '{ exit !( $1==10 || ($1==172 && $2>=16 && $2<=31) || ($1==192 && $2==168) ) }'
+}
+
+same_subnet() {
+    valid_ipv4 "$1" && valid_ipv4 "$2" || return 1
+    case "$3" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$3" -ge 1 ] && [ "$3" -le 30 ] || return 1
+    awk -v a="$1" -v b="$2" -v p="$3" 'function n(ip, v) { split(ip,v,"."); return ((v[1]*256+v[2])*256+v[3])*256+v[4] } BEGIN { s=2^(32-p); exit !(int(n(a)/s)==int(n(b)/s)) }'
+}
+
+valid_device() { printf '%s\n' "$1" | grep -Eq '^[a-zA-Z0-9_.:-]{1,15}$'; }
+valid_mac() { printf '%s\n' "$1" | grep -Eq '^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$'; }
+
+neighbor_mac() {
+    ip -4 neigh show to "$1" dev "$2" 2>/dev/null | awk '
+        /FAILED|INCOMPLETE/ { next }
+        { for (i=1;i<NF;i++) if ($i=="lladdr") { print tolower($(i+1)); exit } }'
+}
+
+read_candidate() {
+    local status up proto routes route target mask nexthop
+    status="$(ubus call network.interface.wan status 2>/dev/null)" || return 1
+    json_load "$status" || return 1
+    json_get_var up up; json_get_var proto proto; json_get_var device l3_device
+    [ "$up" = 1 ] || return 1
+    case "$proto" in dhcp|static) ;; *) return 1 ;; esac
+    valid_device "$device" || return 1
+    json_select 'ipv4-address' && json_select 1 || return 1
+    json_get_var address address; json_get_var prefix mask
+    private_ipv4 "$address" || return 1
+    case "$prefix" in ''|*[!0-9]*) return 1 ;; esac
+    # Весь подтверждённый диапазон должен оставаться внутри RFC1918
+    case "$address" in 10.*) [ "$prefix" -ge 8 ] ;; 172.*) [ "$prefix" -ge 12 ] ;; *) [ "$prefix" -ge 16 ] ;; esac || return 1
+    [ "$prefix" -le 30 ] || return 1
+    json_select ..; json_select ..
+    json_select route || return 1
+    json_get_keys routes
+    gateway=''
+    for route in $routes; do
+        json_select "$route"
+        json_get_var target target; json_get_var mask mask; json_get_var nexthop nexthop
+        json_select ..
+        if [ "$target" = 0.0.0.0 ] && [ "$mask" = 0 ]; then gateway="$nexthop"; break; fi
+    done
+    private_ipv4 "$gateway" && same_subnet "$address" "$gateway" "$prefix" || return 1
+    gateway_mac="$(neighbor_mac "$gateway" "$device")"
+    valid_mac "$gateway_mac" || return 1
+    candidate="$(printf 'wan|%s|%s/%s|%s|%s' "$device" "$address" "$prefix" "$gateway" "$gateway_mac" | sha256sum | awk '{print $1}')"
+}
+
+trusted_candidate() {
+    [ "$(uci -q get "$SECTION" 2>/dev/null || true)" = home_network ] || return 1
+    [ "$(uci -q get "$SECTION.enabled" 2>/dev/null || true)" = 1 ] || return 1
+    read_candidate || return 1
+    [ "$candidate" = "$(uci -q get "$SECTION.fingerprint" 2>/dev/null || true)" ]
+}
+
+lan_addresses() {
+    local status
+    status="$(ubus call network.interface.lan status 2>/dev/null)" || return 0
+    printf '%s' "$status" | jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null || true
+}
+
+source_is_lan() {
+    local route route_device zone network zone_name networks iface
+    [ "$1" = 127.0.0.1 ] && return 0
+    valid_ipv4 "$1" || return 1
+    route="$(ip -4 route get "$1" 2>/dev/null)" || return 1
+    route_device="$(printf '%s\n' "$route" | awk '{for(i=1;i<NF;i++) if($i=="dev") {print $(i+1); exit}}')"
+    [ -n "$route_device" ] || return 1
+    for zone in $(uci -q show firewall | sed -n 's/^firewall\.\([^.=]*\)=zone$/\1/p'); do
+        zone_name="$(uci -q get "firewall.$zone.name" || true)"
+        case " $(uci -q get sheepfold.global.lan_firewall_zones || printf lan) " in *" $zone_name "*) ;; *) continue ;; esac
+        networks="$(uci -q get "firewall.$zone.network" || true)"
+        for network in $networks; do
+            iface="$(ubus call "network.interface.$network" status 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null || true)"
+            [ "$iface" = "$route_device" ] && return 0
+        done
+    done
+    return 1
+}
+
+check_request() {
+    local source="$1" path="$2" observed
+    source_is_lan "$source" && return 0
+    [ -f "$STATE/running" ] && trusted_candidate || return 1
+    same_subnet "$source" "$address" "$prefix" || return 1
+    [ "$source" != "$gateway" ] && [ "$source" != "$address" ] || return 1
+    observed="$(neighbor_mac "$source" "$device")"
+    valid_mac "$observed" && [ "$observed" != "$gateway_mac" ] || return 1
+    # Выдача нового credential остаётся в основной LAN; v1 расширяет только работу уже привязанного APK
+    case "$path" in
+        ''|/ping|/devices|/router-info|/pair-status|/log|/log/clear|/notifications|/access-requests|/child-wifi-networks|\
+        /device/allow|/device/block|/device/temp-access|/global-block|/feedback|/support-report|/support-report/config|\
+        /admin-config|/admin-config/*|/api/v1/admin-config|/api/v1/admin-config/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+endpoints() {
+    local port address_list endpoint first=1
+    port="$(uci -q get sheepfold.global.app_port 2>/dev/null || printf 5201)"
+    case "$port" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || return 1
+    address_list="$(lan_addresses)"
+    if [ -f "$STATE/running" ] && trusted_candidate; then address_list="$address_list $address"; fi
+    for endpoint in $address_list; do
+        private_ipv4 "$endpoint" || continue
+        [ "$first" = 1 ] || printf ','
+        printf 'https://%s:%s/cgi-bin/sheepfold-api' "$endpoint" "$port"
+        first=0
+    done
+}
+
+firewall_rules() {
+    local port batch
+    # Правило живёт только в принадлежащей Sheepfold цепочке, после запрета управления
+    batch='flush chain inet fw4 sheepfold_home_input'
+    if [ -f "$STATE/running" ] && trusted_candidate; then
+        port="$(uci -q get sheepfold.global.app_port 2>/dev/null || printf 5201)"
+        case "$port" in ''|*[!0-9]*) port=0 ;; esac
+        if [ "$port" -ge 1 ] && [ "$port" -le 65535 ]; then
+            batch="$batch
+add rule inet fw4 sheepfold_home_input iifname \"$device\" ip saddr $address/$prefix ip daddr $address tcp dport $port counter accept comment \"Sheepfold trusted home API\""
+        fi
+    fi
+    printf '%s\n' "$batch"
+}
+
+firewall_refresh() {
+    /usr/libexec/sheepfold/sheepfold-firewall home-refresh
+}
+
+status_json() {
+    local enabled state=unavailable
+    enabled="$(uci -q get "$SECTION.enabled" 2>/dev/null || printf 0)"
+    address=''; prefix=''; gateway=''; candidate=''
+    if read_candidate; then
+        state=available
+        if [ "$enabled" = 1 ]; then
+            state=changed
+            [ "$candidate" != "$(uci -q get "$SECTION.fingerprint" 2>/dev/null || true)" ] || state=trusted
+        fi
+    fi
+    json_init
+    json_add_string state "$state"; json_add_boolean enabled "$enabled"
+    json_add_string address "$address"; json_add_string prefix "$prefix"
+    json_add_string gateway "$gateway"; json_add_string candidate "$candidate"
+    json_dump
+}
+
+configure() {
+    local choice="$1" confirmation="$2" kind
+    kind="$(uci -q get "$SECTION" 2>/dev/null || true)"
+    case "$kind" in ''|home_network) ;; *) return 1 ;; esac
+    case "$choice" in
+        0) ;;
+        1)
+            read_candidate && [ "$confirmation" = "$candidate" ] || { echo 'Home network changed; reload settings before confirming.' >&2; return 1; }
+            ;;
+        *) return 1 ;;
+    esac
+    delta="$(mktemp -d "$STATE/config.XXXXXX")" || return 1
+    trap 'rm -rf "$delta"' EXIT HUP INT TERM
+    # Не подхватываем чужую очередь UCI; меняем только два поля собственного раздела
+    uci -t "$delta" -p "$delta" -q set "$SECTION=home_network"
+    uci -t "$delta" -p "$delta" -q set "$SECTION.enabled=$choice"
+    if [ "$choice" = 1 ]; then
+        uci -t "$delta" -p "$delta" -q set "$SECTION.fingerprint=$candidate"
+    else
+        uci -t "$delta" -p "$delta" -q delete "$SECTION.fingerprint" || true
+    fi
+    uci -t "$delta" -p "$delta" commit sheepfold
+    if ! firewall_refresh; then
+        uci -t "$delta" -p "$delta" -q set "$SECTION.enabled=0"
+        uci -t "$delta" -p "$delta" commit sheepfold
+        return 1
+    fi
+    rm -rf "$delta"
+    trap - EXIT HUP INT TERM
+    logger -t sheepfold "Home network API access enabled=$choice (LuCI)"
+    status_json
+}
+
+case "${1:-status}" in
+    status) status_json ;;
+    configure)
+        mkdir -p "$STATE" /var/lock
+        (flock -x -w 5 8 || exit 1; configure "${2:-}" "${3:-}") 8>/var/lock/sheepfold-admin-config.flock
+        ;;
+    check-request) check_request "${2:-}" "${3:-}" ;;
+    endpoints) endpoints ;;
+    refresh) firewall_refresh ;;
+    rules) firewall_rules ;;
+    start)
+        mkdir -p "$STATE" "$ROOT/cgi-bin" "$ROOT/.well-known"
+        # В root нет LuCI, lua/ubus endpoint, directory listing или произвольных CGI
+        ln -sf /www/cgi-bin/sheepfold-api "$ROOT/cgi-bin/sheepfold-api"
+        ln -sf /www/.well-known/sheepfold.json "$ROOT/.well-known/sheepfold.json"
+        touch "$STATE/running"
+        "$0" refresh
+        ;;
+    stop)
+        rm -f "$STATE/running"
+        "$0" refresh
+        ;;
+    *) exit 2 ;;
+esac

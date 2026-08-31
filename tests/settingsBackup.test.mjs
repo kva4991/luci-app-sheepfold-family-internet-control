@@ -173,6 +173,16 @@ describe('settings backup and restore', () => {
     assert.equal(restoredPhone.options.detection_fingerprint, 'stable-classification');
   });
 
+  it('requires fresh home-network consent after any backup restore', () => {
+    const backup = loadBackupModel();
+    const source = sourceSections();
+    source.sheepfold.push({ '.name': 'home_network_global', '.type': 'home_network', enabled: '1', fingerprint: 'a'.repeat(64) });
+    const payload = backup.build(source, true);
+    const restored = backup.prepareRestore(payload, payload).payload.configs.sheepfold.find((section) => section.type === 'home_network');
+    assert.equal(restored.options.enabled, '0');
+    assert.equal(restored.options.fingerprint, undefined);
+  });
+
   it('preserves rules but resets router-bound identity and pairing on a new router', () => {
     const backup = loadBackupModel();
     const importedSections = sourceSections('old-secret', 'a'.repeat(32));

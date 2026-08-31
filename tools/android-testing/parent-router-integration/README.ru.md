@@ -70,6 +70,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$lab\runParentRouterInt
 
 ### Проверенный запуск 30.08.2026
 
+Повтор 31.08.2026 на parent `0.1.60` / code `61` после установки поверх `0.1.59`:
+**9/9 без skips**, `37,829` секунды, тот же ZTE API 30 и router r285.
+Привязка сохранена. Этот проход подтверждает прежнюю LAN-связь; доступ из основной
+домашней сети требует установки r286 и отдельного [живого сценария](../../../docs/home-network-access.ru.md#проверки-v1).
+Отчёт: `C:\Users\User\Documents\pesochnica\sheepfold-parent-router-lab\parent-router-integration\20260831211340`.
+
 Повтор 31.08.2026 после добавления production panel reads: **9/9 без skips**, 36,103 секунды,
 ZTE API 30, `-RequirePairing -SkipBuild` с актуальными APK. Проверены все девять панелей и
 сохранность pairing; записи в UCI не вызывались. Отчёт:

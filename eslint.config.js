@@ -33,6 +33,7 @@ const luciGlobals = {
   groupView: 'readonly',
   iconRegistry: 'readonly',
   integrationPanel: 'readonly',
+  homeNetworkModel: 'readonly',
   logModel: 'readonly',
   logPanelModel: 'readonly',
   navigationState: 'readonly',

@@ -124,16 +124,16 @@ fun ControlTab(
         }
         Button(
             onClick = { onBlock(false) },
-            enabled = !isLoading && globalBlocked != null,
+            enabled = !isLoading && globalBlocked == true,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(108.dp),
-            // Бледное состояние остаётся различимым с контрастом не ниже 3:1. §uicontrast
+            // Цвет обозначает доступную команду, а не текущее состояние интернета §uicontrast
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (globalBlocked == false) Color(0xFF178447) else Color(0xFFB9DCCB),
-                contentColor = if (globalBlocked == false) Color.White else Color(0xFF315B45).copy(alpha = 0.75f),
-                disabledContainerColor = Color(0xFFB9DCCB),
-                disabledContentColor = Color(0xFF315B45).copy(alpha = 0.75f)
+                containerColor = Color(0xFF178447),
+                contentColor = Color.White,
+                disabledContainerColor = Color(0xFFD1D1D1),
+                disabledContentColor = Color(0xFF575757)
             )
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -143,16 +143,16 @@ fun ControlTab(
         }
         Button(
             onClick = { onBlock(true) },
-            enabled = !isLoading && globalBlocked != null,
+            enabled = !isLoading && globalBlocked == false,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(108.dp),
-            // Та же контрастная пара нужна и в светлой, и в тёмной теме. §uicontrast
+            // Неактивные команды имеют одинаковую серую палитру в обеих темах §uicontrast
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (globalBlocked == true) Color(0xFFC62828) else Color(0xFFE8B9B9),
-                contentColor = if (globalBlocked == true) Color.White else Color(0xFF6D3030).copy(alpha = 0.75f),
-                disabledContainerColor = Color(0xFFE8B9B9),
-                disabledContentColor = Color(0xFF6D3030).copy(alpha = 0.75f)
+                containerColor = Color(0xFFC62828),
+                contentColor = Color.White,
+                disabledContainerColor = Color(0xFFD1D1D1),
+                disabledContentColor = Color(0xFF575757)
             )
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

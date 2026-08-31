@@ -1,12 +1,12 @@
 package app.sheepfold.android.router
 
 import android.content.Context
+import android.net.ConnectivityManager
 import app.sheepfold.android.diagnostics.DiagnosticLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.net.ConnectException
-import java.net.NoRouteToHostException
+import java.net.Inet4Address
 import java.net.URL
 import java.net.URLEncoder
 
@@ -374,28 +374,45 @@ class RouterAdminClient(
         path: String,
         form: Map<String, String> = emptyMap()
     ): JSONObject {
-        val firstAttempt = runCatching { requestOnce(activeApiUrl, method, path, form) }
-        if (firstAttempt.isSuccess) return firstAttempt.getOrThrow()
-
-        val firstError = firstAttempt.exceptionOrNull()
-        reportSessionFailure(firstError)?.let { throw it }
-        if (appContext != null && endpointCanBeRecovered(firstError)) {
-            val recoveredApiUrl = RouterEndpointRecovery.discoverAndStore(
-                appContext,
-                connection,
-                activeApiUrl
-            )
-            if (recoveredApiUrl != null) {
-                activeApiUrl = recoveredApiUrl
-                val recoveredAttempt = runCatching { requestOnce(activeApiUrl, method, path, form) }
-                if (recoveredAttempt.isSuccess) return recoveredAttempt.getOrThrow()
-                val recoveredError = recoveredAttempt.exceptionOrNull()
-                reportSessionFailure(recoveredError)?.let { throw it }
-                throw recoveredError ?: IllegalStateException("Роутер недоступен")
+        val candidates = endpointCandidates()
+        var lastError: Throwable = IllegalStateException("Роутер недоступен")
+        for (candidate in candidates) {
+            try {
+                val result = requestOnce(candidate, method, path, form)
+                activeApiUrl = candidate
+                appContext?.let { SheepfoldConnectionStore.updateApiUrl(it, candidate, connection) }
+                return result
+            } catch (error: Exception) {
+                reportSessionFailure(error)?.let { throw it }
+                // После начала записи нельзя знать, применил ли роутер команду до обрыва связи
+                if (!HomeRouterEndpoints.mayRetry(method, error)) throw error
+                lastError = error
             }
         }
+        if (appContext != null && HomeRouterEndpoints.mayRetry(method, lastError)) {
+            val recovered = RouterEndpointRecovery.discover(connection, candidates.first())
+            if (recovered != null && recovered !in candidates) {
+                try {
+                    val result = requestOnce(recovered, method, path, form)
+                    activeApiUrl = recovered
+                    SheepfoldConnectionStore.updateApiUrl(appContext, recovered, connection)
+                    return result
+                } catch (error: Exception) {
+                    reportSessionFailure(error)?.let { throw it }
+                    throw error
+                }
+            }
+        }
+        throw lastError
+    }
 
-        throw firstError ?: IllegalStateException("Роутер недоступен")
+    private fun endpointCandidates(): List<String> {
+        val context = appContext ?: return listOf(activeApiUrl)
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        val subnets = connectivity?.getLinkProperties(connectivity.activeNetwork)?.linkAddresses.orEmpty()
+            .filter { it.address is Inet4Address }
+            .map { it.address.hostAddress.orEmpty() to it.prefixLength }
+        return HomeRouterEndpoints.order(activeApiUrl, SheepfoldConnectionStore.homeEndpoints(context, connection), subnets)
     }
 
     private fun requestOnce(
@@ -462,6 +479,9 @@ class RouterAdminClient(
                 throw RouterHttpException(code, errorCode, friendlyApiMessage(errorCode, serverMessage))
             }
             val result = json ?: throw IllegalStateException("Роутер вернул некорректный JSON")
+            appContext?.let {
+                SheepfoldConnectionStore.rememberHomeEndpoints(it, connection, http.getHeaderField("X-Sheepfold-Home-Endpoints"))
+            }
             DiagnosticLog.info("router.request.completed", "method" to method, "path" to path.substringBefore('?'),
                 "elapsedMs" to (System.nanoTime() - started) / 1_000_000)
             return result
@@ -475,11 +495,6 @@ class RouterAdminClient(
         }
     }
 
-    private fun endpointCanBeRecovered(error: Throwable?): Boolean =
-        error is ConnectException ||
-            error is NoRouteToHostException ||
-            error is RouterHttpException && error.statusCode == 404
-
     private fun reportSessionFailure(error: Throwable?): RouterSessionException? =
         RouterSessionFailure.fromThrowable(error)?.also { failure ->
             appContext?.let { RouterSessionEvents.report(it, failure) }
@@ -488,6 +503,8 @@ class RouterAdminClient(
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())
 
     private fun friendlyApiMessage(errorCode: String, fallback: String): String = when (errorCode) {
+        "home_network_not_allowed" ->
+            "Доступ из этой сети не разрешён. Подключитесь к Wi-Fi Sheepfold или подтвердите домашнюю сеть в настройках роутера."
         "revision_conflict" -> "Настройки изменились на роутере. Обновите экран и повторите действие."
         "config_busy" -> "Роутер уже сохраняет настройки. Повторите действие после обновления."
         "unsupported_schema" -> "Версия API управления не поддерживается. Обновите Sheepfold."
@@ -545,7 +562,7 @@ class RouterAdminClient(
 
 private fun Boolean.flag(): String = if (this) "1" else "0"
 
-private class RouterHttpException(
+internal class RouterHttpException(
     val statusCode: Int,
     val errorCode: String,
     message: String

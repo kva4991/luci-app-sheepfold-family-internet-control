@@ -4266,3 +4266,42 @@ msgstr ""
 
 msgid "Invalid beta testing setting."
 msgstr ""
+
+msgid "Loading home network..."
+msgstr ""
+
+msgid "Parent app in the main home network"
+msgstr ""
+
+msgid "Allow access from the main home network"
+msgstr ""
+
+msgid "Connection details"
+msgstr ""
+
+msgid "Enable this only when the WAN cable connects Sheepfold to your own main router. This permits only the parent app API from the displayed network, not LuCI or SSH. The main router and internet rules are not changed."
+msgstr ""
+
+msgid "First open the paired app on Sheepfold Wi-Fi to save both addresses. Use the same phone MAC on both home networks. If the upstream address or gateway changes, confirm the network here again."
+msgstr ""
+
+msgid "Allow the displayed home network"
+msgstr ""
+
+msgid "Network changed: confirmation required"
+msgstr ""
+
+msgid "Sheepfold address"
+msgstr ""
+
+msgid "Main router"
+msgstr ""
+
+msgid "A directly connected private IPv4 home network was not found. Access stays closed."
+msgstr ""
+
+msgid "Could not confirm the home network. Reload settings and try again."
+msgstr ""
+
+msgid "Could not read the home network. Reload settings."
+msgstr ""

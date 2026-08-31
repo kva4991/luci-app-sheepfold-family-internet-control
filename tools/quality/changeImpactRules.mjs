@@ -187,6 +187,16 @@ export const impactRules = Object.freeze([
     full: true,
   }),
   Object.freeze({
+    id: 'homeNetworkAccess',
+    area: 'Доверенная домашняя сеть родительского APK',
+    pattern: /(?:sheepfold-home-(?:network|firewall)|settings\/home-network\.js$|HomeRouterEndpoints\.kt$|RouterEndpointRecovery\.kt$|SheepfoldConnectionStore\.kt$)/,
+    categories: ['android', 'backendFast', 'luci', 'networkIntegration', 'security'],
+    checks: ['docs', 'lintAndroid', 'routerReadOnly', 'routerFullSafe'],
+    risk: 'critical',
+    review: 'Проверить явное согласие на upstream, root API без LuCI, source/MAC/TLS и отсутствие повторной записи при смене адреса; живой переход Wi-Fi описан в home-network-access.ru.md.',
+    full: true,
+  }),
+  Object.freeze({
     id: 'uciMigration',
     area: 'UCI и миграция',
     pattern: /(?:sheepfold\.uci\.defaults|etc\/uci-defaults|postinst|preinst|uci-config-migration|settings\/save)/,

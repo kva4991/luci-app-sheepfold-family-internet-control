@@ -101,8 +101,12 @@ chain sheepfold_forward_guard {
 	iifname @sheepfold_global_ifaces counter drop comment "Sheepfold global internet block"
 }
 
+chain sheepfold_home_input {
+}
+
 chain sheepfold_input_guard {
 	ether saddr @sheepfold_management_block_macs udp dport { 53, 67, 547 } counter return comment "Sheepfold essential DNS and DHCP"
 	ether saddr @sheepfold_management_block_macs tcp dport 53 counter return comment "Sheepfold essential DNS TCP"
 	ether saddr @sheepfold_management_block_macs counter drop comment "Sheepfold router access block"
+	jump sheepfold_home_input
 }

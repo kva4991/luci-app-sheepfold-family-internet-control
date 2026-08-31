@@ -1,0 +1,5 @@
+#!/bin/sh
+# fw4 script include восстанавливает только проверенный домашний допуск после reload
+# Вложенный reload уже находится под firewall lock; внешний sync закончит транзакцию
+[ "${SHEEPFOLD_FIREWALL_RELOADING:-0}" = 1 ] && exit 0
+exec /usr/libexec/sheepfold/sheepfold-home-network refresh

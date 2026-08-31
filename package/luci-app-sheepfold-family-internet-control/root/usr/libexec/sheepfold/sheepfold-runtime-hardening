@@ -6,6 +6,11 @@ ROOT="${1:-}"
 path() { printf '%s%s' "$ROOT" "$1"; }
 die() { echo "Sheepfold hardening check failed: $*" >&2; exit 1; }
 
+for helper in /usr/libexec/sheepfold/sheepfold-home-network /usr/libexec/sheepfold/sheepfold-home-firewall /etc/hotplug.d/iface/90-sheepfold-home-network; do
+    [ -f "$(path "$helper")" ] || die "missing file $helper"
+    chmod 0755 "$(path "$helper")"
+done
+
 CGI="$(path /www/cgi-bin/sheepfold-api)"
 CGI_LEGACY="$(path /usr/libexec/sheepfold/sheepfold-api-legacy)"
 CONTROL="$(path /usr/libexec/sheepfold/sheepfold-router-control)"

@@ -1,7 +1,7 @@
 /*
  * Проверяет вычисляемый контраст основной Android-палитры и кнопок управления.
- * Тест разбирает реальные Kotlin-цвета, включая alpha-композицию неактивного
- * текста: простая проверка наличия Color(...) не замечает слияние с фоном.
+ * Тест разбирает реальные Kotlin-цвета и проверяет нейтральную серую палитру
+ * неактивных команд: наличие Color(...) само по себе не замечает слияние с фоном.
  * Он ничего не изменяет, но не доказывает правильную отрисовку, размеры и
  * отсутствие системных перекрытий: перед релизом всё ещё нужен снимок устройства.
  * §uicontrast
@@ -40,12 +40,6 @@ function contrastRatio(foreground, background) {
     (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
     (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
   );
-}
-
-function composite(foreground, background, alpha) {
-  return foreground.map((channel, index) => (
-    channel * alpha + background[index] * (1 - alpha)
-  ));
 }
 
 function requireMatch(source, expression, description) {
@@ -144,25 +138,27 @@ describe('Android UI contrast', () => {
     }
   });
 
-  it('keeps active and pale internet actions visible against their own backgrounds', () => {
-    const green = requireMatch(
-      controls,
-      /containerColor = if \(globalBlocked == false\) Color\(0xFF([0-9A-F]{6})\) else Color\(0xFF([0-9A-F]{6})\)[\s\S]*?contentColor = if \(globalBlocked == false\) Color\.White else Color\(0xFF([0-9A-F]{6})\)\.copy\(alpha = ([0-9.]+)f\)/i,
-      'зелёная кнопка управления',
-    );
-    const red = requireMatch(
-      controls,
-      /containerColor = if \(globalBlocked == true\) Color\(0xFF([0-9A-F]{6})\) else Color\(0xFF([0-9A-F]{6})\)[\s\S]*?contentColor = if \(globalBlocked == true\) Color\.White else Color\(0xFF([0-9A-F]{6})\)\.copy\(alpha = ([0-9.]+)f\)/i,
-      'красная кнопка управления',
-    );
-
-    for (const [label, match] of [['green', green], ['red', red]]) {
-      const activeBackground = rgb(`#${match[1]}`);
-      const paleBackground = rgb(`#${match[2]}`);
-      const paleForeground = composite(rgb(`#${match[3]}`), paleBackground, Number(match[4]));
-
-      assertContrast(`${label}.active`, rgb('#FFFFFF'), activeBackground, 4.5);
-      assertContrast(`${label}.pale`, paleForeground, paleBackground, 3);
+  it('keeps the available action bright and disabled commands neutral and readable', () => {
+    for (const [action, blocked] of [['on', 'true'], ['off', 'false']]) {
+      const body = requireMatch(
+        controls,
+        new RegExp(`Button\\(\\s*onClick = \\{ onBlock\\(${blocked === 'true' ? 'false' : 'true'}\\) \\},([\\s\\S]*?)R\\.string\\.router_turn_internet_${action}`),
+        `internet_${action}`,
+      )[1];
+      assert.ok(body.includes(`enabled = !isLoading && globalBlocked == ${blocked}`));
+      const colors = requireMatch(
+        body,
+        /containerColor = Color\(0xFF([0-9A-F]{6})\),\s*contentColor = Color\.White,\s*disabledContainerColor = Color\(0xFF([0-9A-F]{6})\),\s*disabledContentColor = Color\(0xFF([0-9A-F]{6})\)/i,
+        `internet_${action} palette`,
+      );
+      const background = rgb(`#${colors[2]}`);
+      const foreground = rgb(`#${colors[3]}`);
+      for (const color of [background, foreground]) {
+        assert.equal(color[0], color[1], 'Disabled commands must be neutral gray');
+        assert.equal(color[1], color[2], 'Disabled commands must be neutral gray');
+      }
+      assertContrast(`${action}.active`, rgb('#FFFFFF'), rgb(`#${colors[1]}`), 4.5);
+      assertContrast(`${action}.disabled`, foreground, background, 4.5);
     }
   });
 });

@@ -212,6 +212,12 @@ revoke_device_tokens() {
 ensure_token_storage
 
 case "$command" in
+    home-network-status)
+        exec /usr/libexec/sheepfold/sheepfold-home-network status
+        ;;
+    home-network-configure)
+        exec /usr/libexec/sheepfold/sheepfold-home-network configure "${2:-}" "${3:-}"
+        ;;
     root-password-status)
         root_password_status
         ;;

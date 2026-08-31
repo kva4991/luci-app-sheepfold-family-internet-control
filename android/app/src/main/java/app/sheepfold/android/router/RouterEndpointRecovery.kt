@@ -1,6 +1,5 @@
 package app.sheepfold.android.router
 
-import android.content.Context
 import org.json.JSONObject
 import java.net.URL
 
@@ -8,8 +7,7 @@ import java.net.URL
 object RouterEndpointRecovery {
     private const val defaultApiPath = "/cgi-bin/sheepfold-api"
 
-    fun discoverAndStore(
-        context: Context,
+    fun discover(
         connection: RouterConnectionRequest,
         failedApiUrl: String
     ): String? {
@@ -38,8 +36,7 @@ object RouterEndpointRecovery {
 
         // Discovery доверяем только на уже закреплённом локальном IP и при совпадении
         // TLS-ключа (либо старого certificate pin). Меняется только порт. §dnsbind1
-        // После этого сохраняем новый endpoint для экранов, виджетов и фоновых задач.
-        SheepfoldConnectionStore.updateApiUrl(context, updatedApiUrl)
+        // Сохранит вызывающий клиент, только когда новый адрес подтвердит административный запрос
         return updatedApiUrl
     }
 

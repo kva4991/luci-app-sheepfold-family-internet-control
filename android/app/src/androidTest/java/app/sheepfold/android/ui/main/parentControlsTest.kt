@@ -1,26 +1,32 @@
 package app.sheepfold.android.ui.main
 
 /*
- * Проверяет реальные клики управления и редактора устройства, блокировку повторных действий и положение индикатора
+ * Проверяет клики, блокировку повторных команд, положение индикатора и пиксели кнопок в обеих темах
  * Только callbacks на синтетических данных; pairing, сеть, правила и настройки не изменяются
  * Не доказывает выполнение интернет-команды или сохранение UCI
  */
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.Surface
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.sheepfold.android.R
 import app.sheepfold.android.router.RouterDevice
+import app.sheepfold.android.ui.theme.SheepfoldTheme
+import app.sheepfold.android.ui.theme.ThemeMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -31,14 +37,61 @@ import org.junit.runner.RunWith
 class ParentControlsTest : ParentUiFixture() {
     @Test fun controlCommandsAndRefreshAreDistinct() {
         val commands = mutableListOf<Boolean>()
+        val blocked = mutableStateOf(false)
         var refreshes = 0
-        show { ControlTab("Fixture", false, false, null, { refreshes++ }, { commands += it }) }
+        show { ControlTab("Fixture", blocked.value, false, null, { refreshes++ }, { commands += it }) }
         label(R.string.router_now_enabled).assertIsDisplayed()
         icon(R.string.action_refresh).assertIsDisplayed().performClick()
-        label(R.string.router_turn_internet_off).performClick()
-        label(R.string.router_turn_internet_on).performClick()
+        label(R.string.router_turn_internet_on).assertIsNotEnabled().performTouchInput { click() }
+        assertTrue(commands.isEmpty())
+        label(R.string.router_turn_internet_off).assertIsEnabled().performClick()
+        compose.runOnIdle { blocked.value = true }
+        label(R.string.router_turn_internet_off).assertIsNotEnabled().performTouchInput { click() }
+        label(R.string.router_turn_internet_on).assertIsEnabled().performClick()
         assertEquals(listOf(true, false), commands)
         assertEquals(1, refreshes)
+    }
+
+    @Test fun internetActionColorsFollowAvailabilityInLightTheme() =
+        checkInternetActionColors(ThemeMode.LIGHT)
+
+    @Test fun internetActionColorsFollowAvailabilityInDarkTheme() =
+        checkInternetActionColors(ThemeMode.DARK)
+
+    private fun checkInternetActionColors(theme: ThemeMode) {
+        val blocked = mutableStateOf<Boolean?>(false)
+        val loading = mutableStateOf(false)
+        show {
+            SheepfoldTheme(theme) {
+                // Как MainActivity, Surface задаёт реальный фон и цвет текста выбранной темы
+                Surface {
+                    ControlTab("Fixture", blocked.value, loading.value, null, {}, {})
+                }
+            }
+        }
+        for (state in listOf(false, true, null)) {
+            for (busy in listOf(false, true)) {
+                compose.runOnIdle { blocked.value = state; loading.value = busy }
+                compose.mainClock.advanceTimeBy(400)
+                for ((id, target) in listOf(R.string.router_turn_internet_on to true, R.string.router_turn_internet_off to false)) {
+                    val enabled = !busy && state == target
+                    val button = label(id).performScrollTo().assertIsDisplayed()
+                    if (enabled) button.assertIsEnabled() else button.assertIsNotEnabled()
+                    val expected = if (!enabled) Color(0xFFD1D1D1) else if (target) Color(0xFF178447) else Color(0xFFC62828)
+                    // Большая доля реальных пикселей должна принадлежать заливке, не тексту или фону страницы
+                    val pixels = button.captureToImage().toPixelMap()
+                    var matching = 0
+                    for (y in 0 until pixels.height) for (x in 0 until pixels.width) {
+                        val pixel = pixels[x, y]
+                        if (kotlin.math.abs(pixel.red - expected.red) < 0.02f &&
+                            kotlin.math.abs(pixel.green - expected.green) < 0.02f &&
+                            kotlin.math.abs(pixel.blue - expected.blue) < 0.02f) matching++
+                    }
+                    assertTrue("$theme state=$state busy=$busy button=$id fill mismatch", matching > pixels.width * pixels.height * 0.6)
+                }
+                if (!busy && state != null) savePanelScreenshot("control-${theme.name.lowercase()}-$state.png")
+            }
+        }
     }
     @Test fun loadingBlocksRepeatedCommandsAndThenRecovers() {
         val loading = mutableStateOf(true)
@@ -147,6 +200,6 @@ class ParentControlsTest : ParentUiFixture() {
         compose.runOnIdle { state.value = true }
         label(R.string.router_now_disabled).assertIsDisplayed()
         label(R.string.router_turn_internet_on).assertIsEnabled()
-        label(R.string.router_turn_internet_off).assertIsEnabled()
+        label(R.string.router_turn_internet_off).assertIsNotEnabled()
     }
 }

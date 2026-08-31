@@ -44,7 +44,16 @@ Sheepfold использует штатные package-author drop-in файлы 
 - `usr/share/nftables.d/table-pre/30-sheepfold.nft` — только собственные sets/chains;
 - `usr/share/nftables.d/chain-pre/forward/30-sheepfold.nft` — переход в forward guard;
 - `usr/share/nftables.d/chain-pre/input/30-sheepfold.nft` — запрет доступа устройств из чёрного списка к роутеру;
-- `sheepfold-firewall sync` — изменение только элементов `sheepfold_*` sets.
+- `sheepfold-firewall sync` — изменение только элементов `sheepfold_*` sets и собственного scoped-допуска `sheepfold_home_input`.
+
+Домашний parent API v1 (§homen01) использует `home_network_global` типа `home_network`:
+`enabled=0` по умолчанию, `fingerprint` создаётся только после явного подтверждения сети.
+`sheepfold-home-network` проверяет контекст, CGI source и выдаёт правила; только общий
+`sheepfold-firewall` применяет их в одном batch с management block sets. `home-refresh`
+принудительно восстанавливает batch после fw4 reload/iface hotplug. Нет нового таймера,
+NAT, маршрутов или фонового сканирования. Init создаёт отдельный `/tmp/sheepfold/api-www`;
+stop и prerm снимают разрешение. Точные поля, стоимость, причина SHA-256 и проверка
+реального OpenWrt jshn: [домашний доступ v1](home-network-access.ru.md#данные-и-алгоритм-v1).
 
 Запрещено выполнять `flush ruleset`, удалять чужие таблицы, менять `meta mark`/`ct mark`, `ip rule`, `ip route`, Dnsmasq или sing-box. Это сохраняет таблицу и маркировку Podkop. Чёрный список устройств проверяется первым для запрета доступа к самому роутеру; затем белый список устройств, администраторы и группа «Без ограничений» образуют исключения глобальной блокировки. Временный доступ не является исключением глобальной кнопки (§84azytj, §v7x2k9p).
 

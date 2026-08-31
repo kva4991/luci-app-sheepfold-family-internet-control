@@ -119,11 +119,11 @@ describe('Android pairing discovery and access-list UI', () => {
     assert.match(endpointRecovery, /\.well-known\/sheepfold\.json/);
     assert.match(endpointRecovery, /tlsSpkiSha256 = tlsSpki/);
     assert.match(endpointRecovery, /it in 1\.\.65535/);
-    assert.match(endpointRecovery, /SheepfoldConnectionStore\.updateApiUrl/);
+    assert.doesNotMatch(endpointRecovery, /SheepfoldConnectionStore\.updateApiUrl/);
     assert.match(connectionStore, /fun updateApiUrl/);
-    assert.match(adminClient, /endpointCanBeRecovered/);
-    assert.match(adminClient, /RouterEndpointRecovery\.discoverAndStore/);
-    assert.doesNotMatch(adminClient, /SocketTimeoutException/);
+    assert.match(adminClient, /HomeRouterEndpoints\.mayRetry/);
+    assert.match(adminClient, /RouterEndpointRecovery\.discover\(connection/);
+    assert.match(adminClient, /requestOnce\(recovered[\s\S]*SheepfoldConnectionStore\.updateApiUrl/);
   });
 
   it('updates allowlist and blocklist panels without reloading the browser page', () => {

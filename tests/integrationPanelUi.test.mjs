@@ -21,7 +21,7 @@ const implementationStatus = readFileSync(resolve(root, 'docs/current-implementa
 describe('Integration settings panel §frontmod §dompol §ipv6pod', () => {
   it('owns integration and site-filter UI outside the overview composer', () => {
     assert.match(overview, /require sheepfold\.features\.integrations\.panel as integrationPanel/);
-    assert.match(settingsController, /panel\('integrations', deps\.integrationPanel\.render\(integrationUi\), active\)/);
+    assert.match(settingsController, /panel\('integrations', \[deps\.integrationPanel\.render\(integrationUi\), homeNetworkModel\.render/);
     assert.match(panel, /Use together with/);
     assert.match(panel, /Site filtering is performed through/);
     assert.match(panel, /Automatic AdGuard Home management/);
