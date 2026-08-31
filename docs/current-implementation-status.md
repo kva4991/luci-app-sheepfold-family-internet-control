@@ -31,12 +31,16 @@ returning from the install-source permission screen offered another download ins
 continuing installation. A completed physical update has not been independently verified.
 See [the update runbook](android-app-updates.ru.md).
 
-The local `0.1.59` / code `60` fix makes download and installation one explicit operation.
+The test `0.1.59` / code `60` fix makes download and installation one explicit operation.
 An atomic private-cache checkpoint survives process loss; Activity Result and a resumed,
 unlocked Activity continue a recent permission request without downloading again. Cancelling
 installation keeps the file but does not reopen the installer automatically. PIN, pairing,
-same-signer verification and Android's final confirmation are unchanged. This version is not
-published or installed on the physical phone. Build/Lint and all 102 JVM tests passed;
+same-signer verification and Android's final confirmation are unchanged. It was published on
+2026-08-31 from `2025ec8`, without installing it on the physical phone. Anonymous GitHub metadata,
+downloaded bytes and signing certificate were verified; old assets and latest are unchanged.
+The full local quality gate passed all 123 test files (795 tests passed, two Windows skips),
+and [source CI](https://github.com/kva4991/luci-app-sheepfold-family-internet-control/actions/runs/33406798664)
+passed Android Lint/builds and its other checks. Build/Lint and all 102 local JVM tests passed;
 the focused updater/read-panel suite passed 27/27 on both API 28 and API 35.
 The broad emulator run was not green: five router-dependent tests had no discovered router,
 and one existing Wi-Fi visibility assertion failed. Evidence and remaining OEM validation
