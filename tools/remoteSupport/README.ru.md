@@ -77,6 +77,11 @@ Caller будущего backend обязан проверить права до 
 не восстанавливает старые claims или доверие к backup. Это намеренный блокирующий runtime gate,
 не обещание durable recovery.
 
+Недостоверные часы необратимо блокируют текущий экземпляр: код и pending bytes очищаются,
+а восстановление времени не возобновляет запросы или доступ. Точный контракт
+[`clockUntrusted`](../../docs/remote-support-protocol.ru.md) проверяется на уже открытом claim;
+это защита RAM-автомата, не watchdog живого SSH.
+
 ## Проверка
 
 Рабочий каталог: корень public Sheepfold checkout; PowerShell или POSIX shell, Node.js 20+.

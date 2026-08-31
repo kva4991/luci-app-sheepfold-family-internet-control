@@ -1,6 +1,7 @@
 /*
  * Проверяет control-клиент на синтетических подписанных байтах без сети и private checkout
  * Назначение: обнаруживать рассогласование состояний/сроков/повторов до OpenWrt/FRP gate §rsup001 §testwhy
+ * Меняет только RAM fixture; зелёный результат не доказывает watchdog или закрытие живого SSH
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -66,6 +67,7 @@ function fixture() {
   };
   return { client, serverKeys, routerKeys, router, keyId, routerId, controlId, enrollmentId,
     now: () => now, advance: (seconds) => { now += seconds; tick += Math.max(0, seconds); },
+    setClock: (wall, monotonic) => { now = wall; tick = monotonic; },
     tick: (seconds) => { tick += seconds; }, sign, message, verify, enroll, open };
 }
 
@@ -170,6 +172,64 @@ test('controlExpiryUsesMonotonicTimeAndRejectsBackwardClock', () => {
   assert.equal(f.client.claimCode(), null);
   const other = fixture(); other.enroll(); other.open(); other.advance(-1);
   assert.throws(() => other.client.status(), { code: 'clockUntrusted' });
+});
+
+test('controlInvalidClockPermanentlyClosesOpenClaimAndPendingReply', () => {
+  const invalidWall = [NaN, -1, 1.5, Infinity, -Infinity, -0, Number.MAX_SAFE_INTEGER + 1, null, '1788000000'];
+  const invalidTick = [NaN, -1, Infinity, -Infinity, -0, Number.MAX_SAFE_INTEGER,
+    Number.MAX_SAFE_INTEGER + 1, null, '1'];
+  for (const clock of ['wall', 'tick']) {
+    for (const value of clock === 'wall' ? invalidWall : invalidTick) {
+      for (const method of ['status', 'claimCode', 'retry']) {
+        const f = fixture(); f.enroll(); const claim = f.open();
+        assert.match(f.client.claimCode(), /^\d{12}$/);
+        f.client.queryStatus();
+        const lateReply = f.sign(f.message('statusQuery', { ...claim.status, state: 'sessionPreparing',
+          accessExpiresAt: f.now() + accessLifeSec, ticketId: 'T-clock' }, claim.request.streamId));
+        const originalTime = f.now();
+        f.setClock(clock === 'wall' ? value : originalTime, clock === 'tick' ? value : 0);
+        assert.throws(() => f.client[method](), { code: 'clockUntrusted' });
+        f.setClock(originalTime, 0);
+        assert.equal(f.client.status().state, 'securityBlocked');
+        assert.equal(f.client.status().pendingResponse, false);
+        assert.equal(f.client.claimCode(), null);
+        assert.throws(() => f.client.retry(), { code: 'stateConflict' });
+        assert.throws(() => f.client.queryStatus(), { code: 'clockUntrusted' });
+        assert.throws(() => f.client.openClaim({ localConsent: true, routerHostKey: hostKey() }),
+          { code: 'claimNotOpen' });
+        assert.throws(() => f.client.accept(lateReply), { code: 'clockUntrusted' });
+        assert.equal(f.client.localRevoke().state, 'securityBlocked');
+        assert.equal(f.client.claimCode(), null);
+      }
+    }
+  }
+});
+
+test('controlBackwardClockDoesNotResumeClaimAfterTimeIsRestored', () => {
+  for (const clock of ['wall', 'tick']) {
+    const f = fixture(); f.enroll(); f.open(); f.advance(2); f.client.queryStatus();
+    const originalTime = f.now();
+    f.setClock(clock === 'wall' ? originalTime - 1 : originalTime, clock === 'tick' ? 1 : 2);
+    assert.throws(() => f.client.status(), { code: 'clockUntrusted' });
+    f.setClock(originalTime, 2);
+    assert.equal(f.client.status().state, 'securityBlocked');
+    assert.equal(f.client.status().pendingResponse, false);
+    assert.equal(f.client.claimCode(), null);
+    assert.throws(() => f.client.retry(), { code: 'stateConflict' });
+  }
+});
+
+test('controlClockFailureClearsPendingRevokeAndAllowsFractionalUptime', () => {
+  const f = fixture(); f.enroll(); f.open(); f.tick(0.25);
+  assert.equal(f.client.status().state, 'claimOpen');
+  f.client.revokeRequest();
+  const originalTime = f.now();
+  f.setClock(originalTime, NaN);
+  assert.throws(() => f.client.status(), { code: 'clockUntrusted' });
+  f.setClock(originalTime, 0.25);
+  assert.equal(f.client.status().pendingResponse, false);
+  assert.equal(f.client.status().state, 'securityBlocked');
+  assert.throws(() => f.client.retry(), { code: 'stateConflict' });
 });
 
 test('controlExpiredPendingRequestDoesNotGetFreshCodeOrDeadline', () => {
