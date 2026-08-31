@@ -2,11 +2,12 @@ package app.sheepfold.android.relay
 
 /*
  * Назначение: исполняет golden HMAC/AES-GCM и единый Keystore/AtomicFile bundle на Android runtime.
- * Почему instrumentation: JVM provider не моделирует AndroidKeyStore; setup/teardown очищают test-app bundle/key.
+ * Почему instrumentation: JVM не моделирует AndroidKeyStore; отдельные alias и каталог изолируют synthetic bundle.
+ * Меняется только случайное test-хранилище; рабочие settings, bundle, ключ и pairing не читаются и не удаляются.
  * Green без emulator/device не доказывает API 28 OEM, Doze, TLS, сеть, rollback anchor или field provisioning. §testwhy
  */
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -20,20 +21,26 @@ import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class MessageRelayAndroidTest {
     private lateinit var context: Context
+    private lateinit var secureStore: MessageRelayEncryptedStore
+    private lateinit var testDirectory: java.io.File
 
     @Before
     fun setUp() {
-        context = ApplicationProvider.getApplicationContext()
-        MessageRelayConnectionStore.clear(context)
+        context = InstrumentationRegistry.getInstrumentation().targetContext
+        val testName = "message-relay-test-${UUID.randomUUID()}"
+        secureStore = MessageRelayEncryptedStore(testName, testName)
+        testDirectory = context.noBackupFilesDir.resolve(testName)
     }
 
     @After
     fun tearDown() {
-        MessageRelayConnectionStore.clear(context)
+        secureStore.clear(context)
+        assertTrue(!testDirectory.exists() || testDirectory.delete())
     }
 
     @Test
@@ -70,40 +77,40 @@ class MessageRelayAndroidTest {
     @Test
     fun secretsAndStateShareOneEncryptedFailClosedBundle() {
         val secrets = androidSecrets()
-        MessageRelaySecureStore.write(context, secrets)
-        val directory = context.noBackupFilesDir.resolve("message-relay")
+        secureStore.write(context, secrets)
+        val directory = testDirectory
         val bundle = directory.resolve("relay-bundle-v1.bin")
         assertTrue(bundle.isFile)
         assertFalse(directory.resolve("state-v1.bin").exists())
         val bytes = bundle.readBytes()
         assertFalse(bytes.containsSubsequence(secrets.phoneCredential.toByteArray()))
         assertFalse(bytes.containsSubsequence(secrets.phoneToRouterKey))
-        assertEquals(secrets, MessageRelaySecureStore.read(context))
+        assertEquals(secrets, secureStore.read(context))
 
         val state = MessageRelayStateStore(
-            AndroidMessageRelayStateStorage(context),
+            AndroidMessageRelayStateStorage(context, secureStore),
             secrets.stateGeneration
         )
         assertEquals(1L, state.reserveOutboundSequence(secrets.outboundKeyRecord()))
         assertEquals(
             2L,
             MessageRelayStateStore(
-                AndroidMessageRelayStateStorage(context),
+                AndroidMessageRelayStateStorage(context, secureStore),
                 secrets.stateGeneration
             ).reserveOutboundSequence(secrets.outboundKeyRecord())
         )
 
         bundle.delete()
-        assertNull(MessageRelaySecureStore.read(context))
+        assertNull(secureStore.read(context))
         assertThrows(IllegalStateException::class.java) { state.verifyInitialized() }
     }
 
     @Test
     fun secureReadAndStateMutationDoNotInvertLocks() {
         val secrets = androidSecrets()
-        MessageRelaySecureStore.write(context, secrets)
+        secureStore.write(context, secrets)
         val state = MessageRelayStateStore(
-            AndroidMessageRelayStateStorage(context),
+            AndroidMessageRelayStateStorage(context, secureStore),
             secrets.stateGeneration
         )
         val start = CountDownLatch(1)
@@ -111,7 +118,7 @@ class MessageRelayAndroidTest {
         try {
             val reads = executor.submit {
                 start.await()
-                repeat(8) { assertEquals(secrets, MessageRelaySecureStore.read(context)) }
+                repeat(8) { assertEquals(secrets, secureStore.read(context)) }
             }
             val writes = executor.submit {
                 start.await()

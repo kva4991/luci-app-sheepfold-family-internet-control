@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,7 +34,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -61,6 +61,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,6 +106,7 @@ private enum class SetupStep { AGREEMENT, NETWORK, MAC, PAIRING, QR, MANUAL, PRO
 
 @Composable
 fun SafeRouterSetupScreen(
+    setupModel: RouterSetupViewModel,
     pairingOnly: Boolean = false,
     pairingMessage: String? = null,
     onSetupComplete: (RouterConnectionRequest) -> Unit
@@ -113,15 +115,16 @@ fun SafeRouterSetupScreen(
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val manager = remember { SecureRouterConnectionManager() }
-    var step by remember(pairingOnly) {
+    var step by rememberSaveable(pairingOnly) {
         mutableStateOf(if (pairingOnly) SetupStep.PAIRING else SetupStep.AGREEMENT)
     }
     var networkState by remember { mutableStateOf(LocalRouterDiscovery.networkState(context)) }
     var discovery by remember { mutableStateOf<LocalSheepfoldDiscovery?>(null) }
-    var connected by remember { mutableStateOf<RouterConnectionRequest?>(null) }
-    var busy by remember { mutableStateOf(false) }
+    var networkBusy by remember { mutableStateOf(false) }
+    val busy = networkBusy || setupModel.busy
 
     fun back() {
+        if (step == SetupStep.PROTECTION) setupModel.discardResult()
         step = when (step) {
             SetupStep.AGREEMENT -> SetupStep.AGREEMENT
             SetupStep.NETWORK -> SetupStep.AGREEMENT
@@ -134,20 +137,28 @@ fun SafeRouterSetupScreen(
 
     fun connect(request: RouterConnectionRequest) {
         if (busy) return
-        busy = true
-        scope.launch {
-            runCatching { manager.connect(request) }
-                .onSuccess {
-                    connected = it
-                    snackbar.showSnackbar(context.getString(R.string.setup_connected_to, it.routerName))
-                    if (pairingOnly) onSetupComplete(it) else step = SetupStep.PROTECTION
-                }
-                .onFailure { snackbar.showSnackbar(it.message ?: context.getString(R.string.setup_connection_failed)) }
-            busy = false
+        setupModel.connect(request)
+    }
+
+    BackHandler(enabled = busy || step != SetupStep.AGREEMENT) { if (!busy) back() }
+
+    LaunchedEffect(setupModel.connected) {
+        val connected = setupModel.connected ?: return@LaunchedEffect
+        if (pairingOnly) {
+            onSetupComplete(connected)
+            setupModel.discardResult()
+        } else {
+            step = SetupStep.PROTECTION
+            snackbar.showSnackbar(context.getString(R.string.setup_connected_to, connected.routerName))
         }
     }
 
-    BackHandler(enabled = step != SetupStep.AGREEMENT) { back() }
+    LaunchedEffect(setupModel.failed) {
+        if (setupModel.failed) {
+            snackbar.showSnackbar(setupModel.errorMessage ?: context.getString(R.string.setup_connection_failed))
+            setupModel.dismissError()
+        }
+    }
 
     LaunchedEffect(pairingMessage) {
         if (!pairingMessage.isNullOrBlank()) snackbar.showSnackbar(pairingMessage)
@@ -166,10 +177,10 @@ fun SafeRouterSetupScreen(
                     busy = busy,
                     onRefresh = {
                         networkState = LocalRouterDiscovery.networkState(context)
-                        busy = true
+                        networkBusy = true
                         scope.launch {
                             discovery = LocalRouterDiscovery.discover(context)
-                            busy = false
+                            networkBusy = false
                         }
                     },
                     onNext = { step = SetupStep.MAC }
@@ -192,8 +203,16 @@ fun SafeRouterSetupScreen(
                         .onSuccess(::connect)
                         .onFailure { scope.launch { snackbar.showSnackbar(it.message.orEmpty()) } }
                 }
-                SetupStep.PROTECTION -> ProtectionStep {
-                    onSetupComplete(requireNotNull(connected))
+                SetupStep.PROTECTION -> {
+                    val connected = setupModel.connected
+                    if (connected != null) ProtectionStep {
+                        onSetupComplete(connected)
+                        setupModel.discardResult()
+                    } else PairingStep(
+                        // После гибели процесса секрет не восстанавливается из Bundle и QR не повторяется
+                        onQr = { step = SetupStep.QR },
+                        onManual = { step = SetupStep.MANUAL }
+                    )
                 }
             }
         }
@@ -204,7 +223,7 @@ fun SafeRouterSetupScreen(
 private fun AgreementStep(onNext: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var accepted by remember { mutableStateOf(false) }
+    var accepted by rememberSaveable { mutableStateOf(false) }
     var opening by remember { mutableStateOf(false) }
     val permissions = remember {
         buildList {
@@ -234,7 +253,7 @@ private fun AgreementStep(onNext: () -> Unit) {
 
     Box(Modifier.fillMaxSize()) {
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp, 12.dp, 20.dp, 132.dp),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp, 12.dp, 20.dp, 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -265,8 +284,8 @@ private fun AgreementStep(onNext: () -> Unit) {
                 onClick = { launcher.launch(permissions.toTypedArray()) },
                 modifier = Modifier.fillMaxWidth()
             ) { Text(if (granted) stringResource(R.string.setup_permissions_granted) else stringResource(R.string.setup_permissions_request)) }
+            RoundNextButton(accepted && granted, onNext, Modifier.padding(top = 12.dp))
         }
-        RoundNextButton(accepted && granted, onNext, Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp))
         if (opening) Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
@@ -312,8 +331,8 @@ private fun NetworkStep(
         }
         if (busy) CircularProgressIndicator()
         if (!supported) InfoCard(stringResource(R.string.setup_important), stringResource(R.string.setup_wifi_required))
+        RoundNextButton(supported, onNext, Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp))
     }
-    RoundNextButton(supported, onNext, Modifier.fillMaxSize().wrapContentSize(Alignment.BottomCenter).padding(bottom = 20.dp))
 }
 
 @Composable
@@ -333,8 +352,8 @@ private fun MacStep(state: LocalNetworkState, onNext: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             ) { Text(stringResource(R.string.setup_open_wifi_settings)) }
         }
+        RoundNextButton(true, onNext, Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp))
     }
-    RoundNextButton(true, onNext, Modifier.fillMaxSize().wrapContentSize(Alignment.BottomCenter).padding(bottom = 20.dp))
 }
 
 @Composable
@@ -522,7 +541,7 @@ private fun decodeQrBitmap(bitmap: Bitmap): String {
 @Composable
 private fun StepContainer(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp, 20.dp, 20.dp, 120.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(14.dp))
@@ -541,17 +560,23 @@ private fun InfoCard(title: String, body: String) {
 }
 
 @Composable
-private fun RoundNextButton(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun RoundNextButton(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Button(
         enabled = enabled,
         onClick = onClick,
-        modifier = modifier.size(104.dp),
+        modifier = modifier.size(104.dp).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
         shape = CircleShape,
-        colors = ButtonDefaults.buttonColors(disabledContainerColor = Color(0xFFB9DCCB))
+        contentPadding = PaddingValues(8.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("›", style = MaterialTheme.typography.displaySmall)
-            Text(stringResource(R.string.setup_next), style = MaterialTheme.typography.titleMedium)
+            Icon(painterResource(R.drawable.ic_action_next), contentDescription = null, modifier = Modifier.size(48.dp))
+            Text(stringResource(R.string.setup_next), style = MaterialTheme.typography.labelLarge, maxLines = 1)
         }
     }
 }

@@ -62,6 +62,10 @@ function resolveIcons(catalog) {
         ...(source.thinPaths || []),
         ...(source.appendThinPaths || []),
       ],
+      filledPaths: [
+        ...(parent?.filledPaths || []),
+        ...(source.filledPaths || []),
+      ],
     };
     delete resolved.extends;
     delete resolved.appendPaths;
@@ -99,7 +103,7 @@ export function validateCatalog(catalog = readCatalog()) {
   for (const icon of catalog.icons || []) {
     if (icon.extends && !names.has(icon.extends))
       errors.push(`Unknown parent ${icon.extends} for ${icon.name}`);
-    if (!icon.extends && (!Array.isArray(icon.paths) || icon.paths.length === 0))
+    if (!icon.extends && ![icon.paths, icon.filledPaths].some((paths) => Array.isArray(paths) && paths.length))
       errors.push(`Missing SVG paths: ${icon.name}`);
   }
   if (!names.has(catalog.fallbackIcon))
@@ -113,7 +117,10 @@ export function validateCatalog(catalog = readCatalog()) {
 function registrySource(catalog, icons) {
   const definitions = Object.fromEntries(icons.map((icon) => [
     icon.name,
-    { viewBox: icon.viewBox, paths: icon.paths, thinPaths: icon.thinPaths },
+    {
+      viewBox: icon.viewBox, paths: icon.paths, thinPaths: icon.thinPaths,
+      ...(icon.filledPaths.length ? { filledPaths: icon.filledPaths } : {}),
+    },
   ]));
 
   return `'use strict';
@@ -143,7 +150,10 @@ function svgMarkup(icon) {
   const thinPaths = icon.thinPaths.map((path) => (
     `<path d="${htmlEscape(path)}" stroke-width="1.25"></path>`
   )).join('');
-  return `<svg viewBox="${htmlEscape(icon.viewBox)}" aria-hidden="true">${paths}${thinPaths}</svg>`;
+  const filledPaths = icon.filledPaths.map((path) => (
+    `<path d="${htmlEscape(path)}" fill="currentColor" stroke="none"></path>`
+  )).join('');
+  return `<svg viewBox="${htmlEscape(icon.viewBox)}" aria-hidden="true">${paths}${thinPaths}${filledPaths}</svg>`;
 }
 
 function usageMarkup(entry) {
@@ -273,7 +283,7 @@ function htmlSource(catalog, icons) {
 }
 
 function androidVectorSource(icon) {
-  const mainPath = `    <path
+  const mainPath = icon.paths.length === 0 ? '' : `    <path
         android:fillColor="@android:color/transparent"
         android:pathData="${icon.paths.join(' ')}"
         android:strokeColor="#FF000000"
@@ -288,6 +298,10 @@ function androidVectorSource(icon) {
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
         android:strokeWidth="1.25" />`;
+  const filledPath = icon.filledPaths.length === 0 ? '' : `
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="${icon.filledPaths.join(' ')}" />`;
 
   return `<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -295,7 +309,7 @@ function androidVectorSource(icon) {
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-${mainPath}${thinPath}
+${mainPath}${thinPath}${filledPath}
 </vector>
 `;
 }

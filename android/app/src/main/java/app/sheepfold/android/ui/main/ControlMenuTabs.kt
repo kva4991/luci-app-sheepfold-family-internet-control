@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -27,14 +30,22 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.sheepfold.android.R
+import java.text.DateFormat
+import java.util.Date
 
 data class MainMenuItem(
     val key: String,
@@ -45,15 +56,17 @@ data class MainMenuItem(
 @Composable
 fun ControlTab(
     routerName: String,
-    globalBlocked: Boolean,
+    globalBlocked: Boolean?,
     isLoading: Boolean,
     message: String?,
     onRefresh: () -> Unit,
-    onBlock: (Boolean) -> Unit
+    onBlock: (Boolean) -> Unit,
+    lastUpdated: Long? = null
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 8.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -68,7 +81,11 @@ fun ControlTab(
         ) {
             Text(
                 stringResource(
-                    if (globalBlocked) R.string.router_now_disabled else R.string.router_now_enabled
+                    when (globalBlocked) {
+                        true -> R.string.router_now_disabled
+                        false -> R.string.router_now_enabled
+                        null -> R.string.router_state_unknown
+                    }
                 ),
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleMedium
@@ -92,37 +109,50 @@ fun ControlTab(
                 )
             }
         }
+        lastUpdated?.let {
+            val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it))
+            Text(
+                stringResource(if (globalBlocked == null) R.string.router_last_reply else R.string.router_updated_at, time),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         Button(
             onClick = { onBlock(false) },
-            enabled = !isLoading,
+            enabled = !isLoading && globalBlocked != null,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(108.dp),
             // Бледное состояние остаётся различимым с контрастом не ниже 3:1. §uicontrast
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (!globalBlocked) Color(0xFF178447) else Color(0xFFB9DCCB),
-                contentColor = if (!globalBlocked) Color.White else Color(0xFF315B45).copy(alpha = 0.75f),
+                containerColor = if (globalBlocked == false) Color(0xFF178447) else Color(0xFFB9DCCB),
+                contentColor = if (globalBlocked == false) Color.White else Color(0xFF315B45).copy(alpha = 0.75f),
                 disabledContainerColor = Color(0xFFB9DCCB),
                 disabledContentColor = Color(0xFF315B45).copy(alpha = 0.75f)
             )
         ) {
-            Text(stringResource(R.string.router_turn_internet_on), fontSize = 18.sp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(stringResource(R.string.router_turn_internet_on), fontSize = 18.sp)
+                if (globalBlocked == null) Text(stringResource(if (isLoading) R.string.router_getting_state else R.string.router_state_unknown), style = MaterialTheme.typography.bodySmall)
+            }
         }
         Button(
             onClick = { onBlock(true) },
-            enabled = !isLoading,
+            enabled = !isLoading && globalBlocked != null,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(108.dp),
             // Та же контрастная пара нужна и в светлой, и в тёмной теме. §uicontrast
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (globalBlocked) Color(0xFFC62828) else Color(0xFFE8B9B9),
-                contentColor = if (globalBlocked) Color.White else Color(0xFF6D3030).copy(alpha = 0.75f),
+                containerColor = if (globalBlocked == true) Color(0xFFC62828) else Color(0xFFE8B9B9),
+                contentColor = if (globalBlocked == true) Color.White else Color(0xFF6D3030).copy(alpha = 0.75f),
                 disabledContainerColor = Color(0xFFE8B9B9),
                 disabledContentColor = Color(0xFF6D3030).copy(alpha = 0.75f)
             )
         ) {
-            Text(stringResource(R.string.router_turn_internet_off), fontSize = 18.sp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(stringResource(R.string.router_turn_internet_off), fontSize = 18.sp)
+                if (globalBlocked == null) Text(stringResource(if (isLoading) R.string.router_getting_state else R.string.router_state_unknown), style = MaterialTheme.typography.bodySmall)
+            }
         }
         if (isLoading) CircularProgressIndicator()
         message?.let { Text(it) }
@@ -131,8 +161,21 @@ fun ControlTab(
 
 @Composable
 fun MenuTab(items: List<MainMenuItem>, onOpen: (String) -> Unit) {
+    val cardPadding = 14.dp
+    val titleStyle = MaterialTheme.typography.titleMedium.copy(
+        hyphens = Hyphens.None,
+        lineBreak = LineBreak.Heading
+    )
+    val measurer = rememberTextMeasurer()
+    val wordWidth = remember(items, measurer, titleStyle) {
+        items.flatMap { it.title.split(Regex("\\s+")) }.maxOfOrNull { word ->
+            measurer.measure(word, style = titleStyle, softWrap = false).size.width
+        } ?: 0
+    }
+    // Размер шрифта не уменьшаем: перевод и системный масштаб определяют число колонок.
+    val minCellWidth = maxOf(148.dp, with(LocalDensity.current) { wordWidth.toDp() } + cardPadding * 2 + 2.dp)
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 148.dp),
+        columns = GridCells.Adaptive(minSize = minCellWidth),
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
@@ -143,17 +186,17 @@ fun MenuTab(items: List<MainMenuItem>, onOpen: (String) -> Unit) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(86.dp)
+                    .heightIn(min = 112.dp)
                     .clickable { onOpen(item.key) },
                 shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Row(
+                Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        .fillMaxWidth()
+                        .padding(cardPadding),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
                         painter = painterResource(item.iconRes),
@@ -161,16 +204,13 @@ fun MenuTab(items: List<MainMenuItem>, onOpen: (String) -> Unit) {
                         modifier = Modifier.size(34.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-                        Text(item.title, style = MaterialTheme.typography.titleMedium)
-                        Spacer(
-                            Modifier
-                                .padding(top = 8.dp)
-                                .fillMaxWidth()
-                                .height(2.dp)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
-                        )
-                    }
+                    Text(item.title, style = titleStyle, textAlign = TextAlign.Center)
+                    Spacer(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                    )
                 }
             }
         }

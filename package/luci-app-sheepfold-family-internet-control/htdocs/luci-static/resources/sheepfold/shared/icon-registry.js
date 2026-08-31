@@ -3,6 +3,14 @@
 
 /* Generated from icons/catalog.json by npm run icons:generate. Do not edit manually. §iconcat1 */
 var definitions = {
+	"actionNext": {
+		"viewBox": "0 0 24 24",
+		"paths": [],
+		"thinPaths": [],
+		"filledPaths": [
+			"M2 6l10 1.7V3l10 9-10 9v-4.7L2 18z"
+		]
+	},
 	"actionSettings": {
 		"viewBox": "0 0 24 24",
 		"paths": [
@@ -77,8 +85,7 @@ var definitions = {
 	"navigationControl": {
 		"viewBox": "0 0 24 24",
 		"paths": [
-			"M12 2v10",
-			"M6.3 5.3a8 8 0 1 0 11.4 0"
+			"M14 3a6 6 0 0 0-5.2 8.8L3 17.6a2.4 2.4 0 0 0 3.4 3.4l5.8-5.8A6 6 0 0 0 21 10l-4 1-4-4 1-4z"
 		],
 		"thinPaths": []
 	},

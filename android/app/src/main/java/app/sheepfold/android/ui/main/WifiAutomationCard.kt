@@ -35,9 +35,11 @@ import kotlinx.coroutines.delay
 internal fun WifiAutomationCard(
     current: RouterWifiAutomation,
     enabled: Boolean,
-    onSave: (RouterWifiAutomation) -> Unit
+    onSave: (RouterWifiAutomation) -> Unit,
+    form: FormDraft<RouterWifiAutomation> = remember(current) { FormDraft(current, "") }
 ) {
-    var draft by remember(current) { mutableStateOf(current) }
+    var draft by form.field({ it }) { _, next -> next }
+    val discard = rememberDraftDismiss(form.dirty, !enabled) { form.value = current }
     var riskDialogVisible by remember { mutableStateOf(false) }
     val validTime = remember(draft.enableTime, draft.disableTime) {
         TIME_PATTERN.matches(draft.enableTime) && TIME_PATTERN.matches(draft.disableTime)
@@ -78,6 +80,7 @@ internal fun WifiAutomationCard(
             ) {
                 Text(stringResource(R.string.settings_save))
             }
+            if (form.dirty) TextButton(onClick = discard, enabled = enabled) { Text(stringResource(R.string.draft_discard)) }
         }
     }
 

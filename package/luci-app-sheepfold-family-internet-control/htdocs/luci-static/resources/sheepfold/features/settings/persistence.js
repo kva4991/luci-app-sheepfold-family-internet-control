@@ -60,6 +60,9 @@ function create(deps) {
 		var password;
 		var automationMode;
 
+		if (hasOwn(options, 'beta_testing') && options.beta_testing !== '0' && options.beta_testing !== '1')
+			throw new Error(_('Invalid beta testing setting.'));
+
 		if (hasOwn(options, 'automation_mode')) {
 			automationMode = String(options.automation_mode || '');
 			if (automationMode !== 'maximum' && automationMode !== 'selective')

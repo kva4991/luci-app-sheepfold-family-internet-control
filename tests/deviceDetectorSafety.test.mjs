@@ -1,3 +1,8 @@
+/*
+ * Проверяет границы доверия классификатора и статические инварианты detector.
+ * Поддельные UCI/DHCP-признаки запускаются локально во временных fixtures с очисткой;
+ * реальные настройки не меняются. Не заменяет nmap/mDNS/SSDP на живом роутере. §testwhy
+ */
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
@@ -390,7 +395,7 @@ printf '%s\\n' "$section"
     assert.match(source, /\$3 == "0x2"/);
     assert.match(source, /print \$4 "\\t" \$1 "\\t\*\\tarp"/);
     assert.match(source, /is_reserved_device_name/);
-    assert.match(source, /\$3 !~ \/[\^]\(arp\|dhcp\|static\)/);
+    assert.match(source, /tolower\(\$3\) !~ \/[\^]\(arp\|dhcp\|static\)/);
   });
 
   it('повторяет автоназначение для закреплённого типа, если группа ещё не назначена', () => {
@@ -609,8 +614,3 @@ printf '%s\\n' "$section"
     assert.match(hardening, /assign_detected_group_if_allowed/);
   });
 });
-/*
- * Проверяет границы доверия классификатора и статические инварианты detector.
- * Поддельные UCI/DHCP-признаки запускаются локально, поэтому тест ловит регрессии
- * решений и shell wiring, но не заменяет nmap/mDNS/SSDP-прогон на живом роутере.
- */

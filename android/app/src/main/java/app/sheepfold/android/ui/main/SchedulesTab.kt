@@ -62,13 +62,14 @@ fun SchedulesTab(
     devices: List<RouterDevice>,
     isLoading: Boolean,
     onConfigChanged: (RouterAdminConfig) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    workspace: ParentWorkspace = remember { ParentWorkspace() }
 ) {
-    val scope = rememberCoroutineScope()
-    var isSaving by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var messageIsError by remember { mutableStateOf(false) }
-    var editor by remember { mutableStateOf<RouterSchedule?>(null) }
+    val scope = workspace.scope
+    var isSaving by workspace.scheduleTask.busy
+    var message by workspace.scheduleTask.message
+    var messageIsError by workspace.scheduleTask.isError
+    val editor = workspace.schedule
     var pendingDelete by remember { mutableStateOf<RouterSchedule?>(null) }
     val schedules = config.schedules
     val groups = config.groups
@@ -101,6 +102,7 @@ fun SchedulesTab(
                     afterSuccess()
                 }
                 .onFailure {
+                    if (it is kotlinx.coroutines.CancellationException) throw it
                     message = it.message ?: changeFailedText
                     messageIsError = true
                 }
@@ -128,12 +130,12 @@ fun SchedulesTab(
                 val firstDevice = devices.firstOrNull { !it.isAdministrator }?.id
                 val targetType = if (firstGroup != null) "group" else "device"
                 val targets = listOfNotNull(firstGroup ?: firstDevice)
-                editor = RouterSchedule(
+                workspace.schedule = FormDraft(RouterSchedule(
                     name = "",
                     targetType = targetType,
                     targets = targets,
                     timeRanges = listOf(RouterTimeRange(config.bedtime, "07:00"))
-                )
+                ), config.revision)
             },
             enabled = canWrite && !isLoading && !isSaving &&
                 (groups.isNotEmpty() || devices.any { !it.isAdministrator }),
@@ -183,7 +185,7 @@ fun SchedulesTab(
                             OutlinedButton(
                                 onClick = {
                                     message = null
-                                    editor = schedule
+                                    workspace.schedule = FormDraft(schedule, config.revision)
                                 },
                                 enabled = canWrite && !isSaving,
                                 modifier = Modifier.weight(1f)
@@ -193,10 +195,10 @@ fun SchedulesTab(
                             OutlinedButton(
                                 onClick = {
                                     message = null
-                                    editor = schedule.copy(
+                                    workspace.schedule = FormDraft(schedule.copy(
                                         section = "",
                                         name = schedule.name + " " + copySuffix
-                                    )
+                                    ), config.revision)
                                 },
                                 enabled = canWrite && !isSaving,
                                 modifier = Modifier.weight(1f)
@@ -217,23 +219,24 @@ fun SchedulesTab(
         }
     }
 
-    editor?.let { schedule ->
+    editor?.let { form ->
         ScheduleEditorDialog(
-            initial = schedule,
+            initial = form.original,
+            form = form,
             schedules = schedules,
             devices = devices,
             groups = groups,
             isSaving = isSaving,
             backendError = message.takeIf { messageIsError },
             onDismiss = {
-                editor = null
+                workspace.schedule = null
                 message = null
             },
             onSave = { updated ->
                 applyMutation(
-                    block = { client.saveSchedule(config, updated) },
+                    block = { client.saveSchedule(config.copy(revision = form.revision), updated) },
                     successText = savedText,
-                    afterSuccess = { editor = null }
+                    afterSuccess = { workspace.schedule = null }
                 )
             }
         )
@@ -268,6 +271,7 @@ fun SchedulesTab(
 @Composable
 private fun ScheduleEditorDialog(
     initial: RouterSchedule,
+    form: FormDraft<RouterSchedule>,
     schedules: List<RouterSchedule>,
     devices: List<RouterDevice>,
     groups: List<RouterGroup>,
@@ -276,16 +280,15 @@ private fun ScheduleEditorDialog(
     onDismiss: () -> Unit,
     onSave: (RouterSchedule) -> Unit
 ) {
-    var name by remember(initial.section, initial.name) { mutableStateOf(initial.name) }
-    var description by remember(initial.section, initial.description) { mutableStateOf(initial.description) }
-    var enabled by remember(initial.section, initial.enabled) { mutableStateOf(initial.enabled) }
-    var action by remember(initial.section, initial.action) { mutableStateOf(initial.action) }
-    var targetType by remember(initial.section, initial.targetType) { mutableStateOf(initial.targetType) }
-    var targets by remember(initial.section, initial.targets) { mutableStateOf(initial.targets.toSet()) }
-    var weekdays by remember(initial.section, initial.weekdays) { mutableStateOf(initial.weekdays.toSet()) }
-    var timeRanges by remember(initial.section, initial.timeRanges) {
-        mutableStateOf(initial.timeRanges.ifEmpty { listOf(RouterTimeRange("21:00", "07:00")) })
-    }
+    var name by form.field({ it.name }) { value, next -> value.copy(name = next) }
+    var description by form.field({ it.description }) { value, next -> value.copy(description = next) }
+    var enabled by form.field({ it.enabled }) { value, next -> value.copy(enabled = next) }
+    var action by form.field({ it.action }) { value, next -> value.copy(action = next) }
+    var targetType by form.field({ it.targetType }) { value, next -> value.copy(targetType = next) }
+    var targets by form.field({ it.targets.toSet() }) { value, next -> value.copy(targets = next.toList()) }
+    var weekdays by form.field({ it.weekdays.toSet() }) { value, next -> value.copy(weekdays = next.toList()) }
+    var timeRanges by form.field({ it.timeRanges }) { value, next -> value.copy(timeRanges = next) }
+    val dismiss = rememberDraftDismiss(form.dirty, isSaving, onDismiss)
     var validationError by remember { mutableStateOf<String?>(null) }
     val nameRequiredText = stringResource(R.string.validation_schedule_name_required)
     val targetRequiredText = stringResource(R.string.validation_schedule_target_required)
@@ -309,7 +312,7 @@ private fun ScheduleEditorDialog(
     val conflictingSchedule = remember(draft, schedules) { findOppositeScheduleConflict(draft, schedules) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = dismiss,
         title = {
             Text(
                 if (initial.section.isBlank()) stringResource(R.string.schedule_add)
@@ -325,6 +328,7 @@ private fun ScheduleEditorDialog(
             ) {
                 backendError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 validationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                SchedulePreview(draft)
                 conflictingSchedule?.let {
                     Text(
                         stringResource(R.string.schedule_conflict_warning, it),
@@ -333,6 +337,7 @@ private fun ScheduleEditorDialog(
                 }
                 OutlinedTextField(
                     value = name,
+                    enabled = !isSaving,
                     onValueChange = { name = it.take(80) },
                     label = { Text(stringResource(R.string.schedule_name)) },
                     modifier = Modifier.fillMaxWidth(),
@@ -340,6 +345,7 @@ private fun ScheduleEditorDialog(
                 )
                 OutlinedTextField(
                     value = description,
+                    enabled = !isSaving,
                     onValueChange = { description = it.take(240) },
                     label = { Text(stringResource(R.string.schedule_description)) },
                     modifier = Modifier.fillMaxWidth(),
@@ -347,19 +353,19 @@ private fun ScheduleEditorDialog(
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(stringResource(R.string.schedule_enabled))
-                    Switch(checked = enabled, onCheckedChange = { enabled = it })
+                    Switch(checked = enabled, onCheckedChange = { enabled = it }, enabled = !isSaving)
                 }
                 Text(stringResource(R.string.schedule_action))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = { action = "block" },
                         modifier = Modifier.weight(1f),
-                        enabled = action != "block"
+                        enabled = !isSaving && action != "block"
                     ) { Text(stringResource(R.string.schedule_action_block)) }
                     OutlinedButton(
                         onClick = { action = "allow" },
                         modifier = Modifier.weight(1f),
-                        enabled = action != "allow"
+                        enabled = !isSaving && action != "allow"
                     ) { Text(stringResource(R.string.schedule_action_allow)) }
                 }
                 Text(stringResource(R.string.schedule_target_type))
@@ -367,17 +373,18 @@ private fun ScheduleEditorDialog(
                     OutlinedButton(
                         onClick = { targetType = "group"; targets = emptySet() },
                         modifier = Modifier.weight(1f),
-                        enabled = targetType != "group"
+                        enabled = !isSaving && targetType != "group"
                     ) { Text(stringResource(R.string.schedule_target_groups)) }
                     OutlinedButton(
                         onClick = { targetType = "device"; targets = emptySet() },
                         modifier = Modifier.weight(1f),
-                        enabled = targetType != "device"
+                        enabled = !isSaving && targetType != "device"
                     ) { Text(stringResource(R.string.schedule_target_devices)) }
                 }
                 targetEntries.forEach { (id, label) ->
                     ParentSelectionRow(
                         label = label,
+                        enabled = !isSaving,
                         checked = id in targets,
                         onCheckedChange = { checked ->
                             targets = if (checked) targets + id else targets - id
@@ -392,6 +399,7 @@ private fun ScheduleEditorDialog(
                             Row(modifier = Modifier.weight(1f)) {
                                 Checkbox(
                                     checked = key in weekdays,
+                                    enabled = !isSaving,
                                     onCheckedChange = { checked ->
                                         weekdays = if (checked) weekdays + key else weekdays - key
                                     }
@@ -408,6 +416,7 @@ private fun ScheduleEditorDialog(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedTextField(
                             value = range.start,
+                            enabled = !isSaving,
                             onValueChange = { value ->
                                 timeRanges = timeRanges.toMutableList().also {
                                     it[index] = range.copy(start = value.take(5))
@@ -419,6 +428,7 @@ private fun ScheduleEditorDialog(
                         )
                         OutlinedTextField(
                             value = range.end,
+                            enabled = !isSaving,
                             onValueChange = { value ->
                                 timeRanges = timeRanges.toMutableList().also {
                                     it[index] = range.copy(end = value.take(5))
@@ -432,7 +442,7 @@ private fun ScheduleEditorDialog(
                             onClick = {
                                 timeRanges = timeRanges.filterIndexed { itemIndex, _ -> itemIndex != index }
                             },
-                            enabled = timeRanges.size > 1
+                            enabled = !isSaving && timeRanges.size > 1
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_delete),
@@ -443,7 +453,7 @@ private fun ScheduleEditorDialog(
                 }
                 OutlinedButton(
                     onClick = { timeRanges = timeRanges + RouterTimeRange("15:00", "16:00") },
-                    enabled = timeRanges.size < 8,
+                    enabled = !isSaving && timeRanges.size < 8,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(stringResource(R.string.schedule_add_range)) }
             }
@@ -466,7 +476,7 @@ private fun ScheduleEditorDialog(
             ) { Text(stringResource(R.string.settings_save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            TextButton(onClick = dismiss, enabled = !isSaving) { Text(stringResource(R.string.action_cancel)) }
         }
     )
 }

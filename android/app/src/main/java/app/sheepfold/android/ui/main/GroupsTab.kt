@@ -66,13 +66,14 @@ fun GroupsTab(
     devices: List<RouterDevice>,
     isLoading: Boolean,
     onConfigChanged: (RouterAdminConfig) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    workspace: ParentWorkspace = remember { ParentWorkspace() }
 ) {
-    val scope = rememberCoroutineScope()
-    var isSaving by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var messageIsError by remember { mutableStateOf(false) }
-    var editor by remember { mutableStateOf<RouterGroup?>(null) }
+    val scope = workspace.scope
+    var isSaving by workspace.groupTask.busy
+    var message by workspace.groupTask.message
+    var messageIsError by workspace.groupTask.isError
+    val editor = workspace.group
     var pendingDelete by remember { mutableStateOf<RouterGroup?>(null) }
     val groups = config.groups
     val canWrite = config.capabilities.groupWrite && config.revision.isNotBlank()
@@ -103,6 +104,7 @@ fun GroupsTab(
                     afterSuccess()
                 }
                 .onFailure {
+                    if (it is kotlinx.coroutines.CancellationException) throw it
                     message = it.message ?: changeFailedText
                     messageIsError = true
                 }
@@ -126,7 +128,7 @@ fun GroupsTab(
         Button(
             onClick = {
                 message = null
-                editor = RouterGroup(name = "", color = nextGroupColor(groups))
+                workspace.group = FormDraft(RouterGroup(name = "", color = nextGroupColor(groups)), config.revision)
             },
             enabled = canWrite && !isLoading && !isSaving,
             modifier = Modifier.fillMaxWidth()
@@ -178,7 +180,7 @@ fun GroupsTab(
                                 description = stringResource(R.string.action_edit),
                                 onClick = {
                                     message = null
-                                    editor = group
+                                    workspace.group = FormDraft(group, config.revision)
                                 },
                                 enabled = canWrite && !isSaving
                             )
@@ -195,23 +197,24 @@ fun GroupsTab(
         }
     }
 
-    editor?.let { group ->
+    editor?.let { form ->
         GroupEditorDialog(
-            initial = group,
+            initial = form.original,
+            form = form,
             devices = devices.filterNot { it.isAdministrator },
             schedules = config.schedules.filter { it.targetType == "group" },
             isSaving = isSaving,
             backendError = message.takeIf { messageIsError },
             onDismiss = {
-                editor = null
+                workspace.group = null
                 message = null
             },
             onSave = { updated ->
                 applyMutation(
-                    block = { client.saveGroup(config, updated) },
+                    block = { client.saveGroup(config.copy(revision = form.revision), updated) },
                     successText = savedText,
                     reloadDevices = true,
-                    afterSuccess = { editor = null }
+                    afterSuccess = { workspace.group = null }
                 )
             }
         )
@@ -261,6 +264,7 @@ fun GroupsTab(
 @Composable
 private fun GroupEditorDialog(
     initial: RouterGroup,
+    form: FormDraft<RouterGroup>,
     devices: List<RouterDevice>,
     schedules: List<RouterSchedule>,
     isSaving: Boolean,
@@ -268,19 +272,14 @@ private fun GroupEditorDialog(
     onDismiss: () -> Unit,
     onSave: (RouterGroup) -> Unit
 ) {
-    var name by remember(initial.section, initial.name) { mutableStateOf(initial.name) }
-    var description by remember(initial.section, initial.description) { mutableStateOf(initial.description) }
-    var color by remember(initial.section, initial.color) { mutableStateOf(initial.color) }
-    var personal by remember(initial.section, initial.personal) { mutableStateOf(initial.personal) }
-    var allowlistOnly by remember(initial.section, initial.allowlistOnly) {
-        mutableStateOf(initial.allowlistOnly)
-    }
-    var selectedDeviceIds by remember(initial.section, initial.deviceIds) {
-        mutableStateOf(initial.deviceIds.toSet())
-    }
-    var selectedScheduleIds by remember(initial.section, initial.scheduleIds) {
-        mutableStateOf(initial.scheduleIds.toSet())
-    }
+    var name by form.field({ it.name }) { value, next -> value.copy(name = next) }
+    var description by form.field({ it.description }) { value, next -> value.copy(description = next) }
+    var color by form.field({ it.color }) { value, next -> value.copy(color = next) }
+    var personal by form.field({ it.personal }) { value, next -> value.copy(personal = next) }
+    var allowlistOnly by form.field({ it.allowlistOnly }) { value, next -> value.copy(allowlistOnly = next) }
+    var selectedDeviceIds by form.field({ it.deviceIds.toSet() }) { value, next -> value.copy(deviceIds = next.toList()) }
+    var selectedScheduleIds by form.field({ it.scheduleIds.toSet() }) { value, next -> value.copy(scheduleIds = next.toList()) }
+    val dismiss = rememberDraftDismiss(form.dirty, isSaving, onDismiss)
     var validationError by remember { mutableStateOf<String?>(null) }
     val nameRequiredText = stringResource(R.string.validation_group_name_required)
     val isNew = initial.section.isBlank()
@@ -289,7 +288,7 @@ private fun GroupEditorDialog(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = dismiss,
         title = {
             Text(
                 if (isNew) stringResource(R.string.groups_add)
@@ -309,29 +308,30 @@ private fun GroupEditorDialog(
                     value = name,
                     onValueChange = { name = it.take(80) },
                     label = { Text(stringResource(R.string.groups_name)) },
-                    enabled = !initial.protectedGroup,
+                    enabled = !isSaving && !initial.protectedGroup,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = description,
+                    enabled = !isSaving,
                     onValueChange = { description = it.take(240) },
                     label = { Text(stringResource(R.string.groups_description)) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2
                 )
-                GroupColorPicker(selectedColor = color, onSelect = { color = it })
+                GroupColorPicker(selectedColor = color, onSelect = { color = it }, enabled = !isSaving)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(stringResource(R.string.groups_personal))
                     Switch(
                         checked = personal,
-                        enabled = isNew,
+                        enabled = !isSaving && isNew,
                         onCheckedChange = { personal = it }
                     )
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(stringResource(R.string.groups_allowlist_only), modifier = Modifier.weight(1f))
-                    Switch(checked = allowlistOnly, onCheckedChange = { allowlistOnly = it })
+                    Switch(checked = allowlistOnly, onCheckedChange = { allowlistOnly = it }, enabled = !isSaving)
                 }
                 Text(stringResource(R.string.groups_schedules))
                 if (schedules.isEmpty()) {
@@ -340,6 +340,7 @@ private fun GroupEditorDialog(
                     schedules.forEach { schedule ->
                         ParentSelectionRow(
                             label = schedule.name,
+                            enabled = !isSaving,
                             checked = schedule.section in selectedScheduleIds,
                             onCheckedChange = { checked ->
                                 selectedScheduleIds = if (checked) {
@@ -367,6 +368,7 @@ private fun GroupEditorDialog(
                             }
                         },
                         checked = device.id in selectedDeviceIds,
+                        enabled = !isSaving,
                         onCheckedChange = { checked ->
                             selectedDeviceIds = if (checked) {
                                 selectedDeviceIds + device.id
@@ -400,7 +402,7 @@ private fun GroupEditorDialog(
             ) { Text(stringResource(R.string.settings_save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            TextButton(onClick = dismiss, enabled = !isSaving) { Text(stringResource(R.string.action_cancel)) }
         }
     )
 }
@@ -418,7 +420,7 @@ private fun GroupActionButton(
 }
 
 @Composable
-private fun GroupColorPicker(selectedColor: String, onSelect: (String) -> Unit) {
+private fun GroupColorPicker(selectedColor: String, onSelect: (String) -> Unit, enabled: Boolean) {
     Text(stringResource(R.string.groups_color))
     groupPastelColors.chunked(5).forEachIndexed { rowIndex, rowColors ->
         Row(
@@ -440,7 +442,7 @@ private fun GroupColorPicker(selectedColor: String, onSelect: (String) -> Unit) 
                             shape = RoundedCornerShape(6.dp)
                         )
                         .semantics { contentDescription = colorDescription }
-                        .clickable { onSelect(colorValue) }
+                        .clickable(enabled = enabled) { onSelect(colorValue) }
                 )
             }
         }

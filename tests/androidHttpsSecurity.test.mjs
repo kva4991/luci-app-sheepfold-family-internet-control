@@ -1,3 +1,8 @@
+/*
+ * Статический guard локального HTTPS, pinning и запрета cleartext для обоих APK.
+ * Не выполняет сеть и не меняет настройки; реальный TLS/маршрут проверяет Android-стенд.
+ * §testwhy
+ */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -90,7 +95,7 @@ describe('Android HTTPS hardening', () => {
     assert.match(connectionManager, /allowHostname = !request\.tlsSpkiSha256\.isNullOrBlank\(\)/);
     assert.match(connectionManager, /resolvedUrlHosts\(parsed\.host, allowHostname\)/);
     assert.match(connectionManager, /apiUrl = apiUrl/);
-    assert.match(connectionManager, /Для ручного подключения укажите IP-адрес роутера/);
+    assert.match(connectionManager, /Для ручного подключения укажите локальный IP-адрес роутера/);
     assert.match(routerHttps, /LocalRouterAddress\.isLocalIpLiteral\(url\.host\)/);
     assert.match(routerHttps, /Выполните сопряжение заново/);
     assert.match(endpointRecovery, /val host = failedUrl\.host/);

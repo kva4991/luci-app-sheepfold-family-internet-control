@@ -2,7 +2,11 @@
 
 <!-- §rsup001 -->
 
-Статус: проектный контракт `v1`. Общий envelope, строгий JSON, state machine, synthetic golden vector и автономный claim/session lifecycle simulator реализованы только как Node.js reference-модель в [`tools/remoteSupport/`](../tools/remoteSupport/README.ru.md). Это не router/server runtime и не обещание совместимости. LuCI-заглушка остаётся заблокированной до появления предметных схем всех `payload`, двустороннего signed-message simulator, backend и живого transport PoC.
+Статус: проектный контракт `v1` и исполняемый экспериментальный control-профиль (31.08.2026).
+В [`tools/remoteSupport/`](../tools/remoteSupport/README.ru.md) реализованы предметные проверки,
+клиентский Node.js автомат и ручной двусторонний HTTPS-стенд с private server. Это не OpenWrt
+runtime: FRP/SSH, ключевой manifest и manager роутера ещё отсутствуют. LuCI-заглушка остаётся
+заблокированной до полного backend и живого transport PoC.
 
 Документ определяет сообщения между Sheepfold на роутере и будущим control plane. FRP переносит зашифрованный поток, но не решает выдачу разрешения, сроки, отзыв, защиту от replay и аутентификацию сотрудника.
 
@@ -164,7 +168,8 @@ ASCII "SheepfoldRemoteSupport\\0"
 - неизвестная major-версия не получает fallback на `v1`;
 - текст ошибки не участвует в логике клиента.
 
-Подписанные payload создаёт один server-side serializer. Golden vectors фиксируют точные байты, подписи, допустимый разбор и набор испорченных вариантов.
+В каждом направлении подписанные payload создаёт один serializer соответствующей стороны.
+Golden vectors фиксируют точные байты, подписи, допустимый разбор и набор испорченных вариантов.
 
 ## Версия и capabilities
 
@@ -255,6 +260,9 @@ Capability сообщает только уже реализованное по�
 - `messageId`/nonce хранится в ограниченном replay cache как минимум до `expiresAt` сообщения.
 - Значение ниже уже подтверждённого sequence отклоняется.
 - Повтор последнего idempotent message может вернуть прежний результат, но не повторяет side effect.
+- Повтор совпадает по всем подписанным байтам, не только по `sequence/messageId`. Изменённый
+  payload с прежними ID отвергается. Потерянный ответ на отзыв возвращается с первоначальной
+  подписью и server sequence, иначе клиент получит искусственный `sequenceGap`.
 - Пропуск sequence вызывает `sequenceGap` и явный status sync, а не выполнение более новой опасной команды вслепую.
 - Новый transport socket не обнуляет sequence.
 - Factory reset создаёт новую router identity; старый `routerId` не восстанавливает support session.
@@ -378,6 +386,78 @@ Reference-модель и схемы запускаются командой:
 ```powershell
 node --test tests/remoteSupportProtocol.test.mjs tests/remoteSupportArchitecture.test.mjs
 ```
+
+## Экспериментальный control-профиль
+
+30.08.2026 в private server появился отдельный локальный HTTPS/control runtime
+`sheepfold-support-server-experimental-1`. 31.08.2026 добавлены исполняемые public validators,
+клиентский автомат и loopback HTTPS-стенд с этим сервером. Router/APK/backend/вкладки не изменяются.
+
+Точный payload задан в
+[`experimental-router-message-v1.schema.json`](../tools/remoteSupport/schemas/experimental-router-message-v1.schema.json)
+и [`experimental-server-message-v1.schema.json`](../tools/remoteSupport/schemas/experimental-server-message-v1.schema.json).
+Они дополняют общий signed payload, а не меняют его подпись. Проверка JSON Schema сама по себе
+не доказывает canonical base64url, подпись, владение identity, связь stream/session, replay и срок:
+это обязательные дополнительные runtime проверки.
+
+| Router message | Точные поля вложенного payload |
+| --- | --- |
+| `enrollProof` | `challenge`, `clientNonce` |
+| `capabilityReport` | `profile`, `capabilities` |
+| `claimOpen` | `sessionId`, `code`, `claimExpiresAt`, `routerHostKey`, `diagnosticsAllowed` |
+| `sessionReady`, `heartbeat` | `sessionId`, `leaseId`, `bootId`; default server пока не создаёт такую lease |
+| `revokeRequest`, `statusQuery` | `sessionId` |
+
+`routerHostKey` — точный OpenSSH `ssh-ed25519` public host key без comment, не временный ключ
+оператора. `diagnosticsAllowed` — отдельное разрешение диагностических recipes; сам claim
+не означает согласие на выгрузку любых данных. Дополнительные ключи отвергаются целиком.
+
+Начальные routes: `POST /experimental/support/enrollment/start` с прежним enrollment-start body
+и `POST /experimental/support/router` с signed envelope. Ответ HTTP: `{ok:true,profile,result}`,
+где `result` — signed message; ошибка `{ok:false,errorCode}`. Body ограничен 24576 bytes,
+signed payload — 16384. `Content-Type: application/json`, без query/compression/redirect.
+Default listener private runtime только `127.0.0.1`; production endpoint не опубликован.
+
+Сотрудник использует отдельные operator routes с mTLS certificate pin и TOTP. Открытый code
+поступает только через скрытый stdin, не argv. Для claim он указывает `sessionId`, номер заявки
+и `operationId`; одинаковый повтор возвращает первоначальный результат. Принятие меняет состояние
+на `sessionPreparing`, но не создаёт SSH. Сервер объявляет только реализованную `claimV1`,
+не объявляет рабочую `mutualTlsTransportV1` без транспорта.
+
+Клиент заявки объявляет только `claimV1/localRevokeV1`. Проверка
+`mutualTlsTransportV1/typedGatewayV1` выполняется отдельно при `prepare`, до вызова broker.
+Прежнее требование полного транспорта уже на `claimOpen` не позволяло честному control-only
+клиенту открыть заявку и было исправлено. Смена capabilities не выдаёт transport credential.
+
+Исполняемый client verifier строже общей формы status: `sessionReady/sessionActive/reconnecting`
+и ненулевая lease не принимаются без согласованного transport-профиля. `claimOpened` означает
+только `claimOpen`; `revokeConfirmed` требует terminal state. Claim deadline неизменен,
+первый access deadline не длиннее 24 часов от подписанного времени ответа, последующие ответы
+не меняют его или номер заявки. Поздний ответ после локального отзыва не открывает доступ.
+
+При неопределённом результате запроса клиент сохраняет для повтора те же bytes/ID/sequence
+только в RAM и только до исходного срока сообщения. После локального отзыва открывающий запрос
+больше не повторяется. Если его ответ потерян навсегда, текущий автомат остаётся закрытым:
+восстановление sequence без повторного `claimOpen` требует ещё не реализованного signed
+status-sync контракта. Это блокирует production manager, но не оправдывает сброс счётчика.
+После server-side закрытия запрос, чей cached response содержал старое открытое состояние,
+получает `sessionRevoked`, а не новый ответ с пропущенным номером. HTTP-ошибка не является
+подписанным разрешением или подтверждением состояния.
+
+В экспериментальном профиле restart сервера отзывает все старые open claims/sessions. Это
+более закрытый исход, чем проектный resume: требуется новое локальное разрешение владельца,
+а старые сроки и код не оживают при восстановлении backup. Роутер должен принять этот исход,
+не пытаться автоматически создать новый claim. Heartbeat и reconnect не продлевают 24 часа.
+После аварийного завершения experimental server не снимает старый writer lock самостоятельно:
+OS-level lock/service crash-recovery gate ещё не пройден. Это ограничение локального server
+entrypoint, а не разрешение клиенту продлить срок или выдать доступ повторно.
+
+**Почему выбран этот способ / нюансы.** Публичный проект остаётся владельцем формата; локальный
+контракт не выдаётся за опубликованную совместимую версию. Схемы `claimAccepted`, реальной
+transport lease/CSR, `sessionActive`, relay map и safe-apply надо согласовать вместе с настоящим
+FRP/bastion adapter. Сейчас они сознательно не входят в server-response schema. После review и
+public commit private repo обновляет pinned vendor revision/SHA-256; рабочий файл не является
+immutable release. Полный план ADR-0022 этим профилем не отменяется.
 
 ## Вопросы перед фиксацией production `v1`
 

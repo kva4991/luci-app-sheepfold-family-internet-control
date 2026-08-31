@@ -14,6 +14,18 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const installer = readFileSync(resolve(repoRoot, 'install.sh'), 'utf8');
 
 describe('Install settings preservation', () => {
+  it('betaParticipationDefaultsOffWithoutOverwritingAnExistingChoice', () => {
+    const prefix = 'package/luci-app-sheepfold-family-internet-control/';
+    const defaults = readFileSync(resolve(repoRoot, prefix, 'root/usr/share/sheepfold/sheepfold.uci.defaults'), 'utf8');
+    const makefile = readFileSync(resolve(repoRoot, prefix, 'Makefile'), 'utf8');
+    const builder = readFileSync(resolve(repoRoot, 'scripts/build-test-ipk.py'), 'utf8');
+    assert.match(defaults, /option beta_testing '0'/);
+    for (const code of [makefile, builder]) {
+      assert.match(code, /ensure_global_option beta_testing '0'/);
+      assert.doesNotMatch(code, /beta_testing(?:=|\s+)'?1/);
+    }
+  });
+
   it('uses current language and product as defaults for an existing installation', () => {
     assert.match(installer, /DEFAULT_APP_LANGUAGE=.*sheepfold\.global\.language/);
     assert.match(installer, /""\)\s*\n\s*APP_LANGUAGE="\$DEFAULT_APP_LANGUAGE"/);

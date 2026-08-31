@@ -146,6 +146,16 @@ internal class MessageRelayStateStore(
         updated
     }
 
+    fun beginPublicAttempt(messageId: String): RelayOutboxEntry = synchronized(globalLock) {
+        val current = outboxEntry(messageId)
+            ?: throw IllegalArgumentException("Unknown relay outbox messageId")
+        require(current.status in setOf(RelayOutboxStatus.READY, RelayOutboxStatus.RELAY_RETRYABLE)) {
+            "Public attempt requires proof that local submission is not pending"
+        }
+        // Существующий wire-status сохраняет совместимость и запрещает забыть отправку при process kill
+        updateOutboundStatus(messageId, RelayOutboxStatus.RELAY_RETRYABLE)
+    }
+
     fun updateOutboundStatus(messageId: String, status: RelayOutboxStatus): RelayOutboxEntry =
         synchronized(globalLock) {
             val state = readState()
@@ -349,7 +359,6 @@ internal class MessageRelayStateStore(
             )
             RelayOutboxStatus.RELAY_RETRYABLE -> setOf(
                 RelayOutboxStatus.RELAY_RETRYABLE,
-                RelayOutboxStatus.READY,
                 RelayOutboxStatus.RELAY_ACCEPTED,
                 RelayOutboxStatus.INDETERMINATE,
                 RelayOutboxStatus.DEFINITE_FAILURE
@@ -361,10 +370,6 @@ internal class MessageRelayStateStore(
             )
             RelayOutboxStatus.INDETERMINATE -> setOf(
                 RelayOutboxStatus.INDETERMINATE,
-                RelayOutboxStatus.READY,
-                RelayOutboxStatus.RELAY_RETRYABLE,
-                RelayOutboxStatus.RELAY_ACCEPTED,
-                RelayOutboxStatus.DEFINITE_FAILURE
             )
             RelayOutboxStatus.DEFINITE_FAILURE -> setOf(RelayOutboxStatus.DEFINITE_FAILURE)
         }
@@ -562,13 +567,16 @@ internal class MessageRelayStateStore(
     }
 }
 
-internal class AndroidMessageRelayStateStorage(context: Context) : MessageRelayStateStorage {
+internal class AndroidMessageRelayStateStorage(
+    context: Context,
+    private val secureStore: MessageRelayEncryptedStore = MessageRelaySecureStore
+) : MessageRelayStateStorage {
     private val appContext = context.applicationContext
 
-    override fun read(): ByteArray? = MessageRelaySecureStore.readStateBytes(appContext)
+    override fun read(): ByteArray? = secureStore.readStateBytes(appContext)
 
     override fun write(bytes: ByteArray) {
-        MessageRelaySecureStore.writeStateBytes(appContext, bytes)
+        secureStore.writeStateBytes(appContext, bytes)
     }
 }
 

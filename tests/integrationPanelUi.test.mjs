@@ -1,6 +1,7 @@
 /*
- * Защищает композицию вкладки интеграций и её узкий callback-контракт. Реальный
- * AdGuard Home/Podkop runtime проверяется отдельными backend и router-тестами.
+ * Защищает композицию вкладки интеграций и её узкий callback-контракт по исходникам.
+ * Не меняет состояние; наличие выключенной заглушки не доказывает remote runtime.
+ * Реальный AdGuard Home/Podkop проверяется отдельными backend и router-тестами.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -48,6 +49,6 @@ describe('Integration settings panel §frontmod §dompol §ipv6pod', () => {
     assert.doesNotMatch(panel, /remote_support_mode|create-access|remote-support install/);
     assert.match(remoteSupportPlan, /в LuCI реализована только неактивная заглушка/);
     assert.match(remoteSupportPlan, /Remote support не отключает IPv6|Удалённая помощь не включает настройку `Выключить IPv6/);
-    assert.match(implementationStatus, /only its inert LuCI placeholder/);
+    assert.match(implementationStatus, /temporary support UI remains inert/);
   });
 });

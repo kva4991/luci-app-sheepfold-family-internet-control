@@ -1,4 +1,5 @@
 import {
+  createHash,
   sign as signBytes,
   verify as verifyBytes,
 } from 'node:crypto';
@@ -134,7 +135,9 @@ export function verifyEnvelope({ envelope, publicKeys, now = null, replayWindow 
       fail('messageExpired', 'message validity has ended');
     }
   }
-  const replay = replayWindow ? replayWindow.accept(payload) : { duplicate: false };
+  const replay = replayWindow
+    ? replayWindow.accept(payload, createHash('sha256').update(signedInput).digest('hex'))
+    : { duplicate: false };
   return { payload, replay };
 }
 
@@ -143,7 +146,7 @@ export class ReplayWindow {
     this.sessions = new Map();
   }
 
-  accept(payload) {
+  accept(payload, fingerprint = createHash('sha256').update(JSON.stringify(payload)).digest('hex')) {
     validatePayload(payload);
     const key = `${payload.routerId || 'unassigned'}:${payload.streamId}`;
     const previous = this.sessions.get(key);
@@ -151,14 +154,14 @@ export class ReplayWindow {
       if (payload.sequence !== 0) {
         fail('sequenceGap', 'a new directional sequence must start at zero');
       }
-      this.sessions.set(key, { sequence: payload.sequence, messageId: payload.messageId });
+      this.sessions.set(key, { sequence: payload.sequence, messageId: payload.messageId, fingerprint });
       return { duplicate: false };
     }
     if (payload.sequence < previous.sequence) {
       fail('sequenceReplay', 'sequence is older than the accepted value');
     }
     if (payload.sequence === previous.sequence) {
-      if (payload.messageId === previous.messageId) {
+      if (payload.messageId === previous.messageId && fingerprint === previous.fingerprint) {
         return { duplicate: true };
       }
       fail('sequenceReplay', 'sequence was reused by another message');
@@ -166,7 +169,7 @@ export class ReplayWindow {
     if (payload.sequence !== previous.sequence + 1) {
       fail('sequenceGap', 'sequence contains a gap');
     }
-    this.sessions.set(key, { sequence: payload.sequence, messageId: payload.messageId });
+    this.sessions.set(key, { sequence: payload.sequence, messageId: payload.messageId, fingerprint });
     return { duplicate: false };
   }
 }

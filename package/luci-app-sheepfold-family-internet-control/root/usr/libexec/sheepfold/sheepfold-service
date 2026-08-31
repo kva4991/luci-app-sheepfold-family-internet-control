@@ -245,8 +245,9 @@ process_pending_connections() {
                         printf '%s\t%s\n' $((now + 5)) "$mac" >> "$remaining_file"
                         continue
                 fi
+                # Неуспешный запуск тоже расходует бюджет: lock/ошибки не должны задержать весь tick.
+                processed=$((processed + 1))
                 if run_detector scan event "$mac" >/dev/null 2>&1; then
-                        processed=$((processed + 1))
                         ran=1
                 else
                         printf '%s\t%s\n' $((now + 60)) "$mac" >> "$remaining_file"

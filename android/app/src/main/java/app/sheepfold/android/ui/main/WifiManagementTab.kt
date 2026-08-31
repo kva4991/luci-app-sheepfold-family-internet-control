@@ -20,6 +20,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
@@ -27,6 +29,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -45,8 +49,10 @@ import app.sheepfold.android.router.RouterAdminConfig
 import app.sheepfold.android.router.RouterWifiModule
 import app.sheepfold.android.router.RouterWifiNetwork
 import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 @Composable
 fun WifiTab(
@@ -55,13 +61,15 @@ fun WifiTab(
     wifiModules: List<RouterWifiModule>,
     isLoading: Boolean,
     onConfigChanged: (RouterAdminConfig) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    workspace: ParentWorkspace = remember { ParentWorkspace() }
 ) {
-    val scope = rememberCoroutineScope()
-    var isSaving by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var messageIsError by remember { mutableStateOf(false) }
+    val scope = workspace.scope
+    var isSaving by workspace.wifiTask.busy
+    var message by workspace.wifiTask.message
+    var messageIsError by workspace.wifiTask.isError
     var pendingGlobalState by remember { mutableStateOf<Boolean?>(null) }
+    var pendingNetwork by remember { mutableStateOf<RouterWifiNetwork?>(null) }
     val canControl = config.capabilities.wifiControl
     val canSaveAutomation = config.capabilities.wifiAutomationWrite && config.revision.isNotBlank()
     val wifiEnabledText = stringResource(R.string.wifi_enabled_success)
@@ -70,12 +78,28 @@ fun WifiTab(
     val wifiSavedText = stringResource(R.string.wifi_saved_success)
     val wifiAutomationSavedText = stringResource(R.string.wifi_automation_saved)
     val runtimePendingText = stringResource(R.string.management_runtime_pending)
+    val resultUnknownText = stringResource(R.string.wifi_result_unknown)
+
+    LaunchedEffect(config.wifiRevision, config.revision, isLoading, isSaving) {
+        if (!isLoading && !isSaving) {
+            config.wifiNetworks.forEach { network ->
+                val form = workspace.wifi[network.section]
+                if (form == null || !form.dirty || wifiSettingsEqual(form.value, network)) {
+                    workspace.wifi[network.section] = FormDraft(network, config.revision, config.wifiRevision)
+                }
+            }
+            if (workspace.automation?.dirty != true || workspace.automation?.value == config.wifiAutomation) {
+                workspace.automation = FormDraft(config.wifiAutomation, config.revision)
+            }
+        }
+    }
 
     fun saveNetwork(network: RouterWifiNetwork) {
         isSaving = true
         message = null
         scope.launch {
-            runCatching { client.saveWifiNetwork(config, network) }
+            val form = workspace.wifi[network.section]
+            runCatching { client.saveWifiNetwork(config.copy(wifiRevision = form?.wifiRevision ?: config.wifiRevision), network) }
                 .onSuccess {
                     onConfigChanged(it)
                     val runtimePending = it.mutation?.runtimeApplied == false
@@ -85,9 +109,11 @@ fun WifiTab(
                         wifiSavedText
                     }
                     messageIsError = runtimePending
+                    onRefresh()
                 }
                 .onFailure {
-                    message = it.message ?: wifiFailedText
+                    if (it is kotlinx.coroutines.CancellationException) throw it
+                    message = if (it is IOException) resultUnknownText else it.message ?: wifiFailedText
                     messageIsError = true
                 }
             isSaving = false
@@ -98,13 +124,14 @@ fun WifiTab(
         isSaving = true
         message = null
         scope.launch {
-            runCatching { client.saveWifiAutomation(config, automation) }
+            runCatching { client.saveWifiAutomation(config.copy(revision = workspace.automation?.revision ?: config.revision), automation) }
                 .onSuccess {
                     onConfigChanged(it)
                     message = wifiAutomationSavedText
                     messageIsError = false
                 }
                 .onFailure {
+                    if (it is kotlinx.coroutines.CancellationException) throw it
                     message = it.message ?: wifiFailedText
                     messageIsError = true
                 }
@@ -124,7 +151,10 @@ fun WifiTab(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(stringResource(R.string.wifi_title), style = MaterialTheme.typography.headlineSmall)
+                Text(stringResource(R.string.wifi_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                IconButton(onClick = onRefresh, enabled = !isLoading && !isSaving) {
+                    Icon(painterResource(R.drawable.ic_refresh), stringResource(R.string.action_refresh))
+                }
                 Switch(
                     checked = config.wifiEnabled,
                     enabled = canControl && !isLoading && !isSaving,
@@ -141,8 +171,10 @@ fun WifiTab(
         items(config.wifiNetworks, key = { it.section }) { network ->
             WifiNetworkCard(
                 network = network,
-                enabled = !isSaving && canControl,
-                onSave = ::saveNetwork
+                form = workspace.wifi.getOrPut(network.section) { FormDraft(network, config.revision, config.wifiRevision) },
+                enabled = !isSaving && !isLoading && canControl,
+                onDiscard = { workspace.wifi[network.section] = FormDraft(network, config.revision, config.wifiRevision) },
+                onSave = { pendingNetwork = it }
             )
         }
         if (config.wifiNetworks.isEmpty() && wifiModules.isNotEmpty()) {
@@ -164,11 +196,33 @@ fun WifiTab(
         item {
             WifiAutomationCard(
                 current = config.wifiAutomation,
+                form = workspace.automation ?: FormDraft(config.wifiAutomation, config.revision).also { workspace.automation = it },
                 enabled = canSaveAutomation && !isLoading && !isSaving,
                 onSave = ::saveAutomation
             )
             if (!canSaveAutomation) Text(stringResource(R.string.wifi_automation_update_router))
         }
+    }
+
+    pendingNetwork?.let { network ->
+        AlertDialog(
+            onDismissRequest = { if (!isSaving) pendingNetwork = null },
+            title = { Text(stringResource(R.string.wifi_save_confirm_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.wifi_save_confirm_message, network.ssid))
+                    if (!network.enabled) Text(stringResource(R.string.wifi_network_will_disable))
+                    if (network.encryption in listOf("none", "wep", "psk-mixed")) Text(stringResource(R.string.wifi_weak_security_warning), color = MaterialTheme.colorScheme.error)
+                    val original = config.wifiNetworks.firstOrNull { it.section == network.section }
+                    if (original?.channel != network.channel) {
+                        val names = config.wifiNetworks.filter { it.device == network.device }.joinToString(", ") { it.ssid }
+                        Text(stringResource(R.string.wifi_shared_radio_warning, names))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { pendingNetwork = null; saveNetwork(network) }, enabled = !isSaving) { Text(stringResource(R.string.settings_save)) } },
+            dismissButton = { TextButton(onClick = { pendingNetwork = null }) { Text(stringResource(R.string.action_cancel)) } }
+        )
     }
 
     pendingGlobalState?.let { enabled ->
@@ -200,7 +254,8 @@ fun WifiTab(
                                     onRefresh()
                                 }
                                 .onFailure {
-                                    message = it.message ?: wifiFailedText
+                                    if (it is kotlinx.coroutines.CancellationException) throw it
+                                    message = if (it is IOException) resultUnknownText else it.message ?: wifiFailedText
                                     messageIsError = true
                                 }
                             isSaving = false
@@ -226,21 +281,23 @@ fun WifiTab(
 @Composable
 private fun WifiNetworkCard(
     network: RouterWifiNetwork,
+    form: FormDraft<RouterWifiNetwork>,
     enabled: Boolean,
+    onDiscard: () -> Unit,
     onSave: (RouterWifiNetwork) -> Unit
 ) {
-    var ssid by remember(network.section, network.ssid) { mutableStateOf(network.ssid) }
-    var password by remember(network.section, network.password) { mutableStateOf(network.password) }
-    var encryption by remember(network.section, network.encryption) { mutableStateOf(network.encryption) }
-    var channel by remember(network.section, network.channel) { mutableStateOf(network.channel) }
-    var networkEnabled by remember(network.section, network.enabled) { mutableStateOf(network.enabled) }
+    var ssid by form.field({ it.ssid }) { value, next -> value.copy(ssid = next) }
+    var password by form.field({ it.password }) { value, next -> value.copy(password = next) }
+    var encryption by form.field({ it.encryption }) { value, next -> value.copy(encryption = next) }
+    var channel by form.field({ it.channel }) { value, next -> value.copy(channel = next) }
+    var networkEnabled by form.field({ it.enabled }) { value, next -> value.copy(enabled = next) }
+    val discard = rememberDraftDismiss(form.dirty, !enabled, onDiscard)
     var passwordVisible by remember { mutableStateOf(false) }
     var securityExpanded by remember { mutableStateOf(false) }
     var channelExpanded by remember { mutableStateOf(false) }
     val securityOptions = listOf("sae-mixed", "psk2", "sae", "psk-mixed", "wep", "none")
         .let { options -> if (network.encryption in options) options else listOf(network.encryption) + options }
-    val channelOptions = listOf("auto", "1", "6", "11", "36", "44", "149")
-        .let { options -> if (network.channel in options) options else listOf(network.channel) + options }
+    val channelOptions = wifiChannelOptions(network)
     val edited = network.copy(
         ssid = ssid.trim(),
         password = password,
@@ -260,6 +317,19 @@ private fun WifiNetworkCard(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
+            qrBitmap?.let {
+                Image(
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = stringResource(R.string.wifi_qr_description, network.ssid),
+                    modifier = Modifier
+                        .size(220.dp)
+                        .align(Alignment.CenterHorizontally)
+                )
+                Text(
+                    stringResource(R.string.wifi_qr_hint),
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -365,26 +435,16 @@ private fun WifiNetworkCard(
                     }
                 }
             }
-            qrBitmap?.let {
-                Image(
-                    bitmap = it.asImageBitmap(),
-                    contentDescription = stringResource(R.string.wifi_qr_description, network.ssid),
-                    modifier = Modifier
-                        .size(220.dp)
-                        .align(Alignment.CenterHorizontally)
-                )
-                Text(
-                    stringResource(R.string.wifi_qr_hint),
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
-            }
             Button(
                 onClick = { onSave(edited) },
-                enabled = enabled && edited.ssid.isNotBlank(),
+                enabled = enabled && wifiInputValid(edited) && !wifiSettingsEqual(edited, network),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.settings_save))
             }
+            if (!wifiInputValid(edited)) Text(stringResource(R.string.wifi_input_invalid), color = MaterialTheme.colorScheme.error)
+            if (network.channels.isEmpty()) Text(stringResource(R.string.wifi_channels_unknown), style = MaterialTheme.typography.bodySmall)
+            if (form.dirty) TextButton(onClick = discard, enabled = enabled) { Text(stringResource(R.string.draft_discard)) }
         }
     }
 }
@@ -419,7 +479,11 @@ internal fun wifiQrPayload(ssid: String, password: String, encryption: String): 
 private fun wifiQrBitmap(payload: String): Bitmap? {
     if (payload.isBlank()) return null
     return runCatching {
-        val matrix = MultiFormatWriter().encode(payload, BarcodeFormat.QR_CODE, 512, 512)
+        // Без явного UTF-8 ZXing заменяет не-латинские SSID/пароли вопросительными знаками
+        val matrix = MultiFormatWriter().encode(
+            payload, BarcodeFormat.QR_CODE, 512, 512,
+            mapOf(EncodeHintType.CHARACTER_SET to "UTF-8")
+        )
         Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888).also { bitmap ->
             for (y in 0 until matrix.height) {
                 for (x in 0 until matrix.width) {

@@ -61,9 +61,10 @@ write_state() {
     local file tmp
     file="$1"
     tmp="${file}.tmp.$$"
-    mkdir -p "${file%/*}"
+    [ ! -d "$file" ] || return 1
+    mkdir -p "${file%/*}" || return 1
     umask 077
-    cat > "$tmp"
+    cat > "$tmp" || { rm -f "$tmp"; return 1; }
     chmod 600 "$tmp" 2>/dev/null || true
     mv -f "$tmp" "$file"
 }
@@ -567,9 +568,38 @@ notify_update_available() {
     "$NOTIFIER" enqueue update "update:${latest}" "$title" "$message" 9>&- >/dev/null 2>&1 || true
 }
 
+# Интервал в RAM и по uptime не изнашивает flash и не зависит от поправок NTP (§betatest1)
+run_beta_update() {
+    local state_file uptime now result
+    state_file="$RUNTIME_DIR/beta-update.state"
+    clock_is_sane || return 0
+    uptime="${SHEEPFOLD_MAINTENANCE_UPTIME:-$(cut -d. -f1 /proc/uptime 2>/dev/null)}"
+    valid_uint "$uptime" || return 1
+    task_due "$state_file" last_uptime 3600 "$uptime" || return 0
+    now="$(now_epoch)"
+    # Записываем попытку до запуска: даже ошибка или force не создают частые повторы
+    write_state "$state_file" <<EOF_STATE || return 1
+last_check=$now
+last_uptime=$uptime
+last_result=starting
+EOF_STATE
+    result=started
+    "$UPDATER" start-beta 9>&- >/dev/null 2>&1 || result=start_failed
+    write_state "$state_file" <<EOF_STATE
+last_check=$now
+last_uptime=$uptime
+last_result=$result
+EOF_STATE
+    [ "$result" = started ]
+}
+
 run_update_check() {
     local force state_file now mode previous interval probe_error probe available current latest tag result
     local failures error_text
+    if [ "$(uci_get sheepfold.global.beta_testing)" = 1 ]; then
+        run_beta_update
+        return $?
+    fi
     force="${1:-0}"
     state_file="$STATE_DIR/update-check.state"
     now="$(now_epoch)"
@@ -652,12 +682,13 @@ print_status() {
     for pair in \
         "log:$RUNTIME_DIR/log-rotation.state" \
         "devices:$STATE_DIR/device-cleanup.state" \
-        "updates:$STATE_DIR/update-check.state"; do
+        "updates:$STATE_DIR/update-check.state" \
+        "beta:$RUNTIME_DIR/beta-update.state"; do
         name="${pair%%:*}"
         file="${pair#*:}"
         printf '%s_last_result=%s\n' "$name" "$(state_get "$file" last_result)"
         printf '%s_last_run=%s\n' "$name" "$(state_get "$file" last_run)"
-        [ "$name" != updates ] || printf 'updates_last_check=%s\n' "$(state_get "$file" last_check)"
+        case "$name" in updates|beta) printf '%s_last_check=%s\n' "$name" "$(state_get "$file" last_check)" ;; esac
     done
 }
 

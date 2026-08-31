@@ -4969,3 +4969,18 @@ msgstr "Кнопка станет доступна после реализаци
 
 msgid "Give access"
 msgstr "Дать доступ"
+
+msgid "Participate in beta testing"
+msgstr "Участвовать в бетатесте"
+
+msgid "After Save, Sheepfold checks published GitHub releases every hour and installs newer versions automatically. Turning this off stops automatic updates but keeps notification settings."
+msgstr "После сохранения Sheepfold каждый час проверяет опубликованные релизы GitHub и автоматически устанавливает новые версии. Выключение останавливает автообновления, но сохраняет настройки уведомлений."
+
+msgid "Enable beta testing? After Save, router updates will be installed automatically and may briefly interrupt access. Notifications about every SIM change and new child Wi-Fi networks will be enabled. Location collection, website history, AI and remote support will not be enabled. You can change notifications separately."
+msgstr "Включить участие в бетатесте? После сохранения новые версии программы на роутере будут устанавливаться автоматически; возможны краткие перерывы доступа. Включатся уведомления о каждой смене SIM и новых Wi-Fi-сетях ребёнка. Сбор координат, история сайтов, ИИ и удалённая помощь не включаются. Уведомления можно настраивать отдельно."
+
+msgid "Outside beta testing, this controls stable-release checks. Installation requires confirmation. Beta testing uses hourly automatic updates instead."
+msgstr "Вне бетатеста задаёт период проверки опубликованных релизов; установка требует подтверждения. При участии в бетатесте вместо этого действуют часовые автообновления."
+
+msgid "Invalid beta testing setting."
+msgstr "Некорректное значение настройки участия в бетатесте."

@@ -1,6 +1,7 @@
 package app.sheepfold.android.router
 
 import android.content.Context
+import app.sheepfold.android.diagnostics.DiagnosticLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -157,6 +158,15 @@ class RouterAdminClient(
         )
     }
 
+    suspend fun loadWifiChannels(): Map<String, List<String>> = withContext(Dispatchers.IO) {
+        val radios = request("GET", "$ADMIN_CONFIG_PATH/wifi/channels").optJSONObject("radios")
+            ?: return@withContext emptyMap()
+        radios.keys().asSequence().take(4).associateWith { radio ->
+            radios.optJSONArray(radio).stringList().take(256)
+                .filter { (it.toIntOrNull() ?: 0) in 1..233 }.distinct()
+        }
+    }
+
     suspend fun saveWifiAutomation(
         config: RouterAdminConfig,
         automation: RouterWifiAutomation
@@ -308,7 +318,10 @@ class RouterAdminClient(
         RouterSnapshot(
             routerName = json.optString("routerName", connection.routerName),
             diagnostics = diagnostics,
-            globalBlocked = diagnostics["globalBlocked"] == "1",
+            // Отсутствующее поле не означает разрешённый интернет. §andpanel1
+            globalBlocked = parseGlobalBlock(diagnostics["globalBlocked"])
+                ?: throw IllegalStateException(appContext?.getString(app.sheepfold.android.R.string.router_state_invalid)
+                    ?: "The router did not report its internet state. Refresh the data."),
             aiAvailable = json.optJSONObject("capabilities")
                 ?.flexibleBoolean("aiAssistant")
                 ?: false,
@@ -402,6 +415,8 @@ class RouterAdminClient(
             allowTrustOnFirstUse = false,
             tlsSpkiSha256 = tlsSpki
         )
+        val started = System.nanoTime()
+        DiagnosticLog.info("router.request.started", "method" to method, "path" to path.substringBefore('?'))
         try {
             http.connectTimeout = 5000
             http.readTimeout = 15000
@@ -445,7 +460,15 @@ class RouterAdminClient(
                 RouterSessionFailure.fromHttp(code, errorCode)?.let { throw it }
                 throw RouterHttpException(code, errorCode, friendlyApiMessage(errorCode, serverMessage))
             }
-            return json ?: throw IllegalStateException("Роутер вернул некорректный JSON")
+            val result = json ?: throw IllegalStateException("Роутер вернул некорректный JSON")
+            DiagnosticLog.info("router.request.completed", "method" to method, "path" to path.substringBefore('?'),
+                "elapsedMs" to (System.nanoTime() - started) / 1_000_000)
+            return result
+        } catch (error: Exception) {
+            // Не записываем headers, форму, ответ или message исключения с данными сервера
+            DiagnosticLog.warn("router.request.failed", "method" to method, "path" to path.substringBefore('?'),
+                "elapsedMs" to (System.nanoTime() - started) / 1_000_000, "errorType" to error.javaClass.simpleName)
+            throw error
         } finally {
             http.disconnect()
         }

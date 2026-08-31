@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
@@ -31,6 +32,7 @@ class ParentFirstLaunchSmokeTest {
             .assertIsDisplayed()
         composeRule
             .onNodeWithText(context.getString(R.string.setup_next))
+            .performScrollTo()
             .assertIsDisplayed()
             .assertIsNotEnabled()
     }

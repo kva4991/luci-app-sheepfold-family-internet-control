@@ -2,13 +2,16 @@
 
 <!-- §mrelay1 -->
 
-Статус на 29 августа 2026 года: **client foundation реализована и верифицирована на Android unit-level, но production-включение запрещено**.
+Статус на 30 августа 2026 года: **частично реализовано, production-включение запрещено**.
 В репозитории присутствует исполнимый protocol v1, строгие схемы и golden vector. Android relay
 source содержит fail-closed local-first coordinator, durable state machine, strict URL/endpoint
 validation, SecureStore и WorkManager scheduling. Он проходит целевой Android relay unit-test subset,
-но не подключён к production provisioning, UI или app lifecycle и не проверен на instrumented API
-28 / физическом телефоне. OpenWrt runtime отсутствует до отдельного согласования native helper и
-live-router gates. Поэтому `clientsReady=no`, `realDataAllowed=no`. Enrollment не создавался,
+но не подключён к production provisioning, UI или app lifecycle. Криптография/store/discovery и
+защита локального API проверены на физическом Android API 30; после сопряжения через QR-файл
+paired-read также прошёл (8 тестов без skips). API 28 не проверен. Native crypto helper реализован и прошёл Linux amd64 Node vector/ASan/UBSan;
+SDK 25.12.5/mediatek/filogic и шесть isolated helper checks на роутере от `nobody` пройдены.
+OpenWrt runtime отсутствует; установка service UID, другие ABI и полный live-router gate не проверены.
+Поэтому `clientsReady=no`, `realDataAllowed=no`. Enrollment не создавался,
 реальные credentials и семейные данные не использовались.
 
 Wire protocol private vendor синхронизирован с protocol commit
@@ -32,7 +35,8 @@ Android/OpenWrt clients и разрешение реальных данных п
 | Deployment gates | `clientsReady=no`, `realDataAllowed=no` |
 | `sheepfold.message_relay_global` на семейном роутере | отсутствует |
 | Android client foundation | незавершённый source handoff, выключен; известные gaps перечислены в continuation plan |
-| OpenWrt client/runtime | отсутствует до отдельного согласования native helper и target/live-router gates |
+| Native crypto helper | Linux cross-runtime gate, SDK 25.12.5/mediatek/filogic и isolated target smoke пройдены; package install/UID и остальные ABI не проверены |
+| OpenWrt client/runtime | отсутствует: нужны provisioning, poller, durable ledger, dispatcher и target/live-router gates |
 | Пользовательский переключатель | не показывается, включать нечего |
 
 Нельзя указывать в APK или UCI лабораторный `http://<IP>:8790`, открывать `8790` в WAN либо
@@ -395,8 +399,8 @@ state хранится постоянно до revoke. Live synthetic pilot хр
    обоих clients.
    **Почему выбран этот способ / нюансы:** прошедшие server gates доказывают только synthetic
    transport boundary, а не безопасную обработку команды реальными получателями.
-2. После отдельного согласования реализовать и проверить OpenWrt native crypto helper, relay
-   client, linearized dedup/result lookup и root dispatcher.
+2. Завершить package install/UID и ABI-проверки уже реализованного native helper; реализовать
+   OpenWrt relay client, linearized dedup/result lookup и root dispatcher.
    **Почему выбран этот способ / нюансы:** router должен durable принять сообщение и повторно
    проверить локальные права до side effect; server этого доказать не может.
 3. Подключить существующий выключенный Android foundation к reviewed production provisioning,

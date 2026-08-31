@@ -38,9 +38,11 @@ describe('family message relay architecture §mrelay1', () => {
     assert.match(focused, /Android client foundation[\s\S]*незавершённый source handoff/);
     assert.match(focused, /OpenWrt client\/runtime[\s\S]*отсутствует/);
     assert.match(focused, /message_relay\.enabled` не вводится[\s\S]*остаётся `0`/);
-    assert.match(continuation, /Перед public `enqueue\(\)` нет durable состояния `RELAY_ATTEMPT`/);
+    assert.match(continuation, /перед public `enqueue\(\)` durable сохраняется `RELAY_RETRYABLE`/);
     assert.match(continuation, /`requestMessageId=<тот же ID>`/);
-    assert.match(continuation, /каркас OpenWrt package[\s\S]*не собирается/);
+    assert.match(continuation, /package не устанавливался/);
+    assert.match(continuation, /создание service UID и package lifecycle ещё не проверены/);
+    assert.match(continuation, /ASan\/UBSan Linux amd64 gate/);
     assert.match(implementationStatus, /family message relay[\s\S]*`clientsReady=no`, `realDataAllowed=no`/i);
   });
 

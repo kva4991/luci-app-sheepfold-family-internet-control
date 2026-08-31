@@ -29,10 +29,11 @@ endef
 
 define Build/Compile
 	$(TARGET_CC) $(TARGET_CPPFLAGS) $(TARGET_CFLAGS) -std=c11 -Wall -Wextra \
-		-Werror -D_FORTIFY_SOURCE=2 -fstack-protector-strong \
+		-Werror -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fstack-protector-strong \
 		-o $(PKG_BUILD_DIR)/sheepfold-message-relay-crypto \
 		$(PKG_BUILD_DIR)/sheepfold-message-relay-crypto.c \
-		$(TARGET_LDFLAGS) -Wl,-z,now -Wl,-z,relro -lcrypto
+		$(PKG_BUILD_DIR)/relayJson.c \
+		$(TARGET_LDFLAGS) -Wl,-z,now -Wl,-z,relro -lcrypto -ljansson -lm
 endef
 
 define Package/sheepfold-message-relay-crypto/install

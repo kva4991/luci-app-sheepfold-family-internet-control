@@ -22,17 +22,10 @@ internal data class MessageRelaySettings(
     val enabled: Boolean = false,
     val baseUrl: String = ""
 ) {
-    fun canonicalBaseUrl(): String = baseUrl.trim().trimEnd('/')
+    fun canonicalBaseUrl(): String = normalized().baseUrl
 
     fun normalized(): MessageRelaySettings {
-        val sanitized = canonicalBaseUrl()
-        val valid = sanitized.isNotBlank() &&
-            runCatching { MessageRelayEndpoint.requirePublicHttpsBaseUrl(sanitized) }.isSuccess
-        return if (valid) {
-            copy(enabled = enabled, baseUrl = MessageRelayEndpoint.requirePublicHttpsBaseUrl(sanitized).toString())
-        } else {
-            copy(enabled = false, baseUrl = "")
-        }
+        return fromConfigured(enabled, baseUrl)
     }
 
     fun permitsPublicNetwork(): Boolean = enabled && baseUrl.isNotBlank() &&
@@ -40,17 +33,10 @@ internal data class MessageRelaySettings(
 
     companion object {
         fun fromConfigured(enabled: Boolean, rawBaseUrl: String): MessageRelaySettings {
-            val sanitized = rawBaseUrl.trim()
-            val valid = sanitized.isNotBlank() &&
-                runCatching { MessageRelayEndpoint.requirePublicHttpsBaseUrl(sanitized) }.isSuccess
-            return if (valid) {
-                MessageRelaySettings(
-                    enabled = enabled,
-                    baseUrl = MessageRelayEndpoint.requirePublicHttpsBaseUrl(sanitized).toString()
-                )
-            } else {
-                MessageRelaySettings(enabled = false, baseUrl = "")
-            }
+            val endpoint = runCatching {
+                MessageRelayEndpoint.requirePublicHttpsBaseUrl(rawBaseUrl.trim()).toString()
+            }.getOrNull() ?: return MessageRelaySettings()
+            return MessageRelaySettings(enabled, endpoint)
         }
     }
 }
@@ -159,25 +145,33 @@ internal object MessageRelayConnectionStore {
     internal fun write(context: Context, settings: MessageRelaySettings) {
         val normalized = settings.normalized()
         if (normalized.enabled) MessageRelayEndpoint.requirePublicHttpsBaseUrl(normalized.baseUrl)
-        context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).edit()
+        // Настройка транспорта должна пережить сбой до возврата вызывающему коду
+        check(context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).edit()
             .putBoolean(enabledKey, normalized.enabled)
             .putString(baseUrlKey, normalized.baseUrl)
-            .apply()
+            .commit()) { "Cannot persist relay settings" }
     }
 
     fun clear(context: Context) {
-        context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).edit().clear().apply()
+        val cleared = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE).edit().clear().commit()
         MessageRelaySecureStore.clear(context)
+        check(cleared) { "Cannot persist disabled relay settings" }
     }
 }
 
-internal object MessageRelaySecureStore {
-    private const val keyAlias = "sheepfold-message-relay-secrets-v1"
-    private const val directoryName = "message-relay"
-    private const val fileName = "relay-bundle-v1.bin"
+internal object MessageRelaySecureStore : MessageRelayEncryptedStore(
+    "sheepfold-message-relay-secrets-v1", "message-relay"
+)
+
+// Отдельный экземпляр позволяет проверять AndroidKeyStore без очистки пользовательского хранилища
+internal open class MessageRelayEncryptedStore(
+    private val keyAlias: String,
+    private val directoryName: String
+) {
+    private val fileName = "relay-bundle-v1.bin"
     private val encryptedMagic = "SFMR1E3".toByteArray(Charsets.US_ASCII)
     private val plaintextMagic = "SFMR1S3".toByteArray(Charsets.US_ASCII)
-    private const val maximumBundleBytes = 620_000
+    private val maximumBundleBytes = 620_000
     private val lock = Any()
 
     fun write(context: Context, secrets: MessageRelaySecrets) {

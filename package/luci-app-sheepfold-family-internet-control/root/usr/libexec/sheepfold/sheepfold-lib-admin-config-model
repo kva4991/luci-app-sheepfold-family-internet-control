@@ -337,7 +337,7 @@ admin_config_json() {
     json_string "$bedtime"
     printf ',"wifiEnabled":'
     wifi_enabled && printf true || printf false
-    printf ',"capabilities":{"scheduleWrite":true,"groupWrite":true,"deviceWrite":true,"wifiControl":true,"wifiAutomationWrite":true,"notificationWrite":true,"administratorRead":true,"logRead":true,"logClear":true}'
+    printf ',"capabilities":{"scheduleWrite":true,"groupWrite":true,"deviceWrite":true,"wifiControl":true,"wifiChannelsRead":true,"wifiAutomationWrite":true,"notificationWrite":true,"administratorRead":true,"logRead":true,"logClear":true}'
     if [ -n "$mutation_kind" ]; then
         printf ',"mutation":{"kind":'
         json_string "$mutation_kind"

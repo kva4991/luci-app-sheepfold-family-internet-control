@@ -7,6 +7,12 @@
 Production TLS endpoint, рабочая пара ключей расшифрования и runtime удалённого управления ещё
 не включены.
 
+31.08.2026 согласован экспериментальный control-профиль: public `ControlClient` и private
+`SupportControlService` проходят совместный loopback HTTPS/MFA стенд. Это локальные source
+изменения, не deployment. Публичная реализация остаётся Node.js test-only; OpenWrt manager и
+FRP/SSH не добавлены. Команда, ожидаемые результаты и ограничения находятся в
+[`tools/remoteSupport/README.ru.md`](../tools/remoteSupport/README.ru.md).
+
 ## Репозитории
 
 - этот публичный клиентский проект: <https://github.com/kva4991/luci-app-sheepfold-family-internet-control>;
@@ -52,6 +58,13 @@ synthetic support/report трафику. Ни один из них **не явл
 [`android-router-message-relay.ru.md`](android-router-message-relay.ru.md).
 
 ## Владение контрактами
+
+План следующего support milestone находится в private-проекте:
+`docs/remote-support-implementation-plan.ru.md`. Он покрывает identity/claim/MFA, FRP/bastion,
+отзыв уже открытого SSH и интеграцию новой вкладки «Тех поддержка» в LuCI и родительском APK.
+По уточнению владельца 30.08.2026 тестовое развёртывание не выполняется: это документационный
+checkpoint серверного deployment, не разрешение открыть дополнительные порты. Последующий
+локальный control-стенд не отменяет этот запрет.
 
 | Область | Source of truth |
 |---|---|

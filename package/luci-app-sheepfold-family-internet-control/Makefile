@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=283
+PKG_RELEASE:=284
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -198,6 +198,7 @@ ensure_global_option detector_max_upnp_fetches_per_scan '4'
 ensure_global_option identity_quarantine_reminder_seconds '86400'
 ensure_global_option service_control_interval_seconds '30'
 ensure_global_option update_check_install_mode 'weekly'
+ensure_global_option beta_testing '0'
 ensure_global_option active_messenger 'none'
 # SHEEPFOLD_AI_BEGIN
 ensure_global_option ai_enabled '0'

@@ -52,6 +52,40 @@ function staticIconReferences(source) {
 }
 
 describe('Единый каталог значков Sheepfold', () => {
+  it('generates a solid next arrow for Android, LuCI and the visual catalog', () => {
+    const { icons, outputs } = generatedOutputs();
+    const next = icons.find((icon) => icon.name === 'actionNext');
+    assert.equal(next.paths.length, 0);
+    assert.equal(next.filledPaths.length, 1);
+    const vector = outputs.get(resolve(repoRoot, next.androidVector));
+    assert.ok(vector.includes(next.filledPaths[0]));
+    assert.match(vector, /android:fillColor="#FF000000"/);
+    assert.doesNotMatch(vector, /android:strokeWidth/);
+    assert.match(outputs.get(resolve(repoRoot, 'icons/catalog.html')), /fill="currentColor" stroke="none"/);
+    const registrySource = outputs.get(resolve(luciResources, 'sheepfold/shared/icon-registry.js'));
+    const registry = new Function('baseclass', registrySource)({ extend: (value) => value });
+    const iconSource = readFileSync(resolve(luciResources, 'sheepfold/shared/icons.js'), 'utf8');
+    const document = { createElementNS: () => ({
+      attrs: {}, children: [],
+      setAttribute(name, value) { this.attrs[name] = value; },
+      appendChild(child) { this.children.push(child); },
+    }) };
+    const renderer = new Function('baseclass', 'iconRegistry', 'document', iconSource)(
+      { extend: (value) => value }, registry, document,
+    );
+    const arrow = renderer.named('actionNext').children[0];
+    assert.equal(arrow.attrs.d, next.filledPaths[0]);
+    assert.equal(arrow.attrs.fill, 'currentColor');
+    assert.equal(arrow.attrs.stroke, 'none');
+  });
+
+  it('uses a wrench rather than a power symbol for the control tab', () => {
+    const { icons, outputs } = generatedOutputs();
+    const control = icons.find((icon) => icon.name === 'navigationControl');
+    assert.equal(control.paths.length, 1);
+    assert.ok(control.paths[0].includes('l-4 1-4-4 1-4z'));
+    assert.doesNotMatch(outputs.get(resolve(repoRoot, control.androidVector)), /M12 2v10/);
+  });
   it('имеет уникальные английские имена и реальные места использования', () => {
     const catalog = validateCatalog();
     const names = [

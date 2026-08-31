@@ -51,7 +51,7 @@ private data class PendingSupportReport(
 
 /** Отдельная родительская вкладка обратной связи; в детское APK не включается. §feedback */
 @Composable
-fun FeedbackTab(client: RouterAdminClient) {
+fun FeedbackTab(client: RouterAdminClient, workspace: ParentWorkspace = remember { ParentWorkspace() }) {
     val categories = listOf(
         FeedbackCategory("idea", R.string.feedback_type_suggestion),
         FeedbackCategory("bug", R.string.feedback_type_problem),
@@ -59,14 +59,15 @@ fun FeedbackTab(client: RouterAdminClient) {
         FeedbackCategory("other", R.string.feedback_type_other)
     )
     val scope = rememberCoroutineScope()
-    var category by remember { mutableStateOf(categories.first()) }
+    val form = workspace.feedback
+    var category by form.field({ value -> categories.firstOrNull { it.value == value.category } ?: categories.first() }) { value, next -> value.copy(category = next.value) }
     var categoryOpen by remember { mutableStateOf(false) }
-    var subject by remember { mutableStateOf("") }
-    var message by remember { mutableStateOf("") }
-    var expectedBehavior by remember { mutableStateOf("") }
-    var reproductionSteps by remember { mutableStateOf("") }
-    var contact by remember { mutableStateOf("") }
-    var includeDiagnostics by remember { mutableStateOf(false) }
+    var subject by form.field({ it.subject }) { value, next -> value.copy(subject = next) }
+    var message by form.field({ it.message }) { value, next -> value.copy(message = next) }
+    var expectedBehavior by form.field({ it.expected }) { value, next -> value.copy(expected = next) }
+    var reproductionSteps by form.field({ it.steps }) { value, next -> value.copy(steps = next) }
+    var contact by form.field({ it.contact }) { value, next -> value.copy(contact = next) }
+    var includeDiagnostics by form.field({ it.diagnostics }) { value, next -> value.copy(diagnostics = next) }
     var sending by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<PendingSupportReport?>(null) }
     var dialogError by remember { mutableStateOf<String?>(null) }

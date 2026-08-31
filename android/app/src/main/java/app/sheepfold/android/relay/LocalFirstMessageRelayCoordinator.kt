@@ -120,8 +120,8 @@ internal class LocalFirstMessageRelayCoordinator(
                 }
                 is LocalRelayLookup.Unreachable -> RelayCommandRouteResult.RelayUnavailable(messageId)
                 is LocalRelayLookup.DefiniteFailure -> {
-                    stateStore.updateOutboundStatus(messageId, RelayOutboxStatus.DEFINITE_FAILURE)
-                    RelayCommandRouteResult.DefiniteFailure(messageId, lookup.httpStatus)
+                    // Ошибка GET не доказывает, что предыдущий POST не успел изменить роутер
+                    RelayCommandRouteResult.Indeterminate(messageId)
                 }
             }
         }
@@ -160,8 +160,9 @@ internal class LocalFirstMessageRelayCoordinator(
         if (!settings.permitsPublicNetwork() || publicTransportFactory == null) {
             return RelayCommandRouteResult.RelayUnavailable(entry.messageId)
         }
+        val attempting = stateStore.beginPublicAttempt(entry.messageId)
         return try {
-            val receipt = publicTransportFactory.create().enqueue(entry.envelopeJson)
+            val receipt = publicTransportFactory.create().enqueue(attempting.envelopeJson)
             stateStore.updateOutboundStatus(entry.messageId, RelayOutboxStatus.RELAY_ACCEPTED)
             RelayCommandRouteResult.AcceptedByRelay(receipt.messageId, receipt.duplicate)
         } catch (error: MessageRelayHttpException) {
@@ -172,6 +173,10 @@ internal class LocalFirstMessageRelayCoordinator(
             } else if (error.httpStatus == 408 || error.httpStatus == 429 || error.httpStatus >= 500) {
                 stateStore.updateOutboundStatus(entry.messageId, RelayOutboxStatus.RELAY_RETRYABLE)
                 RelayCommandRouteResult.RetryableRelayFailure(entry.messageId, error.retryAfterSeconds)
+            } else if (entry.status == RelayOutboxStatus.RELAY_RETRYABLE) {
+                // Отказ на retry не отменяет возможное исполнение предыдущей попытки с потерянным ответом.
+                stateStore.updateOutboundStatus(entry.messageId, RelayOutboxStatus.INDETERMINATE)
+                RelayCommandRouteResult.Indeterminate(entry.messageId)
             } else {
                 stateStore.updateOutboundStatus(entry.messageId, RelayOutboxStatus.DEFINITE_FAILURE)
                 RelayCommandRouteResult.DefiniteFailure(entry.messageId, error.httpStatus)

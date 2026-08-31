@@ -140,11 +140,12 @@ class PinnedLocalMessageRelayTransportTest {
     @Test
     fun `lookup permits fallback only for exact canonical not found response`() {
         val requestMessageId = relayId(16)
+        val validBody = "{\"error\":\"notFound\",\"protocolVersion\":1,\"requestMessageId\":\"$requestMessageId\"}"
         val exact = PinnedLocalMessageRelayTransport(
             localConnection(),
             LocalPinnedConnectionFactory { _, _ -> FakeHttpsConnection(
                 404,
-                "{\"error\":\"notFound\"}".toByteArray(),
+                validBody.toByteArray(),
                 mapOf("Content-Type" to "application/json")
             ) },
             probeBudgetMillis = 500
@@ -153,6 +154,11 @@ class PinnedLocalMessageRelayTransportTest {
 
         for ((body, contentType) in listOf(
             ByteArray(0) to "application/json",
+            validBody.replace(requestMessageId, relayId(17)).toByteArray() to "application/json",
+            validBody.replace(":1,", ":2,").toByteArray() to "application/json",
+            validBody.replace(":1,", ":1,\"extra\":true,").toByteArray() to "application/json",
+            validBody.replace(":1,", ":1,\"protocolVersion\":1,").toByteArray() to "application/json",
+            validBody.toByteArray() to "text/html",
             "{\"error\": \"notFound\"}".toByteArray() to "application/json",
             "{\"error\":\"notFound\"}".toByteArray() to "application/json; charset=utf-8"
         )) {

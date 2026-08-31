@@ -2,18 +2,25 @@
 
 <!-- §mrelay1 -->
 
-Обновлено 28 августа 2026 года после byte-exact синхронизации private vendor и развёртывания
-канонического `HMAC-SHA256+AES-256-GCM` protocol в synthetic-only server pilot. Этот файл является
-handoff следующему агенту: текущий проход не меняет client runtime, а фиксирует факты, риски и
-порядок продолжения. Server compatibility больше не является блокером, но это не разрешает
-установку client runtime на роутер, enrollment или production-включение.
+Обновлено 31 августа 2026 года после перепроверки `gemini_v1`, физических Android-тестов и
+появления native crypto helper. Дублирующий план ветки удалён: этот документ владеет
+незавершённой relay-работой, а результаты проверки APK и установки записываются в
+[Android runbook](android-test-lab.ru.md) и [памятку слияния](merge-readiness-plan.ru.md).
+Владелец разрешил использовать CloudCore как тестовый сервер; это не означает разрешение
+production/семейных данных. Server compatibility больше не является исходным блокером,
+но OpenWrt runtime и Android product wiring остаются незавершёнными.
 
 ## Текущая точка
 
-Затронуты два рабочих дерева:
+Исходные репозитории на компьютере владельца:
 
 - public client: `C:\Users\User\Documents\pesochnica\luci-app-sheepfold-family-internet-control`;
 - private server: `C:\Users\User\Documents\pesochnica\sheepfold-support-server`.
+
+Перепроверка `gemini_v1` 30.08.2026 выполняется в отдельном public checkout:
+`C:\Users\User\Documents\Codex\2026-08-23\openwrt-ip-podkop-x20-sheepfold-sheepfold\review-gemini-v1`.
+Именно там находятся текущие незакоммиченные исправления и `.build`-отчёты. Не принимать
+исходный checkout в `pesochnica` за автоматически синхронизированную копию этой работы.
 
 Перед продолжением нужно снова проверить оба worktree и сохранить любые появившиеся
 незакоммиченные изменения. Deployment state не следует выводить из git status.
@@ -34,12 +41,16 @@ handoff следующему агенту: текущий проход не ме
 - разбор практик Tailscale DERP, Home Assistant Companion, ntfy и OpenWISP;
 - незавершённый, выключенный Android foundation в
   `android/app/src/main/java/app/sheepfold/android/relay/` и его JVM/instrumented test sources;
-- только каркас OpenWrt package `package/sheepfold-message-relay-crypto/Makefile` без `src`, relay
-  service, UCI, provisioning, poller, durable ledger или dispatcher; этот каркас не собирается.
+- отдельный OpenWrt package `package/sheepfold-message-relay-crypto/` с native source на
+  Jansson/OpenSSL, ручным Linux gate и успешной SDK 25.12.5/mediatek/filogic сборкой;
+  шесть synthetic target checks прошли от `nobody`, без установки package;
+- физический Android API 30 стенд без удаления данных: после QR-файла и исправления задержек
+  авторизации все 8 проверок, включая paired-read, прошли без skips; отдельно прошли 10
+  UI/lifecycle-проверок. Это не доказывает камеру QR, API 28 или relay E2E.
 
 Product transport не готов. Android foundation не подключён к production provisioning, UI и
-app lifecycle, имеет перечисленные ниже незакрытые safety gaps и не прошёл итоговый Gradle/API 28/
-physical-device gate. OpenWrt runtime отсутствует. Поэтому `clientsReady=no`,
+app lifecycle; часть safety gaps ниже уже исправлена, но API 28 и полный device E2E gate не пройдены.
+OpenWrt runtime отсутствует. Поэтому `clientsReady=no`,
 `realDataAllowed=no`; enrollment не создавался, реальные credentials и семейные данные не
 использовались.
 
@@ -62,7 +73,7 @@ security gates и не разрешает подключать live endpoint.
 | `MessageRelayStateStore.kt` | durable sequence/high-water, outbox/inbox/dedup и server-ack state | power-loss recovery на filesystem реального телефона |
 | `PinnedLocalMessageRelayTransport.kt` | прежний SPKI/local Bearer, общий 2500 мс budget, pre/post-body classification | совместимый linearized local endpoint на OpenWrt |
 | `PublicMessageRelayHttpsClient.kt` | system-CA HTTPS к `/v1/phone/*`, bounded responses, отдельный phone bearer | live credential lifecycle и сетевые/OEM edge cases |
-| `LocalFirstMessageRelayCoordinator.kt` | один envelope/messageId, durable local-attempt state, local-first branching | безопасное завершение всех crash windows; один P1 указан ниже |
+| `LocalFirstMessageRelayCoordinator.kt` | один envelope/messageId, durable local/public attempt до HTTP I/O, local-first branching | router-side dedup и real power-loss |
 | `MessageRelaySynchronizer.kt` | bounded poll, durable inbox, ack после сохранения | доставка consumer/UI и process-death flow |
 | `MessageRelayPollWorker.kt` | выключенный periodic WorkManager skeleton с minimum 15 минут | мгновенный background push; worker нигде не scheduled production lifecycle |
 | relay tests | protocol/golden/state/transport/coordinator и один Android storage source | instrumented API 28, физический телефон, router peer и end-to-end field flow |
@@ -75,7 +86,7 @@ lifecycle, пользовательского toggle/provisioning flow нет.
 остановленного pass и восстановлены только функциональной реконструкцией из `.class`/DEX последней
 зелёной debug-сборки. Исходные Kotlin bytes не сохранились. После восстановления команда
 `:app:compileDebugKotlin :app:testDebugUnitTest` завершилась `BUILD SUCCESSFUL`; hashes текущих
-reconstructed sources:
+reconstructed sources на момент восстановления (не hashes текущих исправленных файлов):
 
 - `MessageRelayConnectionStore.kt` —
   `0519ad2448cc0c728bd7e49e7c4f188dccefcb1a155c10eff2219b7894691ebc`;
@@ -88,23 +99,42 @@ platform behavior, а наличие worker class не означает, что 
 reconstruction вернула компилируемое поведение, но не авторский Kotlin text; эти два файла требуют
 отдельного source review до дальнейшего редактирования.
 
-## Известные незавершённые места в сохранённом Android foundation
+## Исправленные границы и оставшаяся работа Android
 
-1. Перед public `enqueue()` нет durable состояния `RELAY_ATTEMPT` до начала HTTP I/O. Process kill
-   после передачи body/server accept может оставить outbox в `READY`; после TTL результат способен
-   стать «unknown» и запись может быть очищена неверно.
-   **Почему это важно / нюансы:** exact-envelope server idempotency делает повтор безопасным только
-   пока client сохраняет связь с исходным `messageId`. Следующий агент должен сначала persist
-   retryable/attempt marker, затем начать сеть, а crash-before-return закрепить regression test.
-   Если добавляется новый enum value, нельзя молча менять ordinal уже сохранённого binary state:
-   нужен stable wire code либо явная migration.
-2. Local lookup сейчас признаёт `NoRecord` только по exact `application/json` и canonical
-   `{"error":"notFound"}`, но ответ не связан с запрошенным ID/version.
-   **Почему это важно / нюансы:** stale/cached/misrouted `notFound` способен открыть public fallback
-   после неоднозначного local POST. Контракт нужно усилить strict полями `protocolVersion=1`,
-   `requestMessageId=<тот же ID>`, `error=notFound`, запретить unknown/duplicate fields и проверить
-   другой ID/version/content-type. Даже после parser fix OpenWrt обязан доказать linearized lookup
-   относительно durable pre-side-effect dedup.
+При проверке исходного плана обнаружена ошибочная атрибуция: фильтр имён
+`arp/dhcp/static`, разделение unknown/mismatch, приоритет detected type и запрет
+polling при disabled/invalid config уже были в `main`. Их нельзя считать новыми
+функциями этой ветки. Новая проверка усилила JSON/recovery/lookup и изоляцию
+тестового хранилища. Enum ordinal не меняется: публичная попытка использует
+существующий `RELAY_RETRYABLE`, а не добавленное произвольное состояние.
+
+Отдельные исправления локальной авторизации и загрузки панелей не являются
+relay runtime. В `list_devices` и token validation устранён полный allocator/commit
+на каждую строку; allocator сохранён для повреждённых ID. После QR из файла
+физический paired gate прошёл 8/8 без skips. Камера QR этим не проверена.
+Оптимизация detector (POSIX awk, пустые TSV-поля, dedup источников, актуальный LAN IP,
+отсутствие collectors без online-целей и nmap без IP) не меняет пороги, ручные типы,
+identity baseline и права; полевая матрица остаётся в
+[паспорте устройств](device-passport-and-control.ru.md).
+
+Незакрытые gates из удалённого плана сохранены: lifecycle native package на 24.10 и
+других ABI, unprivileged poller и durable ledger до side effect, local-authenticated
+provisioning/revoke, Android consumer, API 28/35, Doze/process death, power loss,
+synthetic E2E Wi-Fi/VPS с задержкой до 30 секунд и согласие до реальных данных.
+
+1. Исправлено: перед public `enqueue()` durable сохраняется `RELAY_RETRYABLE` до начала HTTP I/O.
+   Сохранён существующий enum ordinal; indirect retry/indeterminate-to-READY запрещён.
+   Simulated crash после приёма сервером проверяет exact bytes после повторного открытия store,
+   сохранение связи с `messageId` после TTL и неопределённый итог вместо ложного отказа.
+   Даже явный 400/401/403/410 на последующем public retry не опровергает выполнение первой
+   попытки с потерянным ответом: в этом случае сохраняется `INDETERMINATE`, не definite failure.
+   **Почему это важно / нюансы:** server idempotency не помогает, если телефон забыл уже отправленную
+   команду. Регрессии находятся в `MessageRelayRecoveryTest.kt`; реальный power-loss ещё не проверен.
+2. Исправлено на Android: `NoRecord` требует exact `application/json` и canonical поля
+   `protocolVersion=1`, `requestMessageId=<тот же ID>`, `error=notFound`, без лишних/повторных ключей.
+   Ошибка lookup не делает прошлый POST доказанно неисполненным. На OpenWrt ещё нужно реализовать
+   linearized lookup относительно durable pre-side-effect dedup.
+   **Почему это важно / нюансы:** чужой/stale/generic 404 не должен разрешать новый путь команды.
 3. Android foundation не подключён к production provisioning, UI, consumer и lifecycle:
    `MessageRelayConnectionStore.write()`, `scheduleIfProvisioned()`, coordinator,
    `pendingInboundRecords()` и `consumeInbox()` не имеют production caller; revoke основного pairing
@@ -117,17 +147,13 @@ reconstruction вернула компилируемое поведение, н�
    secrets/state, затем включается setting.
    **Почему это важно / нюансы:** обратный порядок оставит `enabled=true` без полного key/state
    bundle после crash; свободный URL позволит направить metadata/bearer не тому relay.
-5. После восстановления проходят `compileDebugKotlin`, `testDebugUnitTest`,
-   `compileDebugAndroidTestKotlin` и `assembleDebug`, но `lintDebug` падает:
-   `MessageRelayJson.kt:263` вызывает `BigInteger.longValueExact()`, доступный Android только с
-   API 31 при project `minSdk=28`. Lint зафиксировал 1 error и 80 warnings; warnings в этом handoff
-   отдельно не классифицированы. Instrumented API 28, process-death/Doze и physical-device tests
-   также не выполнены.
-   **Почему это важно / нюансы:** это реальная runtime-несовместимость, поэтому suppress/`TargetApi`
-   использовать нельзя. Следующий агент должен выполнить API-28-compatible bounds comparison с
-   `Long.MIN_VALUE/MAX_VALUE`, затем обычный `toLong()`, и закрепить boundary tests + lint. Даже
-    зелёные compile/JVM/assemble не воспроизводят Keystore/AtomicFile, cancellation, OEM background
-    restrictions или фактическую TLS сеть.
+5. `longValueExact()` заменён API-28-safe bounds comparison и `toLong()`; fractional input теперь
+   даёт protocol error вместо необработанного ArithmeticException. После изменений JVM tests,
+   `assembleDebug` и `assembleDebugAndroidTest` проходят. На физическом API 30 проверены provider,
+   отдельный encrypted fixture store, discovery и неверный TLS pin. API 28, Doze, реальный
+   process death и полная привязка пока не доказаны. Последний parent Kotlin diff прошёл
+   56 JVM-тестов, debug/instrumentation build и `lintDebug` 30.08.2026.
+   **Почему это важно / нюансы:** сборка/устройство API 30 не заменяют минимальную версию API 28.
 
 ## Проверенный baseline перед документирующим commit
 
@@ -152,10 +178,14 @@ Instrumented tests на API 28, physical-device/Doze/process-death и live-route
 
 ## Что фактически сделано и не сделано на OpenWrt
 
-Сохранён только `package/sheepfold-message-relay-crypto/Makefile`. Он объявляет отдельный
-architecture-dependent helper и зависимости `+jansson +libopenssl`, но `src/` пуст, ожидаемый
-`sheepfold-message-relay-crypto.c` отсутствует, а linker command пока не содержит `-ljansson`.
-Следовательно, package заведомо не собирается и не устанавливался.
+В `package/sheepfold-message-relay-crypto/` добавлены `relay.h`, `relayJson.c` и
+`sheepfold-message-relay-crypto.c`, исправлен link set `-lcrypto -ljansson -lm`.
+Helper принимает один bounded stdin JSON без secrets в argv, проверяет scope ключа, TTL,
+payload/actionHash и GCM tag до stdout. Обычный и ASan/UBSan Linux amd64 gate прошли по 6 тестов.
+Официальный SDK 25.12.5/mediatek/filogic собрал native APK. Изолированный бинарник на роутере
+прошёл шесть smoke checks от `nobody:nogroup`; package не устанавливался, `/tmp` очищен.
+Другие ABI, 24.10, создание service UID и package lifecycle ещё не проверены. Команды и ограничения:
+[README helper](../package/sheepfold-message-relay-crypto/README.ru.md).
 
 Также отсутствуют:
 
@@ -174,8 +204,8 @@ fresh-install/upgrade проверки на OpenWrt 25.12 из-за извест
 
 **Почему выбран этот способ / нюансы.** Отдельный Jansson + OpenSSL EVP/HMAC helper безопаснее
 handwritten JSON и shell `openssl` на границе keys/nonces, но ошибка здесь имеет высокий ущерб.
-Поэтому дальнейшая native реализация остаётся под отдельным подтверждением владельца, target-SDK
-build и cross-runtime vector; один Makefile не считается доказательством runtime.
+Поэтому прошедшие Linux и отдельный target gate не разрешают включать product transport: permissions,
+router lifecycle и side-effect ledger ещё требуют отдельной проверки.
 
 ## Как клиент должен обращаться к серверу
 
@@ -279,22 +309,23 @@ synthetic client E2E всё ещё требует готовых Android и Open
    реальные credentials/семейные данные.
    **Почему выбран этот способ / нюансы:** прошедшие server gates доказывают только synthetic
    DNS/TLS/Caddy boundary, а не готовность client runtime.
-3. Устранить Android API 28 lint blocker в strict JSON integer parser и добавить min/max/overflow
-   regression tests без повышения `minSdk` и без suppress.
+3. **Source/JVM/Lint выполнено.** Сохранить API-28-safe strict integer parser, min/max/overflow и
+   fractional regression tests. Остаётся runtime на API 28 без повышения `minSdk` и без suppress.
    **Почему выбран этот способ / нюансы:** приложение заявляет API 28; API-31 method может пройти
    desktop compile и упасть на поддерживаемом телефоне, а повышение `minSdk` изменит продуктовый
    контракт ради одного заменяемого вызова.
-4. Закрыть Android public-enqueue crash window: durable перевести запись из `READY` в
-   retryable/attempt state до HTTP I/O и добавить simulated process-death regression.
+4. **Выполнено в source/JVM.** Public-enqueue сохраняет `RELAY_RETRYABLE` до HTTP I/O;
+   simulated restart проверяет exact retry. Остаётся физическая power-loss/lifecycle матрица.
    **Почему выбран этот способ / нюансы:** server exact-envelope idempotency допускает повтор, но
    только сохранённый outbox binding позволяет принять поздний result и не потерять исход команды.
-5. Одновременно зафиксировать request-bound local `NoRecord` contract на Android и OpenWrt:
+5. Android request-bound contract уже проверен; реализовать соответствующий OpenWrt lookup:
    `protocolVersion`, точный `requestMessageId`, `error=notFound`, strict JSON/content-type и
    linearized lookup после durable dedup.
    **Почему выбран этот способ / нюансы:** generic `404` или чужой stale response не доказывает,
    что неоднозначный POST не исполнился, и не должен открывать public fallback.
-6. Только после отдельного подтверждения владельца закончить OpenWrt native helper вместо
-   несобираемого Makefile-only scaffold, затем собрать его target SDK для всех поддерживаемых ABI.
+6. Native helper реализован, normal и ASan/UBSan Linux gates пройдены (по 6 tests, без skips).
+   SDK 25.12.5/mediatek/filogic и synthetic target vector проверены; завершить другие ABI,
+   24.10 и package install/upgrade permissions.
    **Почему выбран этот способ / нюансы:** `jansson` нужен вместо handwritten JSON, а OpenSSL
    EVP/HMAC — вместо shell `openssl`; ошибка native boundary может раскрыть key или повторить nonce,
    поэтому approval и target build являются отдельным security gate.

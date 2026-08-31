@@ -84,3 +84,9 @@ The installed updater compares package-manager versions, validates the trusted
 GitHub asset path and internal metadata, saves the UCI configuration before the
 package-manager transaction, and restores the configuration after a failed
 install. This is configuration recovery, not a binary firmware rollback.
+
+The optional `beta_testing=1` General setting authorizes hourly background updates
+from the same published stable releases, with no same-version reinstall or edition
+switch. It defaults to off and is never activated by package migration. See the
+[maintenance contract](maintenance-jobs.ru.md) for consent, notification settings,
+shutdown behavior and test commands.

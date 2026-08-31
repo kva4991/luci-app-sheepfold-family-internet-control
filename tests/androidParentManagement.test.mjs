@@ -1,7 +1,8 @@
 /*
  * Protects the parent Android release scope: schedule/group editors and the
  * administrator, Wi-Fi and log screens must use authenticated router data rather
- * than local placeholders. Passing does not replace Android Lint, APK assembly,
+ * than local placeholders. Reads source only and changes no application/router state.
+ * Panel request selection also has JVM coverage. Passing does not replace Android Lint, APK assembly,
  * physical-phone pairing/roaming tests or production signing. §roadmap §pairsec
  */
 import assert from 'node:assert/strict';
@@ -10,6 +11,7 @@ import test from 'node:test';
 
 const read = (path) => readFileSync(path, 'utf8');
 const main = read('android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt');
+const panelLoader = read('android/app/src/main/java/app/sheepfold/android/ui/main/RouterPanelLoader.kt');
 const client = read('android/app/src/main/java/app/sheepfold/android/router/RouterAdminClient.kt');
 const adminJson = read('android/app/src/main/java/app/sheepfold/android/router/RouterAdminJson.kt');
 const models = read('android/app/src/main/java/app/sheepfold/android/router/RouterAdminModels.kt');
@@ -22,6 +24,7 @@ const wifiAutomation = read('android/app/src/main/java/app/sheepfold/android/ui/
 const settings = read('android/app/src/main/java/app/sheepfold/android/ui/main/SettingsTab.kt');
 const controlMenu = read('android/app/src/main/java/app/sheepfold/android/ui/main/ControlMenuTabs.kt');
 const devices = read('android/app/src/main/java/app/sheepfold/android/ui/main/DevicesTab.kt');
+const deviceCards = read('android/app/src/main/java/app/sheepfold/android/ui/main/DeviceCards.kt');
 const deviceEditor = read('android/app/src/main/java/app/sheepfold/android/ui/main/DeviceEditorDialog.kt');
 const notifications = read('android/app/src/main/java/app/sheepfold/android/ui/main/NotificationsTab.kt');
 const agreement = read('android/app/src/main/java/app/sheepfold/android/ui/setup/AgreementAcceptance.kt');
@@ -31,7 +34,8 @@ const strings = read('android/app/src/main/res/values/strings.xml');
 const stringsEn = read('android/app/src/main/res/values-en/strings.xml');
 
 test('planned parent placeholders are replaced by router-backed screens', () => {
-  assert.match(main, /client\.loadAdminConfig\(\)/);
+  assert.match(main, /RouterPanelLoader\(client\)/);
+  assert.match(panelLoader, /client::loadAdminConfig/);
   assert.match(main, /"schedules" -> SchedulesTab\(/);
   assert.match(main, /"groups" -> GroupsTab\(/);
   assert.match(main, /"administrators" -> AdministratorsTab\(/);
@@ -46,20 +50,43 @@ test('planned parent placeholders are replaced by router-backed screens', () => 
 });
 
 test('global internet command keeps loading until refreshed router state is available', () => {
-  assert.match(main, /suspend fun reloadRouterState\(\)/);
-  assert.match(main, /client\.setGlobalBlock\(enabled\)[\s\S]{0,260}reloadRouterState\(\)/);
+  assert.match(main, /client\.setGlobalBlock\(enabled\)[\s\S]{0,260}acceptPanel\(loader\.load\("control"\)\)/);
+  assert.match(main, /isLoading = isLoading \|\| controlBusy/);
+  assert.match(main, /finally \{\s*controlBusy = false/);
   assert.doesNotMatch(main, /\.onSuccess\s*\{[\s\S]{0,160}refresh\(\)/);
 });
 
+test('panel entry and refresh share one scoped loader without background full reloads', () => {
+  assert.match(main, /LaunchedEffect\(client, selectedTabKey, refreshVersion\)/);
+  assert.match(main, /acceptPanel\(loader\.load\(selectedTabKey\)\)/);
+  assert.match(main, /remember\(client, selectedTabKey, refreshVersion\)/);
+  assert.match(main, /catch \(error: CancellationException\) \{\s*throw error/);
+  assert.match(panelLoader, /"control", "info" -> RouterPanelData\(snapshot = loadInfo\(\)\)/);
+  assert.match(panelLoader, /currentCoroutineContext\(\)\.ensureActive\(\)\s*return data/);
+  assert.doesNotMatch(main, /reloadRouterState|client\.loadDevices\(|client\.loadChildAccessRequests\(/);
+  assert.doesNotMatch(operations, /LaunchedEffect|client\.loadLog\(/);
+  assert.match(notifications, /IconButton\(onClick = onRefresh/);
+});
+
+test('infoRefreshIsVisibleBeforeDiagnosticsEvenWithoutSnapshot', () => {
+  const infoTab = main.slice(main.indexOf('private fun RouterInfoTab('));
+  const refresh = infoTab.indexOf('OutlinedButton(');
+  assert.ok(refresh >= 0 && refresh < infoTab.indexOf('snapshot?.diagnostics'));
+  assert.match(infoTab, /OutlinedButton\(onClick = onRefresh, enabled = !isLoading\)/);
+  assert.match(infoTab, /painterResource\(R\.drawable\.ic_refresh\)/);
+  assert.match(infoTab, /Text\(stringResource\(R\.string\.action_refresh\)\)/);
+  assert.match(main, /"info" -> RouterInfoTab\(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh\)/);
+});
+
 test('schedule and group editors preserve the shared router contract', () => {
-  assert.match(schedules, /client\.saveSchedule\(config, updated\)/);
+  assert.match(schedules, /client\.saveSchedule\(config\.copy\(revision = form\.revision\), updated\)/);
   assert.match(schedules, /client\.deleteSchedule\(config, schedule\.section\)/);
   assert.match(schedules, /RouterTimeRange/);
   assert.match(schedules, /findOppositeScheduleConflict/);
   assert.match(schedules, /filterNot \{ it\.isAdministrator \}/);
-  assert.match(groups, /client\.saveGroup\(config, updated\)/);
+  assert.match(groups, /client\.saveGroup\(config\.copy\(revision = form\.revision\), updated\)/);
   assert.match(groups, /client\.deleteGroup\(config, group\.section\)/);
-  assert.match(groups, /afterSuccess = \{ editor = null \}/);
+  assert.match(groups, /afterSuccess = \{ workspace\.group = null \}/);
   assert.match(groups, /backendError = message\.takeIf \{ messageIsError \}/);
   assert.match(groups, /group\.protectedGroup/);
   assert.match(groups, /devices\.filterNot \{ it\.isAdministrator \}/);
@@ -76,7 +103,7 @@ test('schedule and group editors preserve the shared router contract', () => {
   assert.match(scheduleRules, /findSelectedGroupScheduleConflict/);
   assert.match(scheduleRules, /windowsOverlap/);
   assert.doesNotMatch(groups, /groups_color_format/);
-  assert.match(schedules, /afterSuccess = \{ editor = null \}/);
+  assert.match(schedules, /afterSuccess = \{ workspace\.schedule = null \}/);
   assert.match(schedules, /backendError = message\.takeIf \{ messageIsError \}/);
 });
 
@@ -111,7 +138,11 @@ test('device lists and profile editor perform router-backed explicit mutations',
   assert.match(devices, /devices_update_router/);
   assert.match(devices, /targetStatus != "blocked" \|\| device\.status != "allow"/);
   assert.match(devices, /selected\.any \{ it\.status == "blocked" \}/);
-  assert.match(devices, /R\.drawable\.ic_delete/);
+  assert.match(deviceCards, /device_list_remove/);
+  assert.match(deviceCards, /onRemove: \(\(\) -> Unit\)\?/);
+  assert.match(devices, /filterDevices\(devices, workspace\.deviceFilter\)/);
+  assert.match(devices, /filterDevices\(listDevices, workspace\.listFilter\)/);
+  assert.match(deviceCards, /if \(details\) DeviceDetails\(device\)/);
   assert.match(deviceEditor, /deviceTypeOptions/);
   assert.match(deviceEditor, /manualDeviceType = deviceType != "unknown"/);
   assert.match(deviceEditor, /if \(device\.isAdministrator\) "allow" else status/);
@@ -169,4 +200,29 @@ test('parent settings use compact native controls and expose language', () => {
   assert.match(strings, /name="router_turn_internet_off">Интернет выключить</);
   assert.match(strings, /name="router_label_format">Название роутера:/);
   assert.match(stringsEn, /name="router_label_format">Router name:/);
+});
+
+test('menuCellsReserveWidthForWholeWordsAndGrowVertically', () => {
+  const menu = controlMenu.slice(controlMenu.indexOf('fun MenuTab('));
+  assert.match(menu, /rememberTextMeasurer\(\)/);
+  assert.match(menu, /measurer\.measure\(word, style = titleStyle, softWrap = false\)/);
+  assert.match(menu, /GridCells\.Adaptive\(minSize = minCellWidth\)/);
+  assert.match(menu, /wordWidth\.toDp\(\)/);
+  assert.match(menu, /heightIn\(min = 112\.dp\)/);
+  assert.match(menu, /hyphens = Hyphens\.None/);
+  assert.match(menu, /Text\(item\.title, style = titleStyle, textAlign = TextAlign\.Center\)/);
+  assert.doesNotMatch(menu, /\.height\(86\.dp\)|maxLines|TextOverflow\.Ellipsis|fontSize\s*=/);
+});
+
+test('wifiQrPrecedesEveryNetworkCardHeadingAndEditor', () => {
+  const card = wifi.slice(wifi.indexOf('private fun WifiNetworkCard('), wifi.indexOf('private fun wifiSecurityLabel('));
+  const qr = card.indexOf('qrBitmap?.let');
+  assert.ok(qr > card.indexOf('Card(colors'));
+  assert.ok(qr < card.indexOf('Row('), 'QR must be at the top, before the network heading');
+  assert.ok(qr < card.indexOf('OutlinedTextField('), 'QR must be visible before the editor');
+  assert.equal(card.match(/qrBitmap\?\.let/g)?.length, 1, 'do not duplicate the QR below the editor');
+  assert.match(card, /wifiQrPayload\(network\.ssid, network\.password, network\.encryption\)/);
+  assert.match(card, /wifi_qr_description, network\.ssid/);
+  assert.match(card, /\.size\(220\.dp\)/);
+  assert.match(wifi, /items\(config\.wifiNetworks, key = \{ it\.section \}\)[\s\S]*WifiNetworkCard\(/);
 });

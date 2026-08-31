@@ -2,7 +2,50 @@
 
 <!-- §rsup001 -->
 
-Статус: архитектура принята, модель угроз и проектный protocol `v1` описаны; в LuCI реализована только неактивная заглушка. Router backend, `frpc`, внешний сервер, API и реальный удалённый доступ ещё не реализованы.
+Статус: архитектура принята, модель угроз и проектный protocol `v1` описаны; в LuCI реализована только неактивная заглушка. Есть экспериментальный private control service и public Node.js стенд; router backend, `frpc`, рабочий внешний endpoint и реальный удалённый доступ ещё не реализованы.
+
+Уточнение владельца 30.08.2026: целевой интерфейс переносится из «Интеграции» в отдельную
+вкладку «Тех поддержка» в LuCI; родительский APK получает одноимённую вкладку/карточку с теми же
+действиями. Код интерфейса пока не перемещён. Предложенное тестовое развёртывание отклонено;
+тот этап работы был ограничен планом. В актуальном private checkout `sheepfold-support-server`
+подробный порядок записан в `docs/remote-support-implementation-plan.ru.md`. Он включает
+согласование локального APK consent, отдельный контроль текущих SSH-соединений при отзыве и
+проверку конфликта FRP с уже занятым HTTPS TCP 443. Исторические места интерфейса ниже описывают
+прежний план, а не отменяют это уточнение.
+
+## Checkpoint 31.08.2026
+
+По последующему запросу реализован экспериментальный control-профиль, но не весь этот план.
+Рабочая public ветка `gemini_v1` получила предметные schemas/validators, последовательный
+клиентский автомат и ручной двусторонний HTTPS-стенд. В private `codex/debian-package-pilot`
+исправлены capabilities, canonical host key и повтор ответа на отзыв. Существующие несвязанные
+изменения обеих веток сохранены; commit/push/deploy не выполнялись. Обновлённый исходный документ
+из public `pesochnica` checkout использован как вход, его pending изменения не перезаписывались.
+
+Подтверждено: public direct suite 46/46, private support 16/16, 12 сквозных HTTPS/MFA проверок,
+обе metadata peer-проверки, проверка полей/подписей и целостность прежнего vendor snapshot.
+Documentation gates: 249 public Markdown-файлов и 13 private tests. Полный private suite:
+188 tests, 183 passed, 1 прежний NTP/Git Bash failure, 4 platform/peer skips.
+Полный public `npm test`, Android build, native OpenWrt build и live-router gate не повторялись
+для этого изолированного изменения. Перед публикацией общей ветки полный gate остаётся обязательным.
+
+Следующий порядок без преждевременного включения UI:
+
+1. Завершить signed status-sync: утраченный навсегда ответ/истёкший request не должен требовать
+   повторного `claimOpen` или сброса sequence. Пока клиент в такой ситуации остаётся закрытым.
+2. Согласовать server-key manifest/ротацию и конкретные transport CSR/lease/relay-map schemas,
+   затем опубликовать reviewed public revision и обновить private vendor hashes.
+3. Сделать native crypto и durable OpenWrt manager: отдельная identity, root/ACL gate, RAM-код,
+   clock/reboot/lock, локальный revoke/watchdog и bounded polling.
+4. Реализовать настоящий private FRP/bastion adapter с независимым отзывом уже открытого SSH,
+   ограниченным bind, host-key проверкой и package lifecycle.
+5. Только после этих gates подключить единую вкладку LuCI/APK и измерить router resource budget;
+   отдельное разрешение на test deployment по-прежнему требуется.
+
+**Почему выбран этот способ / нюансы.** Открытие заявки отделено от выдачи доступа.
+`sessionPreparing` и зелёный HTTPS-тест не доказывают SSH. Сначала проверяется общий contract
+реальными сообщениями двух реализаций, затем platform/transport, затем пользовательская активация.
+Точные команды и ограничения: [control runbook](../tools/remoteSupport/README.ru.md).
 
 Этот документ описывает не обычное удалённое управление роутером, а временный сервисный канал, который владелец явно открывает сотруднику техподдержки для диагностики и настройки Sheepfold, OpenWRT и совместной работы с Podkop или AdGuard Home.
 

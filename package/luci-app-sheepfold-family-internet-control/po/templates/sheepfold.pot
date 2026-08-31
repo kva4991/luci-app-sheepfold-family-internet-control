@@ -4251,3 +4251,18 @@ msgstr ""
 
 msgid "Give access"
 msgstr ""
+
+msgid "Participate in beta testing"
+msgstr ""
+
+msgid "After Save, Sheepfold checks published GitHub releases every hour and installs newer versions automatically. Turning this off stops automatic updates but keeps notification settings."
+msgstr ""
+
+msgid "Enable beta testing? After Save, router updates will be installed automatically and may briefly interrupt access. Notifications about every SIM change and new child Wi-Fi networks will be enabled. Location collection, website history, AI and remote support will not be enabled. You can change notifications separately."
+msgstr ""
+
+msgid "Outside beta testing, this controls stable-release checks. Installation requires confirmation. Beta testing uses hourly automatic updates instead."
+msgstr ""
+
+msgid "Invalid beta testing setting."
+msgstr ""

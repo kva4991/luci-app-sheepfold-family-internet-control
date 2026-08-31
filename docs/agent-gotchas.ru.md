@@ -27,6 +27,9 @@
 
 ## Куда что писать
 
+- Отсутствующее `globalBlocked` не равно разрешённому интернету; RAM-черновик хранит исходную revision, а не последнюю полученную: [панели Android](android-config.ru.md#неизвестное-состояние-интернета) (§andpanel1).
+- Каналы Wi-Fi читаются только для Wi-Fi и только при capability; без iwinfo сохраняются текущий канал и `auto`, а транспортная ошибка POST не доказывает отмену записи: [контракт каналов](android-openwrt-api.ru.md#каналы-радиомодулей) (§apicon1).
+
 | Тема | Куда |
 | --- | --- |
 | LuCI gettext, `.lmo`, два параметра языка | [`docs/localization.ru.md`](localization.ru.md) |
@@ -199,6 +202,16 @@
 - Не передавайте сохранённый hostname прямо в `URL.openConnection()`. Только подписанный `SF2` родительского APK может разрешить имя один раз; успешный локальный IP становится единственным сохранённым endpoint. Границы `RouterHttps` и `ChildRouterHttps` обязаны отклонять hostname, loopback, multicast и публичные IP для команд, ИИ, виджетов, детских отчётов и восстановления порта. Иначе отдельный клиент легко вернёт DNS rebinding незаметно для остальных (§dnsbind1).
 - `RouterConnectionRequest` намеренно является обычным `class`, а не `data class`: токен, device identity и TLS-отпечатки живут в слабой карте по идентичности экземпляра. Структурное равенство позволяло временному результату первого `read()` стать ключом второй сессии, после чего GC удалял действующие секреты и APK при повторном входе ошибочно требовал новое сопряжение. Корневой экран и фоновые worker-ы читают подключение один раз и проверяют именно этот объект (§authrs1).
 
+### Android: геометрия меню и снимки тестов
+
+- Patch `Move to` с изменением только регистра на Windows может удалить файл при успешном ответе. Использовать промежуточное отличающееся имя и проверять наличие/хеш; [подробности окружения](agent-environment.ru.md#смена-регистра-имени-файла-на-windows).
+
+- Для Wi-Fi QR обязательно задавать ZXing `CHARACTER_SET=UTF-8`: без этого не-латинские SSID/пароли превращаются в `?`. Проверять декодирование нарисованного QR, а не только строку payload; при снятии QR после ввода закрывать клавиатуру тестовой Activity (§andlab1).
+- `INSTALL_FAILED_UPDATE_INCOMPATIBLE` в Codex может быть следствием другого Java `user.home`: Gradle берёт debug key sandbox-пользователя. Сверить сертификаты и `:app:signingReport`, задать `ANDROID_USER_HOME` на существующий каталог владельца, не удалять приложение и не заменять ключ. Команда: [рабочие панели Android](android-test-lab.ru.md#рабочие-панели-родительского-приложения) (§andlab1).
+
+- `GetTextLayoutResult` может вернуть параграф шире фактического `Text`, хотя строка полностью видна. Не считать один `hasVisualOverflow` доказательством обрезания: проверять ширины строк, высоту, многоточие и границы слов; подробности в [Android-стенде](android-test-lab.ru.md#меню-переносы-подписей) (§andlab1).
+- Синтетические PNG хранить в app-private `cacheDir`, читать у debug APK через `exec-out run-as` и проверять PNG-сигнатуру. На OEM `/sdcard/Android/data` может быть закрыт даже для `run-as`, а ADB вернуть код 0 с `Permission denied` вместо картинки; не расширять ради снимка права телефона (§andlab1).
+
 ### Android: новые Wi-Fi-сети детского устройства
 
 - Отчёт выключен по умолчанию и разрешается детскому APK только флагами аутентифицированного для устройства `/client-status`; одного наличия Android-разрешения недостаточно.
@@ -215,11 +228,35 @@
 
 ### Временная удалённая техподдержка
 
+- Experimental control-клиент объявляет только `claimV1/localRevokeV1`; требовать FRP уже для
+  `claimOpen` нельзя. Transport capabilities проверяются при `prepare`, не заменяя реальный
+  broker. `sessionPreparing` не означает подключившегося сотрудника.
+- При потере ответа на отзыв повторяется та же подпись/sequence. Новый ответ на тот же запрос
+  создавал `sequenceGap`; regression есть в public/private support tests. Replay сравнивает
+  все подписанные bytes, а не только одинаковые ID.
+- [Ручной control peer-стенд](../tools/remoteSupport/README.ru.md) открывает только synthetic
+  loopback HTTPS и проверяет настоящий private handler/MFA. Это не установленный OpenWrt
+  manager и не доказательство FRP. Потеря неподтверждённого запроса до истечения срока требует
+  будущего signed status-sync; сбрасывать sequence или повторно создавать claim запрещено.
+
 - Случайный или отдельный порт не является шифром: сканирование его обнаружит, а связь порта с продиктованным кодом ослабит оба значения. У каждого роутера нужна отдельная криптографическая identity, transport использует короткоживущий mTLS credential, а случайный `sessionRoutePort` существует только внутри закрытого relay/bastion и не кодируется в 12-значном номере (§rsup001).
 - `tools/remoteSupport/` нельзя подключать к LuCI или пакету: это Node.js reference-контракт для тестов. Он фиксирует точные байты и общие инварианты; production router/server обязан реализовать тот же протокол своими адаптерами и пройти cross-runtime golden vectors (§rsup001).
 - Закрытый `sheepfold-support-server` не добавляется submodule и не является runtime-зависимостью установки Sheepfold. Общая граница сверяется через два `peer-project.json`; router protocol и golden vectors изменяются сначала здесь, а server queue/operator/Codex bridge - в закрытом репозитории (§rsuppeer).
 
 ### Family message relay
+
+- Durable public-attempt marker пишется до HTTP body; generic/чужой 404 не является доказательством отсутствия команды. Не разрешать indirect `INDETERMINATE`/public retry → `READY`; см. [continuation plan](family-message-relay-continuation-plan.ru.md) (§mrelay1).
+- 400/401/403/410 на повторном public enqueue не опровергает выполнение первой попытки с потерянным ответом; сохранять неопределённый итог, а не предлагать новую команду: [continuation plan](family-message-relay-continuation-plan.ru.md) (§mrelay1).
+- Физический Android `OK (N tests)` включает assumption-skips; instrumentation не должен очищать рабочий Keystore, а `am start -W` может зависнуть после фактического старта. Команды/изоляция fixtures: [parent-router stand](../tools/android-testing/parent-router-integration/README.ru.md) (§andlab1).
+- `LeftCompositionCancellationException` после `/pair` может означать поворот Activity, а не сетевой timeout: операция принадлежит Activity ViewModel, шаг сохраняется отдельно без секретов. Граница process death и свежего QR: [Android-конфигурация](android-config.ru.md) (§pairtx1).
+- Timeout уже привязанного APK проверять отдельно от QR: allocator и UCI commit на каждую строку вызывали и `list_devices`, и общая `token_device_is_admin_paired` до отбора нужного MAC. Быстрый helper `router-info` не доказывает быстрый HTTP с авторизацией. Не увеличивать timeout вместо устранения причины; fast path и repair повреждённого ID: [паспорт устройства](device-passport-and-control.ru.md) (§deviceid2).
+- «Обновить» родительского управления не является синхронизацией всех вкладок: набор запросов централизован в `RouterPanelLoader`, журнал не имеет второго entry-load, фоновые уведомления независимы. Возвращение полного reload или применение отменённого ответа нарушит [контракт панелей](android-config.ru.md#обновление-данных-открытой-панели) (§andpanel1).
+- Круглая кнопка «Далее» является концом scroll-content, не экранным overlay. Использовать `actionNext` из каталога, проверять обе темы и disabled state: [каталог](icon-catalog.ru.md), [UI/lifecycle stand](../tools/android-testing/parent-router-integration/README.ru.md) (§iconcat1, §uicontrast).
+- Перед Gradle проверить `GRADLE_USER_HOME`: унаследованный путь может принадлежать другому проекту. Для локального Sheepfold использовать `%USERPROFILE%\.gradle`, не очищая чужой кеш; команда приведена в [Android-стенде](../tools/android-testing/parent-router-integration/README.ru.md) (§andlab1).
+- Native Linux golden-vector/sanitizer gate не доказывает OpenWrt ABI или рабочий relay; SDK, ledger и dispatcher остаются отдельными gates: [helper README](../package/sheepfold-message-relay-crypto/README.ru.md) (§mrelay1).
+- SDK уже задаёт `_FORTIFY_SOURCE`: сначала `-U`, затем своё `-D`, не отключать `-Werror`. SDK хранить на диске, переиспользовать cache и проверять живой `make` после обрыва SSH: [helper README](../package/sheepfold-message-relay-crypto/README.ru.md) (§mrelay1).
+- Лимит событий detector считает попытки, включая отказ lock; счётчик только успешных запусков допускает неограниченный обход очереди при ошибке: [device-detection.ru.md](device-detection.ru.md) (§detload).
+- В detector TSV нужны placeholders и для IP, и для hostname; `/regex/i` не является case-insensitive синтаксисом awk. Старый DHCP IP не должен вытеснять live LAN IP: [автоопределение](device-detection.ru.md) (§devpas1, §detload).
 
 - Не пытайтесь проксировать через VPS существующий `/api/v1/*` или передавать туда local Android Bearer. Для `§mrelay1` нужны отдельные router/phone identities, AES-GCM-authenticated E2E envelopes, bounded TTL/deduplication и политика `local_preferred`; недоступность сервера дома должна оставлять локальный pinned HTTPS рабочим. Точные параметры и частичный статус реализации хранятся в [`docs/android-router-message-relay.ru.md`](android-router-message-relay.ru.md).
 
@@ -278,7 +315,9 @@
 - Сообщение `opkg: Malformed package file` приходит слишком поздно. Updater до `opkg` обязан проверить официальный URL asset, `debian-binary`, единственные `control.tar.gz`/`data.tar.gz`, безопасные пути, имя пакета, версию и `Architecture: all`.
 - `postinst` не удаляет временную копию `/tmp/sheepfold/update/sheepfold-config-before-update`: updater удаляет её только после получения и проверки результата `opkg`. Иначе ошибка `postinst` уничтожит единственную оперативную копию до попытки восстановления.
 - Восстановление UCI-конфига не равно откату бинарного пакета. Updater не должен обещать полный rollback, пока предыдущий IPK действительно не сохранён и не проверен.
-- `§maintjob1`: фоновые задания запускаются только через `sheepfold-maintenance`; запрещено вызывать `updater start/install` из расписания или удалять offline-карточку без проверки списков, DHCP, расписаний, группы, административной привязки и `user_configured`.
+- `§maintjob1`: фоновые задания запускаются только через `sheepfold-maintenance`; обычный режим лишь уведомляет, а `start-beta` допускается раз в час только при сохранённом `beta_testing=1` (§betatest1). Нельзя удалять offline-карточку без проверки списков, DHCP, расписаний, группы, административной привязки и `user_configured`.
+- `§betatest1`: бета-профиль не разрешает новые виды сбора данных. Его изменение требует обновления подтверждения LuCI, тестов и [контракта обслуживания](maintenance-jobs.ru.md). Не снимайте flock в родителе после передачи worker и не наследуйте его в перезапускаемые init-службы.
+- `§updsafe`: exit-коды сетевых утилит могут совпасть с внутренними кодами «нет новой версии»/«отменено». Фоновый updater различает их по `update_outcome`, иначе ошибка wget с кодом 4 выглядит как добровольная отмена и скрывает уведомление.
 - `§country1`: country profile не имеет права молча заменять уже настроенный `system.@system[0].zonename`; внешняя IP-геолокация запрещена.
 - `§devpas1`: выбор полного режима не устанавливает `nmap`; optional package action всегда отдельный, подтверждённый и ограниченный именованным пакетом.
 - `§apicon1`: изменяющая LuCI-команда не должна вручную дублировать `button.disabled`, toast и reload. Составная UCI/runtime-операция получает стабильный action key; после post-commit runtime failure UI перечитывает фактический UCI, а не откатывает интерфейс предположением.

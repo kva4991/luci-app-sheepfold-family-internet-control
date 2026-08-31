@@ -24,13 +24,14 @@ internal fun ParentInlineStatus(message: String?, isError: Boolean) {
 internal fun ParentSelectionRow(
     label: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(label, modifier = Modifier.weight(1f))
-        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }

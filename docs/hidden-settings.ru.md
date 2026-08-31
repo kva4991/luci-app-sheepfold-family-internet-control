@@ -89,6 +89,8 @@ UCI-параметры и секции Sheepfold, которые **сущест�
 
 ## Отображаются в LuCI (для сверки)
 
+`beta_testing` (`0` по умолчанию) находится внизу «Общие»: [часовые обновления и профиль уведомлений](maintenance-jobs.ru.md), §betatest1. Это не скрытое разрешение на все экспериментальные функции.
+
 `language`, `country_profile`, `automation_mode`, `new_device_policy`, `detection_mode`, `device_monitoring_mode`, `update_check_install_mode`, `domain_allowlist_for_blocklist`, `site_*`, `site_filter_backend`, `adguard_auto_manage`, `adguard_health_interval_seconds`, AdGuard Home (`url`, `username`, `password`), `app_port`, `sim_change_notifications`, `child_wifi_network_notifications`, messenger tokens, `integration_mode`, emergency sites, Wi-Fi auto, NTP/timezone, WPS, LED, `log_storage`, log retention, offline cleanup, USB, Yandex Disk (`login`, `password`, `root_folder`, `quota_mb`), AI keys/flags, `export_mode`, `blocked_page_text`, группы/устройства/списки MAC.
 
 ## Исторические ловушки UI

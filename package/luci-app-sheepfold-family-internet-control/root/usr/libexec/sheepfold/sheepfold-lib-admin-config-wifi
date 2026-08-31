@@ -7,6 +7,64 @@ WIFI_TX_DIR=""
 WIFI_TX_RESTORE=0
 WIFI_TX_ACTIVE=0
 
+# Два ограниченных read-only RPC на радио, без сканирования эфира и записи во flash
+wifi_channel_list() (
+    local radio band payload phy keys key channel mhz restricted count
+    radio="$1"
+    valid_section_name "$radio" || exit 0
+    [ -r "${SHEEPFOLD_JSHN_LIB:-/usr/share/libubox/jshn.sh}" ] || exit 0
+    . "${SHEEPFOLD_JSHN_LIB:-/usr/share/libubox/jshn.sh}"
+    payload="$("${SHEEPFOLD_UBUS_BIN:-ubus}" -t 1 call iwinfo phyname "{\"section\":\"$radio\"}" 2>/dev/null | head -c 4097)"
+    [ "${#payload}" -le 4096 ] || exit 0
+    json_load "$payload" >/dev/null 2>&1 || exit 0
+    json_get_var phy phyname || exit 0
+    case "$phy" in ''|*[!a-zA-Z0-9_.-]*) exit 0 ;; esac
+    payload="$("${SHEEPFOLD_UBUS_BIN:-ubus}" -t 1 call iwinfo freqlist "{\"device\":\"$phy\"}" 2>/dev/null | head -c 65537)"
+    [ "${#payload}" -le 65536 ] || exit 0
+    json_load "$payload" >/dev/null 2>&1 || exit 0
+    json_select results >/dev/null 2>&1 || exit 0
+    json_get_keys keys || exit 0
+    band="$(uci_get "wireless.$radio.band")"
+    [ -n "$band" ] || band="$(uci_get "wireless.$radio.hwmode")"
+    count=0
+    for key in $keys; do
+        count=$((count + 1))
+        [ "$count" -le 256 ] || break
+        json_select "$key" >/dev/null 2>&1 || continue
+        channel=""; mhz=""; restricted=""
+        json_get_var channel channel || true
+        json_get_var mhz mhz || true
+        json_get_var restricted restricted || true
+        json_select ..
+        [ "$restricted" = 0 ] || continue
+        case "$channel:$mhz" in *[!0-9:]*|:*|*:) continue ;; esac
+        [ "$channel" -ge 1 ] && [ "$channel" -le 233 ] || continue
+        case "$band" in
+            2g|11g|11ng) [ "$mhz" -ge 2400 ] && [ "$mhz" -lt 2500 ] || continue ;;
+            5g|11a|11na) [ "$mhz" -ge 4900 ] && [ "$mhz" -lt 5925 ] || continue ;;
+            6g) [ "$mhz" -ge 5925 ] && [ "$mhz" -le 7125 ] || continue ;;
+            *) continue ;;
+        esac
+        printf '%s\n' "$channel"
+    done
+)
+
+wifi_channels_json() {
+    local radio first channels
+    first=1
+    printf '{"app":"sheepfold","radios":{'
+    for radio in $(sections_of_config_type wireless wifi-device | head -n 4); do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        json_string "$radio"
+        printf ':['
+        channels="$(wifi_channel_list "$radio" | sort -nu)"
+        printf '%s\n' "$channels" | awk 'NF { if (seen++) printf ","; printf "%d", $1 }'
+        printf ']'
+    done
+    printf '}}\n'
+}
+
 wifi_save_cleanup() {
     local status="${1:-1}"
     trap - EXIT HUP INT TERM
@@ -134,6 +192,14 @@ wifi_save() {
         printf '%s\n' wifi_network_not_found >&2
         return 2
     }
+
+    # Сохранить прежний канал можно и без iwinfo, но новый числовой канал требует проверки
+    if [ "$channel" != auto ] && [ "$channel" != "$(uci_get "wireless.$device.channel")" ]; then
+        wifi_channel_list "$device" | grep -Fxq "$channel" || {
+            printf '%s\n' invalid_wifi_channel >&2
+            return 2
+        }
+    fi
 
     mkdir -p "$TRANSACTION_ROOT"
     chmod 700 "$TRANSACTION_ROOT" 2>/dev/null || true

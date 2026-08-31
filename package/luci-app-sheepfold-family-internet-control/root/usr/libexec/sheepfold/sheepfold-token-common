@@ -75,11 +75,17 @@ token_device_is_admin_paired() {
 	token_valid_mac "$wanted_mac" || return 1
 	[ -n "$wanted_id" ] || return 1
 	for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
-		device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section" 2>/dev/null || true)"
-		mac="$(token_normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
 		admin="$(uci -q get "sheepfold.$section.admin_device" 2>/dev/null || printf 0)"
 		[ "$admin" = 1 ] || continue
+		mac="$(token_normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
 		[ "$mac" = "$wanted_mac" ] || continue
+		# Обычная авторизация не должна повторять полный обход и commit allocator
+		# для каждой записи; старый формат восстанавливаем только у нужного телефона
+		device_id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
+		case "$device_id" in
+			''|*[!0-9]*|0*) device_id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section" 2>/dev/null || true)" ;;
+		esac
+		[ -n "$device_id" ] || continue
 		legacy_ids="$(uci -q get "sheepfold.$section.legacy_ids" 2>/dev/null || true)"
 		# После миграции старого формата номера старый APK продолжает работать только
 		# с прежним ID из своего токена и с тем же проверенным MAC. §deviceid2

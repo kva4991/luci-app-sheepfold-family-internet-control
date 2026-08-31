@@ -14,6 +14,8 @@ if [ ! -r "$PACKAGE_MANAGER_HELPER" ]; then
         exit 1
 fi
 . "$PACKAGE_MANAGER_HELPER"
+LOCK_COMMON="${SHEEPFOLD_LOCK_COMMON:-${SCRIPT_DIR}/sheepfold-lock-common}"
+. "$LOCK_COMMON"
 PACKAGE_MANAGER="$(sheepfold_package_manager)" || {
         printf 'OpenWrt package manager was not found (opkg or apk).\n' >&2
         exit 1
@@ -40,6 +42,9 @@ PACKAGE_FILE="${WORK_DIR}/${ASSET_PACKAGE}-latest.${PACKAGE_EXTENSION}"
 LOG_FILE="${RUNTIME_DIR}/update.log"
 STATUS_FILE="${RUNTIME_DIR}/update.status"
 PID_FILE="${RUNTIME_DIR}/update.pid"
+UPDATE_LOCK="${RUNTIME_DIR}/update.flock"
+NOTIFIER="${SHEEPFOLD_NOTIFICATION_HELPER:-${SCRIPT_DIR}/sheepfold-admin-notification}"
+EVENT_LOG="${SHEEPFOLD_LOG_HELPER:-${SCRIPT_DIR}/sheepfold-log}"
 CONFIG_FILE="${SHEEPFOLD_UPDATE_CONFIG_FILE:-/etc/config/sheepfold}"
 MIGRATION_CONFIG_BACKUP="${SHEEPFOLD_UPDATE_MIGRATION_BACKUP:-/etc/sheepfold/migrations/sheepfold.config.pre-upgrade}"
 CONFIG_BACKUP="${WORK_DIR}/sheepfold-config-before-update"
@@ -499,7 +504,7 @@ version_is_newer() {
 
 read_release_info() {
         say checking_release
-        fetch "$API_URL" "$RELEASE_JSON"
+        fetch "$API_URL" "$RELEASE_JSON" || return $?
 
         TAG="$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RELEASE_JSON" | sed -n '1p')"
         case "$PACKAGE_MANAGER" in
@@ -514,27 +519,27 @@ read_release_info() {
 
         if [ -z "${TAG:-}" ]; then
                 say no_tag >&2
-                exit 1
+                return 1
         fi
 
         if [ -z "${PACKAGE_URL:-}" ]; then
                 say no_package "$TAG" >&2
-                exit 1
+                return 1
         fi
 
         if ! trusted_package_url; then
                 say untrusted_package_url >&2
-                exit 1
+                return 1
         fi
 
         if [ -z "${LATEST_VERSION:-}" ]; then
                 say no_package_version >&2
-                exit 1
+                return 1
         fi
 }
 
 print_check() {
-        read_release_info
+        read_release_info || return $?
         CURRENT_VERSION="$(current_version || true)"
         say current_version "${CURRENT_VERSION:-unknown}"
         say latest_release "$TAG"
@@ -550,7 +555,7 @@ print_check() {
 print_probe() {
         # Machine-readable check for the periodic maintenance job. It reuses the
         # updater's trusted release parsing but never downloads or installs a package.
-        read_release_info >/dev/null
+        read_release_info >/dev/null || return $?
         CURRENT_VERSION="$(current_version || true)"
         available=0
         version_is_newer "$LATEST_VERSION" "$CURRENT_VERSION" && available=1
@@ -560,9 +565,31 @@ print_probe() {
         printf 'tag=%s\n' "$TAG"
 }
 
+beta_enabled() {
+        [ "$(uci -q get sheepfold.global.beta_testing 2>/dev/null || true)" = 1 ]
+}
+
+with_update_lock() (
+        # Общая блокировка защищает также временные файлы probe от ручной установки
+        sheepfold_lock_acquire "$UPDATE_LOCK" 0 || return 3
+        trap 'sheepfold_lock_release' EXIT
+        trap 'exit 1' HUP INT TERM
+        "$@"
+)
+
 install_update() {
+        update_outcome=failed
+        update_mode="${1:-manual}"
+        if [ "$update_mode" = beta ]; then
+                if ! beta_enabled; then
+                        update_outcome=cancelled
+                        return 4
+                fi
+                # Нельзя угадывать версию установленного пакета при безнадзорном обновлении
+                [ -n "$(current_version || true)" ] || return 1
+        fi
         say updater_title
-        read_release_info
+        read_release_info || return $?
         CURRENT_VERSION="$(current_version || true)"
         say current_version "${CURRENT_VERSION:-unknown}"
         say latest_release "$TAG"
@@ -570,15 +597,22 @@ install_update() {
 
         if ! version_is_newer "$LATEST_VERSION" "$CURRENT_VERSION"; then
                 say no_updates
+                update_outcome=no_update
                 return 2
         fi
 
         say downloading_package
-        fetch "$PACKAGE_URL" "$PACKAGE_FILE"
+        if fetch "$PACKAGE_URL" "$PACKAGE_FILE"; then
+                download_code=0
+        else
+                download_code="$?"
+                cleanup_install_files
+                return "$download_code"
+        fi
 
         if [ ! -s "$PACKAGE_FILE" ]; then
                 say empty_package >&2
-                exit 1
+                return 1
         fi
 
         # Не полагаемся только на сообщение package manager: до установки проверяем
@@ -594,8 +628,15 @@ install_update() {
                 return 1
         fi
 
+        # Отключение участия во время загрузки отменяет ещё не начатую установку
+        if [ "$update_mode" = beta ] && ! beta_enabled; then
+                cleanup_install_files
+                update_outcome=cancelled
+                return 4
+        fi
+
         say installing_package
-        if sheepfold_package_install_file "$PACKAGE_FILE" 0; then
+        if sheepfold_package_install_file "$PACKAGE_FILE" 0 9>&-; then
                 install_code=0
         else
                 install_code="$?"
@@ -626,8 +667,8 @@ install_update() {
         cleanup_install_files
 
         say reloading_service
-        [ -x "$SHEEPFOLD_INIT" ] && "$SHEEPFOLD_INIT" restart || true
-        [ -x "$RPCD_INIT" ] && "$RPCD_INIT" reload || true
+        [ -x "$SHEEPFOLD_INIT" ] && "$SHEEPFOLD_INIT" restart 9>&- || true
+        [ -x "$RPCD_INIT" ] && "$RPCD_INIT" reload 9>&- || true
 
         say update_completed
 }
@@ -640,35 +681,64 @@ pid_running() {
 }
 
 start_update() {
-        if pid_running; then
-                say already_running "$(cat "$PID_FILE")"
-                return 0
-        fi
-
+        # Удерживаемый flock уже исключает живой updater, а старый PID мог быть переиспользован
         : > "$LOG_FILE"
         echo "running" > "$STATUS_FILE"
-        "$0" run-background >/dev/null 2>&1 </dev/null &
+        ( run_background "${1:-manual}" ) >/dev/null 2>&1 </dev/null &
         echo "$!" > "$PID_FILE"
+        # Дочерний worker наследует flock; родитель только закрывает свой FD, не снимая lock
+        trap - EXIT HUP INT TERM
+        exec 9>&-
         say started_background "$!"
 }
 
 run_background() {
-        echo "$$" > "$PID_FILE"
+        background_mode="${1:-manual}"
+        trap 'rm -f "$PID_FILE"; sheepfold_lock_release' EXIT
+        trap 'exit 1' HUP INT TERM
         : > "$LOG_FILE"
         echo "running" > "$STATUS_FILE"
 
         code=0
-        "$0" install-foreground >>"$LOG_FILE" 2>&1 || code="$?"
+        install_update "$background_mode" >>"$LOG_FILE" 2>&1 || code="$?"
 
         if [ "$code" = "0" ]; then
                 echo "ok" > "$STATUS_FILE"
-        elif [ "$code" = "2" ]; then
+        elif [ "$update_outcome" = no_update ]; then
                 echo "no_update" > "$STATUS_FILE"
+        elif [ "$update_outcome" = cancelled ]; then
+                echo "cancelled" > "$STATUS_FILE"
         else
                 echo "failed:${code}" > "$STATUS_FILE"
         fi
 
+        if [ "$background_mode" = beta ]; then
+                beta_result "$code"
+        fi
         rm -f "$PID_FILE"
+}
+
+beta_result() {
+        # Коды downloader могут совпасть с no_update/cancelled; решает смысл результата, не номер
+        case "$update_outcome" in no_update|cancelled) return 0 ;; esac
+        version="$(current_version || true)"
+        if [ "$1" = 0 ]; then
+                result_key="beta-update:${version}"
+                if [ "$LANGUAGE" = ru ]; then
+                        message="Бета-тест: Sheepfold автоматически обновлён до ${version}."
+                else
+                        message="Beta testing: Sheepfold automatically updated to ${version}."
+                fi
+        else
+                result_key="beta-update-failed:$(date +%F)"
+                if [ "$LANGUAGE" = ru ]; then
+                        message="Бета-тест: не удалось обновить Sheepfold. Повтор через час. Подробности в журнале обновления на роутере."
+                else
+                        message="Beta testing: Sheepfold update failed. Retrying in one hour. See the router update log for details."
+                fi
+        fi
+        [ ! -x "$EVENT_LOG" ] || "$EVENT_LOG" "$message" 9>&- >/dev/null 2>&1 || true
+        [ ! -x "$NOTIFIER" ] || "$NOTIFIER" enqueue update "$result_key" Sheepfold "$message" 9>&- >/dev/null 2>&1 || true
 }
 
 print_status() {
@@ -684,15 +754,26 @@ print_log() {
         cat "$LOG_FILE" 2>/dev/null || true
 }
 
+install_command() {
+        code=0
+        install_update || code="$?"
+        [ "$update_outcome" = no_update ] && return 0
+        return "$code"
+}
+
 case "$COMMAND" in
         check)
-                print_check
+                with_update_lock print_check
                 ;;
         probe)
-                print_probe
+                with_update_lock print_probe
                 ;;
         start)
-                start_update
+                with_update_lock start_update
+                ;;
+        start-beta)
+                beta_enabled || exit 4
+                with_update_lock start_update beta
                 ;;
         status)
                 print_status
@@ -701,16 +782,16 @@ case "$COMMAND" in
                 print_log
                 ;;
         install)
-                code=0
-                install_update || code="$?"
-                [ "$code" = "2" ] && exit 0
-                exit "$code"
+                with_update_lock install_command
                 ;;
         install-foreground)
-                install_update
+                with_update_lock install_update
+                ;;
+        install-beta-foreground)
+                with_update_lock install_update beta
                 ;;
         run-background)
-                run_background
+                with_update_lock run_background
                 ;;
         *)
                 say usage >&2

@@ -3,6 +3,23 @@
   "fallbackIcon": "deviceTypeUnknown",
   "icons": [
     {
+      "name": "actionNext",
+      "category": "Действия",
+      "title": "Далее",
+      "androidVector": "android/app/src/main/res/drawable/ic_action_next.xml",
+      "filledPaths": [
+        "M2 6l10 1.7V3l10 9-10 9v-4.7L2 18z"
+      ],
+      "uses": [
+        {
+          "place": "Круглая кнопка перехода в конце страницы первоначальной настройки родительского APK",
+          "files": [
+            "android/app/src/main/java/app/sheepfold/android/ui/setup/SafeRouterSetupScreen.kt"
+          ]
+        }
+      ]
+    },
+    {
       "name": "actionSettings",
       "category": "Действия",
       "title": "Настроить",
@@ -107,9 +124,11 @@
           ]
         },
         {
-          "place": "Обновление данных на экране управления родительского Android-приложения",
+          "place": "Обновление данных на экранах управления, информации и уведомлений родительского Android-приложения",
           "files": [
             "android/app/src/main/java/app/sheepfold/android/ui/main/ControlMenuTabs.kt",
+            "android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt",
+            "android/app/src/main/java/app/sheepfold/android/ui/main/NotificationsTab.kt",
             "android/app/src/main/res/drawable/ic_refresh.xml"
           ]
         }
@@ -174,8 +193,7 @@
       "category": "Навигация",
       "title": "Управление",
       "paths": [
-        "M12 2v10",
-        "M6.3 5.3a8 8 0 1 0 11.4 0"
+        "M14 3a6 6 0 0 0-5.2 8.8L3 17.6a2.4 2.4 0 0 0 3.4 3.4l5.8-5.8A6 6 0 0 0 21 10l-4 1-4-4 1-4z"
       ],
       "androidVector": "android/app/src/main/res/drawable/ic_navigation_control.xml",
       "uses": [

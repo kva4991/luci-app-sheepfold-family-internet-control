@@ -182,9 +182,10 @@ function scanJson(text) {
   }
 }
 
-export function parseStrictJson(bytes) {
+export function parseStrictJson(bytes, limit = maxMessageBytes) {
   const input = Buffer.from(bytes);
-  if (input.length === 0 || input.length > maxMessageBytes) {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 24576 ||
+      input.length === 0 || input.length > limit) {
     fail('messageMalformed', 'payload size is outside the allowed range');
   }
 

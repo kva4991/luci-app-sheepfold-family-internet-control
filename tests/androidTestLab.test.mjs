@@ -111,4 +111,27 @@ describe('manual Android test lab §andlab1', () => {
     assert.match(docs, /камера/i);
     assert.match(docs, /физическ(?:ий|ом) телефон/i);
   });
+
+  it('keeps the documented parent component suite present and isolated from saved credentials', () => {
+    const testRoot = 'android/app/src/androidTest/java/app/sheepfold/android';
+    const files = [
+      'router/adminConfigJsonTest.kt',
+      'ui/main/parentUiFixture.kt',
+      'ui/main/parentControlsTest.kt',
+      'ui/main/parentReadPanelsTest.kt',
+      'ui/main/parentEditorsTest.kt',
+      'ui/main/parentWifiTest.kt',
+    ];
+    for (const file of files) {
+      const source = read(`${testRoot}/${file}`);
+      assert.match(source, /class \w+/);
+      assert.doesNotMatch(source, /SheepfoldConnectionStore|AppProtectionStore|LanguagePreferenceStore/);
+    }
+    const fixture = read(`${testRoot}/ui/main/parentUiFixture.kt`);
+    assert.match(fixture, /createAndroidComposeRule<ComponentActivity>/);
+    assert.match(fixture, /https:\/\/127\.0\.0\.1:1/);
+    for (const file of ['scheduleRulesTest.kt', 'wifiQrTest.kt']) {
+      assert.match(read(`android/app/src/test/java/app/sheepfold/android/ui/main/${file}`), /@Test/);
+    }
+  });
 });

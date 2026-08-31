@@ -104,14 +104,18 @@ internal class PinnedLocalMessageRelayTransport(
             is LocalHttpResponse.FailedBeforeBody -> LocalRelayLookup.Unreachable(response.cause)
             is LocalHttpResponse.FailedAfterBody -> LocalRelayLookup.Unreachable(response.cause)
             is LocalHttpResponse.Completed -> when (response.status) {
-                200 -> LocalRelayLookup.Result(parseResultEnvelope(response.body))
+                200 -> try {
+                    LocalRelayLookup.Result(parseResultEnvelope(response.body))
+                } catch (error: RuntimeException) {
+                    LocalRelayLookup.Unreachable(error)
+                }
                 202 -> if (response.retryAfter == "1" && response.body.isEmpty()) {
                     LocalRelayLookup.Pending
                 } else {
                     LocalRelayLookup.DefiniteFailure(202)
                 }
                 404 -> if (response.contentType == "application/json" &&
-                    response.body.contentEquals(canonicalNotFoundResponse)
+                    response.body.contentEquals(notFoundResponse(requestMessageId))
                 ) {
                     LocalRelayLookup.NoRecord
                 } else {
@@ -262,10 +266,17 @@ internal class PinnedLocalMessageRelayTransport(
         return canonical
     }
 
+    private fun notFoundResponse(requestMessageId: String): ByteArray = MessageRelayJson.canonicalBytes(
+        MessageRelayJson.objectValue(
+            "error" to RelayJsonValue.StringValue("notFound"),
+            "protocolVersion" to RelayJsonValue.IntegerValue(1),
+            "requestMessageId" to RelayJsonValue.StringValue(requestMessageId)
+        )
+    )
+
     companion object {
         internal const val localProbeBudgetMillis = 2_500L
         private val contractedDefinitePostStatuses = setOf(0, 400, 401, 403, 404, 405, 409, 413, 422, 429)
-        private val canonicalNotFoundResponse = "{\"error\":\"notFound\"}".toByteArray(Charsets.UTF_8)
     }
 }
 

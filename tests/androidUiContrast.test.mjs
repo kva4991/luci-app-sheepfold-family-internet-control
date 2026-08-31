@@ -16,6 +16,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
 const theme = read('android/app/src/main/java/app/sheepfold/android/ui/theme/Theme.kt');
 const controls = read('android/app/src/main/java/app/sheepfold/android/ui/main/ControlMenuTabs.kt');
+const setup = read('android/app/src/main/java/app/sheepfold/android/ui/setup/SafeRouterSetupScreen.kt');
 
 function rgb(hex) {
   const value = hex.replace('#', '');
@@ -87,6 +88,23 @@ function assertContrast(label, foreground, background, minimum) {
 }
 
 describe('Android UI contrast', () => {
+  it('keeps the next arrow and disabled outline visible in both themes', () => {
+    const button = setup.slice(setup.indexOf('internal fun RoundNextButton'));
+    assert.match(button, /R\.drawable\.ic_action_next/);
+    for (const [property, token] of [
+      ['containerColor', 'primary'], ['contentColor', 'onPrimary'],
+      ['disabledContainerColor', 'surfaceVariant'], ['disabledContentColor', 'onSurfaceVariant'],
+    ]) assert.ok(button.includes(`${property} = MaterialTheme.colorScheme.${token}`));
+    assert.match(button, /border\(1\.dp, MaterialTheme\.colorScheme\.outline, CircleShape\)/);
+    assert.doesNotMatch(setup, /Alignment\.BottomCenter|wrapContentSize|Text\("›"/);
+    const constants = parseThemeConstants();
+    for (const name of ['LightColors', 'DarkColors']) {
+      const colors = parseScheme(name, constants);
+      assertContrast(`${name}.next`, rgb(colors.onPrimary), rgb(colors.primary), 4.5);
+      assertContrast(`${name}.nextDisabled`, rgb(colors.onSurfaceVariant), rgb(colors.surfaceVariant), 4.5);
+      assertContrast(`${name}.nextOutline`, rgb(colors.outline), rgb(colors.background), 3);
+    }
+  });
   it('keeps text and icons distinct in both application themes', () => {
     const constants = parseThemeConstants();
     for (const schemeName of ['LightColors', 'DarkColors']) {
@@ -129,12 +147,12 @@ describe('Android UI contrast', () => {
   it('keeps active and pale internet actions visible against their own backgrounds', () => {
     const green = requireMatch(
       controls,
-      /containerColor = if \(!globalBlocked\) Color\(0xFF([0-9A-F]{6})\) else Color\(0xFF([0-9A-F]{6})\)[\s\S]*?contentColor = if \(!globalBlocked\) Color\.White else Color\(0xFF([0-9A-F]{6})\)\.copy\(alpha = ([0-9.]+)f\)/i,
+      /containerColor = if \(globalBlocked == false\) Color\(0xFF([0-9A-F]{6})\) else Color\(0xFF([0-9A-F]{6})\)[\s\S]*?contentColor = if \(globalBlocked == false\) Color\.White else Color\(0xFF([0-9A-F]{6})\)\.copy\(alpha = ([0-9.]+)f\)/i,
       'зелёная кнопка управления',
     );
     const red = requireMatch(
       controls,
-      /containerColor = if \(globalBlocked\) Color\(0xFF([0-9A-F]{6})\) else Color\(0xFF([0-9A-F]{6})\)[\s\S]*?contentColor = if \(globalBlocked\) Color\.White else Color\(0xFF([0-9A-F]{6})\)\.copy\(alpha = ([0-9.]+)f\)/i,
+      /containerColor = if \(globalBlocked == true\) Color\(0xFF([0-9A-F]{6})\) else Color\(0xFF([0-9A-F]{6})\)[\s\S]*?contentColor = if \(globalBlocked == true\) Color\.White else Color\(0xFF([0-9A-F]{6})\)\.copy\(alpha = ([0-9.]+)f\)/i,
       'красная кнопка управления',
     );
 

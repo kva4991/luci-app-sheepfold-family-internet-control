@@ -261,7 +261,11 @@ internal object MessageRelayJson {
             if (match.value.startsWith('-') && decimal.compareTo(BigDecimal.ZERO) == 0) {
                 fail("negative zero is forbidden")
             }
-            val integer = decimal.toBigIntegerExact()
+            val integer = try {
+                decimal.toBigIntegerExact()
+            } catch (_: ArithmeticException) {
+                fail("JSON numbers must be safe integers")
+            }
             val lowerBound = BigInteger.valueOf(Long.MIN_VALUE)
             val upperBound = BigInteger.valueOf(Long.MAX_VALUE)
             if (integer < lowerBound || integer > upperBound) {

@@ -42,7 +42,11 @@ describe('Android family message relay runtime §mrelay1', () => {
     assert.match(localClient, /localProbeBudgetMillis = 2_500L/);
     assert.match(localClient, /compareAndSet\(LocalPostPhase\.PRE_BODY, LocalPostPhase\.MAY_HAVE_REACHED\)/);
     assert.match(localClient, /LocalPostPhase\.CANCELLED/);
-    assert.match(localClient, /canonicalNotFoundResponse/);
+    assert.match(localClient, /notFoundResponse\(requestMessageId\)/);
+    assert.match(localClient, /"requestMessageId" to RelayJsonValue\.StringValue\(requestMessageId\)/);
+    const publicAttempt = coordinator.indexOf('stateStore.beginPublicAttempt(entry.messageId)');
+    const publicSubmit = coordinator.indexOf('.enqueue(attempting.envelopeJson)');
+    assert.ok(publicAttempt >= 0 && publicAttempt < publicSubmit);
     assert.match(localClient, /response\.contentType == "application\/json"/);
   });
 

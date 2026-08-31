@@ -13,7 +13,7 @@ const inlineLinkPattern = /!?\[[^\]]*\]\(\s*(<[^>]+>|[^\s)]+)(?:\s+['"][^'"]*['"
 // `[Environment]::Method(...)`, который иначе выглядит как сломанная ссылка.
 const referenceLinkPattern = /^\s*\[[^\]]+\]:[ \t]+(<[^>]+>|\S+)/gm;
 const tagPattern = /§[a-z][a-z0-9]{2,}/g;
-const testFilePattern = /(?<![A-Za-z0-9._<>-])([A-Za-z0-9][A-Za-z0-9._-]*\.test\.mjs)(?![A-Za-z0-9._-])/g;
+const testFilePattern = /(?<![A-Za-z0-9._<>-])((?:tools\/(?:[A-Za-z0-9_-]+\/)*)?[A-Za-z0-9][A-Za-z0-9._-]*\.test\.mjs)(?![A-Za-z0-9._-])/g;
 const npmRunPattern = /\bnpm(?:\.cmd)?\s+run\s+([A-Za-z0-9:_-]+)/g;
 const ignoredExampleTags = new Set(['§xxxxxxx']);
 
@@ -157,7 +157,10 @@ export function auditDocumentation(paths, options = {}) {
     }
 
     for (const testFile of documentedTestFiles(source)) {
-      if (!knownTestFiles.has(testFile)) missingTestFiles.push({ file: relativePath, testFile });
+      // Ручные стенды вне tests/ не входят в обычный suite; проверяем их точный путь.
+      const found = testFile.startsWith('tools/')
+        ? exists(resolve(cwd, testFile)) : knownTestFiles.has(testFile);
+      if (!found) missingTestFiles.push({ file: relativePath, testFile });
     }
 
     for (const script of documentedNpmScripts(source)) {

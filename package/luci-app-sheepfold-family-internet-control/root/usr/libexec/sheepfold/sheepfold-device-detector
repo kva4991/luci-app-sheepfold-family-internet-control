@@ -370,6 +370,7 @@ ssdp_profile_for_ip() {
 ssdp_location_for_ip() {
 	local ip
 	ip="$1"
+	[ -n "$ip" ] || return 0
 	[ -r "$SSDP_FILE" ] || return 0
 	awk -F '\t' -v wanted="$ip" '$1 == wanted && $5 != "" { print $5; exit }' "$SSDP_FILE"
 }
@@ -806,8 +807,11 @@ append_router_devices() {
 
 aggregate_router_devices() {
         awk -F '\t' '
-        function valid_mac(value) {
-                return value ~ /^([0-9A-Fa-f][0-9A-Fa-f]:){5}[0-9A-Fa-f][0-9A-Fa-f]$/
+        function valid_mac(value, parts, part) {
+                if (split(value, parts, ":") != 6) return 0
+                for (part = 1; part <= 6; part++)
+                        if (parts[part] !~ /^[0-9A-Fa-f][0-9A-Fa-f]$/) return 0
+                return 1
         }
         {
                 mac = toupper($1)
@@ -817,19 +821,27 @@ aggregate_router_devices() {
                         order[++count] = mac
                         seen[mac] = 1
                 }
-                if ($2 != "" && ip[mac] == "")
+                # Текущий LAN IP важнее старой аренды: иначе сканируется другой адрес.
+                rank = ($4 ~ /(^|,)(arp|neighbor)(,|$)/) ? 2 : ($4 ~ /(^|,)dhcp_event(,|$)/ ? 1 : 0)
+                if ($2 != "" && (ip[mac] == "" || rank > ip_rank[mac])) {
                         ip[mac] = $2
-                if ($3 != "" && $3 != "*" && name[mac] == "" && $3 !~ /^(arp|dhcp|static)$/i)
+                        ip_rank[mac] = rank
+                }
+                # POSIX awk не поддерживает JavaScript-модификатор /i.
+                if ($3 != "" && $3 != "*" && name[mac] == "" && tolower($3) !~ /^(arp|dhcp|static)$/)
                         name[mac] = $3
-                if ($4 != "" && sources[mac] !~ $4)
-                        sources[mac] = sources[mac] (sources[mac] == "" ? "" : ",") $4
+                source_count = split($4, parts, ",")
+                for (part = 1; part <= source_count; part++) {
+                        source = parts[part]
+                        if (source != "" && !seen_source[mac, source]++)
+                                sources[mac] = sources[mac] (sources[mac] == "" ? "" : ",") source
+                }
         }
         END {
                 for (i = 1; i <= count; i++) {
                         mac = order[i]
-				# BusyBox read считает tab пробельным IFS и схлопывает пустое третье
-				# поле. Явный placeholder сохраняет sources на четвёртой позиции. §devpas1
-				print mac "\t" ip[mac] "\t" (name[mac] == "" ? "*" : name[mac]) "\t" sources[mac]
+				# BusyBox read схлопывает пустые IP и hostname; placeholder нужен обоим. §devpas1
+				print mac "\t" (ip[mac] == "" ? "*" : ip[mac]) "\t" (name[mac] == "" ? "*" : name[mac]) "\t" sources[mac]
                 }
         }' "$RAW_FILE"
 }
@@ -1617,8 +1629,12 @@ process_detected_device() {
         effective_mode="$6"
         min_confidence="$7"
         max_hosts="$8"
+        # Placeholder служит только TSV framing и не является адресом устройства.
+        [ "$ip" != "*" ] || ip=""
         section="$(section_for_mac "$mac" 2>/dev/null || true)"
 
+        # Placeholder отсутствующего hostname не должен мешать чтению сохранённого имени.
+        is_reserved_device_name "$name" && name=""
         if [ -n "$section" ] && [ -z "$name" ]; then
                 name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || true)"
         fi
@@ -1701,7 +1717,7 @@ process_detected_device() {
         ports="$stored_ports"
         ports_scan_due=0
         [ $((now - ports_scanned_at)) -lt "$full_rescan_seconds" ] || ports_scan_due=1
-        if [ "$effective_mode" = "full" ] && [ "$scanned_hosts" -lt "$max_hosts" ] && \
+        if [ "$effective_mode" = "full" ] && [ -n "$ip" ] && [ "$scanned_hosts" -lt "$max_hosts" ] && \
            [ "$ports_scan_due" = 1 ] && command -v nmap >/dev/null 2>&1; then
                 ports="$(scan_ports "$ip" "$effective_mode" || true)"
                 scanned_hosts=$((scanned_hosts + 1))
@@ -1715,6 +1731,21 @@ process_detected_device() {
                 section="$(section_for_mac "$mac" 2>/dev/null || true)"
                 [ -z "$section" ] || uci_set_if_changed "sheepfold.$section.detection_ports_scanned_at" "$now"
         fi
+}
+
+has_detection_targets() {
+        local device_list priority_mac mac ip name sources section
+        device_list="$1"
+        priority_mac="$2"
+        valid_mac "$priority_mac" || priority_mac=""
+        while IFS="$(printf '\t')" read -r mac ip name sources; do
+                sources_confirm_online "$sources" || continue
+                [ -z "$priority_mac" ] || [ "$mac" = "$priority_mac" ] || continue
+                section="$(section_for_mac "$mac" 2>/dev/null || true)"
+                device_is_blocklisted "$section" "$mac" && continue
+                return 0
+        done < "$device_list"
+        return 1
 }
 
 scan_devices() {
@@ -1745,21 +1776,25 @@ scan_devices() {
         chmod 700 "$CACHE_DIR" "$STATE_DIR" "$SIGNAL_DIR" 2>/dev/null || true
         ensure_default_groups
         rm -f "$DIRTY_FLAG"
-        collect_mdns
-	collect_wifi_capabilities
-	discovery_force=0
-	if [ "$scan_scope" = event ] && valid_mac "$priority_mac"; then
-		priority_section="$(section_for_mac "$priority_mac" 2>/dev/null || true)"
-		if [ -z "$priority_section" ] || \
-		   [ "$(uci -q get "sheepfold.$priority_section.just_detected" 2>/dev/null || true)" = 1 ]; then
-			discovery_force=1
-		fi
-	fi
-	collect_ssdp "$effective_mode" "$discovery_force"
-	collect_ws_discovery "$effective_mode" "$discovery_force"
         append_router_devices
-        : > "$CACHE_FILE"
         aggregate_router_devices > "$device_list"
+        # Не запускаем общие collectors ради уже выключенного или запрещённого MAC.
+        # Presence и observation ниже сохраняются; фильтр не меняет права или evidence.
+        if has_detection_targets "$device_list" "$priority_mac"; then
+                collect_mdns
+                collect_wifi_capabilities
+                discovery_force=0
+                if [ "$scan_scope" = event ] && valid_mac "$priority_mac"; then
+                        priority_section="$(section_for_mac "$priority_mac" 2>/dev/null || true)"
+                        if [ -z "$priority_section" ] || \
+                           [ "$(uci -q get "sheepfold.$priority_section.just_detected" 2>/dev/null || true)" = 1 ]; then
+                                discovery_force=1
+                        fi
+                fi
+                collect_ssdp "$effective_mode" "$discovery_force"
+                collect_ws_discovery "$effective_mode" "$discovery_force"
+        fi
+        : > "$CACHE_FILE"
 
         if valid_mac "$priority_mac"; then
                 priority_list="$device_list.priority"

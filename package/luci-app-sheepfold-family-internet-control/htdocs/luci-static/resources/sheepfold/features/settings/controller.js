@@ -85,6 +85,17 @@ function create(deps) {
 
 	function renderGeneral() {
 		return deps.generalModel.render({
+			checkbox: deps.forms.checkboxControl,
+			confirm: deps.confirm,
+			setBetaOptions: function (options) {
+				deps.setOptions(options);
+				// Обе вкладки уже отрисованы, поэтому обновляем и видимые значения уведомлений
+				Object.keys(options).forEach(function (option) {
+					document.querySelectorAll('select[data-setting-option="' + option + '"]').forEach(function (input) {
+						input.value = options[option];
+					});
+				});
+			},
 			value: deps.value,
 			setOption: deps.setOption,
 			setOptions: deps.setOptions,

@@ -79,7 +79,22 @@ describe('quality assistant modules §qassist', () => {
     ]);
   });
 
-  it('reports only objective Markdown structure defects', () => {
+  it('validates exact paths of manual tool tests without confusing suite basenames', () => {
+    const report = auditDocumentation(['docs/example.md'], {
+      cwd: repoRoot,
+      read: () => '`tools/lab/exists.test.mjs` `tools/lab/missing.test.mjs` `missing.test.mjs`',
+      exists: (path) => ['docs/example.md', 'tools/lab/exists.test.mjs']
+        .some((name) => resolve(repoRoot, name) === path),
+      knownTags: new Set(),
+      knownTestFiles: new Set(['missing.test.mjs']),
+      packageScripts: new Set(),
+    });
+    assert.deepEqual(report.missingTestFiles, [
+      { file: 'docs/example.md', testFile: 'tools/lab/missing.test.mjs' },
+    ]);
+  });
+
+  it('reports Markdown heading and fence defects independently of prose', () => {
     const issues = markdownStructureIssues([
       '# Main title',
       '### Skipped level',

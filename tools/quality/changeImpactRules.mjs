@@ -57,9 +57,24 @@ export const checkCatalog = Object.freeze({
     automatic: false,
     description: 'Настоящая сборка IPK и OpenWrt APK в официальном SDK.',
   }),
+  nativeRelay: Object.freeze({
+    command: 'sh tools/messageRelay/runNativeCryptoTests.sh --sanitize',
+    automatic: false,
+    description: 'Linux-only native SFMR1 gate с OpenSSL/Jansson; затем отдельно target SDK и vector на OpenWrt.',
+  }),
 });
 
 export const impactRules = Object.freeze([
+  Object.freeze({
+    id: 'nativeRelay',
+    area: 'Native SFMR1 crypto boundary',
+    pattern: /^(?:package\/sheepfold-message-relay-crypto\/|tools\/messageRelay\/(?:.*\.mjs|.*\.sh)|tests\/fixtures\/family-message-relay\/)/,
+    categories: ['backendFast', 'packaging', 'security'],
+    checks: ['docs', 'nativeRelay'],
+    risk: 'critical',
+    review: 'Проверить strict JSON, размеры, GCM tag, byte-exact vector и отсутствие runtime/enrollment до gates; native test не заменяет ABI build.',
+    full: true,
+  }),
   Object.freeze({
     id: 'aiServerCoreExperiment',
     area: 'Экспериментальное серверное ядро ИИ',

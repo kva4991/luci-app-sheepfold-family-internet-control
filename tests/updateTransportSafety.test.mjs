@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const updater = resolve(
@@ -23,10 +24,16 @@ const telegram = resolve(
 );
 const testTmp = join(repoRoot, '.build', 'test-tmp');
 mkdirSync(testTmp, { recursive: true });
+const flockAvailable = spawnSync('sh', ['-c', 'command -v flock >/dev/null 2>&1']).status === 0;
+const lockShim = join(testTmp, 'update-lock-shim.sh');
+// Git Bash не поставляет flock: transport-тесты подменяют только lock, отдельный lock-тест требует Linux
+if (!flockAvailable) writeFileSync(lockShim, 'sheepfold_lock_acquire() { exec 9>"$1"; }\nsheepfold_lock_release() { exec 9>&-; }\n');
 
 const posix = (path) => path
   .replaceAll('\\', '/')
   .replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`);
+
+const lockEnv = flockAvailable ? {} : { SHEEPFOLD_LOCK_COMMON: posix(relative(repoRoot, lockShim)) };
 
 function executable(path, body) {
   writeFileSync(path, body.replace(/^\n/, ''), 'utf8');
@@ -62,6 +69,12 @@ function runInstallScenario({
   installExit = 23,
   confirmInstalledVersion = false,
   packageUrl,
+  command = 'install',
+  beta = '0',
+  newer = true,
+  fetchExit = 0,
+  cancelAfterDownload = false,
+  lockHeld = false,
 } = {}) {
   const root = mkdtempSync(join(testTmp, 'sheepfold-updater-install-'));
   const bin = join(root, 'bin');
@@ -71,7 +84,12 @@ function runInstallScenario({
   const release = join(root, 'release.json');
   const opkgLog = join(root, 'opkg.log');
   const opkgState = join(root, 'opkg.state');
+  const betaState = join(root, 'beta.state');
+  const fetchLog = join(root, 'fetch.log');
   mkdirSync(bin, { recursive: true });
+  mkdirSync(runtime, { recursive: true });
+  writeFileSync(betaState, beta);
+  writeFileSync(fetchLog, '');
   writeFileSync(config, 'config original\n', 'utf8');
   const releasePackageUrl = packageUrl
     || `https://github.com/kva4991/luci-app-sheepfold-family-internet-control/releases/download/test/${assetName}`;
@@ -84,6 +102,7 @@ function runInstallScenario({
   executable(join(bin, 'uci'), `
 #!/bin/sh
 case "$*" in
+  *beta_testing*) cat "$BETA_STATE" ;;
   *product_variant*) printf sheepfold ;;
   *language*) printf ru ;;
   *) exit 1 ;;
@@ -100,9 +119,14 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+printf '%s\\n' "$url" >> "$FETCH_LOG"
+[ "$FETCH_EXIT" = 0 ] || exit "$FETCH_EXIT"
 case "$url" in
   "$UPDATE_API_URL") cp "$RELEASE_SOURCE" "$output" ;;
-  "$RELEASE_PACKAGE_URL") cp "$PACKAGE_SOURCE" "$output" ;;
+  "$RELEASE_PACKAGE_URL")
+    cp "$PACKAGE_SOURCE" "$output"
+    [ "$CANCEL_AFTER_DOWNLOAD" != 1 ] || printf 0 > "$BETA_STATE"
+    ;;
   *) exit 9 ;;
 esac
 `);
@@ -114,7 +138,7 @@ case "$1" in
     [ ! -s "$OPKG_STATE" ] || version="$(cat "$OPKG_STATE")"
     printf 'Package: luci-app-sheepfold-family-internet-control\nVersion: %s\nStatus: install user installed\n' "$version"
     ;;
-  compare-versions) exit 0 ;;
+  compare-versions) [ "$NEWER" = 1 ] ;;
   install)
     printf 'install %s\n' "$2" >> "$OPKG_LOG"
     printf 'config changed by failed package\n' > "$CONFIG_FILE"
@@ -134,10 +158,13 @@ esac
     ? 'C:\\Program Files\\Git\\bin\\bash.exe'
     : 'bash';
   const updateApiUrl = 'https://api.github.com/repos/kva4991/luci-app-sheepfold-family-internet-control/releases/latest';
-  const result = spawnSync(bash, [posix(relative(repoRoot, updater)), 'install'], {
+  const args = lockHeld ? ['-c', 'exec 9>"$UPDATE_LOCK"; flock -n 9 || exit 90; bash "$TEST_UPDATER" "$TEST_COMMAND" 9>&-']
+    : [posix(relative(repoRoot, updater)), command];
+  const result = spawnSync(bash, args, {
     cwd: repoRoot,
     env: {
       ...process.env,
+      ...lockEnv,
       PATH: path,
       UPDATE_API_URL: updateApiUrl,
       RELEASE_SOURCE: posix(relative(repoRoot, release)),
@@ -149,6 +176,13 @@ esac
       INSTALL_EXIT: String(installExit),
       CONFIRM_INSTALLED_VERSION: confirmInstalledVersion ? '1' : '0',
       EXPECTED_VERSION: expectedVersion,
+      TEST_UPDATER: posix(relative(repoRoot, updater)), TEST_COMMAND: command,
+      UPDATE_LOCK: posix(relative(repoRoot, join(runtime, 'update.flock'))),
+      BETA_STATE: posix(relative(repoRoot, betaState)),
+      FETCH_LOG: posix(relative(repoRoot, fetchLog)), FETCH_EXIT: String(fetchExit),
+      NEWER: newer ? '1' : '0', CANCEL_AFTER_DOWNLOAD: cancelAfterDownload ? '1' : '0',
+      SHEEPFOLD_LOG_HELPER: posix(relative(repoRoot, join(root, 'missing-log'))),
+      SHEEPFOLD_NOTIFICATION_HELPER: posix(relative(repoRoot, join(root, 'missing-notifier'))),
       SHEEPFOLD_UPDATE_RUNTIME_DIR: posix(relative(repoRoot, runtime)),
       SHEEPFOLD_UPDATE_WORK_DIR: posix(relative(repoRoot, work)),
       SHEEPFOLD_UPDATE_CONFIG_FILE: posix(relative(repoRoot, config)),
@@ -158,7 +192,7 @@ esac
     },
     encoding: 'utf8',
   });
-  return { config, opkgLog, result };
+  return { config, opkgLog, fetchLog, result, runtime };
 }
 
 function runApkInstallScenario({ metadataName = 'luci-app-sheepfold-family-internet-control' } = {}) {
@@ -262,6 +296,7 @@ json_get_var() {
     env: {
       ...process.env,
       PATH: path,
+      ...lockEnv,
       UPDATE_API_URL: updateApiUrl,
       RELEASE_SOURCE: posix(relative(repoRoot, release)),
       RELEASE_PACKAGE_URL: routerUrl,
@@ -286,6 +321,74 @@ json_get_var() {
 }
 
 describe('network transport safety', () => {
+  it('betaUpdaterRequiresOptInAndSkipsAnEqualOrOlderRelease', () => {
+    const disabled = runInstallScenario({ command: 'install-beta-foreground' });
+    assert.equal(disabled.result.status, 4, disabled.result.stderr);
+    assert.equal(readFileSync(disabled.fetchLog, 'utf8'), '');
+    assert.equal(existsSync(disabled.opkgLog), false);
+    const current = runInstallScenario({ command: 'install-beta-foreground', beta: '1', newer: false });
+    assert.equal(current.result.status, 2, current.result.stderr);
+    assert.equal(readFileSync(current.fetchLog, 'utf8').trim().split('\n').length, 1);
+    assert.equal(existsSync(current.opkgLog), false);
+  });
+
+  it('betaUpdaterRechecksConsentBeforeInstallAndStopsOnDownloadFailure', () => {
+    const cancelled = runInstallScenario({ command: 'install-beta-foreground', beta: '1', cancelAfterDownload: true });
+    assert.equal(cancelled.result.status, 4, cancelled.result.stderr);
+    assert.equal(readFileSync(cancelled.config, 'utf8'), 'config original\n');
+    assert.equal(existsSync(cancelled.opkgLog), false);
+    const failed = runInstallScenario({ command: 'install-beta-foreground', beta: '1', fetchExit: 7 });
+    assert.equal(failed.result.status, 7, failed.result.stderr);
+    assert.equal(existsSync(failed.opkgLog), false);
+  });
+
+  it('manualAndBetaOperationsRespectTheSameLiveLock', { skip: !flockAvailable }, () => {
+    for (const command of ['install', 'probe', 'start-beta']) {
+      const busy = runInstallScenario({ command, beta: '1', lockHeld: true });
+      assert.equal(busy.result.status, 3, busy.result.stderr);
+      assert.equal(readFileSync(busy.fetchLog, 'utf8'), '');
+      assert.equal(existsSync(busy.opkgLog), false);
+    }
+  });
+
+  it('betaDownloadErrorsAreNotMistakenForCancellationOrAnUnchangedVersion', async () => {
+    for (const fetchExit of [2, 4]) {
+      const run = runInstallScenario({ command: 'start-beta', beta: '1', fetchExit });
+      assert.equal(run.result.status, 0, run.result.stderr);
+      const statusFile = join(run.runtime, 'update.status');
+      const pidFile = join(run.runtime, 'update.pid');
+      for (let attempt = 0; attempt < 200; attempt++) {
+        if (existsSync(statusFile) && readFileSync(statusFile, 'utf8').trim() !== 'running' && !existsSync(pidFile)) break;
+        await delay(100);
+      }
+      assert.equal(readFileSync(statusFile, 'utf8').trim(), `failed:${fetchExit}`);
+      assert.equal(existsSync(pidFile), false);
+      assert.equal(existsSync(run.opkgLog), false);
+    }
+    const manual = runInstallScenario({ fetchExit: 2 });
+    assert.equal(manual.result.status, 2, manual.result.stderr);
+  });
+
+  it('betaBackgroundWorkerFinishesValidatedInstallAndReleasesItsLock', async () => {
+    const run = runInstallScenario({ command: 'start-beta', beta: '1', installExit: 0, confirmInstalledVersion: true });
+    assert.equal(run.result.status, 0, run.result.stderr || run.result.stdout);
+    const statusFile = join(run.runtime, 'update.status');
+    const pidFile = join(run.runtime, 'update.pid');
+    for (let attempt = 0; attempt < 200; attempt++) {
+      if (existsSync(statusFile) && readFileSync(statusFile, 'utf8').trim() !== 'running' && !existsSync(pidFile)) break;
+      await delay(100);
+    }
+    assert.equal(readFileSync(statusFile, 'utf8').trim(), 'ok', readFileSync(join(run.runtime, 'update.log'), 'utf8'));
+    assert.equal(existsSync(pidFile), false);
+    if (flockAvailable) {
+      const lock = spawnSync('flock', ['-n', posix(relative(repoRoot, join(run.runtime, 'update.flock'))), 'true'], {
+        cwd: repoRoot, encoding: 'utf8',
+      });
+      assert.equal(lock.status, 0, lock.stderr);
+    }
+    assert.match(readFileSync(run.opkgLog, 'utf8'), /^install /);
+  });
+
   it('preserves a downloader failure code instead of reporting success', () => {
     const root = mkdtempSync(join(testTmp, 'sheepfold-updater-transport-'));
     const bin = join(root, 'bin');
@@ -306,6 +409,7 @@ describe('network transport safety', () => {
       cwd: repoRoot,
       env: {
         ...process.env,
+        ...lockEnv,
         PATH: path,
         SHEEPFOLD_UPDATE_RUNTIME_DIR: posix(relative(repoRoot, runtime)),
         SHEEPFOLD_UPDATE_WORK_DIR: posix(relative(repoRoot, work)),

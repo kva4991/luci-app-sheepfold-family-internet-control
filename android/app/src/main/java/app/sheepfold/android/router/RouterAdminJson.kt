@@ -33,6 +33,7 @@ internal object RouterAdminJson {
             bedtime = json.optString("bedtime").ifBlank { "21:00" },
             wifiEnabled = json.flexibleBoolean("wifiEnabled"),
             capabilities = RouterAdminCapabilities(
+                wifiChannelsRead = capabilities?.flexibleBoolean("wifiChannelsRead") == true,
                 scheduleWrite = capabilities?.flexibleBoolean("scheduleWrite") == true,
                 groupWrite = capabilities?.flexibleBoolean("groupWrite") == true,
                 deviceWrite = capabilities?.flexibleBoolean("deviceWrite") == true,

@@ -9,6 +9,20 @@ import { formatImpact, inspectChanges, parseNameStatus } from '../scripts/inspec
 import { recommendedCommands } from '../tools/quality/changeImpact.mjs';
 
 describe('change impact advisor §impact1', () => {
+  it('requires a separate native gate for the SFMR1 helper and executable wire model', () => {
+    const report = inspectChanges([
+      'package/sheepfold-message-relay-crypto/src/relayJson.c',
+      'package/sheepfold-message-relay-crypto/README.ru.md',
+      'tools/messageRelay/relayEnvelope.mjs',
+    ]);
+    assert.deepEqual(report.unknown, []);
+    assert.equal(report.risk, 'critical');
+    assert.equal(report.fullTest, true);
+    const command = 'sh tools/messageRelay/runNativeCryptoTests.sh --sanitize';
+    assert.ok(recommendedCommands(report).manual.includes(command));
+    assert.ok(!recommendedCommands(report).automatic.includes(command));
+  });
+
   it('maps a shared API change to backend, Android, security and a full run', () => {
     const report = inspectChanges([
       'package/luci-app-sheepfold-family-internet-control/root/www/cgi-bin/sheepfold-api',

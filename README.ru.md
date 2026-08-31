@@ -30,6 +30,8 @@ sh /tmp/sheepfold-install.sh
 
 После установки OpenWrt-пакета скрипт обновления передаёт работу установленному Sheepfold updater. Updater проверяет последний stable-релиз GitHub, сравнивает версии, скачивает пакет формата текущей версии OpenWrt, проверяет его внутренние метаданные и запускает установку только при наличии более новой версии.
 
+Галочка **«Участвовать в бетатесте»** внизу «Общие» после подтверждения и сохранения включает часовые автоматические обновления из этих опубликованных релизов и уведомления о SIM/новых Wi-Fi ребёнка, без нового сбора координат. По умолчанию выключена. Подробности: [бета-режим](docs/maintenance-jobs.ru.md).
+
 ```sh
 wget -O /tmp/sheepfold-update.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/update.sh
 sh /tmp/sheepfold-update.sh

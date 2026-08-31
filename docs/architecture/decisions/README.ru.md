@@ -33,6 +33,7 @@ ADR хранит контекст решения, а профильный док
 | [0025](0025-parent-apk-encrypted-support-reports.ru.md) | Родительское APK шифрует баг-репорт до домашнего роутера | Принято | `§feedback`, `§srep001`, `§rsuppeer` |
 | [0026](0026-signed-github-support-endpoint-discovery.ru.md) | Резервный адрес баг-репортов принимается только из подписанного manifest | Принято | `§srep001`, `§srepdisc1`, `§rsuppeer` |
 | [0027](0027-local-first-family-message-relay.ru.md) | Необязательный local-first relay коротких сообщений родительского APK | Принято | `§mrelay1`, `§k5rf0hb`, `§q3nj8wd` |
+| [0028](0028-opt-in-beta-updates.ru.md) | Явное участие в часовых обновлениях и узкий тестовый профиль | Принято | `§betatest1`, `§maintjob1`, `§updsafe` |
 
 ## Статусы
 

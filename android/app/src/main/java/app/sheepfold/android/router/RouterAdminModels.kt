@@ -33,7 +33,8 @@ data class RouterWifiNetwork(
     val encryption: String,
     val channel: String,
     val enabled: Boolean,
-    val band: String
+    val band: String,
+    val channels: List<String> = emptyList()
 )
 
 data class RouterWifiAutomation(
@@ -113,7 +114,8 @@ data class RouterAdminCapabilities(
     val notificationWrite: Boolean = false,
     val administratorRead: Boolean = true,
     val logRead: Boolean = true,
-    val logClear: Boolean = true
+    val logClear: Boolean = true,
+    val wifiChannelsRead: Boolean = false
 )
 
 data class RouterAdminMutation(

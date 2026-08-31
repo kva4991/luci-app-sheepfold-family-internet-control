@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,35 +34,47 @@ import com.example.sheepfoldchild.viewmodel.ChildUiState
 
 @Composable
 fun ChildStatusScreen(viewModel: ChildStatusViewModel) {
+    val state = viewModel.uiState
     Scaffold { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(24.dp),
-            contentAlignment = Alignment.Center
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            when (val state = viewModel.uiState) {
-                is ChildUiState.Loading -> CircularProgressIndicator()
-                is ChildUiState.Success -> StatusCard(
-                    status = state.status,
-                    lastUpdated = viewModel.lastUpdated,
-                    accessRequestMessage = viewModel.accessRequestMessage,
-                    onRefresh = viewModel::refresh,
-                    onRequestThirtyMinutes = viewModel::requestThirtyMinutes
-                )
-                is ChildUiState.RouterUnavailable -> RouterUnavailableCard(
-                    message = state.message,
-                    onRefresh = viewModel::refresh
-                )
-                is ChildUiState.Error -> ErrorCard(
-                    message = state.message,
-                    onRefresh = viewModel::refresh
-                )
-                is ChildUiState.NoRouter -> Text(
-                    text = stringResource(R.string.error_generic),
-                    textAlign = TextAlign.Center
-                )
+            // Повтор доступен и после ошибки, а длинная карточка не скрывает кнопку.
+            Button(
+                onClick = viewModel::refresh,
+                enabled = state !is ChildUiState.Loading && !viewModel.routerBaseUrl.isNullOrBlank(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)
+            ) {
+                Text(stringResource(R.string.btn_refresh), textAlign = TextAlign.Center)
+            }
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                contentAlignment = Alignment.Center
+            ) {
+                when (state) {
+                    is ChildUiState.Loading -> CircularProgressIndicator()
+                    is ChildUiState.Success -> StatusCard(
+                        status = state.status,
+                        lastUpdated = viewModel.lastUpdated,
+                        accessRequestMessage = viewModel.accessRequestMessage,
+                        onRequestThirtyMinutes = viewModel::requestThirtyMinutes
+                    )
+                    is ChildUiState.RouterUnavailable -> RouterUnavailableCard(
+                        message = state.message
+                    )
+                    is ChildUiState.Error -> ErrorCard(
+                        message = state.message
+                    )
+                    is ChildUiState.NoRouter -> Text(
+                        text = stringResource(R.string.error_generic),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
@@ -70,7 +85,6 @@ private fun StatusCard(
     status: ClientStatusData,
     lastUpdated: String?,
     accessRequestMessage: String?,
-    onRefresh: () -> Unit,
     onRequestThirtyMinutes: () -> Unit
 ) {
     val isEnabled = status.internetState == "enabled"
@@ -151,10 +165,6 @@ private fun StatusCard(
                 Text(message, fontSize = 14.sp, textAlign = TextAlign.Center)
             }
 
-            Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.btn_refresh), textAlign = TextAlign.Center)
-            }
-
             lastUpdated?.let {
                 Text(
                     text = stringResource(R.string.last_updated, it),
@@ -167,7 +177,7 @@ private fun StatusCard(
 }
 
 @Composable
-private fun RouterUnavailableCard(message: String, onRefresh: () -> Unit) {
+private fun RouterUnavailableCard(message: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -186,15 +196,12 @@ private fun RouterUnavailableCard(message: String, onRefresh: () -> Unit) {
                 textAlign = TextAlign.Center
             )
             Text(message, textAlign = TextAlign.Center)
-            Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.btn_refresh), textAlign = TextAlign.Center)
-            }
         }
     }
 }
 
 @Composable
-private fun ErrorCard(message: String, onRefresh: () -> Unit) {
+private fun ErrorCard(message: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -208,9 +215,6 @@ private fun ErrorCard(message: String, onRefresh: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(message, fontSize = 16.sp, textAlign = TextAlign.Center)
-            Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.btn_refresh), textAlign = TextAlign.Center)
-            }
         }
     }
 }

@@ -68,6 +68,7 @@ unset admin_config_module
 
 case "$ACTION" in
     get) admin_config_json ;;
+    wifi-channels) wifi_channels_json ;;
     schedule-save) schedule_save ;;
     schedule-delete) schedule_delete ;;
     group-save) group_save ;;

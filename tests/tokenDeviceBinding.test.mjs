@@ -1,8 +1,9 @@
 /*
  * Проверяет, что администраторский Bearer связан не только с постоянным ID и
  * сохранённым MAC, но и с MAC, который сам роутер наблюдает у REMOTE_ADDR.
- * Fault-injection дополнительно защищает атомарность pairing; тест не заменяет
- * проверку ARP/DHCP на живом роутере и физическом телефоне.
+ * Fault-injection защищает атомарность pairing, а UCI stub проверяет отсутствие
+ * лишних ID-commit при авторизации; временные файлы удаляются, роутер не меняется
+ * Тест не заменяет проверку ARP/DHCP и задержки на живом роутере и телефоне
  */
 import { spawnSync } from 'node:child_process';
 import {
@@ -136,7 +137,67 @@ authenticate_token 'phoneBearer' '192.168.4.201'
   return result;
 }
 
+function runTokenPairLookup({ id = '16', wantedId = '16', admin = '1',
+  mac = '02:00:00:00:00:16', legacyIds = '', repairId = '16' } = {}) {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'sheepfold-token-lookup-'));
+  const repairsFile = join(fixtureRoot, 'repairs');
+  const common = readProjectFile('root/usr/libexec/sheepfold/sheepfold-token-common')
+    .replaceAll('/usr/libexec/sheepfold/sheepfold-device-id ensure', 'ensure_id');
+  const fixture = `
+set -eu
+uci() {
+  case "$*" in
+    '-q show sheepfold') printf '%s\\n' sheepfold.other=device sheepfold.phone=device ;;
+    '-q get sheepfold.other.admin_device') printf 1 ;;
+    '-q get sheepfold.other.mac') printf '02:00:00:00:00:01' ;;
+    '-q get sheepfold.phone.admin_device') printf '%s' '${admin}' ;;
+    '-q get sheepfold.phone.mac') printf '%s' '${mac}' ;;
+    '-q get sheepfold.phone.id') printf '%s' '${id}' ;;
+    '-q get sheepfold.phone.legacy_ids') printf '%s' '${legacyIds}' ;;
+    *) printf 'Unexpected UCI access: %s\\n' "$*" >> '${shellPath(repairsFile)}'; return 1 ;;
+  esac
+}
+ensure_id() {
+  printf 'ensure:%s\\n' "$1" >> '${shellPath(repairsFile)}'
+  printf '%s' '${repairId}'
+}
+${common}
+token_device_is_admin_paired '${wantedId}' '02:00:00:00:00:16'
+`;
+  try {
+    const result = spawnSync('sh', ['-s'], { input: fixture, cwd: repoRoot, encoding: 'utf8', timeout: 10000 });
+    assert.ifError(result.error);
+    return { status: result.status, repairs: existsSync(repairsFile) ? readFileSync(repairsFile, 'utf8').trim() : '' };
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+}
+
 describe('Administrator token device binding', () => {
+  it('authenticates a stored canonical ID without allocator or UCI writes', () => {
+    assert.deepEqual(runTokenPairLookup(), { status: 0, repairs: '' });
+    assert.deepEqual(runTokenPairLookup({ wantedId: 'D-0016', legacyIds: 'D-0016' }), { status: 0, repairs: '' });
+  });
+
+  it('rejects a different MAC, revoked administrator flag and nonmatching ID without repairs', () => {
+    for (const options of [
+      { mac: '02:00:00:00:00:17' }, { admin: '0' }, { wantedId: '6' },
+      { wantedId: '16x' }, { wantedId: 'D-0016', legacyIds: 'D-0017' },
+    ]) {
+      assert.deepEqual(runTokenPairLookup(options), { status: 1, repairs: '' });
+    }
+  });
+
+  it('repairs only the matching administrator record with an invalid or legacy ID', () => {
+    for (const id of ['', 'D-0016', '0', '0016', 'invalid']) {
+      assert.deepEqual(runTokenPairLookup({ id }), { status: 0, repairs: 'ensure:phone' });
+    }
+    assert.deepEqual(runTokenPairLookup({ id: '', repairId: '', legacyIds: '16' }), {
+      status: 1, repairs: 'ensure:phone',
+    });
+    assert.deepEqual(runTokenPairLookup({ id: '', admin: '0' }), { status: 1, repairs: '' });
+  });
+
   it('stores login, device_id and mac when pairing succeeds', () => {
     const pairCommon = readProjectFile('root/usr/libexec/sheepfold/sheepfold-pair-common');
     const pairDevice = readProjectFile('root/usr/libexec/sheepfold/sheepfold-pair-device');

@@ -633,14 +633,24 @@ client_status() {
 # -----------------------------------------------------------------------------
 
 list_devices() {
-        local first=1
+        local first=1 seen_ids=' '
         printf '['
 
         for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
                 local id mac name ip group device_type device_status admin_device manual_device_type
-                id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section")"
                 mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
                 [ -n "$mac" ] || continue
+
+                # Обычный GET не должен для каждой строки пересчитывать все ID и коммитить UCI
+                # Повреждённые/повторные номера по-прежнему исправляет единственный allocator §deviceid2
+                id="$(uci -q get "sheepfold.$section.id" 2>/dev/null || true)"
+                case "$id" in
+                        ''|*[!0-9]*|0*) id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section")" ;;
+                        *) case "$seen_ids" in
+                                *" $id "*) id="$(/usr/libexec/sheepfold/sheepfold-device-id ensure "$section")" ;;
+                        esac ;;
+                esac
+                seen_ids="$seen_ids$id "
 
                 name="$(uci -q get "sheepfold.$section.name" 2>/dev/null || printf '%s' "$mac")"
                 ip="$(uci -q get "sheepfold.$section.ip" 2>/dev/null || true)"

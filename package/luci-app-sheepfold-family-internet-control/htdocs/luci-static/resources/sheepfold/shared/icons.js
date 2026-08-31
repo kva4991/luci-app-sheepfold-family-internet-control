@@ -25,6 +25,13 @@ function svg(name, attrs) {
 		path.setAttribute('stroke-width', '1.25');
 		node.appendChild(path);
 	});
+	(definition.filledPaths || []).forEach(function (pathData) {
+		var path = document.createElementNS(svgNs, 'path');
+		path.setAttribute('d', pathData);
+		path.setAttribute('fill', 'currentColor');
+		path.setAttribute('stroke', 'none');
+		node.appendChild(path);
+	});
 
 	return node;
 }

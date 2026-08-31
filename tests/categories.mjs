@@ -112,6 +112,7 @@ export const testCategories = Object.freeze({
     'tokenDeviceBinding.test.mjs',
   ],
   devices: [
+    'deviceInventoryAggregation.test.mjs',
     'overviewFinalRefreshSemantics.test.mjs',
     'overviewFinalExperimentalR252.test.mjs',
     'overviewFinalization.test.mjs',
@@ -211,6 +212,8 @@ export const testCategories = Object.freeze({
     'updateTransportSafety.test.mjs',
   ],
   backendFast: [
+    'deviceInventoryAggregation.test.mjs',
+    'nativeMessageRelayCrypto.test.mjs',
     'luciCoordinatorForwarderCleanup.test.mjs',
     'luciCoordinatorCleanup.test.mjs',
     'luciPersistenceAdapters.test.mjs',
@@ -262,6 +265,8 @@ export const testCategories = Object.freeze({
     'siteListResilience.test.mjs',
   ],
   android: [
+    'wifiChannelSafety.test.mjs',
+    'parentRouterIntegration.test.mjs',
     'androidTestLab.test.mjs',
     'childPrivacyPermissions.test.mjs',
     'androidAppProtection.test.mjs',
@@ -286,6 +291,7 @@ export const testCategories = Object.freeze({
     'tokenDeviceBinding.test.mjs',
   ],
   security: [
+    'nativeMessageRelayCrypto.test.mjs',
     'agenticSecurityAudit.test.mjs',
     'overviewFinalRefreshSemantics.test.mjs',
     'overviewFinalExperimentalR252.test.mjs',
@@ -321,6 +327,8 @@ export const testCategories = Object.freeze({
     'remoteSupportArchitecture.test.mjs',
     'remoteSupportPeerContract.test.mjs',
     'remoteSupportProtocol.test.mjs',
+    'remoteSupportControl.test.mjs',
+    'remoteSupportControlHttp.test.mjs',
     'remoteSupportSessionSimulator.test.mjs',
     'androidFamilyMessageRelayRuntime.test.mjs',
     'familyMessageRelayArchitecture.test.mjs',
@@ -386,6 +394,8 @@ export const testCategories = Object.freeze({
     'updateTransportSafety.test.mjs',
   ],
   tooling: [
+    'nativeMessageRelayCrypto.test.mjs',
+    'parentRouterIntegration.test.mjs',
     'documentationOperations.test.mjs',
     'androidTestLab.test.mjs',
     'agenticSecurityAudit.test.mjs',
@@ -405,6 +415,8 @@ export const testCategories = Object.freeze({
     'remoteSupportArchitecture.test.mjs',
     'remoteSupportPeerContract.test.mjs',
     'remoteSupportProtocol.test.mjs',
+    'remoteSupportControl.test.mjs',
+    'remoteSupportControlHttp.test.mjs',
     'remoteSupportSessionSimulator.test.mjs',
     'androidFamilyMessageRelayRuntime.test.mjs',
     'familyMessageRelayArchitecture.test.mjs',

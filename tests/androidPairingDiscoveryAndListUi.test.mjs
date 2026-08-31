@@ -1,6 +1,6 @@
 /*
  * Защищает контракт discovery/pairing Android и одинаковую модель выбора устройств
- * в LuCI. Это статическая/модельная проверка без телефона и роутера; она не доказывает
+ * в LuCI. Это статическая/модельная проверка без изменения состояния; она не доказывает
  * реальное HTTPS-сопряжение, которое остаётся live-router Android-сценарием.
  */
 import { readFileSync } from 'node:fs';
@@ -140,11 +140,14 @@ describe('Android pairing discovery and access-list UI', () => {
     assert.match(addModal, /persistMembership/);
   });
 
-  it('keeps current Android and OpenWrt release versions synchronized', () => {
-    assert.match(androidBuild, /sheepfoldVersionCode = 56/);
-    assert.match(androidBuild, /sheepfoldVersionName = "0\.1\.55"/);
-    assert.match(childBuild, /sheepfoldChildVersionCode = 15/);
-    assert.match(childBuild, /sheepfoldChildVersionName = "1\.14"/);
+  it('keeps independent package versions valid and above the compatibility baseline', () => {
+    // Редакции версионируются независимо; точное старое значение запрещало любое обновление.
+    const parentCode = Number(androidBuild.match(/sheepfoldVersionCode = (\d+)/)?.[1]);
+    const childCode = Number(childBuild.match(/sheepfoldChildVersionCode = (\d+)/)?.[1]);
+    assert.ok(Number.isSafeInteger(parentCode) && parentCode >= 56 && parentCode <= 2100000000);
+    assert.ok(Number.isSafeInteger(childCode) && childCode >= 15 && childCode <= 2100000000);
+    assert.match(androidBuild, /sheepfoldVersionName = "\d+\.\d+\.\d+"/);
+    assert.match(childBuild, /sheepfoldChildVersionName = "\d+\.\d+(?:\.\d+)?"/);
     const release = Number(makefile.match(/PKG_RELEASE:=(\d+)/)?.[1] || 0);
     assert.ok(release >= 258);
   });

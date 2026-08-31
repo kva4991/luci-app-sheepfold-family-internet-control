@@ -19,7 +19,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -113,34 +112,23 @@ fun AdministratorsTab(
 }
 
 @Composable
-fun LogsTab(client: RouterAdminClient, config: RouterAdminConfig) {
+fun LogsTab(
+    client: RouterAdminClient,
+    config: RouterAdminConfig,
+    entries: List<String>,
+    isLoading: Boolean,
+    onRefresh: () -> Unit,
+    onCleared: () -> Unit
+) {
     val scope = rememberCoroutineScope()
-    var entries by remember { mutableStateOf<List<String>>(emptyList()) }
     var filter by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
+    var isClearing by remember { mutableStateOf(false) }
+    val busy = isLoading || isClearing
     var message by remember { mutableStateOf<String?>(null) }
     var messageIsError by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
-    val loadFailedText = stringResource(R.string.management_error_load_logs)
     val clearFailedText = stringResource(R.string.management_error_clear_logs)
     val clearedText = stringResource(R.string.logs_cleared_success)
-
-    fun refresh() {
-        if (!config.capabilities.logRead) return
-        isLoading = true
-        message = null
-        scope.launch {
-            runCatching { client.loadLog(300) }
-                .onSuccess { entries = it.reversed() }
-                .onFailure {
-                    message = it.message ?: loadFailedText
-                    messageIsError = true
-                }
-            isLoading = false
-        }
-    }
-
-    LaunchedEffect(client, config.revision) { refresh() }
 
     val filtered = remember(entries, filter) {
         if (filter.isBlank()) entries else entries.filter { it.contains(filter, ignoreCase = true) }
@@ -154,7 +142,7 @@ fun LogsTab(client: RouterAdminClient, config: RouterAdminConfig) {
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(stringResource(R.string.logs_title), style = MaterialTheme.typography.headlineSmall)
-            OutlinedButton(onClick = ::refresh, enabled = !isLoading && config.capabilities.logRead) {
+            OutlinedButton(onClick = { message = null; onRefresh() }, enabled = !busy && config.capabilities.logRead) {
                 Text(stringResource(R.string.action_refresh))
             }
         }
@@ -168,12 +156,12 @@ fun LogsTab(client: RouterAdminClient, config: RouterAdminConfig) {
         )
         OutlinedButton(
             onClick = { confirmClear = true },
-            enabled = !isLoading && entries.isNotEmpty() && config.capabilities.logClear,
+            enabled = !busy && entries.isNotEmpty() && config.capabilities.logClear,
             modifier = Modifier.fillMaxWidth()
         ) { Text(stringResource(R.string.logs_clear)) }
         ParentInlineStatus(message, messageIsError)
-        if (isLoading && entries.isEmpty()) CircularProgressIndicator()
-        if (!isLoading && entries.isEmpty()) Text(stringResource(R.string.logs_empty))
+        if (busy && entries.isEmpty()) CircularProgressIndicator()
+        if (!busy && entries.isEmpty()) Text(stringResource(R.string.logs_empty))
 
         LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(filtered) { entry ->
@@ -192,11 +180,11 @@ fun LogsTab(client: RouterAdminClient, config: RouterAdminConfig) {
             confirmButton = {
                 TextButton(onClick = {
                     confirmClear = false
-                    isLoading = true
+                    isClearing = true
                     scope.launch {
                         runCatching { client.clearLog() }
                             .onSuccess {
-                                entries = emptyList()
+                                onCleared()
                                 message = clearedText
                                 messageIsError = false
                             }
@@ -204,7 +192,7 @@ fun LogsTab(client: RouterAdminClient, config: RouterAdminConfig) {
                                 message = it.message ?: clearFailedText
                                 messageIsError = true
                             }
-                        isLoading = false
+                        isClearing = false
                     }
                 }) { Text(stringResource(R.string.logs_clear)) }
             },

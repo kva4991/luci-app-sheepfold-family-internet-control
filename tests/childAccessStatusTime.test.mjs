@@ -1,7 +1,9 @@
 /*
  * Защищает сквозной контракт времени следующего реального изменения доступа:
  * evaluator -> router status -> публичный child API -> Kotlin model -> два экрана.
- * Тест не проверяет часовой пояс живого роутера и визуальную геометрию Android.
+ * Проверяет также доступность ручного обновления статуса вне карточек результата.
+ * Читает только исходники, не меняет состояние. Не проверяет часовой пояс живого
+ * роутера, фактический HTTP-запрос и визуальную геометрию Android.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -15,6 +17,8 @@ const model = read('android-child/app/src/main/java/com/example/sheepfoldchild/d
 const repository = read('android-child/app/src/main/java/com/example/sheepfoldchild/data/ClientStatusRepository.kt');
 const accessScreen = read('android-child/app/src/main/java/com/example/sheepfoldchild/ui/AccessInfoScreen.kt');
 const statusScreen = read('android-child/app/src/main/java/com/example/sheepfoldchild/ui/ChildStatusScreen.kt');
+const childViewModel = read('android-child/app/src/main/java/com/example/sheepfoldchild/viewmodel/ChildStatusViewModel.kt');
+const childStrings = read('android-child/app/src/main/res/values/strings.xml');
 
 function publicOutput(source) {
   const start = source.indexOf('header_json "200 OK"');
@@ -56,5 +60,26 @@ describe('child next access change time', () => {
     assert.match(accessScreen, /val showExplanation = status\.internetState != "enabled"/);
     assert.match(statusScreen, /val showExplanation = !isEnabled/);
     assert.match(output, /if \[ "\$internet_state" = enabled \][\s\S]*"message":null/);
+  });
+});
+
+describe('child manual status refresh', () => {
+  it('childRefreshStaysAboveResultAndErrorCards', () => {
+    const refresh = statusScreen.indexOf('onClick = viewModel::refresh');
+    assert.ok(refresh >= 0 && refresh < statusScreen.indexOf('when (state)'));
+    assert.equal(statusScreen.match(/R\.string\.btn_refresh/g)?.length, 1);
+    assert.match(statusScreen, /state !is ChildUiState\.Loading && !viewModel\.routerBaseUrl\.isNullOrBlank\(\)/);
+    assert.match(statusScreen, /heightIn\(min = 64\.dp\)/);
+    assert.match(statusScreen, /verticalScroll\(rememberScrollState\(\)\)/);
+    assert.match(childStrings, /name="btn_refresh">Обновить\\nданные</);
+  });
+
+  it('childRefreshUsesStatusReadWithoutChangingAccessRules', () => {
+    const refresh = childViewModel.slice(childViewModel.indexOf('fun refresh()'), childViewModel.indexOf('fun requestThirtyMinutes()'));
+    assert.ok(refresh.indexOf('uiState = ChildUiState.Loading') < refresh.indexOf('viewModelScope.launch'));
+    assert.match(refresh, /repository\.fetchClientStatus\(url\)/);
+    assert.match(refresh, /ChildUiState\.RouterUnavailable/);
+    assert.match(refresh, /ChildUiState\.Error/);
+    assert.doesNotMatch(refresh, /requestThirtyMinutes|setGlobalBlock|saveDevice/);
   });
 });

@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
@@ -23,6 +24,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,8 +40,10 @@ import app.sheepfold.android.router.RouterSessionEvents
 import app.sheepfold.android.router.SheepfoldConnectionStore
 import app.sheepfold.android.security.AppProtectionStore
 import app.sheepfold.android.ui.main.OperationalMainScreen
+import app.sheepfold.android.ui.main.ParentWorkspace
 import app.sheepfold.android.ui.security.AppUnlockScreen
 import app.sheepfold.android.ui.setup.SafeRouterSetupScreen
+import app.sheepfold.android.ui.setup.RouterSetupViewModel
 import app.sheepfold.android.ui.setup.AgreementAcceptanceStore
 import app.sheepfold.android.ui.setup.AgreementRenewalScreen
 import app.sheepfold.android.ui.theme.SheepfoldTheme
@@ -51,6 +55,8 @@ import app.sheepfold.android.widget.WidgetCommandIntent
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
+    private val setupModel by viewModels<RouterSetupViewModel>()
+    private val workspace by viewModels<ParentWorkspace>()
     private var forceLockToken by mutableIntStateOf(0)
     private var pendingWidgetCommand by mutableStateOf<WidgetCommand?>(null)
     private var backgroundedAtElapsed = 0L
@@ -67,6 +73,8 @@ class MainActivity : FragmentActivity() {
         acceptWidgetIntent(intent)
         setContent {
             SheepfoldRoot(
+                setupModel = setupModel,
+                workspace = workspace,
                 forceLockToken = forceLockToken,
                 pendingWidgetCommand = pendingWidgetCommand,
                 onWidgetCommandConsumed = { pendingWidgetCommand = null },
@@ -117,6 +125,8 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 private fun SheepfoldRoot(
+    setupModel: RouterSetupViewModel,
+    workspace: ParentWorkspace,
     forceLockToken: Int,
     pendingWidgetCommand: WidgetCommand?,
     onWidgetCommandConsumed: () -> Unit,
@@ -134,7 +144,7 @@ private fun SheepfoldRoot(
     var agreementCurrent by remember { mutableStateOf(AgreementAcceptanceStore.isCurrent(context)) }
     var connection by remember { mutableStateOf(storedConnection) }
     var unlocked by remember { mutableStateOf(!AppProtectionStore.requiresAuthentication(context)) }
-    var pairingLoss by remember { mutableStateOf(SheepfoldConnectionStore.consumePairingLoss(context)) }
+    var pairingLoss by rememberSaveable { mutableStateOf(SheepfoldConnectionStore.consumePairingLoss(context)) }
     var widgetCommandBusy by remember(pendingWidgetCommand) { mutableStateOf(false) }
     var widgetCommandError by remember(pendingWidgetCommand) { mutableStateOf<String?>(null) }
     val pairingMessage = pairingLoss?.let { reason ->
@@ -155,6 +165,7 @@ private fun SheepfoldRoot(
         RouterSessionEvents.events.collect { reason ->
             SheepfoldConnectionStore.consumePairingLoss(context)
             pairingLoss = reason
+            workspace.clear()
             connection = null
             setupComplete = false
         }
@@ -183,6 +194,7 @@ private fun SheepfoldRoot(
                     }
                     setupComplete && connection != null -> {
                         OperationalMainScreen(
+                            workspace = workspace,
                             connection = connection!!,
                             themeMode = themeMode,
                             onThemeModeChange = { newMode ->
@@ -200,6 +212,7 @@ private fun SheepfoldRoot(
                                 }
                             },
                             onDisconnect = {
+                                workspace.clear()
                                 SheepfoldConnectionStore.clear(context)
                                 connection = null
                                 setupComplete = false
@@ -211,6 +224,7 @@ private fun SheepfoldRoot(
                     }
                     else -> {
                         SafeRouterSetupScreen(
+                            setupModel = setupModel,
                             pairingOnly = pairingLoss != null,
                             pairingMessage = pairingMessage
                         ) { request ->

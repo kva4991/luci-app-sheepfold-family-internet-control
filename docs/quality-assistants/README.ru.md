@@ -97,6 +97,7 @@ flowchart TD
 | Android Kotlin/XML | `test:android`, Android Lint | сборка затронутого APK и сценарий эмулятора/телефона |
 | UCI/defaults/package | `backendFast packaging security` | полный suite, живой upgrade/restore и официальный SDK build |
 | Только тестовая инфраструктура | `quality:changed` | полный suite, потому что менялся способ получения доказательств |
+| Native relay helper / SFMR1 wire model | дешёвый guard + protocol tests | ручной Linux `runNativeCryptoTests.sh --sanitize`, официальный SDK и target vector; [команды и ограничения](../../package/sheepfold-message-relay-crypto/README.ru.md) |
 
 ## Значение итоговых статусов
 
@@ -135,6 +136,10 @@ flowchart TD
 Проектный skill [sheepfold-documentation](../../.agents/skills/sheepfold-documentation/SKILL.md) направляет агента от проверки реального поведения к подходящему типу документа и [стандарту технической документации Sheepfold](../documentation-writing-standard.ru.md). Он применяется при создании страниц, существенной переработке и ревью документации, но не раздувает постоянный контекст `AGENTS.md` полным редакционным справочником.
 
 `quality:docs` намеренно проверяет только детерминированные признаки: локальные ссылки, §-теги, существующие test/npm-контракты, один `H1`, порядок уровней заголовков, закрытые fenced code blocks и непустой alt-текст изображения. Он не пытается regex-правилами оценить ясность русского языка, техническую истинность или статус реализации: эти свойства агент сверяет с кодом, тестами, схемами и runtime-доказательствами.
+
+Имена обычных `.test.mjs` проверяются по каталогу `tests/`. Для ручного стенда вне suite
+указывать точный путь `tools/.../имя.test.mjs`: проверяется существование именно этого файла,
+а не одноимённого теста в другом каталоге. Это не добавляет стенд в автоматический запуск.
 
 ## Когда расширять инструменты
 

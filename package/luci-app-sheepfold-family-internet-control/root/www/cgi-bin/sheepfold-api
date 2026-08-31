@@ -359,6 +359,12 @@ case "$path_info" in
         read_admin_body
         run_admin_config group-delete "$ADMIN_BODY"
         ;;
+    /api/v1/admin-config/wifi/channels|/admin-config/wifi/channels)
+        [ "$method" = "GET" ] || method_not_allowed
+        enforce_rate_limit admin_read 120 60
+        require_admin
+        run_admin_config wifi-channels
+        ;;
     /api/v1/admin-config/wifi/save|/admin-config/wifi/save)
         [ "$method" = "POST" ] || method_not_allowed
         enforce_rate_limit admin_write 20 300

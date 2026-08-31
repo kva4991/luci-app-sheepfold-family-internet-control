@@ -1,7 +1,10 @@
 package app.sheepfold.android.router
 
 import app.sheepfold.android.diagnostics.DiagnosticLog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.ConnectException
@@ -28,6 +31,7 @@ class SecureRouterConnectionManager {
         var lastProbeError: Throwable? = null
         var selectedApiUrl: String? = null
         for (apiUrl in candidates) {
+            currentCoroutineContext().ensureActive()
             val startedAt = System.nanoTime()
             DiagnosticLog.info("pair.candidate.probe.started", "api" to apiUrl)
             val probe = runCatching { pairingEndpointIsReady(request, apiUrl) }
@@ -52,12 +56,16 @@ class SecureRouterConnectionManager {
             ?: throw friendlyConnectionError(lastProbeError, candidates.firstOrNull().orEmpty())
         // Сначала выбираем endpoint безопасным GET /ping, затем отправляем QR-код
         // ровно один раз. После неясного timeout повторять одноразовый секрет нельзя. §authrs1
+        currentCoroutineContext().ensureActive()
         runCatching { pair(request, apiUrl) }
             .onSuccess { connected ->
                 DiagnosticLog.info("pair.candidate.succeeded", "api" to apiUrl)
                 return@withContext connected
             }
-            .getOrElse { error -> throw friendlyConnectionError(error, apiUrl) }
+            .getOrElse { error ->
+                if (error is CancellationException) throw error
+                throw friendlyConnectionError(error, apiUrl)
+            }
     }
 
     fun parseQrPayload(payload: String): RouterConnectionRequest {
@@ -241,6 +249,8 @@ class SecureRouterConnectionManager {
                 // конфиг. До сохранения credential проверяем его обычным защищённым
                 // запросом, иначе APK может открыть главное окно без привязки. §pairtx1
                 RouterAdminClient(connected).verifyAdministratorAccess()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 DiagnosticLog.error("pair.authorization.failed", error, "deviceId" to deviceId)
                 throw IllegalStateException(

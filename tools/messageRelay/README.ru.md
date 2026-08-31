@@ -78,6 +78,12 @@ node --test tests/familyMessageRelayProtocol.test.mjs
 strict JSON, TTL и tamper detection в canonical implementation. Он не доказывает Android API 28,
 физическое устройство или OpenWrt target helper — эти gates выполняются отдельно.
 
+Native реализация и ручной Linux gate описаны в
+[README helper](../../package/sheepfold-message-relay-crypto/README.ru.md).
+`runNativeCryptoTests.sh` собирает одноразовый helper, а `tools/messageRelay/nativeCrypto.test.mjs` сравнивает
+его с этим reference-кодом на synthetic fixtures. Эти инструменты не входят в vendor
+wire model и не включают relay, enrollment или исполнение команд на роутере.
+
 При изменении любого поля сначала меняются executable model, схемы и vector, затем Android и
 OpenWrt implementations, после чего обновляется pinned vendor manifest закрытого server project.
 Старый major продолжает приниматься сервером до явно спланированного окончания совместимости.

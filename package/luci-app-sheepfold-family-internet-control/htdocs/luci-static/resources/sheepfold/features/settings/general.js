@@ -32,6 +32,33 @@ function automaticSetupDraft(value) {
 	};
 }
 
+/* Бета-профиль не даёт согласия на координаты, историю сайтов или удалённый доступ (§betatest1) */
+function betaTestingDraft(enabled, wifiMode) {
+	if (!enabled)
+		return { beta_testing: '0' };
+	return {
+		beta_testing: '1',
+		sim_change_notifications: 'all',
+		child_wifi_network_notifications: wifiMode === 'with_location' ? 'with_location' : 'network_only'
+	};
+}
+
+function betaTestingField(deps) {
+	var control = deps.checkbox(_('Participate in beta testing'), deps.value('beta_testing', '0') === '1',
+		_('After Save, Sheepfold checks published GitHub releases every hour and installs newer versions automatically. Turning this off stops automatic updates but keeps notification settings.'), {
+			'data-setting-option': 'beta_testing',
+			'change': function (event) {
+				var enabled = event.currentTarget.checked;
+				if (enabled && !deps.confirm(_('Enable beta testing? After Save, router updates will be installed automatically and may briefly interrupt access. Notifications about every SIM change and new child Wi-Fi networks will be enabled. Location collection, website history, AI and remote support will not be enabled. You can change notifications separately.'))) {
+					event.currentTarget.checked = false;
+					return;
+				}
+				deps.setBetaOptions(betaTestingDraft(enabled, deps.value('child_wifi_network_notifications', 'off')));
+			}
+		});
+	return control.node;
+}
+
 function applicationPortField(deps) {
 	var currentValue = deps.value('app_port', '5201');
 	var input = E('input', {
@@ -200,7 +227,7 @@ function render(deps) {
 			['weekly', _('Every week')],
 			['monthly', _('Every month')],
 			['never', _('Never')]
-		], null, null, _('Defines how often Sheepfold checks for a stable release. Installation still requires an explicit confirmation.')),
+		], null, null, _('Outside beta testing, this controls stable-release checks. Installation requires confirmation. Beta testing uses hourly automatic updates instead.')),
 		deps.selectField(_('Blocklist emergency-useful sites access'), 'domain_allowlist_for_blocklist', '1', [
 			['1', _('Yes')],
 			['0', _('No')]
@@ -213,7 +240,8 @@ function render(deps) {
 			_('Could not save settings.'),
 			null,
 			2
-		)
+		),
+		betaTestingField(deps)
 	);
 
 	return E('div', { 'class': 'sf-flat-form' }, fields);
@@ -223,5 +251,6 @@ return baseclass.extend({
 	maximumAutomationDraft: maximumAutomationDraft,
 	automationModeDraft: automationModeDraft,
 	automaticSetupDraft: automaticSetupDraft,
+	betaTestingDraft: betaTestingDraft,
 	render: render
 });

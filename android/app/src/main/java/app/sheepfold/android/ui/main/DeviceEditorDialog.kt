@@ -42,12 +42,14 @@ internal fun DeviceEditorDialog(
     saving: Boolean,
     error: String?,
     onDismiss: () -> Unit,
-    onSave: (RouterDevice) -> Unit
+    onSave: (RouterDevice) -> Unit,
+    form: FormDraft<RouterDevice> = remember(device.mac) { FormDraft(device, "") }
 ) {
-    var name by remember(device.mac) { mutableStateOf(device.name) }
-    var group by remember(device.mac) { mutableStateOf(device.group.ifBlank { UNCONFIGURED_GROUP }) }
-    var deviceType by remember(device.mac) { mutableStateOf(device.deviceType) }
-    var status by remember(device.mac) { mutableStateOf(device.status) }
+    var name by form.field({ it.name }) { value, next -> value.copy(name = next) }
+    var group by form.field({ it.group.ifBlank { UNCONFIGURED_GROUP } }) { value, next -> value.copy(group = next) }
+    var deviceType by form.field({ it.deviceType }) { value, next -> value.copy(deviceType = next) }
+    var status by form.field({ it.status }) { value, next -> value.copy(status = next) }
+    val dismiss = rememberDraftDismiss(form.dirty, saving, onDismiss)
     var groupExpanded by remember { mutableStateOf(false) }
     var typeExpanded by remember { mutableStateOf(false) }
     var statusExpanded by remember { mutableStateOf(false) }
@@ -55,7 +57,7 @@ internal fun DeviceEditorDialog(
     val groupOptions = listOf(UNCONFIGURED_GROUP) + groups.map { it.name }.filter { it.isNotBlank() }
 
     AlertDialog(
-        onDismissRequest = { if (!saving) onDismiss() },
+        onDismissRequest = dismiss,
         title = { Text(stringResource(R.string.device_edit_title, device.id.removePrefix("#"))) },
         text = {
             Column(
@@ -220,7 +222,7 @@ internal fun DeviceEditorDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !saving) {
+            TextButton(onClick = dismiss, enabled = !saving) {
                 Text(stringResource(R.string.action_cancel))
             }
         }

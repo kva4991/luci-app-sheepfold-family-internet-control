@@ -97,7 +97,7 @@ export function requireExactKeys(value, expected, label) {
 }
 
 export function requireTime(value, label) {
-  if (!Number.isSafeInteger(value) || value < 0) {
+  if (!Number.isSafeInteger(value) || value < 0 || Object.is(value, -0)) {
     fail('messageMalformed', `${label} is outside the interoperable JSON integer range`);
   }
 }

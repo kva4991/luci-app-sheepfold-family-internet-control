@@ -41,6 +41,48 @@ function fakeUci(initial = {}) {
 }
 
 describe('LuCI persistence adapters §persist1', () => {
+  it('betaProfileUsesExplicitConfirmationAndOnlyStagesItsDocumentedSettings', () => {
+    let consent = false;
+    const drafts = [];
+    let input;
+    const model = loadModule('sheepfold/features/settings/general.js', {
+      _: (text) => text,
+      E: (tag, attrs, children) => ({ tag, attrs, children, addEventListener() {} }),
+    });
+    const view = model.render({
+      value: (_key, fallback) => fallback,
+      setOption() { assert.fail('must stage one explicit profile'); },
+      setOptions() { assert.fail('unrelated automation must not change'); },
+      setBetaOptions: (value) => drafts.push({ ...value }),
+      confirm: () => consent,
+      checkbox: (_label, checked, _hint, attrs) => {
+        input = { checked, change: attrs.change };
+        return { node: input };
+      },
+      divider: () => ({}), selectField: () => ({}), textareaField: () => ({}),
+    });
+    assert.equal(view.children.at(-1), input);
+    assert.equal(input.checked, false);
+    input.checked = true;
+    input.change({ currentTarget: input });
+    assert.equal(input.checked, false);
+    assert.equal(drafts.length, 0);
+    consent = true;
+    input.checked = true;
+    input.change({ currentTarget: input });
+    assert.deepEqual(drafts[0], {
+      beta_testing: '1', sim_change_notifications: 'all', child_wifi_network_notifications: 'network_only',
+    });
+    assert.equal(model.betaTestingDraft(true, 'with_location').child_wifi_network_notifications, 'with_location');
+    input.checked = false;
+    input.change({ currentTarget: input });
+    assert.deepEqual(drafts[1], { beta_testing: '0' });
+    const settings = loadModule('sheepfold/features/settings/persistence.js', { _: (text) => text }).create({});
+    settings.validate({ beta_testing: '1' });
+    settings.validate({ beta_testing: '0' });
+    assert.throws(() => settings.validate({ beta_testing: 'yes' }), /Invalid beta testing/);
+  });
+
   it('serializes one mutation, replaces lists atomically and performs zero-argument save/apply', async () => {
     const uci = fakeUci({ sheepfold: { allowlist: { '.name': 'allowlist', '.type': 'list', mac: ['OLD'] } } });
     const adapter = loadModule('sheepfold/core/persistence/uci.js').create({

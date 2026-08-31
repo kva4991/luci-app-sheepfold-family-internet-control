@@ -1,12 +1,12 @@
 /*
  * Verifies the bounded background-maintenance contract: atomic RAM-log rotation,
  * conservative cleanup of only old unconfigured offline cards, and scheduled
- * update notification without unattended installation. Runtime cases use temporary
+ * update notification or explicitly enabled hourly beta updates. Runtime cases use temporary
  * files and command stubs, then remove all state; they do not touch a real router,
  * package manager, network, firewall, or owner configuration. §maintjob1 §testwhy
  */
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -73,6 +73,52 @@ esac
 }
 
 describe('background maintenance jobs §maintjob1', () => {
+  it('betaUpdatesUseHourlyRamStateAndNeverTurnForceIntoRepeatedInstalls', () => {
+    const { root, bin } = commonRoot('maintenance-beta');
+    const runtime = join(root, 'runtime');
+    const state = join(root, 'state');
+    const uci = join(root, 'uci.txt');
+    const calls = join(root, 'updater.log');
+    writeFileSync(uci, 'sheepfold.global.beta_testing=1\nsheepfold.global.update_check_install_mode=never\n');
+    writeFileSync(calls, '');
+    executable(join(bin, 'uci'), simpleUciSource());
+    executable(join(bin, 'updater'), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_UPDATER_CALLS"\nexit "${TEST_START_CODE:-0}"\n');
+    const env = {
+      TEST_UCI: fixturePath(uci), TEST_UPDATER_CALLS: fixturePath(calls),
+      SHEEPFOLD_UCI_BIN: fixturePath(join(bin, 'uci')),
+      SHEEPFOLD_LOCK_COMMON: fixturePath(join(bin, 'lock-common')),
+      SHEEPFOLD_UPDATER: fixturePath(join(bin, 'updater')),
+      SHEEPFOLD_MAINTENANCE_RUNTIME_DIR: fixturePath(runtime),
+      SHEEPFOLD_MAINTENANCE_STATE_DIR: fixturePath(state),
+      SHEEPFOLD_MAINTENANCE_NOW_EPOCH: '1784678400',
+      SHEEPFOLD_MAINTENANCE_TODAY: '2026-07-22',
+    };
+    const run = (uptime, extra = {}) => runHelper('check-updates', {
+      ...env, SHEEPFOLD_MAINTENANCE_UPTIME: String(uptime), ...extra,
+    });
+    try {
+      assert.equal(run(50, { SHEEPFOLD_MAINTENANCE_TODAY: '1970-01-01' }).status, 0);
+      assert.equal(readFileSync(calls, 'utf8'), '');
+      assert.equal(run(100).status, 0);
+      assert.equal(run(3699, { SHEEPFOLD_MAINTENANCE_NOW_EPOCH: '1884678400' }).status, 0);
+      assert.equal(readFileSync(calls, 'utf8'), 'start-beta\n');
+      assert.equal(run(3700, { TEST_START_CODE: '1' }).status, 1);
+      assert.match(readFileSync(join(runtime, 'beta-update.state'), 'utf8'), /last_result=start_failed/);
+      assert.equal(run(3701).status, 0);
+      assert.equal(readFileSync(calls, 'utf8'), 'start-beta\nstart-beta\n');
+      assert.equal(existsSync(join(state, 'update-check.state')), false);
+      rmSync(join(runtime, 'beta-update.state'));
+      mkdirSync(join(runtime, 'beta-update.state'));
+      assert.equal(run(8000).status, 1);
+      assert.equal(readFileSync(calls, 'utf8'), 'start-beta\nstart-beta\n');
+      writeFileSync(uci, 'sheepfold.global.beta_testing=0\nsheepfold.global.update_check_install_mode=never\n');
+      assert.equal(run(8000).status, 0);
+      assert.equal(readFileSync(calls, 'utf8'), 'start-beta\nstart-beta\n');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('runs from the service and probes releases without unattended installation', () => {
     assert.match(service, /MAINTENANCE_HELPER=.*sheepfold-maintenance/);
     assert.match(service, /handle_maintenance periodic/);
@@ -80,9 +126,10 @@ describe('background maintenance jobs §maintjob1', () => {
     assert.match(service, /interval=300/);
     assert.doesNotMatch(service, /maintenance_interval_seconds/);
     assert.match(helper, /"\$UPDATER" probe/);
-    assert.doesNotMatch(helper, /"\$UPDATER" (?:start|install|install-foreground|run-background)/);
+    assert.match(helper, /"\$UPDATER" start-beta/);
+    assert.match(helper, /sheepfold\.global\.beta_testing/);
     assert.match(updater, /print_probe\(\)/);
-    assert.match(updater, /probe\)\s*\n\s*print_probe/);
+    assert.match(updater, /probe\)\s*\n\s*with_update_lock print_probe/);
   });
 
   it('serializes the writer with rotation and marks explicit device edits as preserved', () => {

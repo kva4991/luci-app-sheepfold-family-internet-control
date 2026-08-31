@@ -24,6 +24,36 @@
 классификатора — в [device-identification-design.ru.md](device-identification-design.ru.md),
 а перечень скрытых параметров — в [hidden-settings.ru.md](hidden-settings.ru.md).
 
+### Стоимость чтения списка устройств
+
+Уточнение 30.08.2026: `list_devices` в `sheepfold-router-control-legacy` читает уже назначенные
+канонические числовые ID через UCI. Обычный `GET /devices` больше не вызывает allocator и commit
+для каждой строки. Это важно не только для скорости, но и для ресурса flash. Монотонный счётчик,
+номера существующих устройств, группы и права от такой оптимизации не меняются (§deviceid2).
+
+Отсутствующий, нулевой, старый строковый, записанный с ведущими нулями или повторный ID по-прежнему
+передаётся единственному `sheepfold-device-id ensure`. Следовательно, чтение повреждённого старого
+конфига может вызвать его прежнее исправление; не объявлять этот fallback безусловно read-only.
+Устройства без MAC не выводятся. На корректном конфиге проверка не должна брать ID-lock или
+писать UCI.
+
+На тестовом Cudy до исправления чтение 16 записей занимало 12,60 секунды на роутере. После
+изменения тот же JSON прочитан за 1,38 секунды включая SSH; контрольная сумма UCI осталась прежней.
+Одного исправления списка оказалось недостаточно: `GET /router-info` продолжал превышать 10 секунд,
+хотя сам helper `router-info` выполнялся за 0,58 секунды. Причина была в общей авторизации:
+`token_device_is_admin_paired` тоже запускал allocator для каждой записи до проверки MAC.
+
+Теперь авторизация сначала отбирает административное устройство с тем же MAC, затем читает
+сохранённый ID и его прежние алиасы. Только некорректный ID этого устройства вызывает прежний
+repair; не относящиеся к запросу записи не исправляются. Отозванный admin-флаг, другой MAC и
+несовпадающий ID отклоняются. Проверка источника по DHCP/neighbour, срока и серверного Bearer
+не ослабляется. На обычном конфиге этот путь не берёт ID-lock и не записывает UCI.
+
+После обоих исправлений физический API 30 paired gate прошёл 8 тестов без skips; запросы главного
+экрана занимали 0,6–1,9 секунды каждый. Это измерение конкретного стенда, не SLA. Проверки:
+`node --test tests/deviceStableId.test.mjs tests/tokenDeviceBinding.test.mjs`, затем [физический paired gate](../tools/android-testing/parent-router-integration/README.ru.md)
+с `-RequirePairing`. Shell-fixtures не подключают роутер; успех не заменяет BusyBox и живую сеть.
+
 ### Короткая модель за одну минуту
 
 Для понимания всей системы достаточно сначала разделить семь сущностей:
@@ -302,6 +332,14 @@ OUI-базу при её наличии и кэшированные mDNS-дан�
 источника присутствия. Локальный OUI-справочник Sheepfold лишь дополняет старую базу Nmap.
 Для случайного local-admin MAC производитель всегда неизвестен; сочетание Wi-Fi association и
 стандартного `01+MAC` client ID допускает только слабое предположение о личном телефоне.
+
+Внутренний TSV агрегатора сохраняет пустые IP/hostname через placeholder `*`, который не
+переносится как IP в паспорт. Текущий ARP/neighbour IP выбирается раньше DHCP lease/static IP;
+источник имени `arp/dhcp/static` отсеивается без учёта регистра. До появления IP не расходуется
+nmap budget и не обновляется port-scan timestamp. Общие collectors пропускаются, если выбранных
+online-устройств вне чёрного списка устройств нет. Это устраняет лишнюю работу, не изменяя
+identity baseline, confidence или права; подробности и проверки в
+[device-detection.ru.md](device-detection.ru.md) (§detload).
 
 ### Полный режим
 
@@ -1026,6 +1064,7 @@ no_restrictions_auto_excluded, personal_devices_auto_excluded
 
 ```text
 tests/deviceDetectionService.test.mjs
+tests/deviceInventoryAggregation.test.mjs
 tests/devicePresence.test.mjs
 tests/deviceDetectorSafety.test.mjs
 tests/deviceIdentityLinking.test.mjs

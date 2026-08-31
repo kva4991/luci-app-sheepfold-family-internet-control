@@ -1,6 +1,7 @@
 /*
- * Защищает сценарий потери родительской router-сессии. Это статический контракт:
- * он не заменяет проверку настоящего 401 и смены TLS-ключа на тестовом роутере.
+ * Защищает сценарий потери родительской router-сессии и безопасную диагностику
+ * Статический контракт не меняет состояние приложения и не заменяет проверку
+ * настоящего 401 и смены TLS-ключа на тестовом роутере
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -29,6 +30,18 @@ const legacyApi = read('package/luci-app-sheepfold-family-internet-control/root/
 const routerControl = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-router-control');
 
 describe('Android router session recovery §authrs1', () => {
+  it('reports slow reads clearly without exposing headers or response data in diagnostics', () => {
+    const screen = read('android/app/src/main/java/app/sheepfold/android/ui/main/OperationalMainScreen.kt');
+    assert.match(screen, /error is SocketTimeoutException\) context\.getString\(R\.string\.router_refresh_timeout\)/);
+    for (const locale of ['values', 'values-en']) {
+      assert.match(read(`android/app/src/main/res/${locale}/strings.xml`), /name="router_refresh_timeout"/);
+    }
+    const diagnostics = client.match(/DiagnosticLog\.(?:info|warn)\("router\.request\.[^\n]*(?:\n\s*"[^\n]*)?/g) || [];
+    assert.equal(diagnostics.length, 3);
+    assert.ok(client.includes('"router.request.failed"'));
+    assert.ok(client.includes('"errorType" to error.javaClass.simpleName'));
+    assert.doesNotMatch(diagnostics.join('\n'), /bearerToken|deviceMac|responseBody|serverMessage|error\.message/);
+  });
   it('treats only final authorization failures as a lost pairing', () => {
     assert.match(session, /statusCode == 401/);
     assert.match(session, /token_invalid/);
@@ -51,7 +64,20 @@ describe('Android router session recovery §authrs1', () => {
     assert.match(activity, /pairingOnly = pairingLoss != null/);
     assert.match(activity, /pairingLoss != null && !unlocked/);
     assert.match(setup, /if \(pairingOnly\) SetupStep\.PAIRING else SetupStep\.AGREEMENT/);
-    assert.match(setup, /if \(pairingOnly\) onSetupComplete\(it\) else step = SetupStep\.PROTECTION/);
+    assert.match(setup, /if \(pairingOnly\) \{\s*onSetupComplete\(connected\)/);
+    assert.match(setup, /else \{\s*step = SetupStep\.PROTECTION/);
+  });
+
+  it('owns a single pairing attempt outside a replaceable Compose screen', () => {
+    const model = read('android/app/src/main/java/app/sheepfold/android/ui/setup/RouterSetupViewModel.kt');
+    assert.match(activity, /by viewModels<RouterSetupViewModel>\(\)/);
+    assert.match(setup, /rememberSaveable\(pairingOnly\)/);
+    assert.match(setup, /setupModel\.connect\(request\)/);
+    assert.doesNotMatch(setup, /manager\.connect\(/);
+    assert.match(model, /viewModelScope\.launch/);
+    assert.match(model, /if \(busy \|\| connected != null\) return/);
+    assert.match(model, /catch \(cancelled: CancellationException\) \{\s*throw cancelled/);
+    assert.doesNotMatch(model, /SavedStateHandle|Bundle\s*\(/);
   });
 
   it('probes candidate endpoints without a secret and submits a one-time code only once', () => {

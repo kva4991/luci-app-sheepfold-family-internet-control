@@ -1,7 +1,7 @@
 import org.gradle.api.tasks.Copy
 
-val sheepfoldVersionCode = 56
-val sheepfoldVersionName = "0.1.55"
+val sheepfoldVersionCode = 57
+val sheepfoldVersionName = "0.1.56"
 
 
 val releaseSigningEnvironment = mapOf(

@@ -38,7 +38,7 @@ internal fun findSelectedGroupScheduleConflict(
     return null
 }
 
-private fun scheduleWindows(schedule: RouterSchedule): List<Pair<Int, Int>> =
+internal fun scheduleWindows(schedule: RouterSchedule): List<Pair<Int, Int>> =
     schedule.weekdays.flatMap { day ->
         val dayIndex = weekdayDefinitions.indexOfFirst { it.first == day }
         if (dayIndex < 0) return@flatMap emptyList()

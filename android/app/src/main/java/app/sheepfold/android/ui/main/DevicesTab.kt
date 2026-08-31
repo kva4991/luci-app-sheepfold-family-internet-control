@@ -50,15 +50,17 @@ internal fun DevicesTab(
     devices: List<RouterDevice>,
     isLoading: Boolean,
     onConfigChanged: (RouterAdminConfig) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    workspace: ParentWorkspace = remember { ParentWorkspace() }
 ) {
-    val scope = rememberCoroutineScope()
-    var editingDevice by remember { mutableStateOf<RouterDevice?>(null) }
-    var mutating by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val scope = workspace.scope
+    val editingDevice = workspace.device
+    var mutating by workspace.deviceTask.busy
+    var error by workspace.deviceTask.message
     val canWriteDevices = config.capabilities.deviceWrite && config.revision.isNotBlank()
     val updateRouterText = stringResource(R.string.devices_update_router)
     val runtimePendingText = stringResource(R.string.management_runtime_pending)
+    val shownDevices = filterDevices(devices, workspace.deviceFilter)
 
     fun saveDevice(device: RouterDevice) {
         if (!canWriteDevices) {
@@ -68,14 +70,15 @@ internal fun DevicesTab(
         mutating = true
         error = null
         scope.launch {
-            runCatching { client.saveDevice(config, device) }
+            val revision = editingDevice?.revision ?: config.revision
+            runCatching { client.saveDevice(config.copy(revision = revision), device) }
                 .onSuccess { updated ->
                     onConfigChanged(updated)
                     error = if (updated.mutation?.runtimeApplied == false) runtimePendingText else null
-                    editingDevice = null
+                    workspace.device = null
                     onRefresh()
                 }
-                .onFailure { error = it.message }
+                .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; error = it.message }
             mutating = false
         }
     }
@@ -103,7 +106,7 @@ internal fun DevicesTab(
                     error = if (it.mutation?.runtimeApplied == false) runtimePendingText else null
                 }
                 onRefresh()
-            }.onFailure { error = it.message }
+            }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; error = it.message }
             mutating = false
         }
     }
@@ -118,19 +121,21 @@ internal fun DevicesTab(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(stringResource(R.string.devices_title), style = MaterialTheme.typography.headlineSmall)
-                OutlinedButton(onClick = onRefresh, enabled = !isLoading && !mutating) {
-                    Text(stringResource(R.string.action_refresh))
+                Text(stringResource(R.string.devices_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                IconButton(onClick = onRefresh, enabled = !isLoading && !mutating) {
+                    Icon(painterResource(R.drawable.ic_refresh), stringResource(R.string.action_refresh))
                 }
             }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (!canWriteDevices) Text(updateRouterText)
         }
+        item { DeviceFilterField(workspace.deviceFilter) { workspace.deviceFilter = it } }
         if (!isLoading && devices.isEmpty()) item { Text(stringResource(R.string.devices_empty)) }
-        items(devices, key = { it.id }) { device ->
-            DeviceSummaryCard(
+        else if (!isLoading && shownDevices.isEmpty()) item { Text(stringResource(R.string.device_filter_empty)) }
+        items(shownDevices, key = { it.id }) { device ->
+            DeviceCard(
                 device = device,
-                onEdit = { editingDevice = device },
+                onEdit = { workspace.device = FormDraft(device, config.revision) },
                 onAction = { runAction(device, it) },
                 writeEnabled = canWriteDevices && !isLoading && !mutating,
                 temporaryAccessEnabled = !isLoading && !mutating
@@ -138,14 +143,15 @@ internal fun DevicesTab(
         }
     }
 
-    editingDevice?.let { device ->
+    editingDevice?.let { form ->
         DeviceEditorDialog(
-            device = device,
+            device = form.original,
+            form = form,
             groups = config.groups,
             saving = mutating,
             error = error,
             onDismiss = {
-                editingDevice = null
+                workspace.device = null
                 error = null
             },
             onSave = ::saveDevice
@@ -160,7 +166,8 @@ internal fun DeviceListsTab(
     devices: List<RouterDevice>,
     isLoading: Boolean,
     onConfigChanged: (RouterAdminConfig) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    workspace: ParentWorkspace = remember { ParentWorkspace() }
 ) {
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -175,11 +182,12 @@ internal fun DeviceListsTab(
         stringResource(R.string.tab_allowlist),
         stringResource(R.string.tab_blocklist)
     )
-    val shownDevices = when (selectedTab) {
+    val listDevices = when (selectedTab) {
         1 -> devices.filter { it.status == "allow" }
         2 -> devices.filter { it.status == "blocked" }
         else -> devices
     }
+    val shownDevices = filterDevices(listDevices, workspace.listFilter)
 
     fun applyStatuses(selectedDevices: List<RouterDevice>, status: String) {
         if (!canWriteDevices) {
@@ -222,6 +230,7 @@ internal fun DeviceListsTab(
             modifier = Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item { DeviceFilterField(workspace.listFilter) { workspace.listFilter = it } }
             if (selectedTab > 0) {
                 item {
                     Button(
@@ -235,13 +244,12 @@ internal fun DeviceListsTab(
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             }
-            if (!isLoading && shownDevices.isEmpty()) item { Text(stringResource(R.string.devices_empty)) }
+            if (!isLoading && shownDevices.isEmpty()) item { Text(stringResource(if (listDevices.isEmpty()) R.string.devices_empty else R.string.device_filter_empty)) }
             items(shownDevices, key = { it.id }) { device ->
-                ListDeviceCard(
+                DeviceCard(
                     device = device,
-                    removable = selectedTab > 0,
-                    enabled = canWriteDevices && !isLoading && !mutating,
-                    onRemove = { applyStatuses(listOf(device), "new") }
+                    writeEnabled = canWriteDevices && !isLoading && !mutating,
+                    onRemove = if (selectedTab > 0) ({ applyStatuses(listOf(device), "new") }) else null
                 )
             }
         }
@@ -258,101 +266,6 @@ internal fun DeviceListsTab(
     }
 }
 
-@Composable
-private fun DeviceSummaryCard(
-    device: RouterDevice,
-    onEdit: () -> Unit,
-    onAction: (String) -> Unit,
-    writeEnabled: Boolean,
-    temporaryAccessEnabled: Boolean
-) {
-    val emptyValue = stringResource(R.string.value_empty)
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Icon(
-                    painter = painterResource(deviceTypeOption(device.deviceType).iconRes),
-                    contentDescription = deviceTypeLabel(device.deviceType),
-                    modifier = Modifier.size(32.dp)
-                )
-                Text(
-                    "${displayDeviceId(device.id)} ${if (device.isAdministrator) "♛ " else ""}${device.name}",
-                    modifier = Modifier.padding(start = 10.dp).weight(1f),
-                    style = MaterialTheme.typography.titleMedium
-                )
-                IconButton(onClick = onEdit, enabled = writeEnabled) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_action_settings),
-                        contentDescription = stringResource(R.string.action_configure)
-                    )
-                }
-            }
-            Text(stringResource(R.string.device_status_format, deviceStatusLabel(device.status)))
-            Text(stringResource(R.string.device_type_format, deviceTypeLabel(device.deviceType)))
-            Text(stringResource(R.string.device_ip_format, device.ip.ifBlank { emptyValue }))
-            Text(stringResource(R.string.device_mac_format, device.mac.ifBlank { emptyValue }))
-            Text(stringResource(R.string.device_group_format, device.group.ifBlank { emptyValue }))
-            if (!device.isAdministrator) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (device.status != "allow") {
-                        OutlinedButton(
-                            onClick = { onAction("allow") },
-                            enabled = writeEnabled,
-                            modifier = Modifier.weight(1f)
-                        ) { Text(stringResource(R.string.action_allow)) }
-                    }
-                    if (device.status != "blocked") {
-                        OutlinedButton(
-                            onClick = { onAction("block") },
-                            enabled = writeEnabled,
-                            modifier = Modifier.weight(1f)
-                        ) { Text(stringResource(R.string.action_block)) }
-                    }
-                }
-                if (device.status != "allow" && device.status != "blocked") {
-                    OutlinedButton(
-                        onClick = { onAction("temp") },
-                        enabled = temporaryAccessEnabled,
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("+30") }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ListDeviceCard(
-    device: RouterDevice,
-    removable: Boolean,
-    enabled: Boolean,
-    onRemove: () -> Unit
-) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                painter = painterResource(deviceTypeOption(device.deviceType).iconRes),
-                contentDescription = deviceTypeLabel(device.deviceType),
-                modifier = Modifier.size(30.dp)
-            )
-            Column(Modifier.padding(start = 10.dp).weight(1f)) {
-                Text("${displayDeviceId(device.id)} ${device.name}", style = MaterialTheme.typography.titleMedium)
-                Text("${device.ip}  ${device.mac}", style = MaterialTheme.typography.bodySmall)
-            }
-            if (removable) {
-                IconButton(onClick = onRemove, enabled = enabled) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_delete),
-                        contentDescription = stringResource(R.string.device_list_remove)
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun DeviceCandidatesDialog(

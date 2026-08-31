@@ -17,9 +17,9 @@
 
 | Задача | Первая точка входа |
 | --- | --- |
-| LuCI | `luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/` |
-| API и роутерный backend | `luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/` |
-| UCI и установка | `root/etc/config/sheepfold`, `root/etc/uci-defaults/`, `install.sh`, `docs/uci-config-migration.ru.md` |
+| LuCI | `package/luci-app-sheepfold-family-internet-control/htdocs/luci-static/resources/view/sheepfold/` и модули `sheepfold/` рядом |
+| API и роутерный backend | `package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/` |
+| UCI и установка | `package/luci-app-sheepfold-family-internet-control/Makefile`, его `root/usr/share/sheepfold/sheepfold.uci.defaults`, `install.sh`, `docs/uci-config-migration.ru.md`; `/etc/config/sheepfold` создаётся на роутере, а не поставляется готовым конфигом |
 | Родительский Android | `android/`, `docs/android-config.ru.md`, `docs/android-openwrt-api.ru.md` |
 | Детский Android | `android-child/` и контракт `/client-status` |
 | Android runtime, эмулятор и физические телефоны | `docs/android-test-lab.ru.md`, `tools/android-testing/` (§andlab1) |
