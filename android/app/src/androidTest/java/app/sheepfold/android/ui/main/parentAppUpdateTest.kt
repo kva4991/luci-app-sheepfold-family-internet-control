@@ -26,7 +26,7 @@ class ParentAppUpdateTest : ParentUiFixture() {
         assertEquals(1, checks)
     }
 
-    @Test fun availableUpdateDoesNotInstallOnDownloadClick() {
+    @Test fun downloadClickStartsPreparationBeforeAnySystemInstaller() {
         var downloads = 0
         var installs = 0
         show { ParentAppUpdateContent("0.1.56", ParentUpdateState(UpdatePhase.AVAILABLE, release), onCheck = {},
@@ -46,7 +46,7 @@ class ParentAppUpdateTest : ParentUiFixture() {
         assertEquals(1, cancels)
     }
 
-    @Test fun readyUpdateRequiresInstallClick() {
+    @Test fun readyUpdateOffersRetryWithoutDownloadingAgain() {
         var installs = 0
         show { ParentAppUpdateContent("0.1.56", ParentUpdateState(UpdatePhase.READY, release),
             onCheck = {}, onDownload = {}, onCancel = {}, onInstall = { installs++ }) }
@@ -70,6 +70,15 @@ class ParentAppUpdateTest : ParentUiFixture() {
         show { ParentAppUpdateContent("0.1.56", ParentUpdateState(UpdatePhase.CANCELLING, release),
             onCheck = {}, onDownload = {}, onCancel = {}, onInstall = {}) }
         label(R.string.app_update_cancelling).assertIsDisplayed()
+        label(R.string.app_update_download).assertDoesNotExist()
+        label(R.string.app_update_check).assertDoesNotExist()
+        label(R.string.app_update_install).assertDoesNotExist()
+    }
+
+    @Test fun preparationHidesAllRepeatedActions() {
+        show { ParentAppUpdateContent("0.1.58", ParentUpdateState(UpdatePhase.PREPARING, release),
+            onCheck = {}, onDownload = {}, onCancel = {}, onInstall = {}) }
+        label(R.string.app_update_preparing).assertIsDisplayed()
         label(R.string.app_update_download).assertDoesNotExist()
         label(R.string.app_update_check).assertDoesNotExist()
         label(R.string.app_update_install).assertDoesNotExist()

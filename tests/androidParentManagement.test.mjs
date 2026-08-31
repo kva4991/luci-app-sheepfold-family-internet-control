@@ -88,9 +88,23 @@ test('manualRefreshBlocksRepeatedRequestsBeforeRecomposition', () => {
 });
 
 test('cancelledUpdateCannotRestartBeforeSharedFileCleanupCompletes', () => {
-  assert.equal((appUpdater.match(/job\?\.isCompleted == false/g) || []).length, 2);
+  assert.ok((appUpdater.match(/job\?\.isCompleted == false/g) || []).length >= 2);
   assert.doesNotMatch(appUpdater, /job\?\.isActive/);
   assert.match(appUpdater, /NonCancellable[\s\S]*pending\.delete\(\)[\s\S]*UpdatePhase\.CANCELLING/);
+});
+
+test('parentUpdateContinuationUsesActivityResultsAndTheUnlockedForeground', () => {
+  const updateUi = read('android/app/src/main/java/app/sheepfold/android/ui/main/ParentAppUpdateSection.kt');
+  const updateStore = read('android/app/src/main/java/app/sheepfold/android/updates/ParentUpdateStore.kt');
+  assert.equal((activity.match(/registerForActivityResult\(ActivityResultContracts\.StartActivityForResult\(\)\)/g) || []).length, 2);
+  assert.match(activity, /updateAllowed = unlocked && setupComplete && connection != null && agreementCurrent/);
+  assert.match(activity, /lifecycle\.withResumed \{ onUpdateLaunch\(\) \}/);
+  assert.match(activity, /appUpdates\.permissionReturned\(\)/);
+  assert.match(activity, /appUpdates\.installerReturned\(\)/);
+  assert.doesNotMatch(updateUi, /startActivity|installationIntent|rememberCoroutineScope/);
+  assert.match(updateStore, /AtomicFile/);
+  assert.match(updateStore, /ParentUpdatePolicy\.release\(/);
+  assert.match(appUpdater, /if \(verifyReady\(saved\.release\)\)/);
 });
 
 test('schedule and group editors preserve the shared router contract', () => {

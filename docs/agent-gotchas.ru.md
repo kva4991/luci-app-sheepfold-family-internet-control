@@ -13,6 +13,9 @@
 - Ручное обновление APK не использует updater роутера: нужны публичный parent release asset,
   digest и тот же signing key. CI artifact/debug APK не заменяет публикацию; описание
   и причины ограничений в [Android updater](android-app-updates.ru.md) (§apkupd1).
+- Переход в разрешение источника APK может уничтожить процесс: ViewModel недостаточно.
+  Сохранять и перепроверять готовый файл, регистрировать Activity Result вне вкладки;
+  отказ и ошибка открытия installer не требуют новой загрузки (§apkupd1).
 - «Мои устройства» в APK определяются по парному ID и backend `adminLogin`, не по имени.
   На старом роутере неизвестный владелец не угадывается; см. [настройки Android](android-config.ru.md).
 

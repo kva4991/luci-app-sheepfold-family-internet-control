@@ -35,6 +35,7 @@ ADR хранит контекст решения, а профильный док
 | [0027](0027-local-first-family-message-relay.ru.md) | Необязательный local-first relay коротких сообщений родительского APK | Принято | `§mrelay1`, `§k5rf0hb`, `§q3nj8wd` |
 | [0028](0028-opt-in-beta-updates.ru.md) | Явное участие в часовых обновлениях и узкий тестовый профиль | Принято | `§betatest1`, `§maintjob1`, `§updsafe` |
 | [0029](0029-parent-apk-self-update.ru.md) | Ручное обновление APK с тем же signing key и системным подтверждением | Принято | `§apkupd1` |
+| [0030](0030-resumable-parent-apk-installation.ru.md) | Скачивание и установка одной операцией с восстановлением после Settings | Принято | `§apkupd1` |
 
 ## Статусы
 

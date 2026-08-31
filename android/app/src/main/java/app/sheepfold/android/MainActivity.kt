@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
@@ -30,6 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.withResumed
 import androidx.fragment.app.FragmentActivity
 import app.sheepfold.android.diagnostics.DiagnosticLog
 import app.sheepfold.android.notifications.AccessRequestWorker
@@ -61,6 +65,13 @@ class MainActivity : FragmentActivity() {
     private var forceLockToken by mutableIntStateOf(0)
     private var pendingWidgetCommand by mutableStateOf<WidgetCommand?>(null)
     private var backgroundedAtElapsed = 0L
+    // Регистрация вне вкладки нужна и после пересоздания Activity во время системного разрешения.
+    private val updatePermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        appUpdates.permissionReturned()
+    }
+    private val updateInstaller = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        appUpdates.installerReturned()
+    }
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LanguagePreferenceStore.wrap(newBase))
@@ -81,6 +92,16 @@ class MainActivity : FragmentActivity() {
                 pendingWidgetCommand = pendingWidgetCommand,
                 onWidgetCommandConsumed = { pendingWidgetCommand = null },
                 onLockNow = { forceLockToken += 1 },
+                onUpdateLaunch = {
+                    appUpdates.takeLaunch()?.let { launch ->
+                        try {
+                            when (launch.destination) {
+                                app.sheepfold.android.updates.UpdateDestination.PERMISSION -> updatePermission.launch(launch.intent)
+                                app.sheepfold.android.updates.UpdateDestination.INSTALLER -> updateInstaller.launch(launch.intent)
+                            }
+                        } catch (_: Exception) { appUpdates.installationFailed() }
+                    }
+                },
                 onLanguageChanged = { recreate() }
             )
         }
@@ -134,6 +155,7 @@ private fun SheepfoldRoot(
     pendingWidgetCommand: WidgetCommand?,
     onWidgetCommandConsumed: () -> Unit,
     onLockNow: () -> Unit,
+    onUpdateLaunch: () -> Unit,
     onLanguageChanged: () -> Unit
 ) {
     val context = LocalContext.current
@@ -172,6 +194,16 @@ private fun SheepfoldRoot(
             connection = null
             setupComplete = false
         }
+    }
+
+    val updateAllowed = unlocked && setupComplete && connection != null && agreementCurrent
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LifecycleResumeEffect(updateAllowed) {
+        if (updateAllowed) appUpdates.foregrounded()
+        onPauseOrDispose { }
+    }
+    LaunchedEffect(updateAllowed, appUpdates.launchRequest) {
+        if (updateAllowed && appUpdates.launchRequest != null) lifecycle.withResumed { onUpdateLaunch() }
     }
 
     SheepfoldTheme(themeMode = themeMode) {

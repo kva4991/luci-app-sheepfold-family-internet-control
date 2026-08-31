@@ -4,6 +4,7 @@
 - Дата: 2026-08-31
 - Теги: `§apkupd1`
 - Текущий контракт: [обновление Android](../../android-app-updates.ru.md).
+- Продолжение установки и восстановление после Settings дополнены [ADR-0030](0030-resumable-parent-apk-installation.ru.md).
 
 ## Контекст
 

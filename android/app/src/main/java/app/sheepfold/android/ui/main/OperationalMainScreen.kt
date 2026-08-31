@@ -90,6 +90,12 @@ fun OperationalMainScreen(
         add(MainMenuItem("settings", stringResource(R.string.tab_settings), R.drawable.ic_navigation_settings))
     }
     var selectedTabKey by rememberSaveable(connection.apiUrl) { mutableStateOf("control") }
+    LaunchedEffect(appUpdates.showUpdatePanel) {
+        if (appUpdates.showUpdatePanel) {
+            selectedTabKey = "info"
+            appUpdates.panelShown()
+        }
+    }
     val refreshVersion = workspace.refreshes[selectedTabKey] ?: 0
     // Старый запрос не должен снять индикатор или показать ошибку уже открытой соседней панели
     var isLoading by remember(client, selectedTabKey, refreshVersion) { mutableStateOf(true) }

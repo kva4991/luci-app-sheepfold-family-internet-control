@@ -1,12 +1,13 @@
 <resources>
     <string name="app_update_title">App update</string>
     <string name="app_update_help_title">How to update the app</string>
-    <string name="app_update_help">The check contacts the project on GitHub. Family settings, router address and router token are not sent. Download the update, then confirm installation in Android. App settings and router pairing are preserved. A local test build may have no update with the same signature.</string>
+    <string name="app_update_help">The check contacts the project on GitHub. Family settings, router address and router token are not sent. Download and install checks the file and opens Android confirmation. If installation permission is requested, enable it and return; no second download is needed. App settings and router pairing are preserved. A local test build may have no update with the same signature.</string>
     <string name="app_update_installed">Installed version: %1$s</string>
     <string name="app_update_check">Check for updates</string>
     <string name="app_update_checking">Checking for updates…</string>
     <string name="app_update_cancelling">Cancelling download…</string>
-    <string name="app_update_download">Download update</string>
+    <string name="app_update_download">Download and install</string>
+    <string name="app_update_preparing">Checking the update file…</string>
     <string name="app_update_install">Install update</string>
     <string name="app_update_available">Version %1$s available (%2$d MB)</string>
     <string name="app_update_downloading">Downloaded %1$d%%</string>
@@ -15,7 +16,8 @@
     <string name="app_update_check_failed">Could not check for updates. Check your internet connection and try again later.</string>
     <string name="app_update_version_unknown">Could not identify this app version. Automatic updates are unavailable for this build.</string>
     <string name="app_update_download_failed">Could not prepare the update. Check your connection and available storage. Damaged APKs or APKs with another signature will not be installed.</string>
-    <string name="app_update_permission">Allow Sheepfold to install updates in the Android settings. Return here and tap Install update again.</string>
+    <string name="app_update_permission">Allow Sheepfold to install updates in Android settings. If that screen stays open, press Back. Installation continues automatically when you return.</string>
+    <string name="app_update_permission_denied">The file is saved. To continue, tap Install update and allow installation from Sheepfold in Android.</string>
     <string name="app_update_confirm">Confirm the update in the Android window. If you cancel, you can retry using the same button.</string>
-    <string name="app_update_install_failed">Could not open the installer or recheck the file. Download the update again.</string>
+    <string name="app_update_install_failed">Could not open the installer. The file is saved; try tapping Install update again.</string>
 </resources>

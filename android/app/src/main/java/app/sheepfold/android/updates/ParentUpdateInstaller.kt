@@ -11,13 +11,20 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.security.MessageDigest
 
+internal interface ParentUpdateInstallation {
+    val installed: AppIdentity
+    fun verify(file: File, release: ParentRelease)
+    fun permissionIntent(): Intent?
+    fun installIntent(file: File): Intent
+}
+
 /** Android подтверждает установку; ни удаления приложения, ни смены доверенного ключа здесь нет. */
-internal class ParentUpdateInstaller(private val context: Context) {
+internal class ParentUpdateInstaller(private val context: Context) : ParentUpdateInstallation {
     @Suppress("DEPRECATION")
-    val installed: AppIdentity get() = identity(context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES))
+    override val installed: AppIdentity get() = identity(context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES))
 
     @Suppress("DEPRECATION")
-    fun verify(file: File, release: ParentRelease) {
+    override fun verify(file: File, release: ParentRelease) {
         check(file.length() == release.size)
         val hash = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
@@ -34,11 +41,11 @@ internal class ParentUpdateInstaller(private val context: Context) {
         check(ParentUpdatePolicy.acceptsArchive(installed, identity(archive), release))
     }
 
-    fun permissionIntent(): Intent? =
+    override fun permissionIntent(): Intent? =
         if (context.packageManager.canRequestPackageInstalls()) null
         else Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
 
-    fun installIntent(file: File): Intent {
+    override fun installIntent(file: File): Intent {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.updates", file)
         return Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")

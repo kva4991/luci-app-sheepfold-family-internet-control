@@ -25,9 +25,22 @@ audit passed for 250 Markdown files.
 Parent debug `0.1.58` / code `59` was published on 2026-08-31 as a test-only APK in
 the existing `v0.1.0-experimental.1` release, from source `61bbd7b`. Its certificate matches
 the installed `0.1.57`; anonymous GitHub metadata, APK bytes and signature checks passed.
-The existing router asset and latest release selection are unchanged. The phone is still
-on `0.1.57` for the owner's manual update test; the Android installer path and a future
-production-to-production update remain unverified. See [the update runbook](android-app-updates.ru.md).
+The existing router asset and latest release selection are unchanged. At publication, the phone
+was left on `0.1.57` for the owner's manual update test. The owner subsequently reported that
+returning from the install-source permission screen offered another download instead of
+continuing installation. A completed physical update has not been independently verified.
+See [the update runbook](android-app-updates.ru.md).
+
+The local `0.1.59` / code `60` fix makes download and installation one explicit operation.
+An atomic private-cache checkpoint survives process loss; Activity Result and a resumed,
+unlocked Activity continue a recent permission request without downloading again. Cancelling
+installation keeps the file but does not reopen the installer automatically. PIN, pairing,
+same-signer verification and Android's final confirmation are unchanged. This version is not
+published or installed on the physical phone. Build/Lint and all 102 JVM tests passed;
+the focused updater/read-panel suite passed 27/27 on both API 28 and API 35.
+The broad emulator run was not green: five router-dependent tests had no discovered router,
+and one existing Wi-Fi visibility assertion failed. Evidence and remaining OEM validation
+are recorded in the update runbook; no unrelated Wi-Fi/router fix is claimed here.
 
 Subsequent control refresh polish (2026-08-31): the spinner stays inside the disabled
 refresh button, without moving the internet commands, and repeated refreshes are rejected
