@@ -17,6 +17,11 @@ import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
+import android.graphics.Bitmap
+import java.io.File
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import app.sheepfold.android.router.RouterAdminCapabilities
@@ -40,6 +45,12 @@ abstract class ParentUiFixture {
     protected fun text(id: Int, vararg args: Any) = compose.activity.getString(id, *args)
     protected fun label(id: Int) = compose.onNodeWithText(text(id))
     protected fun icon(id: Int) = compose.onNodeWithContentDescription(text(id))
+    protected fun savePanelScreenshot(name: String) {
+        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        File(compose.activity.cacheDir, name).outputStream().use {
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+        }
+    }
     private lateinit var focus: FocusManager
     private var keyboard: SoftwareKeyboardController? = null
     protected fun hideKeyboard() {

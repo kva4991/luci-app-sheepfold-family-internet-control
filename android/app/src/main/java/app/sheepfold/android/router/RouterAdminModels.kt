@@ -10,7 +10,8 @@ data class RouterDevice(
     val deviceType: String,
     val manualDeviceType: Boolean,
     val status: String,
-    val isAdministrator: Boolean
+    val isAdministrator: Boolean,
+    val administratorLogin: String = ""
 )
 
 data class RouterWifiModule(

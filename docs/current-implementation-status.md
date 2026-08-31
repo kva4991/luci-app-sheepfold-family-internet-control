@@ -2,6 +2,27 @@
 
 General inventory checked: 2026-08-26. Focused changes and merge review: 2026-08-31.
 
+Additional local work after the merge (2026-08-31): the parent app now has a manual APK
+update section in Information, with bounded GitHub downloads, digest/package/version/signature
+checks and Android installer confirmation. The parent-device view replaces the administrator
+list, using the new optional `/devices.adminLogin` projection for ownership.
+Parent debug APK `0.1.57` / code `58` is installed on the physical API 30 phone with
+the previous signing certificate and data preserved. All 5 paired read-only integration
+tests passed, including the nine production panels and unchanged saved bearer.
+The router remains on `r284` without `adminLogin`; the owner authorized commit/push and
+an official GitHub SDK build of `r285` for a backed-up test-router upgrade.
+Installation and post-upgrade results are still pending. Parent build and Lint passed;
+102 JVM tests, 166 Android/API category checks and 13 API 28 emulator component tests passed.
+Lint reports 0 errors and 84 warnings; one new advisory concerns conservative usable-space checking.
+Public parent release assets are absent, so a production-to-production APK update
+has not been tested. See [the update runbook](android-app-updates.ru.md).
+
+Later local-only control refresh polish (2026-08-31): the spinner stays inside the disabled
+refresh button, without moving the internet commands, and repeated refreshes are rejected
+before recomposition. Build/Lint, 102 JVM tests, 15 focused Node checks and all 9
+`ParentControlsTest` cases on API 35 passed; the synthetic screenshot was reviewed.
+This subsequent UI change is not installed on the physical phone.
+
 Focused parent Android verification (2026-08-31, `gemini_v1`): unknown control state disables
 both commands; RAM-only workspace drafts survive Activity recreation and retain their original
 revision; Wi-Fi saves require a disconnect warning; notification events precede settings;
@@ -43,7 +64,7 @@ device documents supplement that contract instead of redefining it.
 Current local test-package name produced by `scripts/build-test-ipk.py`:
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-284_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-285_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.
@@ -156,7 +177,7 @@ equivalent live-router install/runtime pass before a public stable release.
 - `Settings → Misc` shows the fixed order that effective-status and firewall currently enforce. Editing is intentionally disabled until one configurable `access_priority` implementation is shared by LuCI, status API, schedules, and nftables.
 - Additional `/api/v1/*` aliases, a refresh-token flow, and advanced LuCI-only administrator operations remain target work. The authenticated parent-management snapshot now covers pairing, device/list mutations and profile editing, notification policy, global internet state, router information, schedules, groups, Wi-Fi, logs, feedback, and AI where the installed product variant permits it.
 - `sheepfold-maintenance` enforces saved RAM-log retention/size limits and removes only old offline device cards with no family/security/DHCP/list/schedule/manual state. Ordinary stable-release checks according to `update_check_install_mode` only notify administrators. Explicit `beta_testing=1` consent in General instead enables hourly newer-release installation through the shared updater; the opt-in stages only SIM/new-Wi-Fi notifications without newly enabling location collection. Local tests cover the opt-in, timer and package error paths; real flock and live-router installation remain separate gates (§maintjob1, §betatest1, §updsafe).
-- Parent Android `0.1.55` has authenticated router-backed editors for devices and device lists, schedules, custom groups, Wi-Fi and notification policy, a safe administrator/account view, global Wi-Fi control, all-radio Wi-Fi automation, and log read/filter/clear. A newly enabled automatic Wi-Fi shutdown keeps the selected time while showing a non-skippable ten-second risk dialog. Device status and manual passport fields use one centralized UCI commit before firewall refresh; if that verified commit succeeds but firewall refresh fails, the API returns `mutation.runtimeApplied=false` and Android shows a saved-but-pending warning instead of claiming the data was lost. List conflicts remain explicit instead of moving a MAC silently. Wi-Fi credentials cross this boundary only to an authenticated administrator over the pinned HTTPS connection because the parent editor and connection QR require them; they are never part of discovery or public status. The app relocks after a configurable background delay (one minute by default), applies escalating backoff after five wrong password/PIN attempts, exposes one honest Android biometric mode, and requires unlock plus confirmation before a widget disables internet unless the owner explicitly enables the warned instant mode. Router writes use the versioned `/api/v1/admin-config` snapshot with optimistic revision checking and capability-gated read-only fallback for older routers; administrator creation and pairing QR intentionally remain in protected LuCI. The release build fails closed without external signing secrets, while the owner-controlled production key, physical-phone and live-router validation remain release evidence (§pairsec, §apicon1, §roadmap).
+- Parent Android has authenticated router-backed editors for devices and device lists, schedules, custom groups, Wi-Fi and notification policy, a read-only parent-device view grouped by the current owner, global Wi-Fi control, all-radio Wi-Fi automation, and log read/filter/clear. A newly enabled automatic Wi-Fi shutdown keeps the selected time while showing a non-skippable ten-second risk dialog. Device status and manual passport fields use one centralized UCI commit before firewall refresh; if that verified commit succeeds but firewall refresh fails, the API returns `mutation.runtimeApplied=false` and Android shows a saved-but-pending warning instead of claiming the data was lost. List conflicts remain explicit instead of moving a MAC silently. Wi-Fi credentials cross this boundary only to an authenticated administrator over the pinned HTTPS connection because the parent editor and connection QR require them; they are never part of discovery or public status. The app relocks after a configurable background delay (one minute by default), applies escalating backoff after five wrong password/PIN attempts, exposes one honest Android biometric mode, and requires unlock plus confirmation before a widget disables internet unless the owner explicitly enables the warned instant mode. Router writes use the versioned `/api/v1/admin-config` snapshot with optimistic revision checking and capability-gated read-only fallback for older routers; administrator creation and pairing QR intentionally remain in protected LuCI. The release build fails closed without external signing secrets, while the owner-controlled production key, physical-phone and live-router validation remain release evidence (§pairsec, §apicon1, §roadmap).
 - The parent API implementation is now separated without changing its wire contract: Android keeps transport/session commands in `RouterAdminClient`, JSON compatibility in `RouterAdminJson`, and data classes in `RouterAdminModels`; OpenWrt keeps a small `sheepfold-api-admin-config` dispatcher plus one read-model, one shared transaction layer and focused schedule/group/Wi-Fi/notification/device modules. All shell modules execute in the same process and still share one lock, revision check, commit and rollback (§apicon1).
 - Both Android release variants have fail-closed Gradle wiring for externally supplied signing secrets, but still need the owner's permanent production key and physical-device release validation. Debug APKs are development artifacts, not stable distribution files.
 - The parent APK stores the accepted agreement revision and acceptance time separately from its router credential. A material revision asks for consent again without repeating permissions, pairing or app protection. LuCI also exposes a confirmed per-administrator `Terminate all sessions` action that revokes every parent-device Bearer token for that login without deleting the account, devices or family rules. Static tests pass; agreement upgrade and multi-phone revocation still require physical/live-router validation (§authrs1, §pairsec).

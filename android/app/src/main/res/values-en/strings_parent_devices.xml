@@ -1,0 +1,8 @@
+<resources>
+    <string name="parent_devices_mine">My devices</string>
+    <string name="parent_devices_others">Other parent devices</string>
+    <string name="parent_devices_current">This device</string>
+    <string name="parent_devices_empty">No devices</string>
+    <string name="parent_devices_unknown_owner">Parent unknown</string>
+    <string name="parent_devices_owner_missing">The router did not identify the device owners. Update Sheepfold on the router and refresh the data.</string>
+</resources>

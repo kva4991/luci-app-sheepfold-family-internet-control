@@ -55,6 +55,7 @@ import app.sheepfold.android.widget.WidgetCommandIntent
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
+    private val appUpdates by viewModels<app.sheepfold.android.updates.ParentAppUpdateModel>()
     private val setupModel by viewModels<RouterSetupViewModel>()
     private val workspace by viewModels<ParentWorkspace>()
     private var forceLockToken by mutableIntStateOf(0)
@@ -75,6 +76,7 @@ class MainActivity : FragmentActivity() {
             SheepfoldRoot(
                 setupModel = setupModel,
                 workspace = workspace,
+                appUpdates = appUpdates,
                 forceLockToken = forceLockToken,
                 pendingWidgetCommand = pendingWidgetCommand,
                 onWidgetCommandConsumed = { pendingWidgetCommand = null },
@@ -127,6 +129,7 @@ class MainActivity : FragmentActivity() {
 private fun SheepfoldRoot(
     setupModel: RouterSetupViewModel,
     workspace: ParentWorkspace,
+    appUpdates: app.sheepfold.android.updates.ParentAppUpdateModel,
     forceLockToken: Int,
     pendingWidgetCommand: WidgetCommand?,
     onWidgetCommandConsumed: () -> Unit,
@@ -194,6 +197,7 @@ private fun SheepfoldRoot(
                     }
                     setupComplete && connection != null -> {
                         OperationalMainScreen(
+                            appUpdates = appUpdates,
                             workspace = workspace,
                             connection = connection!!,
                             themeMode = themeMode,

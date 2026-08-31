@@ -51,6 +51,11 @@
 
 ## Пакет, варианты и релиз
 
+Для ручного обновления APK дополнительно проверить фиксированный источник, release asset
+и digest, package ID/versionCode/signers, приватный FileProvider, permission return,
+отмену и UI-state. Канонические команды и границы: [Android updater](android-app-updates.ru.md).
+Не распространять правила установки OpenWrt APK на Android APK (§apkupd1).
+
 | Если изменяется | Обязательно актуализировать или проверить | Минимальное доказательство | Почему |
 |---|---|---|---|
 | Файл в OpenWrt rootfs или dependency | Makefile `LUCI_DEPENDS`, оба варианта, runtime hardening/executable mode, test-IPK builder, SDK feed | `testIpkPermissions`, `productVariants`, packaging | Файл может быть в checkout, но отсутствовать или не запускаться в пакете |

@@ -1,18 +1,23 @@
 package app.sheepfold.android.ui.main
 
 /*
- * Проверяет реальные клики управления и редактора устройства, блокировку повторных действий
+ * Проверяет реальные клики управления и редактора устройства, блокировку повторных действий и положение индикатора
  * Только callbacks на синтетических данных; pairing, сеть, правила и настройки не изменяются
  * Не доказывает выполнение интернет-команды или сохранение UCI
  */
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.sheepfold.android.R
 import app.sheepfold.android.router.RouterDevice
@@ -49,6 +54,33 @@ class ParentControlsTest : ParentUiFixture() {
         compose.runOnIdle { loading.value = false }
         icon(R.string.action_refresh).assertIsEnabled().performClick()
         assertEquals(1, calls)
+    }
+    @Test fun refreshSpinnerStaysInsideDisabledButtonUntilRequestCompletes() {
+        val loading = mutableStateOf(false)
+        val error = mutableStateOf<String?>(null)
+        var refreshes = 0
+        show { ControlTab("Fixture", false, loading.value, error.value, { refreshes++; loading.value = true }, {}) }
+        val progress = SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
+        val refresh = icon(R.string.action_refresh)
+        val before = refresh.fetchSemanticsNode().boundsInRoot
+        val commandBefore = label(R.string.router_turn_internet_on).fetchSemanticsNode().boundsInRoot
+        compose.onAllNodes(progress, useUnmergedTree = true).assertCountEquals(0)
+        refresh.performClick()
+        refresh.assertIsNotEnabled()
+        compose.onAllNodes(progress, useUnmergedTree = true).assertCountEquals(1)
+        val spinner = compose.onNode(progress, useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(spinner.left >= before.left && spinner.top >= before.top)
+        assertTrue(spinner.right <= before.right && spinner.bottom <= before.bottom)
+        assertEquals(before, refresh.fetchSemanticsNode().boundsInRoot)
+        assertEquals(commandBefore, label(R.string.router_turn_internet_on).fetchSemanticsNode().boundsInRoot)
+        repeat(3) { refresh.performTouchInput { click() } }
+        compose.runOnIdle { assertEquals(1, refreshes) }
+        savePanelScreenshot("control-refresh-loading.png")
+        compose.runOnIdle { loading.value = false; error.value = "Fixture timeout" }
+        compose.onAllNodes(progress, useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithText("Fixture timeout").assertIsDisplayed()
+        refresh.assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals(2, refreshes) }
     }
     @Test fun deviceDraftRequiresExplicitSaveAndPreservesIdentity() {
         var saved: RouterDevice? = null

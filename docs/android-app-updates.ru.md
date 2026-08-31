@@ -1,0 +1,152 @@
+# Ручное обновление родительского APK
+
+<!-- §apkupd1 -->
+
+Экран: родительский APK → «Информация» → «Обновление приложения». Это отдельная кнопка,
+не обновление данных роутера и не бета-обновления OpenWrt. Детский APK пока не включён.
+
+## Текущее состояние
+
+Реализованы проверка релизов, ограниченное скачивание, проверка APK и передача системному
+установщику Android. Переход между двумя опубликованными production-версиями ещё не проверен.
+На 31.08.2026 публичный GitHub API возвращал один релиз `v0.1.0-experimental.1`
+без родительского APK. При таком ответе экран сообщает об отсутствии обновления.
+
+## Пользовательский путь
+
+1. «Проверить обновление» запрашивает GitHub. Таймера, автопроверки при входе и WorkManager нет.
+2. Экран показывает актуальную версию, доступное обновление или отсутствие подходящего APK.
+   Ошибка сети не называется «Установлена актуальная версия».
+3. «Скачать обновление» загружает файл с процентом выполнения и возможностью отмены.
+4. «Установить обновление» открывает системное подтверждение. Если Android не разрешает
+   установку из Sheepfold, сначала открываются настройки этого разрешения.
+   После возвращения необходимо снова нажать установку, автоматического продолжения нет.
+5. Отмена системного диалога не удаляет приложение; повторное нажатие доступно.
+
+Операция сохраняется при повороте в отдельном Activity ViewModel. Уход с вкладки не запускает
+вторую проверку. Убийство процесса отменяет работу; после перезапуска приложение не продолжает
+скачивание и не запускает установку самостоятельно. Настройки, защита и привязка не сбрасываются.
+
+## Источник и безопасность
+
+- Фиксированный endpoint: `https://api.github.com/repos/kva4991/luci-app-sheepfold-family-internet-control/releases?per_page=20`.
+- Только 20 возвращённых релизов без `draft` и `prerelease`; выбирается самая высокая
+  числовая версия родительского APK. Последний релиз роутера без Android-файла не скрывает
+  предыдущий родительский релиз внутри этого ограниченного окна.
+- Точное имя: `sheepfold-parent-v<version>.apk`, например `sheepfold-parent-v0.1.57.apk`.
+  Нужны `state=uploaded`, положительный размер до 128 МиБ и `digest=sha256:<64 hex>`.
+  Детский/OpenWrt APK, suffix `-debug`, версии с ведущими нулями и неполные assets не подходят.
+- JSON не более 1 МиБ, до 100 assets на релиз. Connect timeout 5 секунд, read timeout 15 секунд,
+  предел чтения JSON 30 секунд, APK 300 секунд. Отмена блокирующего чтения может дождаться
+  socket timeout, поэтому мгновенная остановка не обещается.
+- Metadata redirect запрещён. APK начинает загрузку только с точного release-пути репозитория
+  на `github.com`; до трёх переходов допустимы только по HTTPS на этот путь или
+  `release-assets.githubusercontent.com` / `objects.githubusercontent.com`.
+  Userinfo, fragment и нестандартный порт запрещены. Системное TLS-доверие не отключается.
+- GitHub не получает семейные данные, адрес роутера, его Bearer и логи. Получает обычные
+  сетевые метаданные: исходящий IP и общий User-Agent.
+- Сверяются размер, SHA-256, package ID `app.sheepfold.android`, имя версии,
+  строго больший `versionCode` и тот же набор текущих сертификатов подписантов установленного
+  APK. Контрольная сумма GitHub не доказывает авторство: доверие задаёт подпись установленного
+  приложения. Законная ротация ключа тоже требует отдельного дизайна, не обхода проверки.
+
+## Хранение и установка
+
+Отмена переводит экран в «Отменяем скачивание…». Новый запуск запрещён до завершения
+старого Job и его очистки: `isActive=false` недостаточно, потому что отменённая coroutine
+ещё может удалять общий временный файл в `finally`. Защита использует `isCompleted`.
+
+`cacheDir/app-updates/parent.part` используется во время подготовки. После проверки файл
+переименовывается в `parent.apk`; при отмене/ошибке временный файл удаляется. Перед новым
+скачиванием обе прежние копии удаляются. Остаток после убийства процесса не считается готовым
+обновлением и удаляется при следующем скачивании. Проверенный APK занимает не более 128 МиБ
+до следующей загрузки или очистки кеша; системная очистка кеша допустима.
+
+Перед установкой файл перепроверяется. Неэкспортированный `ParentUpdateFileProvider` выдаёт
+системному установщику временное read-разрешение только на выбранный content URI из
+`app-updates/`, не на весь cache/files/external storage. Устанавливает Android после
+подтверждения человека. Нет тихой установки, uninstall, сброса данных или смены signing key.
+
+## Подготовка публикации
+
+По отдельному разрешению на выпуск, из корня репозитория:
+
+1. Увеличить `versionCode` и числовой `versionName` в `android/app/build.gradle.kts`.
+2. Пройти проверки и собрать release с тем же offline signing key. Настройка ключа:
+   [Android и GitHub Actions](github-actions-openwrt-build.ru.md).
+3. Проверить package ID, versionCode и сертификат средствами Android SDK. Не публиковать
+   локальный debug APK как production-обновление.
+4. Прикрепить APK под точным именем к недрафтовому стабильному релизу. Актуальный Android
+   APK должен оставаться среди последних 20 релизов. Не заменять байты старого asset.
+5. Проверить GitHub `size` и `digest`; если digest отсутствует, исправить публикацию,
+   не отключать проверку APK.
+6. На отдельном телефоне пройти обновление со старой версии тем же ключом; проверить
+   сохранение привязки, темы, языка и защиты.
+
+GitHub Actions artifacts в ZIP, требующие входа, не являются публичными release assets.
+Зелёная CI-сборка сама по себе не делает APK доступным этой кнопке.
+
+## Проверки
+
+Рабочий каталог: корень репозитория, PowerShell. Нужны JDK 17, Android SDK и прогретые
+Gradle dependencies. Локальный кеш настроить по [Android-стенду](android-test-lab.ru.md).
+
+```powershell
+.\android\gradlew.bat -p android :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest '-Pkotlin.compiler.execution.strategy=in-process' --offline --no-daemon --max-workers=2 --console=plain
+node --test tests/androidParentManagement.test.mjs tests/adminConfigApi.test.mjs
+npm.cmd run quality:docs:all
+git diff --check
+```
+
+Ожидаются `BUILD SUCCESSFUL`, ноль failures, исправные ссылки/теги и пустой diff-check.
+`ParentUpdatePolicyTest` проверяет APK, версии, origin и подпись;
+`ParentUpdateTransportTest` исполняет скачивание на fake HTTPS с порчей, обрезкой,
+превышением размера, redirect и отменой. `ParentDeviceGroupsTest` проверяет принадлежность.
+Node-тест исполняет shell-проекцию владельца на fake UCI без живого роутера.
+
+Ожидание завершения cleanup дополнительно защищает source-contract проверка
+`cancelledUpdateCannotRestartBeforeSharedFileCleanupCompletes`; отдельный UI-сценарий
+проверяет отсутствие кнопок повторной загрузки во время отмены. Эти две проверки не
+имитируют задержку реального Android socket.
+
+На отдельном эмуляторе после сборки и установки app/test APK по Android-стенду:
+
+```powershell
+$adb = Join-Path $env:ANDROID_HOME 'platform-tools\adb.exe'
+$serial = 'EMULATOR_SERIAL'
+& $adb -s $serial shell am instrument -w -r -e class app.sheepfold.android.ui.main.ParentAppUpdateTest,app.sheepfold.android.ui.main.ParentReadPanelsTest app.sheepfold.android.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+`EMULATOR_SERIAL` заменить serial тестового эмулятора. Ожидается `OK (... tests)`,
+а не только нулевой exit code. UI-тесты используют вымышленные данные, не обращаются к
+GitHub/роутеру и не запускают installer. Они не доказывают production-подпись и установку
+обновления на конкретном OEM-телефоне.
+
+Итог 31.08.2026: 102 JVM-теста, 166 тестов категории Android/API, 13 component-тестов
+API 28 прошли; Android build/Lint завершились с exit 0 (0 ошибок, 84 предупреждения).
+Новое предупреждение `UsableSpace` рекомендует учитывать освобождаемый Android-кеш;
+текущая проверка намеренно консервативна и не инициирует очистку чужого кеша.
+Снимки `parent-devices.png` и `parent-update.png` с вымышленными данными записываются
+component-тестами в частный cache тестируемого APK; это не семейные данные.
+При выгрузке бинарного PNG через native stdout redirect нужен PowerShell 7.4+;
+Windows PowerShell 5 может повредить байты, используйте документированный ADB pull.
+Снимки на API 28 визуально проверены. В следующем проходе по просьбе владельца родительский
+debug APK `0.1.57` / code `58` установлен через ADB поверх `0.1.56` на физический API 30
+с прежней подписью и сохранением данных. Все пять read-only тестов связки с роутером прошли,
+включая чтение девяти панелей и сохранность bearer. Это не проверка установки через новую
+кнопку: production release по-прежнему не опубликован. Роутер пока остаётся на `r284`
+без `adminLogin`; полный учёт владельцев ждёт обновления его пакета.
+
+Не запускать весь instrumentation package на парном телефоне: там есть first-launch
+и отдельно разрешаемые сетевые сценарии. Не применять `pm clear`/uninstall при конфликте
+подписей. `--offline` без готового кеша не скачает зависимости. При `spawnSync ... EPERM`
+использовать документированный user-context runner, не ослаблять тест. Отсутствие публичного
+APK ожидаемо; ошибка — обещание актуальности без успешного чтения GitHub.
+
+## Источники
+
+[ADR-0029](architecture/decisions/0029-parent-apk-self-update.ru.md) хранит причины решения.
+Платформенные контракты: [PackageManager](https://developer.android.com/reference/android/content/pm/PackageManager),
+[FileProvider](https://developer.android.com/reference/androidx/core/content/FileProvider),
+[подпись Android](https://developer.android.com/studio/publish/app-signing),
+[GitHub release assets](https://docs.github.com/en/rest/releases/assets).

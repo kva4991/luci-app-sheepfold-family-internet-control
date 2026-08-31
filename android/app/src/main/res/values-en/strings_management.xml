@@ -61,14 +61,9 @@
     <string name="groups_delete_blocked">Remove devices from the group and reassign linked schedules first.</string>
     <string name="group_saved_success">Group saved.</string>
     <string name="group_deleted_success">Group deleted.</string>
-    <string name="administrators_title">Administrators</string>
-    <string name="administrators_pairing_note">Accounts and QR pairing are created in protected LuCI. This screen shows only safe details and actual paired devices.</string>
-    <string name="administrators_empty">The router returned no administrator accounts.</string>
     <string name="administrator_login_format">Login: %1$s</string>
-    <string name="administrator_id_format">Administrator ID: %1$s</string>
     <string name="administrator_access_requests_enabled">Accepts child temporary-access requests</string>
     <string name="administrator_access_requests_disabled">Does not accept child temporary-access requests</string>
-    <string name="administrator_paired_devices">Administrator devices</string>
     <string name="wifi_title">Home Wi-Fi</string>
     <string name="wifi_security_note">Networks are loaded from the router over the protected connection. Changes update the same OpenWrt settings used by LuCI.</string>
     <string name="wifi_enable_all">Enable Wi-Fi</string>

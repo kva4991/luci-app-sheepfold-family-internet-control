@@ -47,7 +47,7 @@
     <string name="tab_devices">Devices</string>
     <string name="tab_lists">User lists</string>
     <string name="tab_groups">Groups</string>
-    <string name="tab_administrators">Administrators</string>
+    <string name="tab_administrators">Parent devices</string>
     <string name="tab_wifi">Wi-Fi</string>
     <string name="tab_logs">Log</string>
     <string name="tab_all_devices">All devices</string>

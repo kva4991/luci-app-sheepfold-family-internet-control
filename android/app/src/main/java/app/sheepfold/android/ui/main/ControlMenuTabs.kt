@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -97,16 +98,21 @@ fun ControlTab(
                     .size(48.dp)
                     .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_refresh),
-                    contentDescription = stringResource(R.string.action_refresh),
-                    modifier = Modifier.size(30.dp),
-                    tint = if (isLoading) {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    } else {
-                        MaterialTheme.colorScheme.primary
+                Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_refresh),
+                        contentDescription = stringResource(R.string.action_refresh),
+                        modifier = Modifier.size(30.dp),
+                        tint = if (isLoading) {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        }
+                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.matchParentSize(), strokeWidth = 3.dp)
                     }
-                )
+                }
             }
         }
         lastUpdated?.let {
@@ -154,7 +160,6 @@ fun ControlTab(
                 if (globalBlocked == null) Text(stringResource(if (isLoading) R.string.router_getting_state else R.string.router_state_unknown), style = MaterialTheme.typography.bodySmall)
             }
         }
-        if (isLoading) CircularProgressIndicator()
         message?.let { Text(it) }
     }
 }

@@ -502,6 +502,13 @@ Avoid:
 
 ## Android App Security Copy
 
+- Parent APK self-update belongs to the Information tab, is user-initiated, and uses the
+  fixed GitHub release channel with digest/package/version/same-signer checks. Never replace
+  it with arbitrary router-supplied APK URLs, silent installation, uninstall or new signing
+  keys. Read `docs/android-app-updates.ru.md` before changing it (§apkupd1).
+- Parent devices are grouped by the paired device ID and router-provided administrator
+  login, never by display name or a remembered QR label. Account creation and pairing stay in LuCI.
+
 - During first setup, Android app local authentication should recommend password or PIN.
 - Fingerprint and face unlock may be offered, but should not be described as the safest default for a parental-control app.
 - Use concise wording: biometric unlock can be less safe because a child may try to unlock the app while the parent is asleep.

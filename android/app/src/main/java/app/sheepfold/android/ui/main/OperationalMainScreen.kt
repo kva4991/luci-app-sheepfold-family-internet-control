@@ -28,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.sheepfold.android.R
 import app.sheepfold.android.router.bearerToken
+import app.sheepfold.android.router.deviceId
 import app.sheepfold.android.router.RouterAdminClient
 import app.sheepfold.android.router.RouterAdminConfig
 import app.sheepfold.android.router.RouterAdminNotification
@@ -45,6 +46,7 @@ import java.net.SocketTimeoutException
 /** Рабочий экран: данные и команды всегда приходят с подключённого роутера. */
 @Composable
 fun OperationalMainScreen(
+    appUpdates: app.sheepfold.android.updates.ParentAppUpdateModel,
     connection: RouterConnectionRequest,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
@@ -114,6 +116,9 @@ fun OperationalMainScreen(
     }
 
     fun refresh() {
+        // Блокируем второй клик до перерисовки отключённой кнопки
+        if (isLoading || (selectedTabKey == "control" && controlBusy)) return
+        isLoading = true
         if (selectedTabKey == "control") controlMessage = null
         workspace.refresh(selectedTabKey)
     }
@@ -223,7 +228,7 @@ fun OperationalMainScreen(
                 onConfigChanged = { adminConfig = it },
                 onRefresh = ::refresh
             )
-            "administrators" -> AdministratorsTab(adminConfig.administrators, devices, isLoading, ::refresh)
+            "administrators" -> ParentDevicesTab(adminConfig.administrators, devices, connection.deviceId.orEmpty(), isLoading, ::refresh)
             "wifi" -> WifiTab(
                 workspace = workspace,
                 client = client,
@@ -244,7 +249,7 @@ fun OperationalMainScreen(
                 onRefresh = ::refresh
             )
             "logs" -> LogsTab(client, adminConfig, logs, isLoading, ::refresh, onCleared = { logs = emptyList() })
-            "info" -> RouterInfoTab(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh)
+            "info" -> RouterInfoTab(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh, appUpdates = appUpdates)
             "feedback" -> FeedbackTab(client, workspace)
             else -> SettingsTab(
                 themeMode = themeMode,
@@ -258,7 +263,7 @@ fun OperationalMainScreen(
 }
 
 @Composable
-private fun RouterInfoTab(snapshot: RouterSnapshot?, isLoading: Boolean, onRefresh: () -> Unit) {
+private fun RouterInfoTab(snapshot: RouterSnapshot?, isLoading: Boolean, onRefresh: () -> Unit, appUpdates: app.sheepfold.android.updates.ParentAppUpdateModel) {
     val emptyValue = stringResource(R.string.value_empty)
     LazyColumn(
         modifier = Modifier
@@ -266,6 +271,11 @@ private fun RouterInfoTab(snapshot: RouterSnapshot?, isLoading: Boolean, onRefre
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        item {
+            ParentAppUpdateSection(appUpdates)
+            Spacer(Modifier.height(16.dp))
+            androidx.compose.material3.HorizontalDivider()
+        }
         item {
             Text(stringResource(R.string.router_info_title), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))

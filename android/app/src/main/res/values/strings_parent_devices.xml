@@ -1,0 +1,8 @@
+<resources>
+    <string name="parent_devices_mine">Мои устройства</string>
+    <string name="parent_devices_others">Другие родительские устройства</string>
+    <string name="parent_devices_current">Это устройство</string>
+    <string name="parent_devices_empty">Нет устройств</string>
+    <string name="parent_devices_unknown_owner">Родитель не определён</string>
+    <string name="parent_devices_owner_missing">Роутер не сообщил, кому принадлежат устройства. Обновите Sheepfold на роутере и обновите данные.</string>
+</resources>

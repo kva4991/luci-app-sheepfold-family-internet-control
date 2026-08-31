@@ -7,7 +7,7 @@
     <string name="tab_devices">Устройства</string>
     <string name="tab_lists">Списки пользователей</string>
     <string name="tab_groups">Группы</string>
-    <string name="tab_administrators">Администраторы</string>
+    <string name="tab_administrators">Родительские устройства</string>
     <string name="tab_wifi">Wi-Fi</string>
     <string name="tab_logs">Журнал</string>
     <string name="tab_all_devices">Все устройства</string>

@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_update_title">Обновление приложения</string>
+    <string name="app_update_help_title">Как обновить приложение?</string>
+    <string name="app_update_help">Проверка обращается к GitHub проекта. Настройки семьи, адрес и токен роутера туда не отправляются. Сначала скачайте обновление, затем подтвердите установку в Android. Настройки приложения и привязка к роутеру сохранятся. Для локальной тестовой сборки может не быть обновления с той же подписью.</string>
+    <string name="app_update_installed">Установлена версия %1$s</string>
+    <string name="app_update_check">Проверить обновление</string>
+    <string name="app_update_checking">Проверяем обновления…</string>
+    <string name="app_update_cancelling">Отменяем скачивание…</string>
+    <string name="app_update_download">Скачать обновление</string>
+    <string name="app_update_install">Установить обновление</string>
+    <string name="app_update_available">Доступна версия %1$s (%2$d МБ)</string>
+    <string name="app_update_downloading">Скачано %1$d%%</string>
+    <string name="app_update_current">Установлена актуальная версия</string>
+    <string name="app_update_unpublished">Обновление родительского приложения ещё не опубликовано.</string>
+    <string name="app_update_check_failed">Не удалось проверить обновления. Проверьте доступ к интернету и попробуйте позже.</string>
+    <string name="app_update_version_unknown">Не удалось определить версию приложения. Автоматическое обновление недоступно для этой сборки.</string>
+    <string name="app_update_download_failed">Не удалось подготовить обновление. Проверьте интернет и свободное место. Повреждённый файл или APK с другой подписью не будет установлен.</string>
+    <string name="app_update_permission">Разрешите установку обновлений из Sheepfold в открывшихся настройках Android. Затем вернитесь и нажмите «Установить обновление» ещё раз.</string>
+    <string name="app_update_confirm">Подтвердите обновление в окне Android. Если вы отменили установку, можно повторить её этой же кнопкой.</string>
+    <string name="app_update_install_failed">Не удалось открыть установку или повторно проверить файл. Скачайте обновление ещё раз.</string>
+</resources>

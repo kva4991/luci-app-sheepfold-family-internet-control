@@ -28,6 +28,11 @@ sh /tmp/sheepfold-install.sh
 
 ## Update
 
+The parent Android app has a separate **Information → App update** button.
+It checks published parent APK releases and asks Android to confirm installation.
+See the [update and release guide](docs/android-app-updates.ru.md) for signing requirements
+and current availability. This does not update the router package.
+
 After the OpenWrt package is installed, the update script delegates to the installed Sheepfold updater. The updater checks the latest stable GitHub Release, compares versions, downloads the package format used by the current OpenWrt release, validates its internal metadata, and installs it only when a newer version is available.
 
 Optional **Participate in beta testing** at the bottom of General settings enables hourly automatic updates from those published releases after confirmation and Save. It also enables SIM/new child Wi-Fi notifications, without enabling new location collection. It is off by default. See the [beta-testing contract](docs/maintenance-jobs.ru.md).

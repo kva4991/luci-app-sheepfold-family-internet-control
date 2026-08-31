@@ -55,16 +55,22 @@ class ParentReadPanelsTest : ParentUiFixture() {
     }
     @Test fun administratorPanelSeparatesPairedDevices() {
         val admin = RouterAdministrator("a1", "1", "Fixture parent", "fixture", true)
-        show { AdministratorsTab(listOf(admin), listOf(device(true), device().copy(id = "18", name = "Ordinary fixture")), false, {}) }
+        show { ParentDevicesTab(listOf(admin), listOf(device(true).copy(administratorLogin = "fixture"),
+            device(true).copy(id = "19", name = "Other phone", administratorLogin = "other"),
+            device().copy(id = "18", name = "Ordinary fixture")), "17", false, {}) }
         compose.onNodeWithText(admin.displayName).assertIsDisplayed()
-        val pairedName = "#17 Fixture phone"
+        savePanelScreenshot("parent-devices.png")
+        label(R.string.parent_devices_mine).assertIsDisplayed()
+        val pairedName = "Fixture phone"
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(pairedName))
         compose.onNodeWithText(pairedName).assertIsDisplayed()
-        compose.onNodeWithText("#18 Ordinary fixture").assertDoesNotExist()
+        compose.onNodeWithText("Ordinary fixture").assertDoesNotExist()
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Other phone"))
+        compose.onNodeWithText("Other phone").assertIsDisplayed()
     }
     @Test fun administratorLoadingDoesNotPretendListIsEmpty() {
-        show { AdministratorsTab(emptyList(), emptyList(), true, {}) }
-        label(R.string.action_refresh).assertIsNotEnabled()
-        label(R.string.administrators_empty).assertDoesNotExist()
+        show { ParentDevicesTab(emptyList(), emptyList(), "", true, {}) }
+        icon(R.string.action_refresh).assertIsNotEnabled()
+        label(R.string.parent_devices_empty).assertDoesNotExist()
     }
 }

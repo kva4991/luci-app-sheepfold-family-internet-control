@@ -19,6 +19,8 @@ const schedules = read('android/app/src/main/java/app/sheepfold/android/ui/main/
 const groups = read('android/app/src/main/java/app/sheepfold/android/ui/main/GroupsTab.kt');
 const scheduleRules = read('android/app/src/main/java/app/sheepfold/android/ui/main/ScheduleConflictRules.kt');
 const operations = read('android/app/src/main/java/app/sheepfold/android/ui/main/RouterOperationsTabs.kt');
+const parentDevices = read('android/app/src/main/java/app/sheepfold/android/ui/main/ParentDevicesTab.kt');
+const appUpdater = read('android/app/src/main/java/app/sheepfold/android/updates/ParentAppUpdateModel.kt');
 const wifi = read('android/app/src/main/java/app/sheepfold/android/ui/main/WifiManagementTab.kt');
 const wifiAutomation = read('android/app/src/main/java/app/sheepfold/android/ui/main/WifiAutomationCard.kt');
 const settings = read('android/app/src/main/java/app/sheepfold/android/ui/main/SettingsTab.kt');
@@ -38,7 +40,7 @@ test('planned parent placeholders are replaced by router-backed screens', () => 
   assert.match(panelLoader, /client::loadAdminConfig/);
   assert.match(main, /"schedules" -> SchedulesTab\(/);
   assert.match(main, /"groups" -> GroupsTab\(/);
-  assert.match(main, /"administrators" -> AdministratorsTab\(/);
+  assert.match(main, /"administrators" -> ParentDevicesTab\(/);
   assert.match(main, /"wifi" -> WifiTab\(/);
   assert.match(main, /"logs" -> LogsTab\(/);
   assert.match(main, /"menu" -> MenuTab\(/);
@@ -75,7 +77,20 @@ test('infoRefreshIsVisibleBeforeDiagnosticsEvenWithoutSnapshot', () => {
   assert.match(infoTab, /OutlinedButton\(onClick = onRefresh, enabled = !isLoading\)/);
   assert.match(infoTab, /painterResource\(R\.drawable\.ic_refresh\)/);
   assert.match(infoTab, /Text\(stringResource\(R\.string\.action_refresh\)\)/);
-  assert.match(main, /"info" -> RouterInfoTab\(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh\)/);
+  assert.match(main, /"info" -> RouterInfoTab\(snapshot = snapshot, isLoading = isLoading, onRefresh = ::refresh, appUpdates = appUpdates\)/);
+  assert.match(infoTab, /ParentAppUpdateSection\(appUpdates\)/);
+});
+
+test('manualRefreshBlocksRepeatedRequestsBeforeRecomposition', () => {
+  const refresh = main.slice(main.indexOf('fun refresh() {'), main.indexOf('LaunchedEffect(client, selectedTabKey, refreshVersion)'));
+  assert.match(refresh, /if \(isLoading \|\| \(selectedTabKey == "control" && controlBusy\)\) return\s+isLoading = true/);
+  assert.ok(refresh.indexOf('isLoading = true') < refresh.indexOf('workspace.refresh(selectedTabKey)'));
+});
+
+test('cancelledUpdateCannotRestartBeforeSharedFileCleanupCompletes', () => {
+  assert.equal((appUpdater.match(/job\?\.isCompleted == false/g) || []).length, 2);
+  assert.doesNotMatch(appUpdater, /job\?\.isActive/);
+  assert.match(appUpdater, /NonCancellable[\s\S]*pending\.delete\(\)[\s\S]*UpdatePhase\.CANCELLING/);
 });
 
 test('schedule and group editors preserve the shared router contract', () => {
@@ -169,7 +184,9 @@ test('agreement revision and acceptance time are local and re-consent is isolate
 });
 
 test('administrator and Wi-Fi security boundaries remain explicit', () => {
-  assert.match(operations, /Учётные записи и QR остаются в LuCI/);
+  assert.match(parentDevices, /учётные записи и QR-привязка по-прежнему управляются в LuCI/);
+  assert.match(parentDevices, /groupParentDevices\(administrators, devices, currentDeviceId\)/);
+  assert.match(client, /administratorLogin = item.optString\("adminLogin"\)/);
   assert.match(wifi, /client\.setWifiEnabled/);
   assert.match(wifi, /client\.saveWifiNetwork/);
   assert.match(wifi, /client\.saveWifiAutomation/);

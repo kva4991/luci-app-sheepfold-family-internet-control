@@ -36,7 +36,8 @@ class RouterAdminClient(
                 deviceType = item.optString("deviceType", "unknown"),
                 manualDeviceType = item.flexibleBoolean("manualDeviceType"),
                 status = item.optString("status", "unknown"),
-                isAdministrator = item.flexibleBoolean("adminDevice")
+                isAdministrator = item.flexibleBoolean("adminDevice"),
+                administratorLogin = item.optString("adminLogin")
             )
         }
     }

@@ -206,3 +206,34 @@ test('Wi-Fi projection and writes stay behind administrator auth and verified ro
   assert.match(modules.wifi, /confirmRisk/);
   assert.match(helper, /SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN/);
 });
+
+test('parentDeviceOwnersUseValidatedLoginOnlyForAdminDevices', () => {
+  const start = routerControlLegacy.indexOf('list_devices() {');
+  const end = routerControlLegacy.indexOf('\n}', start) + 2;
+  const shell = String.raw`
+uci() {
+  while [ "$1" = -q ]; do shift; done
+  case "$1:$2" in
+    show:sheepfold) printf '%s\n' 'sheepfold.a=device' 'sheepfold.b=device' 'sheepfold.c=device' ;;
+    get:sheepfold.a.id) printf 1 ;;
+    get:sheepfold.b.id) printf 2 ;;
+    get:sheepfold.c.id) printf 3 ;;
+    get:*.mac) printf '02:00:00:00:00:01' ;;
+    get:sheepfold.a.admin_device|get:sheepfold.c.admin_device) printf 1 ;;
+    get:sheepfold.a.admin_login) printf 'Parent+1' ;;
+    get:sheepfold.b.admin_login) printf 'stale-owner' ;;
+    get:sheepfold.c.admin_login) printf 'bad"login' ;;
+    *) return 1 ;;
+  esac
+}
+` + routerControlLegacy.slice(start, end) + '\nlist_devices\n';
+  const result = spawnSync('sh', ['-c', shell], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+  const devices = JSON.parse(result.stdout);
+  assert.deepEqual(devices.map(({ adminDevice, adminLogin }) => ({ adminDevice, adminLogin })), [
+    { adminDevice: true, adminLogin: 'Parent+1' },
+    { adminDevice: false, adminLogin: '' },
+    { adminDevice: true, adminLogin: '' },
+  ]);
+  assert.doesNotMatch(result.stdout, /stale-owner|bad|pairing_code|password_hash/);
+});

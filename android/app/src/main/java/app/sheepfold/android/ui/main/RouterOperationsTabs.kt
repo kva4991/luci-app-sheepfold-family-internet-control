@@ -30,86 +30,8 @@ import androidx.compose.ui.unit.dp
 import app.sheepfold.android.R
 import app.sheepfold.android.router.RouterAdminClient
 import app.sheepfold.android.router.RouterAdminConfig
-import app.sheepfold.android.router.RouterAdministrator
-import app.sheepfold.android.router.RouterDevice
 import kotlinx.coroutines.launch
 
-/**
- * Учётные записи и QR остаются в LuCI: там уже существует owner-проверка и
- * одноразовая pairing-транзакция. APK показывает реальные безопасные поля.
- */
-@Composable
-fun AdministratorsTab(
-    administrators: List<RouterAdministrator>,
-    devices: List<RouterDevice>,
-    isLoading: Boolean,
-    onRefresh: () -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(stringResource(R.string.administrators_title), style = MaterialTheme.typography.headlineSmall)
-                OutlinedButton(onClick = onRefresh, enabled = !isLoading) {
-                    Text(stringResource(R.string.action_refresh))
-                }
-            }
-            Text(stringResource(R.string.administrators_pairing_note))
-            if (isLoading) CircularProgressIndicator()
-        }
-        if (!isLoading && administrators.isEmpty()) {
-            item { Text(stringResource(R.string.administrators_empty)) }
-        }
-        items(administrators, key = { it.section }) { administrator ->
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Text(administrator.displayName, style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.administrator_login_format, administrator.login))
-                    Text(stringResource(R.string.administrator_id_format, administrator.id.ifBlank { "—" }))
-                    Text(
-                        if (administrator.allowChildAccessRequests) {
-                            stringResource(R.string.administrator_access_requests_enabled)
-                        } else {
-                            stringResource(R.string.administrator_access_requests_disabled)
-                        }
-                    )
-                }
-            }
-        }
-        val pairedDevices = devices.filter { it.isAdministrator }
-        if (pairedDevices.isNotEmpty()) {
-            item {
-                Text(
-                    stringResource(R.string.administrator_paired_devices),
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-            items(pairedDevices, key = { "admin-device-${it.id}" }) { device ->
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text("#${device.id} ${device.name}", style = MaterialTheme.typography.titleMedium)
-                        Text(device.ip.ifBlank { "—" })
-                        Text(device.mac.ifBlank { "—" })
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun LogsTab(

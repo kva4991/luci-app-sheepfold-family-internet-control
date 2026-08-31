@@ -61,14 +61,9 @@
     <string name="groups_delete_blocked">Сначала удалите устройства из группы и переназначьте связанные расписания.</string>
     <string name="group_saved_success">Группа сохранена.</string>
     <string name="group_deleted_success">Группа удалена.</string>
-    <string name="administrators_title">Администраторы</string>
-    <string name="administrators_pairing_note">Учётные записи и QR-сопряжение создаются в защищённом LuCI. Здесь показаны только безопасные сведения и реальные парные устройства.</string>
-    <string name="administrators_empty">Роутер не вернул учётных записей администраторов.</string>
     <string name="administrator_login_format">Логин: %1$s</string>
-    <string name="administrator_id_format">ID администратора: %1$s</string>
     <string name="administrator_access_requests_enabled">Принимает запросы ребёнка на временный доступ</string>
     <string name="administrator_access_requests_disabled">Не принимает запросы ребёнка на временный доступ</string>
-    <string name="administrator_paired_devices">Устройства администраторов</string>
     <string name="wifi_title">Домашний Wi-Fi</string>
     <string name="wifi_security_note">Сети загружаются с роутера по защищённому соединению. Изменения применяются к тем же настройкам OpenWrt, что и в LuCI.</string>
     <string name="wifi_enable_all">Включить Wi-Fi</string>
