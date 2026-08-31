@@ -22,14 +22,19 @@ The full local quality gate passed all 123 Node test files: 794 passed, two Wind
 `flock` cases skipped. [Linux CI](https://github.com/kva4991/luci-app-sheepfold-family-internet-control/actions/runs/33389723848)
 passed 796/796 without skips and built/linted both Android apps. The full documentation
 audit passed for 250 Markdown files.
-Public parent release assets are absent, so a production-to-production APK update
-has not been tested. See [the update runbook](android-app-updates.ru.md).
+Parent debug `0.1.58` / code `59` was published on 2026-08-31 as a test-only APK in
+the existing `v0.1.0-experimental.1` release, from source `61bbd7b`. Its certificate matches
+the installed `0.1.57`; anonymous GitHub metadata, APK bytes and signature checks passed.
+The existing router asset and latest release selection are unchanged. The phone is still
+on `0.1.57` for the owner's manual update test; the Android installer path and a future
+production-to-production update remain unverified. See [the update runbook](android-app-updates.ru.md).
 
 Subsequent control refresh polish (2026-08-31): the spinner stays inside the disabled
 refresh button, without moving the internet commands, and repeated refreshes are rejected
 before recomposition. Build/Lint, 102 JVM tests, 15 focused Node checks and all 9
 `ParentControlsTest` cases on API 35 passed; the synthetic screenshot was reviewed.
-This subsequent UI change is not installed on the physical phone.
+This subsequent UI change is included in published test APK `0.1.58`, but is not yet
+installed on the physical phone.
 
 Earlier merge checkpoint (2026-08-31, `gemini_v1`): unknown control state disables
 both commands; RAM-only workspace drafts survive Activity recreation and retain their original
