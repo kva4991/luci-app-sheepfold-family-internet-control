@@ -9,7 +9,7 @@ https://github.com/kva4991/luci-app-sheepfold-family-internet-control
 ## Public install
 
 ```sh
-wget -O /tmp/sheepfold-install.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/install.sh
+wget -O /tmp/sheepfold-install.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/install.sh &&
 sh /tmp/sheepfold-install.sh
 ```
 
@@ -26,7 +26,7 @@ version, and architecture.
 ## Public uninstall
 
 ```sh
-wget -O /tmp/sheepfold-uninstall.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/uninstall.sh
+wget -O /tmp/sheepfold-uninstall.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/uninstall.sh &&
 sh /tmp/sheepfold-uninstall.sh
 ```
 
@@ -76,7 +76,7 @@ not receive router assets because the updater deliberately follows
 ## Updating an installed router
 
 ```sh
-wget -O /tmp/sheepfold-update.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/update.sh
+wget -O /tmp/sheepfold-update.sh https://raw.githubusercontent.com/kva4991/luci-app-sheepfold-family-internet-control/main/update.sh &&
 sh /tmp/sheepfold-update.sh
 ```
 

@@ -19,6 +19,7 @@ const inputSnippet = read('package/luci-app-sheepfold-family-internet-control/ro
 const routerControl = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-router-control-legacy');
 const service = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-service');
 const pairDevice = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-pair-device');
+const policy = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-lib-access-policy');
 const clientStatus = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-client-status-effective');
 const installer = read('install.sh');
 const makefile = read('package/luci-app-sheepfold-family-internet-control/Makefile');
@@ -67,40 +68,38 @@ describe('fw4 access enforcement and integration profiles', () => {
 
   it('keeps internet-only restrictions separate from the device blocklist', () => {
     assert.match(firewall, /append_unique "\$restricted_file" "\$mac"/);
-    assert.match(firewall, /new_device_policy/);
-    assert.match(firewall, /restricted\|scheduled/);
-    assert.match(firewall, /schedule_status" = block[\s\S]*restricted_file/);
+    assert.match(policy, /new_device_policy/);
+    assert.match(policy, /restricted\|scheduled/);
+    assert.match(firewall, /policyStatus[\s\S]*restricted_file/);
     assert.doesNotMatch(inputSnippet, /internet restrictions/i);
     assert.match(service, /run_detector scan event "\$mac"/);
     assert.match(service, /run_detection_followups[\s\S]*"\$FIREWALL_HELPER" sync/);
   });
 
   it('applies identity quarantine before administrator, group, and allowlist exemptions', () => {
-    const quarantine = firewall.indexOf('identity_quarantine_mode');
-    const administrator = firewall.indexOf('if [ "$admin_device" = 1 ]');
-    const noRestrictions = firewall.indexOf('if [ -n "$group" ] && [ "$group" = "$no_restrictions_name" ]');
-    const allowlist = firewall.indexOf('list_has_mac allowlist');
-
+    const quarantine = policy.indexOf('case "$quarantine" in');
+    const administrator = policy.indexOf('if [ "$policyAdmin" = 1 ]');
+    const noRestrictions = policy.indexOf('policyReason=no_restrictions_group');
+    const allowlist = policy.indexOf('policyReason=allowlist');
     assert.ok(quarantine >= 0 && quarantine < administrator);
-    assert.ok(quarantine < noRestrictions);
-    assert.ok(quarantine < allowlist);
-    assert.match(firewall, /identity_quarantine_mode" = block[\s\S]*"\$block_file"/);
-    assert.match(firewall, /identity_quarantine_mode" = restrict[\s\S]*"\$restricted_file"/);
-    assert.match(firewall, /identity_quarantine_mode" = restrict[\s\S]*"\$management_block_file"/);
+    assert.ok(quarantine < noRestrictions && quarantine < allowlist);
+    assert.match(firewall, /sheepfold_policy_evaluate/);
+    assert.match(policy, /case "\$quarantine" in[\s\S]*policyManagementBlock=1/);
+    assert.match(firewall, /blocklist\|identity_quarantine[\s\S]*restricted_file/);
   });
 
   it('keeps global block above temporary access but below explicit exemptions', () => {
-    const admin = clientStatus.indexOf('administrator_device');
-    const allowlist = clientStatus.indexOf('reason=allowlist');
-    const noRestrictions = clientStatus.indexOf('reason=no_restrictions_group');
-    const globalBlock = clientStatus.indexOf('reason=global_block');
-    const temporary = clientStatus.indexOf('reason=temporary_access');
-    assert.ok(admin >= 0 && admin < noRestrictions);
-    assert.ok(noRestrictions < allowlist);
-    assert.ok(allowlist < globalBlock);
-    assert.ok(globalBlock < temporary);
-    assert.match(firewall, /! status_is_temporary "\$status" && list_has_mac allowlist "\$mac"/);
-    assert.match(firewall, /temp_access\|temp-access\|temporary\|blocked\|block\) continue/);
+    const admin = policy.indexOf('policyReason=administrator_device');
+    const allowlist = policy.indexOf('policyReason=allowlist');
+    const noRestrictions = policy.indexOf('policyReason=no_restrictions_group');
+    const blocklist = policy.indexOf('policyReason=blocklist');
+    const globalBlock = policy.indexOf('policyReason=global_block');
+    const temporary = policy.indexOf('policyReason=temporary_access');
+    assert.ok(noRestrictions >= 0 && noRestrictions < blocklist);
+    assert.ok(blocklist < admin && admin < allowlist);
+    assert.ok(allowlist < globalBlock && globalBlock < temporary);
+    assert.match(clientStatus, /sheepfold_policy_evaluate/);
+    assert.match(policy, /tempAdded/);
   });
 
   it('supports exactly four compatibility modes and preserves a manual choice', () => {

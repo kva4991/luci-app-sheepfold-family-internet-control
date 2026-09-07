@@ -100,21 +100,13 @@ case "$status" in
         internet_state=enabled
         message=""
         ;;
-    block|blocked|deny|denied|disabled|offline)
+    block|blocked|deny|denied|disabled|offline|restricted|scheduled)
         internet_state=disabled
         message="Интернет сейчас отключён семейными правилами."
         ;;
     temporary|temp-access|temp_access|temporary_access)
         internet_state=enabled
         message=""
-        ;;
-    scheduled)
-        internet_state=unknown
-        message="Роутер пока не определил текущий доступ для этого устройства."
-        ;;
-    restricted)
-        internet_state=unknown
-        message="Роутер пока не определил текущий доступ для этого устройства."
         ;;
     *)
         internet_state=unknown

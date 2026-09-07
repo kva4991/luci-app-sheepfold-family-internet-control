@@ -1,3 +1,5 @@
+/* Статически проверяет проводку backend-команд; реальные решения и CGI проверяются
+ * accessPolicyRuntime/apiFormRuntime. Не меняет состояние и не заменяет живой роутер */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,8 +97,8 @@ describe('Router backend access rules', () => {
   });
 
   it('reports the configured policy for newly detected devices', () => {
-    assert.match(clientStatus, /new_device_policy/);
-    assert.match(clientStatus, /restrict\|restrict_until_configured[\s\S]*status restricted[\s\S]*reason new_device_policy/);
-    assert.match(clientStatus, /status=allow[\s\S]*reason=new_device_policy_allow/);
+    assert.match(clientStatus, /sheepfold-lib-access-policy/);
+    assert.match(clientStatus, /sheepfold_policy_evaluate "\$device_section" "\$client_mac"/);
+    assert.match(clientStatus, /print_kv status "\$policyStatus"/);
   });
 });

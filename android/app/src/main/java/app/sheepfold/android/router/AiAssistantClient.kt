@@ -28,7 +28,7 @@ object AiAssistantClient {
             if (result.isSuccess) return@withContext result.getOrThrow()
             lastError = result.exceptionOrNull()
             RouterSessionFailure.fromThrowable(lastError)?.let { failure ->
-                RouterSessionEvents.report(context.applicationContext, failure)
+                RouterSessionEvents.report(context.applicationContext, failure, request.connection)
                 throw failure
             }
         }

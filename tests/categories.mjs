@@ -91,6 +91,7 @@ export const testCategories = Object.freeze({
     'countryProfiles.test.mjs',
   ],
   access: [
+    'accessPolicyRuntime.test.mjs',
     'allowlistUi.test.mjs',
     'androidPairingDiscoveryAndListUi.test.mjs',
     'childAccessRequest.test.mjs',
@@ -159,6 +160,8 @@ export const testCategories = Object.freeze({
     'siteListResilience.test.mjs',
   ],
   backend: [
+    'apiFormRuntime.test.mjs',
+    'accessPolicyRuntime.test.mjs',
     'homeNetworkAccess.test.mjs',
     'overviewFinalRuntime.test.mjs',
     'overviewFinalExperimentalR252.test.mjs',
@@ -268,6 +271,7 @@ export const testCategories = Object.freeze({
     'siteListResilience.test.mjs',
   ],
   android: [
+    'androidSessionRaceRuntime.test.mjs',
     'homeNetworkAccess.test.mjs',
     'wifiChannelSafety.test.mjs',
     'parentRouterIntegration.test.mjs',
@@ -295,6 +299,9 @@ export const testCategories = Object.freeze({
     'tokenDeviceBinding.test.mjs',
   ],
   security: [
+    'apiFormRuntime.test.mjs',
+    'accessPolicyRuntime.test.mjs',
+    'androidSessionRaceRuntime.test.mjs',
     'homeNetworkAccess.test.mjs',
     'nativeMessageRelayCrypto.test.mjs',
     'agenticSecurityAudit.test.mjs',

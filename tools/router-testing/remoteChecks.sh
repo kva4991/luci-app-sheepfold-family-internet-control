@@ -475,11 +475,13 @@ write_safe_checks() {
     pass noRestrictionsRuntime 'Группа Без ограничений остаётся выше активного расписания устройства'
 
     "$router_control" set-device-status "$test_mac" blocked 'Sheepfold SSH test' '' "$no_restrictions_name" computer >/dev/null
-    nft_set_has_mac sheepfold_block_macs "$test_mac" || \
-        fail blocklistBeatsGroupRuntime 'Чёрный список устройств не добавил MAC в блокирующий nftables-набор'
-    nft_set_has_mac sheepfold_exempt_macs "$test_mac" && \
-        fail blocklistBeatsGroupRuntime 'Группа Без ограничений ошибочно обошла чёрный список устройств'
-    pass blocklistBeatsGroupRuntime 'Чёрный список устройств остаётся выше группы Без ограничений'
+    nft_set_has_mac sheepfold_block_macs "$test_mac" && \
+        fail noRestrictionsBeatsBlocklistRuntime 'Чёрный список ошибочно перекрыл интернет группе Без ограничений'
+    nft_set_has_mac sheepfold_exempt_macs "$test_mac" || \
+        fail noRestrictionsBeatsBlocklistRuntime 'Группа Без ограничений не сохранила интернет-исключение'
+    nft_set_has_mac sheepfold_management_block_macs "$test_mac" || \
+        fail noRestrictionsBeatsBlocklistRuntime 'Исключение интернета ошибочно открыло управление роутером'
+    pass noRestrictionsBeatsBlocklistRuntime 'Без ограничений выше чёрного списка для интернета, управление остаётся закрыто'
 
     "$router_control" set-device-status "$test_mac" restricted 'Sheepfold SSH test' '' 'Not configured' computer >/dev/null
     uci -q set "sheepfold.$test_schedule.enabled=0"

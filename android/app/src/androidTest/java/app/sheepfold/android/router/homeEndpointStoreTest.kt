@@ -68,4 +68,18 @@ class HomeEndpointStoreTest {
         assertNull(SheepfoldConnectionStore.read(context))
         assertEquals(emptyList<String>(), SheepfoldConnectionStore.homeEndpoints(context, fresh))
     }
+
+    @Test fun staleAuthorizationFailureDoesNotRemoveFreshPairing() {
+        val old = connection("synthetic-session-old")
+        SheepfoldConnectionStore.save(context, old)
+        val fresh = connection("synthetic-session-fresh")
+        SheepfoldConnectionStore.save(context, fresh)
+        val failure = RouterSessionFailure.fromHttp(401, "token_invalid")!!
+        RouterSessionEvents.report(context, failure, old)
+        assertEquals(fresh.bearerToken, SheepfoldConnectionStore.read(context)!!.bearerToken)
+        assertNull(SheepfoldConnectionStore.consumePairingLoss(context))
+        RouterSessionEvents.report(context, failure, fresh)
+        assertNull(SheepfoldConnectionStore.read(context))
+        assertEquals(RouterPairingLoss.TOKEN_REJECTED, SheepfoldConnectionStore.consumePairingLoss(context))
+    }
 }

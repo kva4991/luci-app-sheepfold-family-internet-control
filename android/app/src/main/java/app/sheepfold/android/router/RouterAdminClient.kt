@@ -497,7 +497,7 @@ class RouterAdminClient(
 
     private fun reportSessionFailure(error: Throwable?): RouterSessionException? =
         RouterSessionFailure.fromThrowable(error)?.also { failure ->
-            appContext?.let { RouterSessionEvents.report(it, failure) }
+            appContext?.let { RouterSessionEvents.report(it, failure, connection) }
         }
 
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())

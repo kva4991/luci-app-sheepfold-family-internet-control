@@ -1,3 +1,8 @@
+/*
+ * Статически защищает фасады и отказ опасных/устаревших маршрутов, ничего не изменяя.
+ * Реальное чтение форм и HTTP-отказы проверяет apiFormRuntime.test.mjs;
+ * этот контракт не заменяет запуск CGI на OpenWrt.
+ */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +35,9 @@ describe('Deprecation guards', () => {
     assert.match(apiLegacy, /read_request_body_checked/);
     assert.match(apiLegacy, /request_too_large/);
     assert.match(apiLegacy, /413 Payload Too Large/);
-    assert.match(apiLegacy, /body="\$\(read_request_body\)" \|\| status=\$\?/);
+    assert.match(apiLegacy, /body="\$\(read_request_body; readStatus=\$\?;[\s\S]*exit "\$readStatus"\)" \|\| status=\$\?/);
+    assert.ok(apiLegacy.includes('body="${body%.}"'));
+    assert.doesNotMatch(apiLegacy, /\$\(read_request_body_checked\)/);
     assert.doesNotMatch(apiLegacy, /body="\$\(read_request_body_checked\)" \|\| status=\$\?/);
   });
 

@@ -232,7 +232,7 @@ There is no need to support old OpenWRT versions based on `firewall3` / `iptable
 
 ## Device Rules
 
-The device blocklist is the highest whole-device rule and overrides automatic group assignment, allowlist, temporary access, and schedules. Emergency-useful public domains are a separate, narrowly scoped safety exception when enabled; they do not remove the device from the blocklist. Blocklisted devices always remain unable to access LuCI, SSH, and Sheepfold API. The backend and UI must prevent the same MAC address from being present in both allowlist and blocklist.
+Owner decision 2026-09-07: the `No restrictions` group is above the device blocklist for ordinary internet access. For other devices, the blocklist overrides administrator status, allowlist, temporary access, and schedules. Identity quarantine is a separate protective overlay and suspends all saved exemptions, including `No restrictions`. Emergency-useful public domains are a separate, narrowly scoped safety exception when enabled; they do not remove the device from the blocklist. Blocklisted devices always remain unable to access LuCI, SSH, and Sheepfold API. The backend and UI must prevent the same MAC address from being present in both allowlist and blocklist.
 
 Temporary access does not bypass the device blocklist. Future editing of lower-priority rules may be enabled only when the effective-status API and firewall apply the selected order consistently; it must never weaken the router-management denial for blocklisted devices.
 
@@ -272,9 +272,9 @@ Device groups should be supported for easier management:
 
 The fixed safe whole-device priority is:
 
-1. device blocklist;
-2. administrator devices;
-3. no restrictions group;
+1. no restrictions group;
+2. device blocklist;
+3. administrator devices;
 4. allowlist;
 5. global internet block;
 6. temporary access;
@@ -318,7 +318,7 @@ Operational behavior:
 - A future parent-confirmed merge starts from the device card and then lets the parent select the second record. It is complete rather than field-by-field: all linked MACs become one logical device with one policy, the lower permanent ID remains primary, the absorbed ID remains an audit alias, and policy conflicts are shown before confirmation. Administrator pairing secrets are revoked and QR pairing is repeated (§merge01).
 - Full detection may use a peer-pinned UPnP description and bounded LAN-only WS-Discovery. Ordinary WS-Discovery passes are passive; one active Probe is allowed only for a newly connected device. UPnP LOCATION must use the exact numeric sender IPv4 with no DNS, redirects, router-self access, unbounded body or control URL. WS-Discovery XAddrs must never be fetched. UPnP is self-reported secondary evidence and cannot grant elevated policy by itself. SNMP is outside the product scope (§devident1, §detload).
 - Passive traffic must never be presented as revealing a Google, Yandex or other user account. Sheepfold does not perform TLS interception; any future account association requires explicit OAuth consent and is not a LAN identity factor (§devident1).
-- Automatic assignment to `No restrictions` is security-sensitive because the group bypasses global shutdown and schedules. It requires strong detection evidence, visible reasoning, and the existing one-time exclusion after a parent removes a device from the group. It never bypasses the device blocklist.
+- Automatic assignment to `No restrictions` is security-sensitive because the group bypasses global shutdown and schedules. It requires strong detection evidence, visible reasoning, and the existing one-time exclusion after a parent removes a device from the group. Once validly assigned, the group takes priority over the device blocklist for internet only; router-management denial and identity quarantine still apply. Blocklisted devices must not be automatically scanned or assigned to this group.
 - Smart speakers are excluded from automatic `No restrictions` assignment and remain ordinary managed devices.
 - A confident type percentage and an auto-group trust score are separate values. Until two independent evidence families are available for `No restrictions`, detection must continue collecting bounded signals instead of permanently locking the first result. LuCI must explain the exact reason when assignment is skipped (§agfix88).
 

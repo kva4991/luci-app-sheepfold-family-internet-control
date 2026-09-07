@@ -188,6 +188,8 @@ private fun SheepfoldRoot(
 
     LaunchedEffect(Unit) {
         RouterSessionEvents.events.collect { reason ->
+            // Событие могло ждать главный поток, пока пользователь уже привязал роутер заново
+            if (SheepfoldConnectionStore.hasConnection(context)) return@collect
             SheepfoldConnectionStore.consumePairingLoss(context)
             pairingLoss = reason
             workspace.clear()

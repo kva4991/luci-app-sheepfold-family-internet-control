@@ -1,5 +1,12 @@
 # Current Implementation Status
 
+Focused local fixes: 2026-09-07, r287, based on merged `ec52b67`. The owner confirmed
+`No restrictions` above the device blocklist for ordinary internet; router management
+and identity quarantine remain protected separately. Local CGI, policy and Android
+session regression tests accompany the changes. This revision has not been deployed
+or validated on hardware; older deployment evidence below does not apply to it.
+See [the r287 fix record](audit-fixes-2026-09-07.ru.md).
+
 General inventory checked: 2026-08-26. Focused changes and merge review: 2026-08-31.
 
 Changes delivered to `main` in `821a6bb` (2026-08-31): the parent app now has a manual APK

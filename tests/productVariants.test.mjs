@@ -117,6 +117,31 @@ describe('product variant boundary §prodvar', () => {
         ['Standard', standardPostinst],
         ['AI Support', aiPostinst],
       ]) {
+        // Проверяется фрагмент реально собранного postinst, но UCI заменён функцией:
+        // никаких записей /etc и установки пакета в этом процессе нет.
+        assert.match(postinst, /sheepfold-lib-access-policy/);
+        assert.match(postinst, /chmod 0644/);
+        const migration = postinst.match(/legacy_access_priority=[\s\S]*?ensure_global_option access_priority [^\n]+/);
+        assert.ok(migration, `${variantName}: access-priority migration is absent`);
+        const expectedOrder = 'no_restrictions blocklist admin_devices allowlist global_block temp_access device_schedule group_schedule default_access';
+        const oldOrders = [
+          'emergency_sites no_restrictions blocklist allowlist global_block temp_access device_schedule group_schedule default_access',
+          'blocklist admin_devices no_restrictions allowlist global_block temp_access device_schedule group_schedule default_access',
+        ];
+        for (const initial of ['', ...oldOrders, expectedOrder, 'custom-order-for-future']) {
+          const script = `mockPriority='${initial}'
+uci() {
+  case "$2" in get) printf '%s' "$mockPriority" ;; set) mockPriority="\${3#*=}" ;; *) return 1 ;; esac
+}
+ensure_global_option() { [ -n "$mockPriority" ] || mockPriority="$2"; }
+${migration[0]}
+printf '%s' "$mockPriority"
+`;
+          const outcome = spawnSync('bash', ['-s'], { cwd: root, input: script, encoding: 'utf8' });
+          assert.equal(outcome.status, 0, outcome.stderr);
+          assert.equal(outcome.stdout, initial === 'custom-order-for-future' ? initial : expectedOrder,
+            `${variantName}: migration from ${initial}`);
+        }
         const syntaxCheck = spawnSync('bash', ['-n'], {
           cwd: root,
           input: postinst,

@@ -11,7 +11,7 @@ sheepfold_form_get() {
 
 	# Percent-encoding хранит байты, а не Unicode code points. Locale C не даёт
 	# awk повторно UTF-8-кодировать байты 0x80..0xFF через sprintf("%c").
-	printf '%s' "$body" | LC_ALL=C awk -v wanted="$wanted" '
+	printf '%s\n' "$body" | LC_ALL=C awk -v wanted="$wanted" '
 	function hex_value(char) {
 		if (char >= "0" && char <= "9")
 			return char + 0
@@ -56,6 +56,12 @@ sheepfold_form_get() {
 	}
 
 	{
+		# Добавленный printf LF позволяет увидеть даже завершающий сырой LF как NR > 1
+		# Сырой control character не является form-urlencoded; %0A в значении допустим
+		if (NR > 1 || $0 ~ /[[:cntrl:]]/) {
+			decode_error = 1
+			exit 2
+		}
 		remaining = $0
 		while (length(remaining)) {
 			separator = index(remaining, "&")
@@ -66,6 +72,9 @@ sheepfold_form_get() {
 				item = remaining
 				remaining = ""
 			}
+
+			if (item == "")
+				continue
 
 			equals = index(item, "=")
 			if (equals) {
@@ -79,21 +88,28 @@ sheepfold_form_get() {
 			key = decode(raw_key)
 			if (decode_error)
 				exit 2
-			if (key != wanted)
-				continue
-
 			value = decode(raw_value)
-			if (decode_error)
+			# Проверяем всю форму до вывода: дубли и повреждённый хвост не должны
+			# подтверждать действие уже разобранным первым параметром
+			if (decode_error || key == "" || key in seen) {
+				decode_error = 1
 				exit 2
-			printf "%s", value
-			found = 1
-			exit 0
+			}
+			seen[key] = 1
+			if (key == wanted)
+				selected = value
 		}
 	}
 
 	END {
 		if (decode_error)
 			exit 2
+		printf "%s", selected
 	}
 	'
+}
+
+# Валидация нужна до чтения отдельных полей и до любого изменения настроек
+sheepfold_form_validate() {
+	sheepfold_form_get '' "$1" >/dev/null
 }

@@ -31,7 +31,9 @@ object SheepfoldConnectionStore {
             .remove(pairingLossKey)
             .remove(homeEndpointsKey)
             .apply()
-        request.tlsPinSha256?.let { RouterTlsPin.save(context, it) }
+        // SPKI-only привязка не должна наследовать leaf-pin прежнего роутера
+        request.tlsPinSha256?.takeIf { it.isNotBlank() }?.let { RouterTlsPin.save(context, it) }
+            ?: RouterTlsPin.clear(context)
         SecureSecretStore.write(context, request.bearerToken)
     }
 
@@ -100,8 +102,10 @@ object SheepfoldConnectionStore {
     private fun sameSession(current: RouterConnectionRequest?, expected: RouterConnectionRequest): Boolean =
         current != null && !expected.bearerToken.isNullOrBlank() &&
             current.bearerToken == expected.bearerToken && current.deviceId == expected.deviceId &&
+            current.deviceMac == expected.deviceMac && current.administratorLogin == expected.administratorLogin &&
             current.tlsPinSha256 == expected.tlsPinSha256 && current.tlsSpkiSha256 == expected.tlsSpkiSha256
 
+    @Synchronized
     fun clear(context: Context) {
         clearConnection(context)
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
@@ -111,6 +115,7 @@ object SheepfoldConnectionStore {
     }
 
     /** Стирает только роутерную сессию; соглашение и защита приложения живут отдельно. §authrs1 */
+    @Synchronized
     fun clearForPairing(context: Context, reason: RouterPairingLoss) {
         clearConnection(context)
         context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
@@ -119,6 +124,19 @@ object SheepfoldConnectionStore {
             .apply()
     }
 
+    /** Сравнение и удаление выполняются под тем же замком, что сохранение новой привязки */
+    @Synchronized
+    fun clearForPairingIfCurrent(
+        context: Context,
+        expected: RouterConnectionRequest,
+        reason: RouterPairingLoss
+    ): Boolean {
+        if (!sameSession(read(context), expected)) return false
+        clearForPairing(context, reason)
+        return true
+    }
+
+    @Synchronized
     fun consumePairingLoss(context: Context): RouterPairingLoss? {
         val preferences = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
         val reason = preferences.getString(pairingLossKey, null)

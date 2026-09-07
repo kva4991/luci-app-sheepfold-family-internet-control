@@ -11,6 +11,7 @@ import { describe, it } from 'node:test';
 
 const read = (path) => readFileSync(path, 'utf8');
 const evaluator = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-schedule-evaluator');
+const accessPolicy = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-lib-access-policy');
 const effectiveStatus = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-client-status-effective');
 const publicStatus = read('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-api-client-status');
 const model = read('android-child/app/src/main/java/com/example/sheepfoldchild/data/ClientStatusResponse.kt');
@@ -32,7 +33,9 @@ describe('child next access change time', () => {
     assert.match(evaluator, /next_access_change_time/);
     assert.match(evaluator, /candidate_effective/);
     assert.match(evaluator, /\[ "\$candidate_effective" = "\$current_effective" \]/);
-    assert.match(effectiveStatus, /sheepfold-schedule-evaluator "\$device_section" "\$fallback_status"/);
+    assert.match(effectiveStatus, /sheepfold_policy_evaluate/);
+    assert.match(accessPolicy, /"\$evaluator" "\$deviceSection" "\$fallbackAccess"/);
+    assert.match(accessPolicy, /policyNextTime="\$\(sheepfold_policy_kv "\$scheduleResult" next_change_time\)"/);
     assert.match(effectiveStatus, /print_kv next_change_time/);
   });
 

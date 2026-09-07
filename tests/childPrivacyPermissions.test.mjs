@@ -37,7 +37,7 @@ describe('Child API privacy and permission policy', () => {
     assert.match(output, /"internetState"/);
     assert.match(output, /"nextAccessChangeTime"/);
     assert.match(output, /if \[ "\$internet_state" = enabled \][\s\S]*"message":null/);
-    assert.match(statusApi, /Роутер пока не определил текущий доступ для этого устройства\./);
+    assert.match(statusApi, /Статус доступа пока неизвестен\./);
     assert.doesNotMatch(model, /\baccessMode\b|\bscheduleConflict\b/);
     assert.doesNotMatch(productStatus, /personalGroupName/);
     assert.doesNotMatch(accessScreen, /status\.accessMode|access_mode_label/);

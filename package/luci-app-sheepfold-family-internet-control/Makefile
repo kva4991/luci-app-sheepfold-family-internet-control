@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-sheepfold-family-internet-control
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=286
+PKG_RELEASE:=287
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=kva4991
 SHEEPFOLD_UI_ASSET_VERSION:=$(PKG_VERSION)-$(PKG_RELEASE)
@@ -126,11 +126,14 @@ ensure_global_option country_profile "$$install_country"
 ensure_global_option country_profile_schema '1'
 ensure_global_option block_on_boot '0'
 legacy_access_priority='emergency_sites no_restrictions blocklist allowlist global_block temp_access device_schedule group_schedule default_access'
-safe_access_priority='blocklist admin_devices no_restrictions allowlist global_block temp_access device_schedule group_schedule default_access'
+previous_access_priority='blocklist admin_devices no_restrictions allowlist global_block temp_access device_schedule group_schedule default_access'
+safe_access_priority='no_restrictions blocklist admin_devices allowlist global_block temp_access device_schedule group_schedule default_access'
 current_access_priority="$$(uci -q get sheepfold.global.access_priority 2>/dev/null || true)"
 # Меняем только прежний заводской порядок. Неизвестное пользовательское значение
 # сохраняем для диагностики и будущей явной миграции, а не переписываем молча.
-[ "$$current_access_priority" != "$$legacy_access_priority" ] || uci -q set sheepfold.global.access_priority="$$safe_access_priority"
+if [ "$$current_access_priority" = "$$legacy_access_priority" ] || [ "$$current_access_priority" = "$$previous_access_priority" ]; then
+	uci -q set sheepfold.global.access_priority="$$safe_access_priority"
+fi
 ensure_global_option access_priority "$$safe_access_priority"
 ensure_global_option schedule_conflict_internet 'off'
 ensure_global_option lan_firewall_zones 'lan'
@@ -551,6 +554,7 @@ for library in \
 	/usr/libexec/sheepfold/sheepfold-hash-common \
 	/usr/libexec/sheepfold/sheepfold-lock-common \
 	/usr/libexec/sheepfold/sheepfold-lib-form \
+	/usr/libexec/sheepfold/sheepfold-lib-access-policy \
 	/usr/libexec/sheepfold/sheepfold-lib-admin-config-common \
 	/usr/libexec/sheepfold/sheepfold-lib-admin-config-devices \
 	/usr/libexec/sheepfold/sheepfold-lib-admin-config-groups \

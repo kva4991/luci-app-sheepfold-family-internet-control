@@ -147,7 +147,14 @@ describe('live router automation §routerharness', () => {
     assert.match(remote, /scheduleAllowRuntime/);
     assert.match(remote, /disabledScheduleRuntime/);
     assert.match(remote, /noRestrictionsRuntime/);
-    assert.match(remote, /blocklistBeatsGroupRuntime/);
+    assert.match(remote, /noRestrictionsBeatsBlocklistRuntime/);
+    assert.match(remote, /nft_set_has_mac sheepfold_management_block_macs "\$test_mac"/);
+    assert.match(runtimeMatrix, /sheepfold-lib-access-policy/);
+    assert.match(runtimeMatrix, /nftables schema differs/);
+    assert.ok(runtimeMatrix.indexOf('$rulesHash =') < runtimeMatrix.indexOf('"mkdir -p'));
+    assert.ok(runtimeMatrix.indexOf('Join-ShellLines -Lines $backupLines') < runtimeMatrix.indexOf('$staged = $true'));
+    assert.ok(runtimeMatrix.indexOf('$staged = $true') < runtimeMatrix.indexOf('Join-ShellLines -Lines $activateLines'));
+    assert.match(runtimeMatrix, /sheepfold-firewall' sync/);
     assert.match(remote, /noRestrictionsRelease/);
     assert.match(remote, /device-temp-access "\$test_mac" 30/);
     assert.match(remote, /tempAccessRuntime/);

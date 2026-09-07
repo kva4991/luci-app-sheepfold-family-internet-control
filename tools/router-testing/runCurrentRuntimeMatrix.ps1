@@ -4,7 +4,8 @@
 
 .DESCRIPTION
 Сценарий нужен в узком промежутке между локальными тестами и сборкой OpenWrt:
-он временно подставляет только helper-файлы, участвующие в матрице доступа,
+он проверяет совместимость установленного nftables drop-in, затем временно
+подставляет только helper-файлы, участвующие в матрице доступа,
 запускает восстанавливаемый профиль writeSafe, а затем возвращает прежние
 файлы и подтверждает их контрольные суммы профилем readOnly (§fwlock1).
 
@@ -38,6 +39,7 @@ $runtimeFiles = @(
     'sheepfold-lock-common',
     'sheepfold-schedule-evaluator',
     'sheepfold-router-control-legacy',
+    'sheepfold-lib-access-policy',
     'sheepfold-client-status-effective',
     'sheepfold-firewall'
 )
@@ -64,6 +66,12 @@ $restoreError = $null
 $readOnlyError = $null
 
 try {
+    # Матрица заменяет только helpers: другой nftables-контракт требует установки пакета.
+    # Проверка выполняется до копирования и не перезагружает firewall автоматически.
+    $rulesSource = Join-Path $repoRoot 'package\luci-app-sheepfold-family-internet-control\root\usr\share\nftables.d\table-pre\30-sheepfold.nft'
+    $rulesHash = (Get-FileHash -LiteralPath $rulesSource -Algorithm SHA256).Hash.ToLowerInvariant()
+    Invoke-RouterCommand -Command "test -f /usr/share/nftables.d/table-pre/30-sheepfold.nft && test `"`$(sha256sum /usr/share/nftables.d/table-pre/30-sheepfold.nft | cut -d' ' -f1)`" = '$rulesHash' || { echo 'nftables schema differs: install the matching test package before runtimeMatrix' >&2; exit 43; }" | Out-Null
+
     Invoke-RouterCommand -Command "mkdir -p '$remoteRoot/stage' '$remoteRoot/backup' '$remoteRoot/present'" | Out-Null
 
     foreach ($name in $runtimeFiles) {
@@ -74,17 +82,25 @@ try {
         Send-SheepfoldFile -Config $config -LocalPath $source -RemotePath "$remoteRoot/stage/$name"
     }
 
+    # Сначала полный backup без замены файлов: частичный сбой активации обязан
+    # попадать в finally с сохранёнными оригиналами, включая ещё не заменённые файлы.
+    $backupLines = @('set -eu')
+    foreach ($name in $runtimeFiles) {
+        $target = "$runtimeTarget/$name"
+        $backupLines += "if [ -e '$target' ]; then cp -p '$target' '$remoteRoot/backup/$name'; : > '$remoteRoot/present/$name'; sha256sum '$target' | cut -d' ' -f1 > '$remoteRoot/backup/$name.sha256'; fi"
+    }
+    Invoke-RouterCommand -Command (Join-ShellLines -Lines $backupLines) | Out-Null
+    $staged = $true
     $activateLines = @('set -eu')
     foreach ($name in $runtimeFiles) {
         $target = "$runtimeTarget/$name"
-        $activateLines += "if [ -e '$target' ]; then cp -p '$target' '$remoteRoot/backup/$name'; : > '$remoteRoot/present/$name'; sha256sum '$target' | cut -d' ' -f1 > '$remoteRoot/backup/$name.sha256'; fi"
         $activateLines += "cp '$remoteRoot/stage/$name' '$target.sheepfold-stage'"
-        $activateLines += "chmod 0755 '$target.sheepfold-stage'"
+        $mode = if ($name -like 'sheepfold-lib-*' -or $name -like '*-common') { '0644' } else { '0755' }
+        $activateLines += "chmod $mode '$target.sheepfold-stage'"
         $activateLines += "mv -f '$target.sheepfold-stage' '$target'"
     }
     $activateLines += "printf 'runtime-stage-ok\\n'"
     Invoke-RouterCommand -Command (Join-ShellLines -Lines $activateLines) | Out-Null
-    $staged = $true
 
     if ($AllowConfiguredSecrets) {
         & $runRouterTests -Profile writeSafe -Variant $Variant -AllowConfiguredSecrets
@@ -102,11 +118,13 @@ try {
             foreach ($name in $restoreFiles) {
                 $target = "$runtimeTarget/$name"
                 $restoreLines += "if [ -e '$remoteRoot/present/$name' ]; then cp -p '$remoteRoot/backup/$name' '$target.sheepfold-restore'; mv -f '$target.sheepfold-restore' '$target'; else rm -f '$target'; fi"
+                $restoreLines += "rm -f '$target.sheepfold-stage'"
             }
             foreach ($name in $runtimeFiles) {
                 $target = "$runtimeTarget/$name"
                 $restoreLines += "if [ -e '$remoteRoot/present/$name' ]; then expected=`$(cat '$remoteRoot/backup/$name.sha256'); actual=`$(sha256sum '$target' | cut -d' ' -f1); [ `"`$actual`" = `"`$expected`" ] || exit 41; else [ ! -e '$target' ] || exit 42; fi"
             }
+            $restoreLines += "if [ -x '$runtimeTarget/sheepfold-firewall' ]; then '$runtimeTarget/sheepfold-firewall' sync; fi"
             $restoreLines += "rm -rf '$remoteRoot'"
             $restoreLines += "printf 'runtime-restore-ok\\n'"
             Invoke-RouterCommand -Command (Join-ShellLines -Lines $restoreLines) | Out-Null

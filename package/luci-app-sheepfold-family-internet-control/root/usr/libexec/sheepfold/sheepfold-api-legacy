@@ -7,6 +7,10 @@
 TOKEN_COMMON="/usr/libexec/sheepfold/sheepfold-token-common"
 [ -r "$TOKEN_COMMON" ] || exit 1
 . "$TOKEN_COMMON"
+FORM_COMMON="${SHEEPFOLD_FORM_COMMON:-${0%/*}/sheepfold-lib-form}"
+[ -r "$FORM_COMMON" ] || FORM_COMMON=/usr/libexec/sheepfold/sheepfold-lib-form
+[ -r "$FORM_COMMON" ] || exit 1
+. "$FORM_COMMON"
 
 json_escape() {
 	# JSON здесь собирается POSIX shell-ом без jq, чтобы endpoint жил даже на лёгких роутерах.
@@ -101,28 +105,32 @@ json_pair() {
 	printf '"%s":"%s"%s' "$(json_escape "$key")" "$(json_escape "$value")" "$comma"
 }
 
-url_decode() {
-	value="$(printf '%s' "$1" | sed 's/+/ /g; s/%/\\x/g')"
-	printf '%b' "$value"
-}
-
 MAX_REQUEST_BODY_BYTES=65536
 
 read_request_body() {
 	length="${CONTENT_LENGTH:-0}"
 	case "$length" in
-		''|*[!0-9]*) length=0 ;;
+		''|*[!0-9]*) return 1 ;;
 	esac
-	[ "$length" -le "$MAX_REQUEST_BODY_BYTES" ] || return 2
+	length="$(printf '%s' "$length" | sed 's/^0*//')"
+	[ -n "$length" ] || length=0
+	[ "${#length}" -le 5 ] && [ "$length" -le "$MAX_REQUEST_BODY_BYTES" ] || return 2
 	[ "$length" -gt 0 ] || return 0
-	dd bs=1 count="$length" 2>/dev/null || return 1
+	local captured bytes
+	captured="$(dd bs=1 count="$length" 2>/dev/null; printf '.')" || return 1
+	captured="${captured%.}"
+	bytes="$(printf '%s' "$captured" | wc -c)"
+	[ "$bytes" -eq "$length" ] || return 1
+	printf '%s' "$captured"
 }
 
 read_request_body_checked() {
 	body=""
 	status=0
 
-	body="$(read_request_body)" || status=$?
+	# Sentinel сохраняет завершающий LF для строгой проверки raw form bytes
+	body="$(read_request_body; readStatus=$?; printf '.'; exit "$readStatus")" || status=$?
+	body="${body%.}"
 	case "$status" in
 		2)
 			header_json "413 Payload Too Large"
@@ -135,17 +143,15 @@ read_request_body_checked() {
 			exit 0
 			;;
 	esac
-	printf '%s' "$body"
+	if ! sheepfold_form_validate "$body"; then
+		header_json "400 Bad Request"
+		printf '{"app":"sheepfold","ok":false,"error":"invalid_form_encoding"}\n'
+		exit 0
+	fi
 }
 
 form_get() {
-	key="$1"
-	body="$2"
-	printf '%s' "$body" | tr '&' '\n' | while IFS='=' read -r item_key item_value; do
-		[ "$item_key" = "$key" ] || continue
-		url_decode "$item_value"
-		break
-	done
+	sheepfold_form_get "$1" "$2"
 }
 
 router_control_pair() {
@@ -244,7 +250,7 @@ devices_json() {
 device_action_json() {
 	action="$1" # allow | block | temp-access
 	auth_check
-	body="$(read_request_body_checked)"
+	read_request_body_checked
 	mac="$(form_get mac "$body")"
 
 	if [ -z "$mac" ]; then
@@ -276,11 +282,14 @@ device_action_json() {
 			;;
 		temp-access)
 			minutes="$(form_get minutes "$body")"
-			case "$minutes" in
-				''|*[!0-9]*) minutes=30 ;;
-			esac
-			# Ограничиваем максимум — 24 часа (1440 минут).
-			[ "$minutes" -le 1440 ] || minutes=1440
+			# Не выдаём другое время вместо ошибочного запроса; допускается только 1..1440
+			if ! printf '%s' "$minutes" | grep -Eq '^[0-9]{1,4}$' ||
+			   [ "$minutes" -lt 1 ] || [ "$minutes" -gt 1440 ]; then
+				header_json "400 Bad Request"
+				printf '{"app":"sheepfold","ok":false,"error":"invalid_minutes"}\n'
+				return 0
+			fi
+			minutes="$(printf '%s' "$minutes" | sed 's/^0*//')"
 			ctrl_result="$(/usr/libexec/sheepfold/sheepfold-router-control device-temp-access "$mac" "$minutes" 2>&1)" || ctrl_status="$?"
 			;;
 	esac
@@ -302,7 +311,7 @@ device_action_json() {
 # ---------------------------------------------------------------------------
 global_block_json() {
 	auth_check
-	body="$(read_request_body_checked)"
+	read_request_body_checked
 	enable="$(form_get enable "$body")"
 	confirm="$(form_get confirm "$body")"
 
@@ -394,7 +403,7 @@ log_json() {
 # ---------------------------------------------------------------------------
 log_clear_json() {
 	auth_check
-	body="$(read_request_body_checked)"
+	read_request_body_checked
 	confirm="$(form_get confirm "$body")"
 
 	if [ "$confirm" != "1" ]; then
@@ -409,7 +418,11 @@ log_clear_json() {
 		*) log_file="/tmp/sheepfold/events.log" ;;
 	esac
 
-	: > "$log_file" 2>/dev/null || true
+	if ! ( : > "$log_file" ) 2>/dev/null; then
+		header_json "500 Internal Server Error"
+		printf '{"app":"sheepfold","ok":false,"error":"log_clear_failed"}\n'
+		return 0
+	fi
 
 	header_json "200 OK"
 	printf '{"app":"sheepfold","ok":true,"message":"Log cleared."}\n'
@@ -417,7 +430,7 @@ log_clear_json() {
 
 feedback_json() {
 	auth_check
-	body="$(read_request_body_checked)"
+	read_request_body_checked
 	category="$(form_get category "$body")"
 	subject="$(form_get subject "$body")"
 	message="$(form_get message "$body")"
@@ -463,7 +476,7 @@ support_report_config_json() {
 
 support_report_submit_json() {
 	auth_check
-	body="$(read_request_body_checked)"
+	read_request_body_checked
 	report_id="$(form_get reportId "$body")"
 	recipient_key_id="$(form_get recipientKeyId "$body")"
 	ciphertext="$(form_get ciphertext "$body")"
@@ -555,7 +568,7 @@ router_info_json() {
 # pair_admin_device_json — POST /pair
 # ---------------------------------------------------------------------------
 pair_admin_device_json() {
-	body="$(read_request_body_checked)"
+	read_request_body_checked
 	login="$(form_get login "$body")"
 	code="$(form_get code "$body")"
 	user_agent="${HTTP_USER_AGENT:-Android Sheepfold}"
@@ -694,7 +707,7 @@ gemini_request() {
 }
 
 ai_assistant_json() {
-	body="$(read_request_body_checked)"
+	read_request_body_checked
 	provider="$(form_get provider "$body")"
 	model="$(form_get model "$body")"
 	parent_text="$(form_get message "$body")"
@@ -779,6 +792,13 @@ blocked_public_path() {
 }
 
 blocked_public_path
+
+# Отказ выполняется в основном CGI, а не внутри подстановки отдельного поля
+if ! sheepfold_form_validate "$query_string"; then
+	header_json "400 Bad Request"
+	printf '{"app":"sheepfold","ok":false,"error":"invalid_form_encoding"}\n'
+	exit 0
+fi
 
 case "$method" in
 	OPTIONS)

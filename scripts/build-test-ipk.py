@@ -48,6 +48,19 @@ def read_make_value(name: str) -> str:
     raise RuntimeError(f"Cannot find {name} in package Makefile.")
 
 
+def read_postinst_fragment(start_prefix: str, end_prefix: str) -> str:
+    """Берёт общую миграцию/права библиотек из Makefile без второй расходящейся копии."""
+    lines = (PKG_DIR / "Makefile").read_text(encoding="utf-8").splitlines()
+    for start, line in enumerate(lines):
+        if not line.strip().startswith(start_prefix):
+            continue
+        for end in range(start + 1, len(lines)):
+            if lines[end].strip().startswith(end_prefix):
+                return "\n".join(lines[start:end + 1]).replace("$$", "$")
+        break
+    raise RuntimeError(f"Cannot find complete postinst fragment: {start_prefix}")
+
+
 def read_luci_dependencies() -> str:
     """Переносит зависимости из Makefile без второго расходящегося списка."""
     dependencies = []
@@ -149,6 +162,10 @@ def open_gzip_tar(path: Path) -> tarfile.TarFile:
 def write_control_tar(path: Path, version: str, release: str, variant: str) -> None:
     current_package = package_name(variant)
     dependencies = read_luci_dependencies()
+    access_priority_migration = read_postinst_fragment(
+        "legacy_access_priority=", "ensure_global_option access_priority "
+    )
+    library_permissions = read_postinst_fragment("for library in ", "done")
     ai_postinst_defaults = ""
     ai_cron_jobs = ""
     if variant == "sheepfoldAi":
@@ -275,6 +292,7 @@ ensure_global_option() {{
 ensure_global_option enabled '0'
 ensure_global_option language 'ru'
 ensure_global_option block_on_boot '0'
+{access_priority_migration}
 ensure_global_option new_device_policy 'allow'
 ensure_global_option auto_configure '1'
 ensure_global_option detection_mode 'full'
@@ -430,6 +448,7 @@ esac
 uci -q set sheepfold.global.ui_asset_version='{version}-{release}'
 uci -q commit sheepfold
 find /usr/libexec/sheepfold -type f -exec chmod 0755 {{}} + 2>/dev/null || true
+{library_permissions}
 [ -x /usr/libexec/sheepfold/sheepfold-ipv6-control ] && \
         /usr/libexec/sheepfold/sheepfold-ipv6-control apply >/dev/null 2>&1 || true
 for helper in \\

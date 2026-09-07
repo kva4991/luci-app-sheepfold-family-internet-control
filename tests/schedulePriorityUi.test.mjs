@@ -34,7 +34,7 @@ const ownerProfile = readFileSync('docs/owner-communication-profile.ru.md', 'utf
 const publicClientStatus = readFileSync('package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold/sheepfold-api-client-status', 'utf8');
 
 const legacyOrder = 'emergency_sites no_restrictions blocklist allowlist global_block temp_access device_schedule group_schedule default_access';
-const defaultOrder = 'blocklist admin_devices no_restrictions allowlist global_block temp_access device_schedule group_schedule default_access';
+const defaultOrder = 'no_restrictions blocklist admin_devices allowlist global_block temp_access device_schedule group_schedule default_access';
 
 function runEvaluator(values, weekday = 'mon', minutes = '600', fallbackStatus = 'none') {
   mkdirSync(resolve('.build'), { recursive: true });
@@ -118,7 +118,7 @@ describe('Schedule editor and access priority UI', () => {
       settingsMisc.indexOf('function accessPriorityField()'),
       settingsMisc.indexOf('function scheduleConflictPolicyField()'),
     );
-    assert.match(overview, /var ACCESS_STEPS = \[\s*\['blocklist', 'Blocklist'\],\s*\['admin_devices', 'Admin devices'\]/);
+    assert.match(overview, /var ACCESS_STEPS = \[\s*\['no_restrictions', 'No restrictions group'\],\s*\['blocklist', 'Blocklist'\],\s*\['admin_devices', 'Admin devices'\]/);
     assert.match(priorityField, /deps\.accessSteps\.map/);
     assert.match(priorityField, /The order is temporarily fixed/);
     assert.doesNotMatch(priorityField, /setSettingsDraftOption\('access_priority'/);
@@ -172,7 +172,7 @@ describe('Schedule editor and access priority UI', () => {
     assert.match(evaluator, /schedule_conflict_internet_off/);
     assert.match(evaluator, /Конфликт расписаний для устройства/);
     assert.match(firewall, /sheepfold-schedule-evaluator/);
-    assert.match(clientStatus, /evaluate_schedule/);
+    assert.match(clientStatus, /sheepfold_policy_evaluate/);
     assert.doesNotMatch(publicClientStatus, /"scheduleConflict":/);
     assert.match(publicClientStatus, /"nextAccessChangeTime":/);
     assert.doesNotMatch(publicClientStatus, /Расписания конфликтуют|schedule_conflict_internet/);

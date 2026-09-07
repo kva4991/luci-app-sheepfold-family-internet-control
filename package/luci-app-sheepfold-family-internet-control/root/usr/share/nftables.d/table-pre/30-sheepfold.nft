@@ -14,6 +14,14 @@ set sheepfold_exempt_macs {
 	type ether_addr
 }
 
+set sheepfold_known_macs {
+	type ether_addr
+}
+
+set sheepfold_new_device_ifaces {
+	type ifname
+}
+
 set sheepfold_global_ifaces {
 	type ifname
 }
@@ -83,6 +91,14 @@ chain sheepfold_site_guard {
 	iifname @sheepfold_site_filter_ifaces ip6 daddr @sheepfold_site_block_v6 udp dport 443 counter drop comment "Sheepfold site blocklist QUIC IPv6"
 }
 
+chain sheepfold_new_device_guard {
+	ip daddr @sheepfold_emergency_v4 tcp dport { 80, 443 } counter return
+	ip6 daddr @sheepfold_emergency_v6 tcp dport { 80, 443 } counter return
+	ip daddr @sheepfold_emergency_v4 udp dport 443 counter return
+	ip6 daddr @sheepfold_emergency_v6 udp dport 443 counter return
+	counter drop comment "Sheepfold unknown device restriction"
+}
+
 chain sheepfold_forward_guard {
 	ether saddr @sheepfold_emergency_macs ip daddr @sheepfold_emergency_v4 tcp dport { 80, 443 } counter return comment "Sheepfold emergency web IPv4"
 	ether saddr @sheepfold_emergency_macs ip6 daddr @sheepfold_emergency_v6 tcp dport { 80, 443 } counter return comment "Sheepfold emergency web IPv6"
@@ -96,6 +112,9 @@ chain sheepfold_forward_guard {
 	iifname @sheepfold_global_ifaces ip daddr @sheepfold_emergency_v4 udp dport 443 counter return comment "Sheepfold global emergency QUIC IPv4"
 	iifname @sheepfold_global_ifaces ip6 daddr @sheepfold_emergency_v6 udp dport 443 counter return comment "Sheepfold global emergency QUIC IPv6"
 	ether saddr @sheepfold_restricted_macs counter drop comment "Sheepfold internet restrictions"
+	# Запрет неизвестного MAC не зависит от задержки detector и создания карточки
+	# goto возвращает аварийное исключение в вызывающий fw4, не в фильтр сайтов
+	iifname @sheepfold_new_device_ifaces ether saddr != @sheepfold_known_macs goto sheepfold_new_device_guard
 	jump sheepfold_site_guard
 	iifname @sheepfold_global_ifaces ether saddr @sheepfold_exempt_macs return comment "Sheepfold global exemptions"
 	iifname @sheepfold_global_ifaces counter drop comment "Sheepfold global internet block"

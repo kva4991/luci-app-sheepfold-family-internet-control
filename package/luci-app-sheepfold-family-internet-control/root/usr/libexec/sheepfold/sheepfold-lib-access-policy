@@ -1,0 +1,176 @@
+#!/bin/sh
+# Единый расчёт обычного интернет-доступа для nftables и статуса API
+# Ничего не записывает в UCI; доменные исключения применяются отдельным слоем
+
+sheepfold_policy_get() {
+    uci -q get "$1" 2>/dev/null || true
+}
+
+sheepfold_policy_list_has() {
+    local listName wantedMac listMac
+    listName="$1"
+    wantedMac="$2"
+    for listMac in $(sheepfold_policy_get "sheepfold.$listName.mac"); do
+        [ "$(printf '%s' "$listMac" | tr 'a-z' 'A-Z')" = "$wantedMac" ] && return 0
+    done
+    return 1
+}
+
+sheepfold_policy_kv() {
+    printf '%s\n' "$1" | sed -n "s/^$2=//p" | sed -n '1p'
+}
+
+sheepfold_policy_init() {
+    policyNow="$(date +%s)"
+    policyGlobalBlock="$(sheepfold_policy_get sheepfold.global.block_on_boot)"
+    policyNoRestrictions="$(sheepfold_policy_get sheepfold.no_restrictions.name)"
+    [ -n "$policyNoRestrictions" ] || policyNoRestrictions='No restrictions'
+    policyNewDevice="$(sheepfold_policy_get sheepfold.global.new_device_policy)"
+    case "$policyNewDevice" in
+        restrict|restrict_until_configured) policyNewDevice=restrict ;;
+        *) policyNewDevice=allow ;;
+    esac
+}
+
+sheepfold_policy_evaluate() {
+    local deviceSection deviceMac rawStatus quarantine tempUntil tempAdded wasTemporary
+    local expiredTemporary permanentAllow fallbackAccess scheduleResult scheduleState evaluator
+    deviceSection="$1"
+    deviceMac="$2"
+    rawStatus=new
+    policyGroup=''
+    policyAdmin=0
+    quarantine=''
+    tempUntil=0
+    tempAdded=''
+    if [ -n "$deviceSection" ]; then
+        rawStatus="$(sheepfold_policy_get "sheepfold.$deviceSection.status")"
+        policyGroup="$(sheepfold_policy_get "sheepfold.$deviceSection.group")"
+        policyAdmin="$(sheepfold_policy_get "sheepfold.$deviceSection.admin_device")"
+        quarantine="$(sheepfold_policy_get "sheepfold.$deviceSection.identity_quarantine_mode")"
+    fi
+    policyStatus=allow
+    policyReason=configured_status
+    policyExempt=0
+    policyManagementBlock=0
+    policyScheduleName=''
+    policyConflict=0
+    policyNextEpoch=''
+    policyNextTime=''
+    wasTemporary=0
+    expiredTemporary=0
+    case "$rawStatus" in
+        temp_access|temp-access|temporary)
+            wasTemporary=1
+            tempUntil="$(sheepfold_policy_get "sheepfold.$deviceSection.temp_access_until")"
+            tempAdded="$(sheepfold_policy_get "sheepfold.$deviceSection.temp_access_allowlist_added")"
+            case "$tempUntil" in ''|*[!0-9]*) tempUntil=0 ;; esac
+            [ "${#tempUntil}" -le 10 ] || tempUntil=0
+            if [ "$tempUntil" -le "$policyNow" ]; then
+                expiredTemporary=1
+                # Обычный sync восстанавливает права даже до служебной уборки записи
+                rawStatus="$(sheepfold_policy_get "sheepfold.$deviceSection.temp_access_previous_status")"
+                case "$rawStatus" in
+                    allow|blocked|restricted|scheduled|new) ;;
+                    *) rawStatus=restricted ;;
+                esac
+            fi
+            ;;
+    esac
+    policyListBlocked=0
+    if sheepfold_policy_list_has blocklist "$deviceMac" || [ "$rawStatus" = blocked ] || [ "$rawStatus" = block ]; then
+        policyListBlocked=1
+        policyManagementBlock=1
+    fi
+
+    # Карантин означает возможную подмену прибора и перекрывает сохранённые права,
+    # в том числе «Без ограничений»; управление роутером закрыто при обоих режимах
+    case "$quarantine" in
+        block|restrict)
+            policyManagementBlock=1
+            policyReason=identity_quarantine
+            if [ "$quarantine" = block ] || [ "$policyListBlocked" = 1 ]; then
+                policyStatus=blocked
+            else
+                policyStatus=restricted
+            fi
+            return 0
+            ;;
+    esac
+
+    # Решение владельца 07.09.2026: «Без ограничений» выше чёрного списка устройств
+    # Только интернет: независимый запрет LuCI/SSH/API из списка остаётся в силе
+    if [ -n "$policyGroup" ] && { [ "$policyGroup" = "$policyNoRestrictions" ] || [ "$policyGroup" = no_restrictions ]; }; then
+        policyReason=no_restrictions_group
+        policyExempt=1
+        return 0
+    fi
+    if [ "$policyListBlocked" = 1 ]; then
+        policyStatus=blocked
+        policyReason=blocklist
+        return 0
+    fi
+    if [ "$policyAdmin" = 1 ]; then
+        policyReason=administrator_device
+        policyExempt=1
+        return 0
+    fi
+
+    permanentAllow=0
+    # Технический allowlist старых +N минут не становится постоянным исключением
+    if { [ "$wasTemporary" = 0 ] || [ "$tempAdded" = 0 ]; } && sheepfold_policy_list_has allowlist "$deviceMac"; then
+        permanentAllow=1
+    fi
+    if [ "$rawStatus" = allow ] || [ "$permanentAllow" = 1 ]; then
+        policyReason=allowlist
+        policyExempt=1
+        return 0
+    fi
+    if [ "$policyGlobalBlock" = 1 ]; then
+        policyStatus=blocked
+        policyReason=global_block
+        return 0
+    fi
+    if [ "$wasTemporary" = 1 ] && [ "$expiredTemporary" = 0 ]; then
+        policyStatus=temporary
+        policyReason=temporary_access
+        policyNextEpoch="$tempUntil"
+        policyNextTime="$(date -d "@$tempUntil" +%H:%M 2>/dev/null || date -r "$tempUntil" +%H:%M 2>/dev/null || true)"
+        return 0
+    fi
+
+    case "$rawStatus" in
+        restricted|scheduled) fallbackAccess=block ;;
+        new|unknown|'')
+            [ "$policyNewDevice" = restrict ] && fallbackAccess=block || fallbackAccess=allow
+            ;;
+        *) fallbackAccess=allow ;;
+    esac
+    evaluator="${SHEEPFOLD_SCHEDULE_EVALUATOR:-/usr/libexec/sheepfold/sheepfold-schedule-evaluator}"
+    if [ -n "$deviceSection" ] && [ -x "$evaluator" ]; then
+        # При ошибке вычислителя сохраняем ограничительный fallback, а не срываем
+        # применение остальных устройств; восстановленный статус передаётся явно
+        scheduleResult="$("$evaluator" "$deviceSection" "$fallbackAccess" 2>/dev/null || true)"
+        scheduleState="$(sheepfold_policy_kv "$scheduleResult" status)"
+        case "$scheduleState" in
+            block|allow)
+                [ "$scheduleState" = block ] && policyStatus=blocked || policyStatus=allow
+                policyReason="$(sheepfold_policy_kv "$scheduleResult" reason)"
+                policyScheduleName="$(sheepfold_policy_kv "$scheduleResult" active_schedule)"
+                policyNextTime="$(sheepfold_policy_kv "$scheduleResult" next_change_time)"
+                policyConflict="$(sheepfold_policy_kv "$scheduleResult" conflict)"
+                [ -n "$policyConflict" ] || policyConflict=0
+                return 0
+                ;;
+        esac
+    fi
+    if [ "$fallbackAccess" = block ]; then
+        policyStatus=restricted
+        policyReason=restricted_policy
+        [ "$rawStatus" != scheduled ] || policyReason=schedule_pending_evaluation
+        case "$rawStatus" in new|unknown|'') policyReason=new_device_policy ;; esac
+        [ "$expiredTemporary" != 1 ] || policyReason=temporary_access_expired
+    else
+        case "$rawStatus" in new|unknown|'') policyReason=new_device_policy_allow ;; esac
+    fi
+}

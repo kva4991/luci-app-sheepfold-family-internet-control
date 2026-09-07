@@ -90,9 +90,9 @@ var DEFAULT_SITE_BLOCKLIST_SOURCES = [
 	'URLhaus malware domains | https://urlhaus.abuse.ch/downloads/hostfile/'
 ].join('\n');
 var ACCESS_STEPS = [
+	['no_restrictions', 'No restrictions group'],
 	['blocklist', 'Blocklist'],
 	['admin_devices', 'Admin devices'],
-	['no_restrictions', 'No restrictions group'],
 	['allowlist', 'Allowlist'],
 	['global_block', 'Global internet block'],
 	['temp_access', 'Temporary access'],

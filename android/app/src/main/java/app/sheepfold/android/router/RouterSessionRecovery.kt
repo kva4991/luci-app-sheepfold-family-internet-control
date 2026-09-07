@@ -78,11 +78,10 @@ object RouterSessionEvents {
     val events = mutableEvents.asSharedFlow()
 
     @Synchronized
-    fun report(context: Context, failure: RouterSessionException) {
-        // Параллельные запросы могут получить один и тот же 401. Первый очищает
-        // credential, остальные уже не должны повторно дёргать навигацию. §authrs1
-        if (!SheepfoldConnectionStore.hasConnection(context)) return
-        SheepfoldConnectionStore.clearForPairing(context, failure.reason)
+    fun report(context: Context, failure: RouterSessionException, expected: RouterConnectionRequest) {
+        // Запоздалый ответ старого запроса не должен стереть новую привязку
+        // Проверка и очистка атомарны относительно save; дубль ошибки ничего не меняет
+        if (!SheepfoldConnectionStore.clearForPairingIfCurrent(context, expected, failure.reason)) return
         mutableEvents.tryEmit(failure.reason)
     }
 }
