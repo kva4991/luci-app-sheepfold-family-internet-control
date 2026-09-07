@@ -140,6 +140,14 @@ frpc (непривилегированный UID) -- mTLS --> relay/frps
 
 ## Разделение ключей
 
+Экспериментальный Node transport-клиент (`§rsup001`) принимает только подписанный one-shot
+grant для своего CSR/stream/router/session, отдельного transport SPKI и точного leaf deadline.
+CA не передаётся по этому wire. Token и signed credential response живут только в RAM;
+HMAC snapshot/replay не допускает их сохранения. Неизвестные fields/DER/extensions, поздний
+ответ после local revoke, clock rollback и изменённый duplicate закрывают grant. Это проверка
+протокола, не доказательство живого SSH или изоляции service UID: доверенный процесс/root
+может прочитать собственную память. [Точная граница](remote-support-protocol.ru.md#экспериментальный-transport-профиль).
+
 - Один ключ не используется одновременно для package signing, server messages, TLS и SSH.
 - Приватный identity-ключ роутера создаётся локально и никогда не покидает роутер.
 - Server signing key отделён от TLS private key и от ключа, защищающего claim verifier.

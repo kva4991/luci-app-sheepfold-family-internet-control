@@ -70,6 +70,8 @@
 
 ## Зафиксированные мелочи
 
+- Transport grant и его signed replay содержат token: только RAM, не HMAC snapshot; `X509Certificate.ca=false` недостаточно для точного CA:FALSE, поэтому Node-клиент проверяет DER BasicConstraints отдельно. Это эксперимент, не SSH-ready: [transport-профиль](remote-support-protocol.ru.md#экспериментальный-transport-профиль) (§rsup001).
+
 Краткий реестр. Подробности — по ссылкам.
 
 ### Локализация LuCI
@@ -244,6 +246,7 @@
 - При потере ответа на отзыв повторяется та же подпись/sequence. Новый ответ на тот же запрос
   создавал `sequenceGap`; regression есть в public/private support tests. Replay сравнивает
   все подписанные bytes, а не только одинаковые ID.
+- Недостоверные часы необратимо закрывают test-only control-клиент: восстановление времени не возвращает код, pending request или доступ; точный контракт `clockUntrusted` описан в [протоколе](remote-support-protocol.ru.md) (§rsup001).
 - [Ручной control peer-стенд](../tools/remoteSupport/README.ru.md) открывает только synthetic
   loopback HTTPS и проверяет настоящий private handler/MFA. Это не установленный OpenWrt
   manager и не доказательство FRP. Потеря неподтверждённого запроса до истечения срока требует

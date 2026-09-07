@@ -23,30 +23,45 @@ export class ControlClient {
   #rawKey; #keyId; #bootstrap = null; #pending = null; #lastReply = null;
   #routerId = null; #controlId = null; #outgoing = new Map(); #incoming = new ReplayWindow();
   #state = 'disabled'; #session = null; #code = null; #localClosed = false; #serverReady = false;
+  #clockBlocked = false;
+  #transportCredentials;
 
   constructor({ privateKey, serverKeys, now = () => Math.floor(Date.now() / 1000),
-    uptime = () => performance.now() / 1000 }) {
+    uptime = () => performance.now() / 1000, transportCredentials = false }) {
     if (privateKey?.type !== 'private' || privateKey.asymmetricKeyType !== 'ed25519' ||
         !(serverKeys instanceof Map) || !serverKeys.size || serverKeys.size > 8 ||
-        [...serverKeys.values()].some((key) => key.type !== 'public' || key.asymmetricKeyType !== 'ed25519')) {
+        [...serverKeys.values()].some((key) => key.type !== 'public' || key.asymmetricKeyType !== 'ed25519') ||
+        typeof transportCredentials !== 'boolean') {
       throw new TypeError('Invalid control client keys');
     }
     this.#privateKey = privateKey; this.#serverKeys = new Map(serverKeys);
     this.#now = now; this.#uptime = uptime;
+    this.#transportCredentials = transportCredentials;
     this.#rawKey = createPublicKey(privateKey).export({ format: 'der', type: 'spki' })
       .subarray(-32).toString('base64url');
     this.#keyId = identityKeyId(this.#rawKey);
   }
 
   #time() {
-    const wall = this.#now(); const tick = this.#uptime();
-    requireTime(wall, 'clock');
-    if (!Number.isFinite(tick) || tick < 0 || tick < this.#lastTick || wall < this.#lastWall) {
+    let wall; let tick; let now;
+    try {
+      wall = this.#now(); tick = this.#uptime();
+      requireTime(wall, 'clock');
+      if (!Number.isFinite(tick) || tick < 0 || Object.is(tick, -0) || tick > Number.MAX_SAFE_INTEGER ||
+          tick < this.#lastTick || wall < this.#lastWall) {
+        fail('clockUntrusted');
+      }
+      const anchor = this.#anchor ?? { wall, tick };
+      now = Math.max(wall, anchor.wall + Math.floor(tick - anchor.tick));
+      requireTime(now, 'clock');
+    } catch {
+      // Повреждённые часы не являются wire-ошибкой: прежний код и запросы больше не безопасны
+      this.#clockBlocked = true;
+      this.#bootstrap = null; this.#pending = null; this.#lastReply = null;
       this.#close('securityBlocked'); fail('clockUntrusted');
     }
     this.#anchor ??= { wall, tick };
     this.#lastWall = wall; this.#lastTick = tick;
-    const now = Math.max(wall, this.#anchor.wall + Math.floor(tick - this.#anchor.tick));
     if (this.#session && !this.#localClosed &&
         now >= (this.#session.accessExpiresAt ?? this.#session.claimExpiresAt)) {
       this.#close(this.#session.accessExpiresAt === null ? 'claimExpired' : 'sessionExpired');
@@ -55,8 +70,9 @@ export class ControlClient {
   }
 
   #close(state) {
-    this.#state = state; this.#localClosed = true; this.#code = null;
-    if (state === 'securityBlocked') this.#serverReady = false;
+    this.#state = this.#clockBlocked ? 'securityBlocked' : state;
+    this.#localClosed = true; this.#code = null;
+    if (this.#state === 'securityBlocked') this.#serverReady = false;
     // Поздний ответ можно сверить, но открывающий запрос после локального отзыва уже не повторяется
     if (this.#pending && this.#pending.type !== 'revokeRequest') this.#pending.wire = null;
   }
@@ -87,6 +103,7 @@ export class ControlClient {
   #build(type, payload, streamId, routerId = this.#routerId) {
     if (this.#pending) fail('stateConflict', 'a request is already outstanding');
     const now = this.#time();
+    if (this.#clockBlocked) fail('clockUntrusted');
     const sequence = this.#outgoing.get(streamId) ?? 0;
     const message = validateRouterMessage({ messageType: type, routerId, streamId, messageId: newId(),
       sequence, issuedAt: now, notBefore: now, expiresAt: now + 60, payload });
@@ -118,7 +135,8 @@ export class ControlClient {
 
   capabilities() {
     if (!this.#controlId || this.#session || this.#localClosed) fail('stateConflict');
-    return this.#build('capabilityReport', { profile: controlProfile, capabilities: [...clientCapabilities] },
+    return this.#build('capabilityReport', { profile: controlProfile,
+      capabilities: [...clientCapabilities, ...(this.#transportCredentials ? ['transportCredentialsV1'] : [])] },
       this.#controlId);
   }
 
@@ -196,6 +214,7 @@ export class ControlClient {
   }
 
   accept(wire) {
+    if (this.#clockBlocked) fail('clockUntrusted');
     try {
       const envelope = parseStrictJson(wire, 24576);
       const { payload: message } = verifyEnvelope({ envelope, publicKeys: this.#serverKeys, now: this.#time() });

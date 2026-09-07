@@ -66,6 +66,16 @@ export const checkCatalog = Object.freeze({
 
 export const impactRules = Object.freeze([
   Object.freeze({
+    id: 'remoteSupportProtocol',
+    area: 'Экспериментальный public/private support contract',
+    pattern: /^(?:tools\/remoteSupport\/|tests\/remoteSupportTransport)/,
+    categories: ['security', 'tooling'],
+    checks: ['docs', 'lintJs'],
+    risk: 'critical',
+    review: 'Сверить private vendor pin, CSR/CA/SPKI, RAM-only replay и неизменяемые сроки; Node contract не доказывает SSH или router runtime.',
+    full: true,
+  }),
+  Object.freeze({
     id: 'nativeRelay',
     area: 'Native SFMR1 crypto boundary',
     pattern: /^(?:package\/sheepfold-message-relay-crypto\/|tools\/messageRelay\/(?:.*\.mjs|.*\.sh)|tests\/fixtures\/family-message-relay\/)/,

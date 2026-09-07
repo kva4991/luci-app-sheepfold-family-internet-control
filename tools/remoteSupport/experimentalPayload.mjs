@@ -8,7 +8,7 @@ import { decodeBase64Url, fail, requireExactKeys, requireTime } from './protocol
 
 export const controlProfile = 'sheepfold-support-server-experimental-1';
 export const clientCapabilities = Object.freeze(['claimV1', 'localRevokeV1']);
-const allCapabilities = [...clientCapabilities, 'mutualTlsTransportV1', 'typedGatewayV1', 'safeApplyV1'];
+const allCapabilities = [...clientCapabilities, 'mutualTlsTransportV1', 'typedGatewayV1', 'safeApplyV1', 'transportCredentialsV1'];
 export const terminalStates = Object.freeze([
   'claimBlocked', 'claimExpired', 'revoked', 'sessionExpired', 'securityBlocked',
 ]);
