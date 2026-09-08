@@ -1,5 +1,12 @@
 # Контракт API Sheepfold
 
+С r292 отказ чтения token-записи, SHA-256 или часов при server-bound авторизации
+даёт **503 `auth_backend_unavailable`**, а не окончательный 401; прежняя привязка не
+отзывается сервером. Неизвестный/истёкший Bearer и повреждённые метаданные остаются
+ошибками авторизации. Это не новая политика повторов команд и не типизация всех
+возможных отказов UCI/storage. Подробности: [B35–B37 и проверки](audit-fixes-r292.ru.md).
+
+
 <!-- §apicon1 -->
 
 Этот документ задаёт общие правила router API. Точный список endpoint и полей находится в [`backend-design.ru.md`](backend-design.ru.md) и [`android-openwrt-api.ru.md`](android-openwrt-api.ru.md).

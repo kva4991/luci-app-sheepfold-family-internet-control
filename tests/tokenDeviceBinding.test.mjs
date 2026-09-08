@@ -118,10 +118,7 @@ uci() {
   esac
 }
 sha256_value() { printf 'knownhash\\n'; }
-token_file_get() { sed -n "s/^$2=//p" "$1" | sed -n '1p'; }
-token_file_is_legacy() { return 1; }
-token_normalize_mac() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
-token_valid_mac() { printf '%s' "$1" | grep -Eq '^([0-9A-F]{2}:){5}[0-9A-F]{2}$'; }
+${readProjectFile('root/usr/libexec/sheepfold/sheepfold-token-common')}
 token_device_is_admin_paired() {
   [ '${adminPaired ? 1 : 0}' = 1 ] && [ "$1" = 8 ] && [ "$2" = 'F2:D2:99:48:B2:D6' ]
 }
@@ -322,8 +319,9 @@ describe('Administrator token device binding', () => {
 
     assert.match(control, /authenticate_token\(\)/);
     assert.match(control, /local bearer client_ip token_file hash now/);
-    assert.match(control, /token_file_get "\$token_file" device_id/);
-    assert.match(control, /token_file_get "\$token_file" mac/);
+    assert.match(control, /token_load_bound_file "\$token_file"/);
+    assert.match(control, /device_id="\$TOKEN_RECORD_DEVICE_ID"/);
+    assert.match(control, /mac="\$TOKEN_RECORD_MAC"/);
     assert.match(control, /token_request_source_matches "\$client_ip" "\$mac"/);
     assert.match(control, /authenticate_token "\$\{2:-\}" "\$\{3:-\}"/);
     assert.match(control, /revoke-device-tokens/);

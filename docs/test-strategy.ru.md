@@ -76,6 +76,14 @@ npm.cmd run quality:changed
 
 Она запускает `git diff --check`, изменённую документацию, применимый ESLint/Android Lint и объединённый набор test-файлов без дублей. Перед push исполняемого кода `npm.cmd run quality:gate` выполняет строгий полный прогон. Подробная граница и JSON-отчёт описаны в [`quality-assistants/README.ru.md`](quality-assistants/README.ru.md).
 
+## Авторизация и установочный guard r292
+
+Для текущей итерации владелец явно выбрал только изменённую область и соседей вместо
+полного runner. Новые `tests/tokenAuthenticationRuntime.test.mjs` (42 сценария) и
+`tests/packageHardeningRuntime.test.mjs` (7 сценариев) защищают reader/hash/HTTP и реальный
+staged-root guard. Соседние наборы, команды, 503/401 контракт и ограничения указаны в
+[отчёте r292](audit-fixes-r292.ru.md). Будущий полный gate перед публикацией этим не закрыт.
+
 ## Привязка, случайность и публикация токена r291
 
 Запускать из корня checkout в Linux с Node и BusyBox/обычными файловыми утилитами;

@@ -38,12 +38,61 @@ token_file_get() {
 	sed -n "s/^${key}=//p" "$file" | sed -n '1p'
 }
 
+# Legacy — только исторический пустой обычный файл. Ошибка чтения или
+# повреждённая непустая запись не должны включать более слабую совместимость.
 token_file_is_legacy() {
+	[ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] && [ ! -s "$1" ]
+}
+
+# Читаем все поля за один проход и используем их только после успешного EOF.
+# Ни source/eval, ни отдельные sed-чтения: дубли и частичный вывод не являются
+# привязкой. 4 = повреждённая/устаревшая запись; 5 = отказ читающего backend.
+token_load_bound_file() {
+	local file parsed parse_status field value
 	file="$1"
-	[ -r "$file" ] || return 1
-	[ ! -s "$file" ] && return 0
-	token_file_get "$file" login >/dev/null 2>&1 || return 0
-	return 1
+	TOKEN_RECORD_LOGIN='' TOKEN_RECORD_DEVICE_ID='' TOKEN_RECORD_MAC=''
+	TOKEN_RECORD_ISSUED_AT='' TOKEN_RECORD_EXPIRES_AT=''
+	[ -f "$file" ] && [ ! -L "$file" ] || return 4
+	[ -r "$file" ] || return 5
+	parse_status=0
+	parsed="$(LC_ALL=C awk '
+		{
+			separator = index($0, "=")
+			key = substr($0, 1, separator - 1)
+			value = substr($0, separator + 1)
+			if (!separator || key !~ /^(login|device_id|mac|issued_at|expires_at)$/ ||
+				seen[key]++ || $0 ~ /[[:cntrl:]]/) invalid = 1
+			values[key] = value
+		}
+		END {
+			if (invalid || seen["login"] != 1 || seen["device_id"] != 1 ||
+				seen["mac"] != 1 || seen["issued_at"] != 1 || seen["expires_at"] != 1 ||
+				values["login"] !~ /^[A-Za-z0-9_.@+-]+$/ ||
+				values["device_id"] !~ /^[A-Za-z0-9_.:-]+$/ ||
+				values["issued_at"] !~ /^[0-9]+$/ || values["expires_at"] !~ /^[0-9]+$/) exit 42
+			mac = toupper(values["mac"])
+			if (split(mac, octets, ":") != 6) exit 42
+			for (i = 1; i <= 6; i++) if (octets[i] !~ /^[0-9A-F][0-9A-F]$/) exit 42
+			printf "login=%s\ndevice_id=%s\nmac=%s\nissued_at=%s\nexpires_at=%s\n", \
+				values["login"], values["device_id"], mac, values["issued_at"], values["expires_at"]
+		}' "$file")" || parse_status=$?
+	case "$parse_status" in 0) ;; 42) return 4 ;; *) return 5 ;; esac
+	# Не pipe: значения должны остаться в текущей функции, а не subshell цикла.
+	while IFS='=' read -r field value; do
+		case "$field" in
+			login) TOKEN_RECORD_LOGIN="$value" ;;
+			device_id) TOKEN_RECORD_DEVICE_ID="$value" ;;
+			mac) TOKEN_RECORD_MAC="$value" ;;
+			issued_at) TOKEN_RECORD_ISSUED_AT="$value" ;;
+			expires_at) TOKEN_RECORD_EXPIRES_AT="$value" ;;
+		esac
+	done <<EOF_TOKEN_RECORD
+$parsed
+EOF_TOKEN_RECORD
+	[ -n "$TOKEN_RECORD_LOGIN" ] && [ -n "$TOKEN_RECORD_DEVICE_ID" ] &&
+		[ -n "$TOKEN_RECORD_MAC" ] && [ -n "$TOKEN_RECORD_ISSUED_AT" ] &&
+		[ -n "$TOKEN_RECORD_EXPIRES_AT" ] || return 5
+	return 0
 }
 
 # Публикует только новую запись. Subshell изолирует переменные/umask/trap от pairing.
@@ -113,30 +162,30 @@ token_device_is_admin_paired() {
 }
 
 token_bound_file_valid() {
-	local file client_device_id client_mac now login device_id mac issued_at expires_at normalized_client_mac
+	local file client_device_id client_mac now login device_id mac issued_at expires_at normalized_client_mac expected_login
 	file="$1"
 	client_device_id="$2"
 	client_mac="$3"
 	now="${4:-$(date +%s)}"
+	expected_login="${5:-}"
 	[ -n "$client_device_id" ] || return 1
 	normalized_client_mac="$(token_normalize_mac "$client_mac")"
 	token_valid_mac "$normalized_client_mac" || return 1
+	case "$now" in ''|*[!0-9]*) return 1 ;; esac
 
 	if token_file_is_legacy "$file"; then
 		token_device_is_admin_paired "$client_device_id" "$normalized_client_mac"
 		return $?
 	fi
 
-	login="$(token_file_get "$file" login)"
-	device_id="$(token_file_get "$file" device_id)"
-	mac="$(token_file_get "$file" mac)"
-	issued_at="$(token_file_get "$file" issued_at)"
-	expires_at="$(token_file_get "$file" expires_at)"
-
-	[ -n "$login" ] && [ -n "$device_id" ] && [ -n "$mac" ] || return 1
-	token_valid_mac "$mac" || return 1
-	case "$issued_at" in ''|*[!0-9]*) issued_at=0 ;; esac
-	case "$expires_at" in ''|*[!0-9]*) expires_at=0 ;; esac
+	token_load_bound_file "$file" || return 1
+	login="$TOKEN_RECORD_LOGIN"
+	device_id="$TOKEN_RECORD_DEVICE_ID"
+	mac="$TOKEN_RECORD_MAC"
+	issued_at="$TOKEN_RECORD_ISSUED_AT"
+	expires_at="$TOKEN_RECORD_EXPIRES_AT"
+	# Имя hash-файла вычислено для конкретного логина; метаданные обязаны совпасть.
+	[ -z "$expected_login" ] || [ "$login" = "$expected_login" ] || return 1
 	[ "$expires_at" -le 0 ] || [ "$now" -le "$expires_at" ] || return 1
 	[ "$client_device_id" = "$device_id" ] || return 1
 	[ "$normalized_client_mac" = "$mac" ] || return 1

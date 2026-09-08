@@ -1,5 +1,11 @@
 # Current Implementation Status
 
+Focused local fixes: 2026-09-08, **r292**, based on r291 `7f4764e`. Complete bound-token
+validation, explicit SHA-256 failure handling, temporary authentication errors (503),
+and delegation-aware installation hardening are corrected. The owner requested targeted
+tests only: see the [r292 record](audit-fixes-r292.ru.md) and [38-card register](bug-register.ru.md).
+No full-suite, hardware, SDK or Android-build completion is claimed for r292.
+
 Focused local fixes: 2026-09-08, **r291**, based on r290 `ea56d55`. Pairing now uses
 the strict common form boundary, rejects failed/short entropy reads and failed digests,
 publishes complete private token records without replacing existing files, and explicitly
@@ -133,10 +139,10 @@ quarantine, automatic groups, notifications and firewall effects is
 [`device-passport-and-control.ru.md`](device-passport-and-control.ru.md) (§devpas1). Focused
 device documents supplement that contract instead of redefining it.
 
-Current local r291 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
+Current local r292 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-291_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-292_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.

@@ -82,6 +82,12 @@ require_admin() {
     auth_status=0
     auth_output="$(/usr/libexec/sheepfold/sheepfold-router-control authenticate-token "$bearer" "$client_ip" 2>/dev/null)" || auth_status=$?
     if [ "$auth_status" -ne 0 ]; then
+        # Отказ проверки не означает отзыв credential: 503 сохраняет привязку APK.
+        if [ "$auth_status" -eq 5 ]; then
+            header_json "503 Service Unavailable"
+            printf '{"app":"sheepfold","ok":false,"error":"auth_backend_unavailable"}\n'
+            exit 0
+        fi
         header_json "401 Unauthorized"
         case "$auth_status" in
             3)

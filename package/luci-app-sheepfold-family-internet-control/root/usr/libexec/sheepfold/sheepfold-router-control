@@ -94,16 +94,23 @@ ensure_token_storage() {
     ln -s "$TOKEN_STATE_DIR" "$TOKEN_RUNTIME_LINK"
 }
 
-sha256_value() {
+sha256_value() (
+    # Результат последнего cut/awk не подтверждает работу hash-процесса.
+    # Сначала проверяем завершение, затем ровно 64 hex-символа; MD5 не допустим.
     if command -v sha256sum >/dev/null 2>&1; then
-        printf '%s' "$1" | sha256sum | cut -d' ' -f1
+        digest="$(printf '%s' "$1" | sha256sum)" || return 1
+        digest="${digest%% *}"
     elif command -v openssl >/dev/null 2>&1; then
-        printf '%s' "$1" | openssl dgst -sha256 | awk '{print $NF}'
+        digest="$(printf '%s' "$1" | openssl dgst -sha256)" || return 1
+        digest="${digest##* }"
     else
         echo "SHA-256 implementation is unavailable." >&2
         return 1
     fi
-}
+    case "$digest" in ''|*[!0-9a-fA-F]*) return 1 ;; esac
+    [ "${#digest}" -eq 64 ] || return 1
+    printf '%s' "$digest" | tr 'A-F' 'a-f'
+)
 
 check_token() {
     local bearer client_device_id client_mac token_file hash now section login
@@ -120,7 +127,7 @@ check_token() {
         token_file="$TOKEN_STATE_DIR/$hash"
         [ -f "$token_file" ] || continue
         now="$(date +%s)"
-        if token_bound_file_valid "$token_file" "$client_device_id" "$client_mac" "$now"; then
+        if token_bound_file_valid "$token_file" "$client_device_id" "$client_mac" "$now" "$login"; then
             printf 'ok\n'
             return 0
         fi
@@ -132,7 +139,7 @@ check_token() {
 }
 
 authenticate_token() {
-    local bearer client_ip token_file hash now file_login device_id mac issued_at expires_at section login
+    local bearer client_ip token_file hash now file_login device_id mac issued_at expires_at section login record_status
     bearer="${1:-}"
     client_ip="${2:-}"
 
@@ -142,26 +149,29 @@ authenticate_token() {
     for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=administrator$/\1/p'); do
         login="$(uci -q get "sheepfold.$section.login" 2>/dev/null || true)"
         [ -n "$login" ] || continue
-        hash="$(sha256_value "$login:$bearer")" || return 2
+        hash="$(sha256_value "$login:$bearer")" || return 5
         token_file="$TOKEN_STATE_DIR/$hash"
         [ -f "$token_file" ] || continue
 
         # uhttpd на части OpenWrt-сборок не передаёт произвольные X-Sheepfold-*
         # заголовки CGI. Поэтому доверенные ID и MAC берём только из серверной
         # записи токена, а телефон предъявляет один Bearer. §pairtx1 §authrs1
-        token_file_is_legacy "$token_file" && return 4
-        file_login="$(token_file_get "$token_file" login)"
-        device_id="$(token_file_get "$token_file" device_id)"
-        mac="$(token_normalize_mac "$(token_file_get "$token_file" mac)")"
-        issued_at="$(token_file_get "$token_file" issued_at)"
-        expires_at="$(token_file_get "$token_file" expires_at)"
+        record_status=0
+        token_load_bound_file "$token_file" || record_status=$?
+        [ "$record_status" -eq 0 ] || return "$record_status"
+        file_login="$TOKEN_RECORD_LOGIN"
+        device_id="$TOKEN_RECORD_DEVICE_ID"
+        mac="$TOKEN_RECORD_MAC"
+        issued_at="$TOKEN_RECORD_ISSUED_AT"
+        expires_at="$TOKEN_RECORD_EXPIRES_AT"
 
         [ "$file_login" = "$login" ] || return 4
         [ -n "$device_id" ] || return 4
         token_valid_mac "$mac" || return 4
         case "$issued_at" in ''|*[!0-9]*) return 4 ;; esac
         case "$expires_at" in ''|*[!0-9]*) return 4 ;; esac
-        now="$(date +%s)"
+        now="$(date +%s)" || return 5
+        case "$now" in ''|*[!0-9]*) return 5 ;; esac
         [ "$expires_at" -le 0 ] || [ "$now" -le "$expires_at" ] || return 2
         token_device_is_admin_paired "$device_id" "$mac" || return 4
         token_request_source_matches "$client_ip" "$mac" || return 3
@@ -186,7 +196,7 @@ token_login() {
         hash="$(sha256_value "$login:$bearer")" || return 1
         token_file="$TOKEN_STATE_DIR/$hash"
         [ -f "$token_file" ] || continue
-        if token_bound_file_valid "$token_file" "$client_device_id" "$client_mac" "$(date +%s)"; then
+        if token_bound_file_valid "$token_file" "$client_device_id" "$client_mac" "$(date +%s)" "$login"; then
             printf '%s\n' "$login"
             return 0
         fi

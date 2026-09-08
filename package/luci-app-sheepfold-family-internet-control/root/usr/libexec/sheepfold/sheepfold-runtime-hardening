@@ -50,6 +50,7 @@ TLS_FINGERPRINT="$(path /usr/libexec/sheepfold/sheepfold-tls-fingerprint)"
 HASH_COMMON="$(path /usr/libexec/sheepfold/sheepfold-hash-common)"
 LOCK_COMMON="$(path /usr/libexec/sheepfold/sheepfold-lock-common)"
 FORM_COMMON="$(path /usr/libexec/sheepfold/sheepfold-lib-form)"
+POLICY_COMMON="$(path /usr/libexec/sheepfold/sheepfold-lib-access-policy)"
 FIREWALL="$(path /usr/libexec/sheepfold/sheepfold-firewall)"
 SCHEDULE_EVALUATOR="$(path /usr/libexec/sheepfold/sheepfold-schedule-evaluator)"
 EMERGENCY_SITES="$(path /usr/libexec/sheepfold/sheepfold-emergency-sites)"
@@ -90,7 +91,7 @@ for required in \
 	"$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS" \
     "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP" "$DEVICE_SSDP_UCODE" "$DEVICE_UPNP_DESCRIPTION" "$DEVICE_WSD" "$DEVICE_WSD_UCODE" "$DEVICE_IDENTITY" "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" \
     "$DHCP_SIGNALS" "$LED_CONTROL" "$IPV6_CONTROL" "$PACKAGE_MANAGER" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-	"$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$API_RATE_LIMIT" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$SIM_MONITOR" "$CHILD_WIFI_MONITOR" "$TLS_FINGERPRINT" "$HASH_COMMON" "$LOCK_COMMON" "$FORM_COMMON" \
+	"$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$API_RATE_LIMIT" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$SIM_MONITOR" "$CHILD_WIFI_MONITOR" "$TLS_FINGERPRINT" "$HASH_COMMON" "$LOCK_COMMON" "$FORM_COMMON" "$POLICY_COMMON" \
     "$FIREWALL" "$SCHEDULE_EVALUATOR" "$EMERGENCY_SITES" "$COUNTRY_PROFILE" \
     "$COUNTRY_PROFILE_RU" "$COUNTRY_PROFILE_BY" "$COUNTRY_PROFILE_CN" "$SITE_LISTS" "$DOMAIN_POLICY" \
     "$ADGUARD_ADAPTER" "$ADGUARD_FEED" $VARIANT_REQUIRED \
@@ -114,7 +115,7 @@ for executable in \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
-chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$FORM_COMMON" ${JSON_COMMON:+"$JSON_COMMON"} "$ACL" "$PRIVACY_NOTICE" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
+chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$FORM_COMMON" "$POLICY_COMMON" ${JSON_COMMON:+"$JSON_COMMON"} "$ACL" "$PRIVACY_NOTICE" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
     "$COUNTRY_PROFILE_RU" "$COUNTRY_PROFILE_BY" "$COUNTRY_PROFILE_CN" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND"
 
 mkdir -p "$(path /etc/sheepfold/tokens)"
@@ -175,7 +176,9 @@ grep -q 'pair_restore_snapshot' "$PAIR_DEVICE" || die "pairing has no commit-fai
 grep -q 'token_write_bound_file' "$PAIR_COMMON" || die "pairing does not store token device metadata"
 grep -q 'token_device_is_admin_paired' "$TOKEN_COMMON" || die "token device binding helper is missing"
 grep -q 'authenticate-token)' "$CONTROL" || die "server-side bound-token authentication is missing"
-grep -q 'token_file_get "\$token_file" device_id' "$CONTROL" || die "API auth does not read server-bound device id"
+grep -q 'token_load_bound_file "\$token_file"' "$CONTROL" || die "API auth does not validate the complete bound token"
+grep -q 'device_id="\$TOKEN_RECORD_DEVICE_ID"' "$CONTROL" || die "API auth does not read server-bound device id"
+grep -q 'token_load_bound_file()' "$TOKEN_COMMON" || die "bound token record reader is missing"
 grep -q 'authenticate-token "\$bearer" "\$client_ip"' "$CGI" || die "CGI does not use server-side bound-token authentication"
 ! grep -q 'HTTP_X_SHEEPFOLD_DEVICE_ID\|HTTP_X_SHEEPFOLD_DEVICE_MAC' "$CGI" || \
     die "CGI trusts optional client identity headers"
@@ -211,10 +214,13 @@ grep -q 'HISTORY_RETENTION_SECONDS=.*7776000' "$CHILD_WIFI_MONITOR" || die "chil
 ! grep -q 'bssid=' "$CHILD_WIFI_MONITOR" || die "raw child Wi-Fi BSSID can be stored on the router"
 grep -q 'child-wifi-history-clear' "$CONTROL" || die "child Wi-Fi history cannot be cleared from LuCI"
 
-# Статус клиента учитывает blocklist, временный доступ и глобальную блокировку.
-grep -q 'global_block' "$CLIENT_STATUS" || die "effective status ignores global block"
-grep -q 'temporary_access_expired' "$CLIENT_STATUS" || die "effective status ignores expired temporary access"
-grep -q 'schedule_pending_evaluation' "$CLIENT_STATUS" || die "scheduled status still claims an unverified result"
+# С r287 расчёт вынесен в общую библиотеку. Проверяем и подключение, и её
+# содержимое: поиск прежних строк в тонком wrapper отклонял исправный postinst.
+grep -q '^\. "\$POLICY_COMMON"' "$CLIENT_STATUS" || die "effective status does not load the shared policy"
+grep -q 'sheepfold_policy_evaluate "\$device_section" "\$client_mac"' "$CLIENT_STATUS" || die "effective status does not invoke the shared policy"
+grep -q 'global_block' "$POLICY_COMMON" || die "effective status ignores global block"
+grep -q 'temporary_access_expired' "$POLICY_COMMON" || die "effective status ignores expired temporary access"
+grep -q 'schedule_pending_evaluation' "$POLICY_COMMON" || die "scheduled status still claims an unverified result"
 
 # Автоопределение использует независимые сигналы и не повторяет побочные действия.
 grep -q 'DNSMASQ_VENDOR_CLASS' "$DHCP_SIGNALS" || die "DHCP vendor-class collection is missing"
@@ -342,7 +348,7 @@ for script in \
     "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
     "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$FIREWALL" "$SCHEDULE_EVALUATOR" \
     "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$ADGUARD_ADAPTER" "$ADGUARD_FEED" \
-	"$PAIR_API" "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$TLS_FINGERPRINT" \
+	"$PAIR_API" "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$POLICY_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$TLS_FINGERPRINT" \
     $VARIANT_EXECUTABLES "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do
