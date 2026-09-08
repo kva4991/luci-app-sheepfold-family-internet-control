@@ -208,8 +208,11 @@ test('Wi-Fi projection and writes stay behind administrator auth and verified ro
 });
 
 test('parentDeviceOwnersUseValidatedLoginOnlyForAdminDevices', () => {
-  const start = routerControlLegacy.indexOf('list_devices() {');
-  const end = routerControlLegacy.indexOf('\n}', start) + 2;
+  // Исполняем serializer вместе с listing: извлечение одной функции теряет зависимость
+  const start = routerControlLegacy.indexOf('json_escape_device_value() {');
+  const listingStart = routerControlLegacy.indexOf('list_devices() {');
+  const end = routerControlLegacy.indexOf('\n}', listingStart) + 2;
+  assert.ok(start >= 0 && listingStart > start && end > listingStart);
   const shell = String.raw`
 uci() {
   while [ "$1" = -q ]; do shift; done

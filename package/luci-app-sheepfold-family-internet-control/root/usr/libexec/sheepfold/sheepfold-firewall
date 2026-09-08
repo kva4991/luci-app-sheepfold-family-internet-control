@@ -109,6 +109,7 @@ collect_lan_interfaces() {
 
 sets_available() {
         command -v nft >/dev/null 2>&1 || return 1
+        nft list chain inet fw4 sheepfold_sync_marker >/dev/null 2>&1 &&
         nft list chain inet fw4 sheepfold_home_input >/dev/null 2>&1 &&
         nft list set inet fw4 sheepfold_block_macs >/dev/null 2>&1 &&
         nft list set inet fw4 sheepfold_management_block_macs >/dev/null 2>&1 &&
@@ -127,6 +128,14 @@ sets_available() {
                 nft list set inet fw4 sheepfold_site_allow_v6 >/dev/null 2>&1 &&
                 nft list set inet fw4 sheepfold_site_block_v4 >/dev/null 2>&1 &&
                 nft list set inet fw4 sheepfold_site_block_v6 >/dev/null 2>&1
+}
+
+runtime_matches_hash() {
+        # Файл в RAM переживает пересборку fw4, а правило в служебной цепочке — нет
+        # Проверяем поколение runtime, не выдавая существование пустых sets за успех
+        local marker
+        marker="$(nft list chain inet fw4 sheepfold_sync_marker 2>/dev/null)" || return 1
+        printf '%s\n' "$marker" | grep -qF "comment \"sheepfold-state:$1\""
 }
 
 ensure_sets() {
@@ -155,7 +164,7 @@ refresh_empty_emergency_sets() {
         case "$last" in ''|*[!0-9]*) last=0 ;; esac
         [ $((now - last)) -ge 300 ] || return 0
         printf '%s\n' "$now" > "$stamp"
-        # fw4 reload очищает IP-наборы, но не UCI. Восстанавливаем их отдельно,
+        # Пересоздание таблицы очищает IP-наборы, но не UCI. Восстанавливаем их отдельно,
         # не заставляя основную синхронизацию ждать сетевые DNS-ответы. §emerg1
         # Фоновый DNS refresh не должен унаследовать fd 9 и удерживать общий
         # firewall lock после завершения короткой nftables-транзакции.
@@ -219,7 +228,10 @@ collect_state() {
         local policy_macs policy_entry
         policy_macs="$STATE_DIR/policy.macs"
         : > "$policy_macs"
-        sheepfold_policy_init
+        sheepfold_policy_init || {
+                logger -t sheepfold "Sheepfold configuration is unavailable; keeping applied firewall state"
+                return 1
+        }
         for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
                 mac="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
                 valid_mac "$mac" || continue
@@ -347,7 +359,7 @@ sync_sets() {
 	current_hash="$( { state_input "$block_file" "$management_block_file" "$restricted_file" "$exempt_file" "$global_iface_file" "$emergency_mac_file" \
 		"$site_allow_mac_file" "$site_block_exempt_file" "$site_filter_iface_file" "$known_file" "$new_iface_file"; printf '%s\n' "$home_rules"; } | sheepfold_state_hash_stdin)"
         previous_hash="$(cat "$STATE_HASH" 2>/dev/null || true)"
-        if [ "$force_sync" != 1 ] && [ "$reset_domain_ips" != 1 ] && [ "$current_hash" = "$previous_hash" ] && sets_available; then
+        if [ "$force_sync" != 1 ] && [ "$reset_domain_ips" != 1 ] && [ "$current_hash" = "$previous_hash" ] && sets_available && runtime_matches_hash "$current_hash"; then
                 refresh_empty_emergency_sets
                 return 0
         fi
@@ -390,6 +402,9 @@ sync_sets() {
                 write_add_command ifname sheepfold_site_filter_ifaces "$site_filter_iface_file"
                 # Допуск API и запреты управления применяются одной атомарной транзакцией
                 printf '%s\n' "$home_rules"
+                # Маркер не участвует в трафике и подтверждается вместе со всеми sets
+                printf 'flush chain inet fw4 sheepfold_sync_marker\n'
+                printf 'add rule inet fw4 sheepfold_sync_marker counter comment "sheepfold-state:%s"\n' "$current_hash"
         } > "$batch"
 
         nft -f "$batch" || return 1
@@ -403,25 +418,31 @@ sync_sets() {
 }
 
 clear_sets() {
-        sets_available || return 0
-        nft flush chain inet fw4 sheepfold_home_input
-        nft flush set inet fw4 sheepfold_block_macs
-        nft flush set inet fw4 sheepfold_management_block_macs
-        nft flush set inet fw4 sheepfold_restricted_macs
-        nft flush set inet fw4 sheepfold_exempt_macs
-        nft flush set inet fw4 sheepfold_known_macs
-        nft flush set inet fw4 sheepfold_new_device_ifaces
-        nft flush set inet fw4 sheepfold_global_ifaces
-        nft flush set inet fw4 sheepfold_emergency_macs
-        nft flush set inet fw4 sheepfold_emergency_v4
-        nft flush set inet fw4 sheepfold_emergency_v6
-        nft flush set inet fw4 sheepfold_site_allow_macs
-        nft flush set inet fw4 sheepfold_site_block_exempt_macs
-        nft flush set inet fw4 sheepfold_site_filter_ifaces
-        nft flush set inet fw4 sheepfold_site_allow_v4
-        nft flush set inet fw4 sheepfold_site_allow_v6
-        nft flush set inet fw4 sheepfold_site_block_v4
-        nft flush set inet fw4 sheepfold_site_block_v6
+        local batch set_name
+        # Не требуем новую схему целиком: prerm должен убрать и старую версию,
+        # а не оставить её ограничения при отсутствии добавленной позже цепочки
+        command -v nft >/dev/null 2>&1 || return 0
+        mkdir -p "$STATE_DIR"
+        batch="$STATE_DIR/clear.nft"
+        {
+                for set_name in sheepfold_home_input sheepfold_sync_marker; do
+                        if nft list chain inet fw4 "$set_name" >/dev/null 2>&1; then
+                                printf 'flush chain inet fw4 %s\n' "$set_name"
+                        fi
+                done
+                for set_name in sheepfold_block_macs sheepfold_management_block_macs \
+                        sheepfold_restricted_macs sheepfold_exempt_macs sheepfold_known_macs \
+                        sheepfold_new_device_ifaces sheepfold_global_ifaces sheepfold_emergency_macs \
+                        sheepfold_emergency_v4 sheepfold_emergency_v6 sheepfold_site_allow_macs \
+                        sheepfold_site_block_exempt_macs sheepfold_site_filter_ifaces \
+                        sheepfold_site_allow_v4 sheepfold_site_allow_v6 sheepfold_site_block_v4 sheepfold_site_block_v6; do
+                        if nft list set inet fw4 "$set_name" >/dev/null 2>&1; then
+                                printf 'flush set inet fw4 %s\n' "$set_name"
+                        fi
+                done
+        } > "$batch"
+        # Отказ любой команды не должен оставлять наполовину снятые ограничения
+        [ ! -s "$batch" ] || nft -f "$batch" || return 1
         rm -f "$STATE_HASH"
 }
 

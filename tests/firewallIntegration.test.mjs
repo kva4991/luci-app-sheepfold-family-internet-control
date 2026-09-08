@@ -53,7 +53,9 @@ describe('fw4 access enforcement and integration profiles', () => {
     assert.doesNotMatch(implementation, /(?:meta|ct)\s+mark/i);
     assert.doesNotMatch(implementation, /\bip\s+(?:rule|route)\b/i);
     assert.doesNotMatch(implementation, /PodkopTable/);
-    assert.match(firewall, /nft flush set inet fw4 sheepfold_block_macs/);
+    assert.match(firewall, /flush set inet fw4 sheepfold_block_macs/);
+    assert.match(tableSnippet, /chain sheepfold_sync_marker/);
+    assert.match(firewall, /runtime_matches_hash/);
   });
 
   it('syncs enforcement after UCI changes and restores sets after fw4 reload', () => {

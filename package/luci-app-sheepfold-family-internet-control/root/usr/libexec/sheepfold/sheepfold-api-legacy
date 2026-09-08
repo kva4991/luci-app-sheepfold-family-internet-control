@@ -238,9 +238,15 @@ client_status_json() {
 # ---------------------------------------------------------------------------
 devices_json() {
 	auth_check
-	output="$(/usr/libexec/sheepfold/sheepfold-router-control list-devices 2>/dev/null || true)"
+	# Сбой backend и пустой вывод не означают, что у семьи исчезли все устройства
+	# Проверяем до заголовка 200 и не публикуем частичный результат команды
+	if ! output="$(/usr/libexec/sheepfold/sheepfold-router-control list-devices 2>/dev/null)" || [ -z "$output" ]; then
+		header_json "503 Service Unavailable"
+		printf '{"app":"sheepfold","ok":false,"error":"devices_unavailable","message":"Could not read the device list."}\n'
+		return 0
+	fi
 	header_json "200 OK"
-	printf '{"app":"sheepfold","ok":true,"devices":%s}\n' "${output:-[]}"
+	printf '{"app":"sheepfold","ok":true,"devices":%s}\n' "$output"
 }
 
 # ---------------------------------------------------------------------------

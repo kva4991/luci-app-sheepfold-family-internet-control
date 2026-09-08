@@ -91,6 +91,8 @@ export const testCategories = Object.freeze({
     'countryProfiles.test.mjs',
   ],
   access: [
+    'readModelRuntime.test.mjs',
+    'recoveryRuntime.test.mjs',
     'accessPolicyRuntime.test.mjs',
     'allowlistUi.test.mjs',
     'androidPairingDiscoveryAndListUi.test.mjs',
@@ -160,6 +162,8 @@ export const testCategories = Object.freeze({
     'siteListResilience.test.mjs',
   ],
   backend: [
+    'readModelRuntime.test.mjs',
+    'recoveryRuntime.test.mjs',
     'apiFormRuntime.test.mjs',
     'accessPolicyRuntime.test.mjs',
     'homeNetworkAccess.test.mjs',

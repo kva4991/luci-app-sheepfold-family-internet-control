@@ -19,7 +19,7 @@ applyTestEnvironment(repoRoot);
 describe('permanent numeric device IDs', () => {
   function readDevices(ids) {
     const source = read('root/usr/libexec/sheepfold/sheepfold-router-control-legacy');
-    const start = source.indexOf('list_devices() {');
+    const start = source.indexOf('json_escape_device_value() {');
     const end = source.indexOf('\n# -----------------------------------------------------------------------------', start);
     assert.ok(start >= 0 && end > start);
     const listing = source.slice(start, end).replaceAll('/usr/libexec/sheepfold/sheepfold-device-id ensure', 'ensure_id');

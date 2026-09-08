@@ -632,11 +632,34 @@ client_status() {
 # Возвращает JSON-массив объектов. Используется GET /devices в CGI.
 # -----------------------------------------------------------------------------
 
+json_escape_device_value() {
+        # Экранируем все JSON-controls, не удаляя пользовательский текст и Unicode
+        # Дополнительный LF сохраняет исходные переносы при построчном чтении awk
+        printf '%s\n' "$1" | LC_ALL=C awk '
+                BEGIN {
+                        for (code = 1; code < 32; code++)
+                                escaped[sprintf("%c", code)] = sprintf("\\u%04x", code)
+                }
+                {
+                        if (NR > 1) printf "\\n"
+                        for (pos = 1; pos <= length($0); pos++) {
+                                char = substr($0, pos, 1)
+                                if (char == "\\") printf "\\\\"
+                                else if (char == "\"") printf "\\\""
+                                else if (char in escaped) printf "%s", escaped[char]
+                                else printf "%s", char
+                        }
+                }
+        '
+}
+
 list_devices() {
-        local first=1 seen_ids=' '
+        local first=1 seen_ids=' ' config_dump
+        # Пустая семья и ошибка чтения UCI различаются до начала JSON-ответа
+        config_dump="$(uci -q show sheepfold 2>/dev/null)" || return 1
         printf '['
 
-        for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
+        for section in $(printf '%s\n' "$config_dump" | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
                 local id mac name ip group device_type device_status admin_device manual_device_type admin_login
                 mac="$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)"
                 [ -n "$mac" ] || continue
@@ -666,16 +689,16 @@ list_devices() {
                 fi
                 manual_device_type="$(uci -q get "sheepfold.$section.manual_device_type" 2>/dev/null || printf 0)"
 
-                # Экранируем поля для безопасной вставки в JSON.
-                local safe_name safe_group
-                safe_name="$(printf '%s' "$name" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-                safe_group="$(printf '%s' "$group" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-
+                # Любое строковое поле остаётся данными даже при повреждённом UCI
                 [ "$first" = "1" ] || printf ','
                 printf '{"id":%s,"mac":"%s","name":"%s","ip":"%s","group":"%s","deviceType":"%s","manualDeviceType":%s,"status":"%s","adminDevice":%s,"adminLogin":"%s"}' \
-                        "$id" "$mac" "$safe_name" "$ip" "$safe_group" "$device_type" \
-                        "$([ "$manual_device_type" = "1" ] && printf true || printf false)" "$device_status" \
-                        "$([ "$admin_device" = "1" ] && printf true || printf false)" "$admin_login"
+                        "$id" "$(json_escape_device_value "$mac")" "$(json_escape_device_value "$name")" \
+                        "$(json_escape_device_value "$ip")" "$(json_escape_device_value "$group")" \
+                        "$(json_escape_device_value "$device_type")" \
+                        "$([ "$manual_device_type" = "1" ] && printf true || printf false)" \
+                        "$(json_escape_device_value "$device_status")" \
+                        "$([ "$admin_device" = "1" ] && printf true || printf false)" \
+                        "$(json_escape_device_value "$admin_login")"
                 first=0
         done
 
@@ -702,8 +725,10 @@ device_allow() {
         local device_id
         device_id="$(uci -q get "sheepfold.$device_section.id" 2>/dev/null || true)"
 
-        # Администраторское устройство уже в белом списке — ничего не меняем.
+        # Предыдущий вызов мог сохранить allow, но не применить nft: повтор обязан
+        # подтвердить runtime, не изменяя постоянные права и не повторяя событие
         if [ "$(uci -q get "sheepfold.$device_section.status" 2>/dev/null || true)" = "allow" ]; then
+                sync_firewall
                 printf 'OK\n'
                 return 0
         fi
@@ -768,13 +793,21 @@ device_block() {
 device_temp_access() {
         local device_mac minutes
         device_mac="$(normalize_mac "${1:-}")"
-        minutes="${2:-30}"
+        minutes="${2-30}"
 
         valid_mac "$device_mac" || { echo "Invalid MAC: $device_mac" >&2; return 2; }
 
-        case "$minutes" in ''|*[!0-9]*) minutes=30 ;; esac
-        [ "$minutes" -ge 1 ] || minutes=30
-        [ "$minutes" -le 1440 ] || minutes=1440
+        # CLI вызывают не только CGI, но и LuCI/бот: проверяем до первой записи UCI
+        # Ведущие нули убираем до ash-арифметики, иначе 0010 означает восемь минут
+        if ! printf '%s' "$minutes" | grep -Eq '^[0-9]{1,4}$'; then
+                echo "Minutes must be an integer from 1 to 1440." >&2
+                return 2
+        fi
+        minutes="$(printf '%s' "$minutes" | sed 's/^0*//')"
+        if [ -z "$minutes" ] || [ "$minutes" -gt 1440 ]; then
+                echo "Minutes must be an integer from 1 to 1440." >&2
+                return 2
+        fi
 
         repair_sheepfold_uci_sections
         ensure_list_section allowlist
@@ -1955,7 +1988,7 @@ case "$COMMAND" in
                 device_block "${2:-}"
                 ;;
         device-temp-access)
-                device_temp_access "${2:-}" "${3:-30}"
+                device_temp_access "${2:-}" "${3-30}"
                 ;;
         expire-temp-access)
                 expire_temp_access

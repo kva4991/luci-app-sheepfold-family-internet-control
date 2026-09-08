@@ -1,5 +1,13 @@
 # Current Implementation Status
 
+Focused local fixes: 2026-09-08, **r288**, based on r287 `ed8e335`. Runtime generation
+markers restore the periodic firewall recovery path, clear uses one owned-object batch,
+and unreadable UCI no longer becomes an empty allow policy. CLI duration/retry and
+`/devices` error/JSON handling are hardened; upcoming inactive schedule boundaries are
+preserved. The complete local Node run passed 922 tests in 130 files with no skips.
+This is not new SDK, CI, phone or live-router evidence. See the
+[detailed cumulative bug register](bug-register.ru.md) and [r288 record](audit-fixes-r288.ru.md).
+
 Focused local fixes: 2026-09-07, r287, based on merged `ec52b67`. The owner confirmed
 `No restrictions` above the device blocklist for ordinary internet; router management
 and identity quarantine remain protected separately. Local CGI, policy and Android
@@ -98,10 +106,10 @@ quarantine, automatic groups, notifications and firewall effects is
 [`device-passport-and-control.ru.md`](device-passport-and-control.ru.md) (§devpas1). Focused
 device documents supplement that contract instead of redefining it.
 
-Current local test-package name produced by `scripts/build-test-ipk.py`:
+Current local r288 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-285_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-288_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.

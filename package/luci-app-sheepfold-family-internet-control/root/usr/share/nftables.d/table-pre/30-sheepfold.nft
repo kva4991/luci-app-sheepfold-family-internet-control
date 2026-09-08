@@ -129,3 +129,7 @@ chain sheepfold_input_guard {
 	ether saddr @sheepfold_management_block_macs counter drop comment "Sheepfold router access block"
 	jump sheepfold_home_input
 }
+
+# Служебная цепочка без hook/jump: маркер поколения runtime, не правило доступа
+chain sheepfold_sync_marker {
+}

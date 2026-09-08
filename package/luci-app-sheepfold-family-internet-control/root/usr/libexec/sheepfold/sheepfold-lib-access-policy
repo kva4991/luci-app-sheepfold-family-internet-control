@@ -21,6 +21,9 @@ sheepfold_policy_kv() {
 }
 
 sheepfold_policy_init() {
+    # Отсутствующее необязательное поле допускает default; нечитаемый конфиг — нет
+    # Иначе ошибка UCI превращает все ограничения в разрешительную пустую политику
+    uci -q show sheepfold >/dev/null 2>&1 || return 1
     policyNow="$(date +%s)"
     policyGlobalBlock="$(sheepfold_policy_get sheepfold.global.block_on_boot)"
     policyNoRestrictions="$(sheepfold_policy_get sheepfold.no_restrictions.name)"
@@ -153,11 +156,16 @@ sheepfold_policy_evaluate() {
         scheduleResult="$("$evaluator" "$deviceSection" "$fallbackAccess" 2>/dev/null || true)"
         scheduleState="$(sheepfold_policy_kv "$scheduleResult" status)"
         case "$scheduleState" in
+            block|allow|none)
+                # Отсутствие активного правила не отменяет известную будущую границу
+                policyNextTime="$(sheepfold_policy_kv "$scheduleResult" next_change_time)"
+                ;;
+        esac
+        case "$scheduleState" in
             block|allow)
                 [ "$scheduleState" = block ] && policyStatus=blocked || policyStatus=allow
                 policyReason="$(sheepfold_policy_kv "$scheduleResult" reason)"
                 policyScheduleName="$(sheepfold_policy_kv "$scheduleResult" active_schedule)"
-                policyNextTime="$(sheepfold_policy_kv "$scheduleResult" next_change_time)"
                 policyConflict="$(sheepfold_policy_kv "$scheduleResult" conflict)"
                 [ -n "$policyConflict" ] || policyConflict=0
                 return 0

@@ -117,6 +117,7 @@ This repository is an experimental build, not a stable release. LuCI and the rou
 See:
 
 - [Current implementation status](docs/current-implementation-status.md)
+- [Подробный реестр ошибок, исправлений и причин решений](docs/bug-register.ru.md)
 - [Current development roadmap (Russian)](docs/project-development-roadmap.ru.md)
 - [Product requirements](docs/product-requirements.md)
 - [Direct task for AI developers](docs/developer-task.md)
