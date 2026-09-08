@@ -44,12 +44,13 @@ function transientOption(name) {
 }
 
 function safeIdentifier(value) {
-	return /^[A-Za-z0-9_-]{1,64}$/.test(String(value || '')) &&
+	// Не приводим массив/объект к строке: ['__proto__'] иначе обходит запрет.
+	return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value) &&
 		value !== '__proto__' && value !== 'prototype' && value !== 'constructor';
 }
 
 function safeOptionName(value) {
-	return /^[A-Za-z0-9_]{1,64}$/.test(String(value || '')) &&
+	return typeof value === 'string' && /^[A-Za-z0-9_]{1,64}$/.test(value) &&
 		value !== '__proto__' && value !== 'prototype' && value !== 'constructor';
 }
 
@@ -119,7 +120,6 @@ function build(sectionsByConfig, includeSecrets, exportedAt) {
 
 function validateSection(section, config, names, containsSecrets) {
 	var options = Object.create(null);
-	var allowedWireless = { 'wifi-device': true, 'wifi-iface': true };
 
 	if (!section || !safeIdentifier(section.name) || !safeIdentifier(section.type) ||
 		!section.options || Array.isArray(section.options) || typeof section.options !== 'object')
@@ -129,7 +129,7 @@ function validateSection(section, config, names, containsSecrets) {
 	names[section.name] = true;
 	if (config === 'dhcp' && section.type !== 'host')
 		throw new Error('invalid_dhcp_section');
-	if (config === 'wireless' && !allowedWireless[section.type])
+	if (config === 'wireless' && section.type !== 'wifi-device' && section.type !== 'wifi-iface')
 		throw new Error('invalid_wireless_section');
 
 	Object.keys(section.options).forEach(function (option) {
@@ -220,7 +220,8 @@ function removeTransientOptions(payload) {
 
 function resetTransferredDevice(section) {
 	Object.keys(section.options || {}).forEach(function (option) {
-		if (transferDeviceOptions[option])
+		// Унаследованные ключи вроде toString не являются переносимыми правами.
+		if (Object.prototype.hasOwnProperty.call(transferDeviceOptions, option))
 			delete section.options[option];
 	});
 }

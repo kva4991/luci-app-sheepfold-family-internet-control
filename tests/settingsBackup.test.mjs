@@ -227,7 +227,7 @@ describe('settings backup and restore', () => {
     assert.match(overview, /require sheepfold\.features\.settings\.backup-panel as settingsBackupPanelModel/);
     assert.match(overview, /require sheepfold\.features\.settings\.backup-persistence as backupPersistenceModel/);
     assert.doesNotMatch(application, /function stageImportedConfig|function stageImportedPayload|function importedSectionByName/);
-    assert.match(backupPersistence, /function stageConfig\(config, importedSections, currentSections, managedTypes\)/);
+    assert.match(backupPersistence, /function stageConfig\(config, importedSections, currentSections, managedTypes, containsSecrets\)/);
     assert.match(backupPersistence, /value === deps\.model\.secretPlaceholder/);
     assert.match(backupPanel, /payload\.containsSecrets[\s\S]*unencrypted_secrets_forbidden/);
     assert.match(backupPanel, /backupModel\.prepareRestore\([\s\S]*backupModel\.validate\(deps\.payload\(true\)\)/);

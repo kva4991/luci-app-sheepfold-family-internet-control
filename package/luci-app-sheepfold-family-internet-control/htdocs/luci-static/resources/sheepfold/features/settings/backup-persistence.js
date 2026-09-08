@@ -13,7 +13,7 @@ function create(deps) {
 		return (sections || []).filter(function (section) { return section.name === name; })[0] || null;
 	}
 
-	function stageConfig(config, importedSections, currentSections, managedTypes) {
+	function stageConfig(config, importedSections, currentSections, managedTypes, containsSecrets) {
 		var existingSections = deps.persistence.sections(config);
 		var importedByName = Object.create(null);
 		(importedSections || []).forEach(function (section) { importedByName[section.name] = section; });
@@ -51,7 +51,8 @@ function create(deps) {
 
 			Object.keys(section.options || {}).forEach(function (option) {
 				var value = section.options[option];
-				if (value === deps.model.secretPlaceholder) {
+				// В полной копии [secret] — допустимое буквальное значение, а не команда.
+				if (!containsSecrets && deps.model.secretOption(option) && value === deps.model.secretPlaceholder) {
 					if (!previous || !Object.prototype.hasOwnProperty.call(previous.options, option))
 						return;
 					value = previous.options[option];
@@ -62,9 +63,9 @@ function create(deps) {
 	}
 
 	function stagePayload(payload, previousPayload) {
-		stageConfig('sheepfold', payload.configs.sheepfold, previousPayload.configs.sheepfold, null);
-		stageConfig('dhcp', payload.configs.dhcp, previousPayload.configs.dhcp, ['host']);
-		stageConfig('wireless', payload.configs.wireless, previousPayload.configs.wireless, ['wifi-device', 'wifi-iface']);
+		stageConfig('sheepfold', payload.configs.sheepfold, previousPayload.configs.sheepfold, null, payload.containsSecrets);
+		stageConfig('dhcp', payload.configs.dhcp, previousPayload.configs.dhcp, ['host'], payload.containsSecrets);
+		stageConfig('wireless', payload.configs.wireless, previousPayload.configs.wireless, ['wifi-device', 'wifi-iface'], payload.containsSecrets);
 	}
 
 	function apply(payload, previousPayload) {

@@ -1,5 +1,15 @@
 # Current Implementation Status
 
+Focused continuation: 2026-09-08, **r294**, based on the available r293 `a1cb6cb`.
+Internal pairing attempts now reserve a slot before backend and share a lock with
+QR reset; storage and unexpected backend failures return 503. Ordinary logging no
+longer corrupts the CGI response. Three backup/staging fixes described by a different
+r293 response were absent from the supplied history and were reimplemented (B47–B49).
+178 focused tests pass; no full runner, SDK build or physical device validation.
+See [r294 report](audit-fixes-r294.ru.md) and the [49-entry register](bug-register.ru.md).
+
+Historical r293 note follows; it does not supersede the r294 evidence:
+
 Focused local fixes: 2026-09-08, **r293**, based on r292 `1812625`. External HTTP rate
 counters now serialize updates and resets, reject storage failures, recover from a
 backward wall-clock change and distinguish 503 outages from 429 quota exhaustion.
@@ -147,10 +157,10 @@ quarantine, automatic groups, notifications and firewall effects is
 [`device-passport-and-control.ru.md`](device-passport-and-control.ru.md) (§devpas1). Focused
 device documents supplement that contract instead of redefining it.
 
-Current local r293 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
+Current local r294 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-293_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-294_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.

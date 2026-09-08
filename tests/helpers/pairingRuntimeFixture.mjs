@@ -44,6 +44,10 @@ export function createPairingFixture({ realBackend = false } = {}) {
     'sheepfold-token-common', 'sheepfold-lib-form']) {
     installExecutable(fixture, name, relocate(readFileSync(join(runtimeRoot, name), 'utf8')));
   }
+  if (existsSync(join(runtimeRoot, 'sheepfold-pair-attempt-common'))) {
+    installExecutable(fixture, 'sheepfold-pair-attempt-common',
+      relocate(readFileSync(join(runtimeRoot, 'sheepfold-pair-attempt-common'), 'utf8')));
+  }
   installExecutable(fixture, 'sheepfold-pair-diagnostics', 'pair_diag_event() { :; }\n');
   installExecutable(fixture, 'sheepfold-log', '#!/bin/sh\nexit 0\n');
   installExecutable(fixture, 'sheepfold-firewall', '#!/bin/sh\nexit 0\n');

@@ -3,18 +3,21 @@ set -eu
 
 . /usr/libexec/sheepfold/sheepfold-pair-common
 
-PAIR_ATTEMPT_DIR="/tmp/sheepfold/pair-attempts"
+. /usr/libexec/sheepfold/sheepfold-pair-attempt-common
 RATE_LIMIT_HELPER="/usr/libexec/sheepfold/sheepfold-api-rate-limit"
 
 reset_old_pairing_attempts() {
-    if [ -d "$PAIR_ATTEMPT_DIR" ]; then
-        for attempt_file in "$PAIR_ATTEMPT_DIR"/*; do
-            [ -f "$attempt_file" ] || continue
-            rm -f "$attempt_file"
-        done
-    fi
-    [ ! -x "$RATE_LIMIT_HELPER" ] || "$RATE_LIMIT_HELPER" reset-bucket pair >/dev/null 2>&1 || true
+    pair_attempt_reset || return 1
+    [ -x "$RATE_LIMIT_HELPER" ] || return 1
+    "$RATE_LIMIT_HELPER" reset-bucket pair 9>&- >/dev/null 2>&1
 }
+
+pair_activate_cleanup() {
+    rmdir "${PAIR_LOCK:-}" 2>/dev/null || true
+    pair_attempt_cleanup
+}
+trap 'pair_activate_cleanup' EXIT
+trap 'exit 1' HUP INT TERM
 
 login="${1:-}"
 code="${2:-}"
@@ -29,7 +32,16 @@ admin_section="$(pair_admin_section_for_login "$login")" || {
     echo "Administrator login was not found. Create the account in LuCI first." >&2
     exit 2
 }
+# Тот же порядок, что в CGI: attempts lock -> admin lock. Обратный порядок
+# создал бы deadlock между проверкой старого QR и выпуском нового.
+pair_attempt_lock || {
+    echo "Could not lock pairing attempts. Pairing code was not changed." >&2
+    exit 6
+}
 pair_acquire_admin_lock "$admin_section"
+# pair-common ставит собственный trap; сохраняем уборку обеих блокировок.
+trap 'pair_activate_cleanup' EXIT
+trap 'exit 1' HUP INT TERM
 
 expires_at=$(( $(date +%s) + lifetime ))
 uci -q set "sheepfold.$admin_section.pairing_code=$code"
@@ -38,7 +50,10 @@ uci -q commit sheepfold
 
 # Новый QR выпущен из авторизованного LuCI-сеанса, поэтому старый счётчик не
 # должен превращать первую попытку с новым кодом в «слишком много попыток».
-reset_old_pairing_attempts
+reset_old_pairing_attempts || {
+    echo "Pairing code was saved, but attempt limits could not be reset. Retry activation." >&2
+    exit 6
+}
 
 pair_print_kv activated 1
 pair_print_kv admin_section "$admin_section"

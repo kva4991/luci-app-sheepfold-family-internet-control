@@ -53,16 +53,18 @@ describe('API rate limit', () => {
     const pairApi = readProjectFile('root/usr/libexec/sheepfold/sheepfold-api-pair');
     const pairActivate = readProjectFile('root/usr/libexec/sheepfold/sheepfold-pair-activate');
     const bodyRead = pairApi.indexOf('\nread_body\nlogin=');
-    const limitCheck = pairApi.indexOf('attempt_limit_allows ||');
+    const limitCheck = pairApi.indexOf('pair_attempt_reserve "$attempt_identity_value"');
     const pairingCall = pairApi.indexOf('sheepfold-router-control pair-admin-device');
-    const failedAttempt = pairApi.indexOf('record_failed_attempt || true');
+    const refund = pairApi.indexOf('pair_attempt_refund || pair_attempt_unavailable');
 
     assert.ok(bodyRead >= 0 && bodyRead < limitCheck);
-    assert.ok(limitCheck < pairingCall && pairingCall < failedAttempt);
-    assert.match(pairApi, /device_not_resolved[\s\S]*device_blocklisted[\s\S]*token_generation_failed[\s\S]*record_failed_attempt/);
+    assert.ok(limitCheck < pairingCall && pairingCall < refund);
+    assert.match(pairApi, /2\|3\) http_status="403 Forbidden"; error_code="pairing_rejected"/);
+    assert.match(pairApi, /pair_attempt_refund[\s\S]*device_not_resolved[\s\S]*device_blocklisted[\s\S]*token_generation_failed/);
     assert.match(pairActivate, /reset_old_pairing_attempts/);
     assert.match(pairActivate, /reset-bucket pair/);
-    assert.match(pairActivate, /pair-attempts/);
+    assert.match(pairActivate, /sheepfold-pair-attempt-common/);
+    assert.match(pairActivate, /pair_attempt_reset/);
   });
 
   it('uses the shared strict parser before pairing without a read-loop subshell', () => {

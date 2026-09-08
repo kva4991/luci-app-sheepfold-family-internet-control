@@ -210,7 +210,8 @@ describe('Whole pairing preparation and rollback ownership', () => {
     assertNoTemps(f);
   }, { realBackend: true }));
   it('keeps a QR usable after a complete CGI token-storage failure', () => withFixture((f) => {
-    installExecutable(f, 'chmod', '#!/bin/sh\n[ "$1" != 600 ] || exit 1\nexec /bin/chmod "$@"\n');
+    // Отказ именно token writer: RAM-квота теперь тоже пишет файл с правами 600.
+    installExecutable(f, 'chmod', '#!/bin/sh\ncase "$*" in */tokens/*) [ "$1" != 600 ] || exit 1 ;; esac\nexec /bin/chmod "$@"\n');
     const response = parseCgi(f.request(`login=Parent&code=${encodeURIComponent(testCode)}`));
     assert.equal(response.status, 500);
     assert.equal(response.body.error, 'token_generation_failed');

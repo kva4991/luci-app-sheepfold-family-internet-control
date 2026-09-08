@@ -1,0 +1,128 @@
+#!/bin/sh
+# Внутренняя квота неверных pairing credentials, отдельная от HTTP rate limit.
+# Проверка, резерв слота, результат backend и доверенный reset держат один lock.
+. /usr/libexec/sheepfold/sheepfold-lock-common
+
+PAIR_ATTEMPT_DIR="/tmp/sheepfold/pair-attempts"
+PAIR_ATTEMPT_TEMP=""
+PAIR_ATTEMPT_LOCKED=0
+
+pair_attempt_uint() {
+    local value digits
+    value="$1"; digits="$2"
+    case "$value" in ''|*[!0-9]*) return 2 ;; esac
+    while [ "${value#0}" != "$value" ] && [ "${#value}" -gt 1 ]; do value="${value#0}"; done
+    [ "${#value}" -le "$digits" ] || return 2
+    printf '%s' "$value"
+}
+
+pair_attempt_cleanup() {
+    [ -z "$PAIR_ATTEMPT_TEMP" ] || rm -f "$PAIR_ATTEMPT_TEMP" 2>/dev/null || true
+    PAIR_ATTEMPT_TEMP=""
+    if [ "$PAIR_ATTEMPT_LOCKED" = 1 ]; then
+        sheepfold_lock_release
+        PAIR_ATTEMPT_LOCKED=0
+    fi
+}
+
+pair_attempt_lock() {
+    local path
+    [ ! -L "$PAIR_ATTEMPT_DIR" ] || return 2
+    mkdir -p "$PAIR_ATTEMPT_DIR" 2>/dev/null || return 2
+    chmod 700 "$PAIR_ATTEMPT_DIR" 2>/dev/null || return 2
+    path="$PAIR_ATTEMPT_DIR/.transaction.lock"
+    [ ! -L "$path" ] || return 2
+    [ ! -e "$path" ] || [ -f "$path" ] || return 2
+    # Блокировка ограничена pairing, не всеми командами API. Файл не удаляем:
+    # ожидающие процессы должны видеть тот же inode после успеха и reset.
+    sheepfold_lock_acquire "$path" 3 >/dev/null 2>&1 || return 2
+    PAIR_ATTEMPT_LOCKED=1
+}
+
+pair_attempt_read() {
+    LC_ALL=C awk '
+        {
+            if (NR != 1 || NF != 2 || $0 !~ /^[0-9]+ [0-9]+$/) { bad=1; next }
+            started=$1; count=$2
+            sub(/^0+/, "", started); sub(/^0+/, "", count)
+            if (length(started) > 10 || length(count) > 9) bad=1
+        }
+        END {
+            if (NR != 1 || bad) exit 2
+            printf "%.0f %.0f\n", started+0, count+0
+        }
+    ' "$1"
+}
+
+pair_attempt_write() {
+    [ "$PAIR_ATTEMPT_LOCKED" = 1 ] || return 2
+    PAIR_ATTEMPT_TEMP="$(mktemp "$PAIR_ATTEMPT_DIR/.state.XXXXXX")" || return 2
+    printf '%s %s\n' "$PAIR_ATTEMPT_STARTED" "$1" > "$PAIR_ATTEMPT_TEMP" || return 2
+    chmod 600 "$PAIR_ATTEMPT_TEMP" 2>/dev/null || return 2
+    mv -f "$PAIR_ATTEMPT_TEMP" "$PAIR_ATTEMPT_FILE" 2>/dev/null || return 2
+    PAIR_ATTEMPT_TEMP=""
+}
+
+pair_attempt_reserve() {
+    local identity limit window now line
+    identity="$1"
+    case "$identity" in ''|*[!A-Za-z0-9_.-]*|.*) return 2 ;; esac
+    [ "${#identity}" -le 128 ] || return 2
+    pair_attempt_lock || return 2
+    limit="$(uci -q get sheepfold.pairing_global.max_attempts 2>/dev/null || printf 10)"
+    window="$(uci -q get sheepfold.pairing_global.attempt_window_seconds 2>/dev/null || printf 600)"
+    limit="$(pair_attempt_uint "$limit" 9)" || return 2
+    window="$(pair_attempt_uint "$window" 9)" || return 2
+    [ "$limit" -ge 1 ] || limit=1
+    [ "$window" -ge 60 ] || window=60
+    now="$(date +%s)" || return 2
+    now="$(pair_attempt_uint "$now" 10)" || return 2
+    [ "$now" -gt 0 ] || return 2
+    PAIR_ATTEMPT_NOW="$now"
+    PAIR_ATTEMPT_FILE="$PAIR_ATTEMPT_DIR/$identity"
+    PAIR_ATTEMPT_STARTED="$now"
+    PAIR_ATTEMPT_PREVIOUS=0
+    if [ -e "$PAIR_ATTEMPT_FILE" ] || [ -L "$PAIR_ATTEMPT_FILE" ]; then
+        [ -f "$PAIR_ATTEMPT_FILE" ] && [ ! -L "$PAIR_ATTEMPT_FILE" ] || return 2
+        line="$(pair_attempt_read "$PAIR_ATTEMPT_FILE")" || return 2
+        PAIR_ATTEMPT_STARTED="${line%% *}"
+        PAIR_ATTEMPT_PREVIOUS="${line#* }"
+    fi
+    if [ "$PAIR_ATTEMPT_STARTED" -le 0 ] || [ "$now" -lt "$PAIR_ATTEMPT_STARTED" ] ||
+       [ $((now - PAIR_ATTEMPT_STARTED)) -ge "$window" ]; then
+        PAIR_ATTEMPT_STARTED="$now"
+        PAIR_ATTEMPT_PREVIOUS=0
+    fi
+    if [ "$PAIR_ATTEMPT_PREVIOUS" -ge "$limit" ]; then
+        PAIR_ATTEMPT_RETRY=$((window - (now - PAIR_ATTEMPT_STARTED)))
+        return 1
+    fi
+    # Резерв записывается ДО проверки кода: при отказе записи нельзя бесконечно
+    # проверять новые коды и каждый раз терять счётчик. Сбой/обрыв оставляет слот
+    # занятым; штатный технический отказ возвращает его под той же блокировкой.
+    pair_attempt_write "$((PAIR_ATTEMPT_PREVIOUS + 1))" || return 2
+}
+
+pair_attempt_refund() {
+    pair_attempt_write "$PAIR_ATTEMPT_PREVIOUS"
+}
+
+pair_attempt_clear() {
+    [ "$PAIR_ATTEMPT_LOCKED" = 1 ] || return 2
+    rm -f "$PAIR_ATTEMPT_FILE" 2>/dev/null
+}
+
+pair_attempt_reset() {
+    local file name result
+    [ "$PAIR_ATTEMPT_LOCKED" = 1 ] || return 2
+    result=0
+    for file in "$PAIR_ATTEMPT_DIR"/*; do
+        [ -e "$file" ] || [ -L "$file" ] || continue
+        name="${file##*/}"
+        case "$name" in ''|*[!A-Za-z0-9_.-]*|*.lock) continue ;; esac
+        # Каталоги старых mkdir-lock не являются счётчиками. Не удаляем рекурсивно.
+        [ ! -d "$file" ] || { result=2; continue; }
+        rm -f "$file" 2>/dev/null || result=2
+    done
+    return "$result"
+}

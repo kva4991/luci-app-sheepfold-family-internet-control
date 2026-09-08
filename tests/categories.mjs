@@ -37,6 +37,7 @@ export const testCategories = Object.freeze({
     'testCategories.test.mjs',
   ],
   luci: [
+    'backupRecoveryRegression.test.mjs',
     'homeNetworkAccess.test.mjs',
     'overviewFinalRuntime.test.mjs',
     'overviewFinalRefreshSemantics.test.mjs',
@@ -164,6 +165,7 @@ export const testCategories = Object.freeze({
     'siteListResilience.test.mjs',
   ],
   backend: [
+    'pairingAttemptRuntime.test.mjs',
     'commandOutcomeRuntime.test.mjs',
     'tokenStorageRecoveryRuntime.test.mjs',
     'pairingBoundaryRuntime.test.mjs',
@@ -314,6 +316,8 @@ export const testCategories = Object.freeze({
     'tokenDeviceBinding.test.mjs',
   ],
   security: [
+    'backupRecoveryRegression.test.mjs',
+    'pairingAttemptRuntime.test.mjs',
     'tokenStorageRecoveryRuntime.test.mjs',
     'pairingBoundaryRuntime.test.mjs',
     'pairingStorageRuntime.test.mjs',

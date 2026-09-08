@@ -291,6 +291,7 @@ function create(deps) {
 
 		return enqueue(function () {
 			var cleanFingerprint;
+			var stageStarted = false;
 			var stageResult;
 			var ownedFingerprint;
 
@@ -302,6 +303,7 @@ function create(deps) {
 
 				if (stateSnapshot() !== cleanFingerprint)
 					throw codedError('uci_concurrent_local_changes', 'uci_concurrent_local_changes');
+				stageStarted = true;
 				value = typeof stage === 'function' ? stage() : null;
 				// У LuCI одна глобальная staging-область в памяти. Yield из stage callback
 				// позволил бы другой вкладке или callback смешать изменения до фиксации
@@ -321,7 +323,9 @@ function create(deps) {
 				result.stageResult = stageResult;
 				return result;
 			}).catch(function (error) {
-				if (error && error.uciCleanupAttempted)
+				// До начала своих записей нечего откатывать: unload стирает и чужой
+				// черновик, который появился во время ожидания remoteChanges().
+				if (!stageStarted || error && error.uciCleanupAttempted)
 					throw error;
 				return cleanupOwned(selected, error, false);
 			});
