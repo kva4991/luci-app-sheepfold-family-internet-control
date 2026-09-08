@@ -273,10 +273,10 @@ record_conflict() {
 		return 0
 	fi
 
-	mkdir -p "$STATE_DIR"
+	mkdir -p "$STATE_DIR" || return 1
 	previous="$(cat "$state_file" 2>/dev/null || true)"
 	[ "$previous" != "$result|$sections" ] || return 0
-	printf '%s\n' "$result|$sections" > "$state_file"
+	printf '%s\n' "$result|$sections" > "$state_file" || return 1
 	device_id="$(uci_get "sheepfold.$device_section.id")"
 	[ -n "$device_id" ] || device_id="$device_section"
 	[ "$result" = allow ] && result_text='интернет включён' || result_text='интернет выключен'
@@ -325,8 +325,15 @@ fi
 
 active_schedule="${active_sections%% *}"
 [ -z "$active_schedule" ] || active_schedule="$(uci_get "sheepfold.$active_schedule.name")"
-next_change_time="$(next_access_change_time "$device_section" "$fallback_status" "$status")"
-record_conflict "$device_section" "$conflict" "$status" "$active_sections"
+next_change_time=''
+if [ "${SHEEPFOLD_SCHEDULE_INCLUDE_NEXT:-1}" != 0 ]; then
+	next_change_time="$(next_access_change_time "$device_section" "$fallback_status" "$status")"
+fi
+# Журнал — побочный эффект, а не условие применения уже вычисленного запрета.
+# Например, заполненная RAM не должна отменять блокирующее расписание.
+if ! record_conflict "$device_section" "$conflict" "$status" "$active_sections"; then
+	logger -t sheepfold "Schedule conflict state could not be recorded" 2>/dev/null || true
+fi
 
 print_kv status "$status"
 print_kv reason "$reason"

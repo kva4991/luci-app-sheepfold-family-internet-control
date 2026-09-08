@@ -93,6 +93,7 @@ export const testCategories = Object.freeze({
   access: [
     'readModelRuntime.test.mjs',
     'recoveryRuntime.test.mjs',
+    'policyConsistencyRuntime.test.mjs',
     'accessPolicyRuntime.test.mjs',
     'allowlistUi.test.mjs',
     'androidPairingDiscoveryAndListUi.test.mjs',
@@ -164,6 +165,7 @@ export const testCategories = Object.freeze({
   backend: [
     'readModelRuntime.test.mjs',
     'recoveryRuntime.test.mjs',
+    'policyConsistencyRuntime.test.mjs',
     'apiFormRuntime.test.mjs',
     'accessPolicyRuntime.test.mjs',
     'homeNetworkAccess.test.mjs',

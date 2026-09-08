@@ -54,14 +54,20 @@ valid_mac "$client_mac" || {
     exit 0
 }
 
-device_section="$(device_section_for_mac "$client_mac" 2>/dev/null || true)"
 if ! sheepfold_policy_init; then
     # Не подменяем сбой чтения разрешением; публичный API сохраняет unknown
     print_kv status unknown
     print_kv reason policy_unavailable
     exit 0
 fi
+device_section="$(device_section_for_mac "$client_mac" 2>/dev/null || true)"
 sheepfold_policy_evaluate "$device_section" "$client_mac"
+if ! sheepfold_policy_unchanged; then
+    # Не выдаём родителю/ребёнку смесь старых прав и новой карточки устройства.
+    print_kv status unknown
+    print_kv reason policy_changed
+    exit 0
+fi
 
 print_kv status "$policyStatus"
 print_kv reason "$policyReason"

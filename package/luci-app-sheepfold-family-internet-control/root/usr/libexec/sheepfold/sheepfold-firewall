@@ -215,6 +215,12 @@ collect_state() {
         local known_file="${10}" new_iface_file="${11}"
         local domain_backend domain_allow_ready domain_block_ready site_block_mode
 
+        sheepfold_policy_init || {
+                logger -t sheepfold "Sheepfold configuration is unavailable; keeping applied firewall state"
+                return 1
+        }
+        policyFirewallConfig="$(uci -q show firewall 2>/dev/null)" || return 1
+        policyNetworkConfig="$(uci -q show network 2>/dev/null)" || return 1
         emergency_for_blocklist="$(uci -q get sheepfold.global.domain_allowlist_for_blocklist 2>/dev/null || printf 1)"
         domain_backend="$(file_value backend "$DOMAIN_POLICY_ACTIVE")"
         domain_allow_ready="$(file_value allowlist_ready "$DOMAIN_POLICY_ACTIVE")"
@@ -228,10 +234,6 @@ collect_state() {
         local policy_macs policy_entry
         policy_macs="$STATE_DIR/policy.macs"
         : > "$policy_macs"
-        sheepfold_policy_init || {
-                logger -t sheepfold "Sheepfold configuration is unavailable; keeping applied firewall state"
-                return 1
-        }
         for section in $(uci -q show sheepfold 2>/dev/null | sed -n 's/^sheepfold\.\([^.=]*\)=device$/\1/p'); do
                 mac="$(normalize_mac "$(uci -q get "sheepfold.$section.mac" 2>/dev/null || true)")"
                 valid_mac "$mac" || continue
@@ -247,7 +249,9 @@ collect_state() {
                 section="$policy_entry"
                 [ "$section" != - ] || section=''
                 append_unique "$known_file" "$mac"
-                sheepfold_policy_evaluate "$section" "$mac"
+                # Firewall нужен только текущий результат. Прогноз недели дорог
+                # и нужен API, а не каждой периодической синхронизации роутера.
+                SHEEPFOLD_SCHEDULE_INCLUDE_NEXT=0 sheepfold_policy_evaluate "$section" "$mac"
                 [ "$policyManagementBlock" != 1 ] || append_unique "$management_block_file" "$mac"
                 case "$policyReason" in
                         blocklist|identity_quarantine)
@@ -294,6 +298,15 @@ collect_state() {
         if [ "$policyGlobalBlock" = 1 ]; then
                 collect_lan_interfaces "$global_iface_file"
         fi
+}
+
+firewall_inputs_unchanged() {
+        local currentFirewall currentNetwork
+        sheepfold_policy_unchanged || return 1
+        currentFirewall="$(uci -q show firewall 2>/dev/null)" || return 1
+        currentNetwork="$(uci -q show network 2>/dev/null)" || return 1
+        [ "$currentFirewall" = "$policyFirewallConfig" ] &&
+                [ "$currentNetwork" = "$policyNetworkConfig" ]
 }
 
 sync_sets() {
@@ -354,12 +367,30 @@ sync_sets() {
 
         home_rules='flush chain inet fw4 sheepfold_home_input'
         if [ -x "$HOME_NETWORK" ]; then
-                home_rules="$("$HOME_NETWORK" rules)" || home_rules='flush chain inet fw4 sheepfold_home_input'
+                home_rules="$("$HOME_NETWORK" rules)" || {
+                        # Сбой helper не означает, что родитель отключил домашний API.
+                        # Сохраняем прежнюю транзакцию вместо молчаливого удаления правил.
+                        logger -t sheepfold "Home network rules are unavailable; keeping applied firewall state"
+                        return 1
+                }
         fi
 	current_hash="$( { state_input "$block_file" "$management_block_file" "$restricted_file" "$exempt_file" "$global_iface_file" "$emergency_mac_file" \
 		"$site_allow_mac_file" "$site_block_exempt_file" "$site_filter_iface_file" "$known_file" "$new_iface_file"; printf '%s\n' "$home_rules"; } | sheepfold_state_hash_stdin)"
+        [ "$(printf '%s\n' "$home_rules" | sed -n '1p')" = 'flush chain inet fw4 sheepfold_home_input' ] || {
+                logger -t sheepfold "Home network rules are incomplete; keeping applied firewall state"
+                return 1
+        }
         previous_hash="$(cat "$STATE_HASH" 2>/dev/null || true)"
+        if ! firewall_inputs_unchanged; then
+                logger -t sheepfold "Configuration changed during firewall calculation; retry required"
+                return 1
+        fi
         if [ "$force_sync" != 1 ] && [ "$reset_domain_ips" != 1 ] && [ "$current_hash" = "$previous_hash" ] && sets_available && runtime_matches_hash "$current_hash"; then
+                # Даже cache-hit нельзя подтверждать по поколению до nft-проверок.
+                firewall_inputs_unchanged || {
+                        logger -t sheepfold "Configuration changed during firewall cache validation; retry required"
+                        return 1
+                }
                 refresh_empty_emergency_sets
                 return 0
         fi
@@ -407,6 +438,12 @@ sync_sets() {
                 printf 'add rule inet fw4 sheepfold_sync_marker counter comment "sheepfold-state:%s"\n' "$current_hash"
         } > "$batch"
 
+        # ensure_sets может вызвать fw4 reload: проверяем поколение ещё раз
+        # непосредственно перед nft, не подтверждая устаревший batch после reload.
+        if ! firewall_inputs_unchanged; then
+                logger -t sheepfold "Configuration changed before firewall apply; retry required"
+                return 1
+        fi
         nft -f "$batch" || return 1
         # Потеря служебного хеша не отменяет уже успешно применённую nft-транзакцию:
         # следующий sync просто безопасно повторит её. Возвращать ошибку здесь опасно,

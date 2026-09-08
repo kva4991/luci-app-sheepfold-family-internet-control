@@ -1,5 +1,15 @@
 # Current Implementation Status
 
+Focused local fixes: 2026-09-08, **r289**, based on r288 `b9209ce`. Observed UCI changes
+now reject the calculation instead of acknowledging a mixed result; this is optimistic
+validation, not a complete snapshot or writer transaction. Failed schedule output is
+discarded, periodic firewall skips future prediction, conflict-log failure does not
+cancel the calculated policy, and failed home-rule generation no longer means a silent
+flush. All **943 local tests in 131 files** passed without skips. No new hardware,
+native UCI, SDK, Android build or CI evidence is claimed. The owner's No restrictions
+priority remains unchanged. See the [r289 record](audit-fixes-r289.ru.md) and
+[26-card cumulative register](bug-register.ru.md).
+
 Focused local fixes: 2026-09-08, **r288**, based on r287 `ed8e335`. Runtime generation
 markers restore the periodic firewall recovery path, clear uses one owned-object batch,
 and unreadable UCI no longer becomes an empty allow policy. CLI duration/retry and
@@ -106,10 +116,10 @@ quarantine, automatic groups, notifications and firewall effects is
 [`device-passport-and-control.ru.md`](device-passport-and-control.ru.md) (§devpas1). Focused
 device documents supplement that contract instead of redefining it.
 
-Current local r288 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
+Current local r289 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-288_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-289_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.

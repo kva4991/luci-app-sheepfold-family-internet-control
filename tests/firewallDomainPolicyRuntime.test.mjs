@@ -66,6 +66,7 @@ case "$*" in
       'sheepfold.normal=device'
     ;;
   *"show firewall") printf 'firewall.lan=zone\n' ;;
+  *"show network") printf 'network.lan=interface\nnetwork.lan.device=br-lan\n' ;;
   *"get sheepfold.global.lan_firewall_zones") printf 'lan' ;;
   *"get sheepfold.global.domain_allowlist_for_blocklist") printf '1' ;;
   *"get sheepfold.global.site_blocklist_mode") printf '%s' "$SITE_MODE" ;;
@@ -148,7 +149,7 @@ esac
 }
 
 describe('firewall state for site lists', () => {
-  it('keeps the device blocklist strongest and assigns domain-policy sets by role', () => {
+  it('keeps ordinary blocklisted devices blocked and assigns domain-policy sets by role', () => {
     const test = runScenario();
     assert.equal(test.result.status, 0, test.result.stderr || test.result.stdout);
     assert.match(test.batch, /sheepfold_block_macs \{ 00:11:22:33:44:01 \}/);

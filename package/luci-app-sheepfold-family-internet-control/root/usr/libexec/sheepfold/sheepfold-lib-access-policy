@@ -23,7 +23,7 @@ sheepfold_policy_kv() {
 sheepfold_policy_init() {
     # Отсутствующее необязательное поле допускает default; нечитаемый конфиг — нет
     # Иначе ошибка UCI превращает все ограничения в разрешительную пустую политику
-    uci -q show sheepfold >/dev/null 2>&1 || return 1
+    policyConfig="$(uci -q show sheepfold 2>/dev/null)" || return 1
     policyNow="$(date +%s)"
     policyGlobalBlock="$(sheepfold_policy_get sheepfold.global.block_on_boot)"
     policyNoRestrictions="$(sheepfold_policy_get sheepfold.no_restrictions.name)"
@@ -33,6 +33,14 @@ sheepfold_policy_init() {
         restrict|restrict_until_configured) policyNewDevice=restrict ;;
         *) policyNewDevice=allow ;;
     esac
+}
+
+# Оптимистическая проверка поколения: отвергает замеченную смену конфигурации,
+# но не заменяет snapshot и общий lock всех writers (ABA и поздний commit возможны).
+sheepfold_policy_unchanged() {
+    local currentConfig
+    currentConfig="$(uci -q show sheepfold 2>/dev/null)" || return 1
+    [ "$currentConfig" = "$policyConfig" ]
 }
 
 sheepfold_policy_evaluate() {
@@ -151,9 +159,12 @@ sheepfold_policy_evaluate() {
     esac
     evaluator="${SHEEPFOLD_SCHEDULE_EVALUATOR:-/usr/libexec/sheepfold/sheepfold-schedule-evaluator}"
     if [ -n "$deviceSection" ] && [ -x "$evaluator" ]; then
-        # При ошибке вычислителя сохраняем ограничительный fallback, а не срываем
+        # При ошибке вычислителя сохраняем fallback текущего устройства, а не срываем
         # применение остальных устройств; восстановленный статус передаётся явно
-        scheduleResult="$("$evaluator" "$deviceSection" "$fallbackAccess" 2>/dev/null || true)"
+        if ! scheduleResult="$("$evaluator" "$deviceSection" "$fallbackAccess" 2>/dev/null)"; then
+            # Частичный stdout после ошибки не является рассчитанной политикой.
+            scheduleResult=''
+        fi
         scheduleState="$(sheepfold_policy_kv "$scheduleResult" status)"
         case "$scheduleState" in
             block|allow|none)
