@@ -23,6 +23,12 @@
 переименование целевого `errorCode` и не новый endpoint `/api/v1/devices`. Подробности
 и совместимость находятся в [Android API](android-openwrt-api.ru.md).
 
+Текущий `/pair` с r291 также сохраняет legacy поле `error`: 400 `invalid_form`
+для повреждённой/неоднозначной формы, 400 `body_read_failed` для ошибки чтения/длины,
+413 `request_too_large` для превышения 4096 байт. Весь body проверяется до привязки;
+ошибка подпроцесса не может стать вторым спрятанным ответом. Успешный token/envelope
+совместимы; подробности и ограничения сохранения — [Android API](android-openwrt-api.ru.md).
+
 ## Безопасные defaults
 
 - Неизвестная capability равна `false`.

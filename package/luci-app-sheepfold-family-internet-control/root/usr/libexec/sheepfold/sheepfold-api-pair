@@ -2,6 +2,7 @@
 set -eu
 
 . /usr/libexec/sheepfold/sheepfold-pair-diagnostics
+. /usr/libexec/sheepfold/sheepfold-lib-form
 
 RUNTIME_DIR="/tmp/sheepfold/pair-attempts"
 PAIR_LOG_HELPER="/usr/libexec/sheepfold/sheepfold-log"
@@ -12,30 +13,10 @@ json_escape() {
     printf '%s' "$1" | tr '\n\r\t' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-url_decode() {
-    value="$(printf '%s' "$1" | sed 's/+/ /g; s/%/\\x/g')"
-    printf '%b' "$value"
-}
-
+# Сопряжение использует ту же строгую границу, что и обычные команды Android.
+# Локальный printf %b декодировал также literal backslash и пропускал битый хвост.
 form_get() {
-    form_key="$1"
-    form_rest="$2"
-
-    # Не используем `tr | while read`: разные BusyBox ash по-разному выполняют цикл
-    # в конвейере, из-за чего реальное POST-тело могло превращаться в пустые login/code.
-    while [ -n "$form_rest" ]; do
-        form_item="${form_rest%%&*}"
-        if [ "$form_item" = "$form_rest" ]; then
-            form_rest=''
-        else
-            form_rest="${form_rest#*&}"
-        fi
-        form_item_key="${form_item%%=*}"
-        form_item_value="${form_item#*=}"
-        [ "$form_item_key" = "$form_key" ] || continue
-        url_decode "$form_item_value"
-        return 0
-    done
+    sheepfold_form_get "$1" "$2"
 }
 
 kv_get() {
@@ -52,15 +33,18 @@ header_json() {
 }
 
 read_body() {
-    length="${CONTENT_LENGTH:-0}"
-    case "$length" in ''|*[!0-9]*) length=0 ;; esac
-    if [ "$length" -gt 4096 ]; then
-        header_json "413 Payload Too Large"
-        printf '{"app":"sheepfold","ok":false,"paired":false,"error":"request_too_large"}\n'
-        exit 0
-    fi
-    [ "$length" -gt 0 ] || return 0
-    dd bs=1 count="$length" 2>/dev/null || true
+    read_status=0
+    sheepfold_form_read_body 4096 || read_status=$?
+    case "$read_status" in
+        0) body="$SHEEPFOLD_FORM_BODY"; return 0 ;;
+        2) http_status="413 Payload Too Large"; error_code="request_too_large" ;;
+        3) http_status="400 Bad Request"; error_code="invalid_form" ;;
+        *) http_status="400 Bad Request"; error_code="body_read_failed" ;;
+    esac
+    # Ошибку публикует основной CGI, а не subshell, чей exit раньше терялся.
+    header_json "$http_status"
+    printf '{"app":"sheepfold","ok":false,"paired":false,"error":"%s"}\n' "$error_code"
+    exit 0
 }
 
 valid_pairing_code() {
@@ -196,7 +180,7 @@ pair_diag_event api_received \
     "remote_ip=${REMOTE_ADDR:-unknown}" \
     "content_length=${CONTENT_LENGTH:-0}" \
     "client_header=${HTTP_X_SHEEPFOLD_CLIENT:-missing}"
-body="$(read_body)"
+read_body
 login="$(form_get login "$body")"
 code="$(form_get code "$body")"
 pair_diag_event api_form_parsed \

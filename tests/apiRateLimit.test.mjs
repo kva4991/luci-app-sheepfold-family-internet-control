@@ -1,3 +1,8 @@
+/*
+ * Проверяет wiring двух уровней rate limit и модель счётчика. Файлы не меняет.
+ * Проверка реального CGI/form выполняется pairingBoundaryRuntime; здесь не
+ * доказываются конкурентные запросы, uhttpd и фактическая защита на роутере.
+ */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,7 +50,7 @@ describe('API rate limit', () => {
   it('starts a newly issued QR with fresh limits and counts only rejected credentials', () => {
     const pairApi = readProjectFile('root/usr/libexec/sheepfold/sheepfold-api-pair');
     const pairActivate = readProjectFile('root/usr/libexec/sheepfold/sheepfold-pair-activate');
-    const bodyRead = pairApi.indexOf('body="$(read_body)"');
+    const bodyRead = pairApi.indexOf('\nread_body\nlogin=');
     const limitCheck = pairApi.indexOf('attempt_limit_allows ||');
     const pairingCall = pairApi.indexOf('sheepfold-router-control pair-admin-device');
     const failedAttempt = pairApi.indexOf('record_failed_attempt || true');
@@ -58,7 +63,7 @@ describe('API rate limit', () => {
     assert.match(pairActivate, /pair-attempts/);
   });
 
-  it('parses the Android form body without a BusyBox pipeline subshell', () => {
+  it('uses the shared strict parser before pairing without a read-loop subshell', () => {
     const pairApi = readProjectFile('root/usr/libexec/sheepfold/sheepfold-api-pair');
     const parserStart = pairApi.indexOf('form_get()');
     const parserEnd = pairApi.indexOf('\n}\n\nkv_get()', parserStart);
@@ -68,8 +73,8 @@ describe('API rate limit', () => {
       .filter((line) => !line.trimStart().startsWith('#'))
       .join('\n');
 
-    assert.match(parser, /form_rest="\$\{form_rest#\*&\}"/);
-    assert.match(parser, /form_item_key="\$\{form_item%%=\*\}"/);
+    assert.match(parser, /sheepfold_form_get "\$1" "\$2"/);
+    assert.match(pairApi, /sheepfold_form_read_body 4096/);
     assert.doesNotMatch(executableParser, /\|\s*while/);
   });
 

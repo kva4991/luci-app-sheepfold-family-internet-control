@@ -113,3 +113,29 @@ sheepfold_form_get() {
 sheepfold_form_validate() {
 	sheepfold_form_get '' "$1" >/dev/null
 }
+
+# Читает ограниченное CGI-тело в SHEEPFOLD_FORM_BODY. Ошибки: 1 — чтение/длина,
+# 2 — превышение лимита, 3 — повреждённая форма. Ответ HTTP остаётся у вызывающего.
+# Не полагаемся на set -e: библиотека вызывается из if и command substitution.
+sheepfold_form_read_body() {
+	local length limit read_status actual_length
+	length="${CONTENT_LENGTH:-0}"
+	limit="${1:-4096}"
+	SHEEPFOLD_FORM_BODY=""
+	case "$length" in ''|*[!0-9]*) return 1 ;; esac
+	case "$limit" in ''|*[!0-9]*) return 1 ;; esac
+	length="$(printf '%s' "$length" | sed 's/^0*//')" || return 1
+	length="${length:-0}"
+	[ "${#length}" -le "${#limit}" ] || return 2
+	[ "$length" -le "$limit" ] || return 2
+	read_status=0
+	# Sentinel сохраняет сырой завершающий LF; проверка длины также замечает NUL,
+	# который shell не способен сохранить, и усечённое тело при успешном dd.
+	SHEEPFOLD_FORM_BODY="$(dd bs=1 count="$length" 2>/dev/null; read_status=$?; printf '.'; exit "$read_status")" || read_status=$?
+	SHEEPFOLD_FORM_BODY="${SHEEPFOLD_FORM_BODY%.}"
+	[ "$read_status" -eq 0 ] || { SHEEPFOLD_FORM_BODY=""; return 1; }
+	actual_length="$(printf '%s' "$SHEEPFOLD_FORM_BODY" | wc -c)" || return 1
+	[ "$actual_length" -eq "$length" ] || { SHEEPFOLD_FORM_BODY=""; return 1; }
+	sheepfold_form_validate "$SHEEPFOLD_FORM_BODY" || { SHEEPFOLD_FORM_BODY=""; return 3; }
+	return 0
+}

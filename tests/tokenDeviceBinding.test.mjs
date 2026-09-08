@@ -67,6 +67,7 @@ PAIR_TOKEN_DIR='${shellPath(tokenDir)}'
 PAIR_TOKEN_HASH='tokenhash'
 PAIR_LOCK='${shellPath(lockDir)}'
 PAIR_TRANSACTION_ACTIVE=1
+PAIR_TOKEN_STORED=1
 PAIR_RESTORE_SNAPSHOT=${restoreSnapshot ? 1 : 0}
 ${rollbackHelpers}
 pair_transaction_cleanup 6
@@ -221,8 +222,10 @@ describe('Administrator token device binding', () => {
     );
 
     assert.match(randomHelper, /\/dev\/urandom/);
-    assert.match(randomHelper, /sha256sum/);
-    assert.match(randomHelper, /openssl dgst -sha256/);
+    assert.match(randomHelper, /pair_sha256_stdin/);
+    const digestHelper = pairCommon.slice(pairCommon.indexOf('pair_sha256_stdin()'), pairCommon.indexOf('pair_sha256()'));
+    assert.match(digestHelper, /sha256sum/);
+    assert.match(digestHelper, /openssl dgst -sha256/);
     assert.doesNotMatch(randomHelper, /(?:\|\s*od\b|\bod\s+-)/);
     assert.match(pairCommon, /token="\$\(pair_random_hex 40\)"/);
   });

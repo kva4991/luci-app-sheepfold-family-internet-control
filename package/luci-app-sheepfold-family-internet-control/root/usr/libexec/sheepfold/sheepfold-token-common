@@ -46,26 +46,40 @@ token_file_is_legacy() {
 	return 1
 }
 
-token_write_bound_file() {
+# Публикует только новую запись. Subshell изолирует переменные/umask/trap от pairing.
+# Существующий токен никогда не заменяется: даже редкая коллизия не отзывает чужой вход.
+token_write_bound_file() (
 	dir="$1"
 	hash="$2"
 	login="$3"
 	device_id="$4"
-	mac="$5"
+	mac="$(token_normalize_mac "$5")" || return 1
 	issued_at="$6"
 	expires_at="$7"
-	tmp="$dir/$hash.tmp.$$"
+	case "$hash" in ''|*[!0-9a-f]*) return 1 ;; esac
+	[ "${#hash}" -eq 64 ] || return 1
+	case "$login" in ''|*[!A-Za-z0-9_.@+-]*) return 1 ;; esac
+	case "$device_id" in ''|*[!0-9]*|0*) return 1 ;; esac
+	token_valid_mac "$mac" || return 1
+	case "$issued_at" in ''|*[!0-9]*) return 1 ;; esac
+	case "$expires_at" in ''|*[!0-9]*) return 1 ;; esac
 
-	{
-		printf 'login=%s\n' "$login"
-		printf 'device_id=%s\n' "$device_id"
-		printf 'mac=%s\n' "$(token_normalize_mac "$mac")"
-		printf 'issued_at=%s\n' "$issued_at"
-		printf 'expires_at=%s\n' "$expires_at"
-	} >"$tmp"
-	chmod 600 "$tmp"
-	mv -f "$tmp" "$dir/$hash"
-}
+	umask 077
+	stage_dir="$(mktemp -d "$dir/.token.XXXXXX")" || return 1
+	tmp="$stage_dir/record"
+	trap 'rm -f "$tmp" 2>/dev/null; rmdir "$stage_dir" 2>/dev/null || true' EXIT
+	trap 'exit 129' HUP
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	# Один printf и явные проверки нужны даже при вызове всей функции из if !.
+	printf 'login=%s\ndevice_id=%s\nmac=%s\nissued_at=%s\nexpires_at=%s\n' \
+		"$login" "$device_id" "$mac" "$issued_at" "$expires_at" > "$tmp" || return 1
+	chmod 600 "$tmp" || return 1
+	# -T запрещает трактовать существующий каталог/ссылку как папку назначения.
+	# link в той же файловой системе публикует готовый inode без замены получателя.
+	ln -T "$tmp" "$dir/$hash" || return 1
+	return 0
+)
 
 token_device_is_admin_paired() {
 	local wanted_id wanted_mac section device_id legacy_ids mac admin

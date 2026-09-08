@@ -166,6 +166,8 @@ export const testCategories = Object.freeze({
   backend: [
     'commandOutcomeRuntime.test.mjs',
     'tokenStorageRecoveryRuntime.test.mjs',
+    'pairingBoundaryRuntime.test.mjs',
+    'pairingStorageRuntime.test.mjs',
     'readModelRuntime.test.mjs',
     'recoveryRuntime.test.mjs',
     'policyConsistencyRuntime.test.mjs',
@@ -309,6 +311,8 @@ export const testCategories = Object.freeze({
   ],
   security: [
     'tokenStorageRecoveryRuntime.test.mjs',
+    'pairingBoundaryRuntime.test.mjs',
+    'pairingStorageRuntime.test.mjs',
     'apiFormRuntime.test.mjs',
     'accessPolicyRuntime.test.mjs',
     'androidSessionRaceRuntime.test.mjs',

@@ -34,6 +34,7 @@ PAIR_TRANSACTION_DIR=""
 PAIR_UCI_SAVEDIR=""
 PAIR_CONFIG_SNAPSHOT=""
 PAIR_TRANSACTION_ACTIVE=0
+PAIR_TOKEN_STORED=0
 PAIR_RESTORE_SNAPSHOT=0
 
 pair_restore_snapshot() {
@@ -51,7 +52,10 @@ pair_transaction_cleanup() {
     trap - EXIT HUP INT TERM
 
     if [ "${PAIR_TRANSACTION_ACTIVE:-0}" = 1 ]; then
-        [ -z "${PAIR_TOKEN_HASH:-}" ] || rm -f "$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH" 2>/dev/null || true
+        # При коллизии writer не создавал запись: cleanup не должен удалить чужой токен.
+        if [ "${PAIR_TOKEN_STORED:-0}" = 1 ] && [ -n "${PAIR_TOKEN_HASH:-}" ]; then
+            rm -f "$PAIR_TOKEN_DIR/$PAIR_TOKEN_HASH" 2>/dev/null || true
+        fi
         if [ "${PAIR_RESTORE_SNAPSHOT:-0}" = 1 ] && ! pair_restore_snapshot; then
             logger -t sheepfold-router-pairing \
                 "Pairing commit failed and the UCI snapshot could not be restored: ${PAIR_CONFIG_SNAPSHOT:-missing}"
@@ -80,13 +84,16 @@ pair_transaction_cleanup() {
 pair_begin_transaction() {
     safe_admin_section="$(printf '%s' "$admin_section" | tr -cd 'A-Za-z0-9_.-')"
     [ -n "$safe_admin_section" ] || return 1
-    mkdir -p "$PAIR_TRANSACTION_ROOT"
-    chmod 700 "$PAIR_TRANSACTION_ROOT" 2>/dev/null || true
-    PAIR_TRANSACTION_DIR="$PAIR_TRANSACTION_ROOT/${safe_admin_section}.$$"
+    # Функция вызывается через ||, поэтому set -e не остановит её на ошибке.
+    # Не начинаем выдачу прав без закрытого staging и полноценной копии для отката.
+    mkdir -p "$PAIR_TRANSACTION_ROOT" || return 1
+    chmod 700 "$PAIR_TRANSACTION_ROOT" || return 1
+    PAIR_TRANSACTION_DIR="$(mktemp -d "$PAIR_TRANSACTION_ROOT/${safe_admin_section}.XXXXXX")" || return 1
     PAIR_UCI_SAVEDIR="$PAIR_TRANSACTION_DIR/uci"
     PAIR_CONFIG_SNAPSHOT="$PAIR_TRANSACTION_DIR/sheepfold.before"
-    (umask 077; mkdir "$PAIR_TRANSACTION_DIR" && mkdir "$PAIR_UCI_SAVEDIR")
-    cp -p /etc/config/sheepfold "$PAIR_CONFIG_SNAPSHOT"
+    (umask 077; mkdir "$PAIR_UCI_SAVEDIR") || return 1
+    cp -p /etc/config/sheepfold "$PAIR_CONFIG_SNAPSHOT" || return 1
+    cmp -s /etc/config/sheepfold "$PAIR_CONFIG_SNAPSHOT" || return 1
     PAIR_TRANSACTION_ACTIVE=1
 }
 
@@ -192,6 +199,7 @@ if ! pair_store_token; then
     echo "Could not store administrator token hash. Pairing code was not consumed." >&2
     exit 6
 fi
+PAIR_TOKEN_STORED=1
 
 # Повторная проверка выполняется непосредственно перед первой записью прав.
 # Если родитель успел заблокировать устройство во время pairing, временный токен

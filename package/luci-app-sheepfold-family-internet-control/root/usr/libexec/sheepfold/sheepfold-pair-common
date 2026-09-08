@@ -149,16 +149,26 @@ pair_device_section_for_mac() {
     esac
 }
 
-pair_sha256() (
-    pair_hash_value="${1:-}"
+# Принимает байты на stdin; выводит только проверенный SHA-256. Частичный stdout
+# неуспешного hash-процесса нельзя превращать в успешный результат через awk/cut.
+pair_sha256_stdin() (
     if command -v sha256sum >/dev/null 2>&1; then
-        printf '%s' "$pair_hash_value" | sha256sum | cut -d' ' -f1
+        pair_digest="$(sha256sum)" || return 1
+        pair_digest="${pair_digest%% *}"
     elif command -v openssl >/dev/null 2>&1; then
-        printf '%s' "$pair_hash_value" | openssl dgst -sha256 | awk '{print $NF}'
+        pair_digest="$(openssl dgst -sha256)" || return 1
+        pair_digest="${pair_digest##* }"
     else
         echo "SHA-256 implementation is unavailable." >&2
         return 1
     fi
+    case "$pair_digest" in ''|*[!0-9a-fA-F]*) return 1 ;; esac
+    [ "${#pair_digest}" -eq 64 ] || return 1
+    printf '%s' "$pair_digest" | tr 'A-F' 'a-f'
+)
+
+pair_sha256() (
+    printf '%s' "${1:-}" | pair_sha256_stdin
 )
 
 pair_random_hex() (
@@ -166,18 +176,19 @@ pair_random_hex() (
     case "$pair_random_length" in ''|*[!0-9]*) return 1 ;; esac
     [ "$pair_random_length" -ge 32 ] && [ "$pair_random_length" -le 64 ] || return 1
 
-    # В минимальном OpenWrt утилиты od может не быть. Хешируем байты из urandom
-    # доступным SHA-256 и сохраняем прежний hex-контракт с Android. §pairrng1
-    if command -v sha256sum >/dev/null 2>&1; then
-        pair_random_value="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | sha256sum | awk '{print $1}')"
-    elif command -v openssl >/dev/null 2>&1; then
-        pair_random_value="$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | openssl dgst -sha256 | awk '{print $NF}')"
-    else
-        echo "SHA-256 implementation is unavailable." >&2
-        return 1
-    fi
-    case "$pair_random_value" in ''|*[!0-9a-fA-F]*) return 1 ;; esac
-    [ "${#pair_random_value}" -eq 64 ] || return 1
+    # Не хешируем поток dd напрямую: при отказе он давал постоянный hash пустоты.
+    # Байты (включая NUL) живут только в закрытом RAM-файле, не в shell-переменной.
+    # bs=1 и проверка длины защищают также от короткого успешного чтения. §pairrng1
+    umask 077
+    pair_random_dir="$(mktemp -d "$PAIR_RUNTIME_DIR/pair-random.XXXXXX")" || return 1
+    trap 'rm -f "$pair_random_dir/seed" 2>/dev/null; rmdir "$pair_random_dir" 2>/dev/null || true' EXIT
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    dd if=/dev/urandom of="$pair_random_dir/seed" bs=1 count=32 2>/dev/null || return 1
+    pair_random_bytes="$(wc -c < "$pair_random_dir/seed")" || return 1
+    [ "$pair_random_bytes" -eq 32 ] || return 1
+    pair_random_value="$(pair_sha256_stdin < "$pair_random_dir/seed")" || return 1
     printf '%s' "$pair_random_value" | cut -c"1-$pair_random_length"
 )
 
