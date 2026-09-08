@@ -36,6 +36,43 @@ root_password_status() {
     esac
 }
 
+# Переносим только проверенные обычные файлы. Сначала приватная копия, затем
+# публикация без замены существующего файла; старый файл удаляется последним.
+# rmdir вместо rm -rf не уничтожит поздно появившийся или неизвестный элемент.
+migrate_token_storage() {
+    local token_file target temporary
+    for token_file in "$TOKEN_RUNTIME_LINK"/*; do
+        [ -e "$token_file" ] || [ -L "$token_file" ] || continue
+        [ -f "$token_file" ] && [ ! -L "$token_file" ] || {
+            echo "Unexpected legacy token entry; migration stopped." >&2
+            return 1
+        }
+        target="$TOKEN_STATE_DIR/${token_file##*/}"
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            # Повтор после прерывания допустим только для тождественной копии.
+            # При конфликте не выбираем старую/новую привязку за пользователя.
+            [ -f "$target" ] && [ ! -L "$target" ] && cmp -s "$token_file" "$target" || {
+                echo "Conflicting persistent token; migration stopped." >&2
+                return 1
+            }
+            chmod 600 "$target" || return 1
+        else
+            temporary="$(mktemp "$TOKEN_STATE_DIR/.migration.XXXXXX")" || return 1
+            if ! cp "$token_file" "$temporary" || ! chmod 600 "$temporary" ||
+                ! cmp -s "$token_file" "$temporary" || ! ln -T "$temporary" "$target"; then
+                rm -f "$temporary" 2>/dev/null || true
+                echo "Token migration failed; the source was retained." >&2
+                return 1
+            fi
+            # Оба имени в одной ФС: ln публикует готовый файл без перезаписи
+            # конкурирующей записи. При отказе публикации источник не удалён.
+            rm -f "$temporary" || return 1
+        fi
+        rm -f "$token_file" || return 1
+    done
+    rmdir "$TOKEN_RUNTIME_LINK" || return 1
+}
+
 ensure_token_storage() {
     umask 077
     mkdir -p /etc/sheepfold "$TOKEN_STATE_DIR" /tmp/sheepfold
@@ -47,13 +84,11 @@ ensure_token_storage() {
         fi
         rm -f "$TOKEN_RUNTIME_LINK"
     elif [ -d "$TOKEN_RUNTIME_LINK" ]; then
-        for token_file in "$TOKEN_RUNTIME_LINK"/*; do
-            [ -f "$token_file" ] || continue
-            cp -p "$token_file" "$TOKEN_STATE_DIR/" 2>/dev/null || true
-        done
-        rm -rf "$TOKEN_RUNTIME_LINK"
+        migrate_token_storage || return 1
     elif [ -e "$TOKEN_RUNTIME_LINK" ]; then
-        rm -f "$TOKEN_RUNTIME_LINK"
+        # Не удаляем неизвестный файл под видом каталога сеансов.
+        echo "Unexpected token storage entry; migration stopped." >&2
+        return 1
     fi
 
     ln -s "$TOKEN_STATE_DIR" "$TOKEN_RUNTIME_LINK"
@@ -161,52 +196,64 @@ token_login() {
 }
 
 revoke_tokens() {
-    local login token_file file_login revoked actor
+    local login token_file file_login revoked failed actor
     login="${1:-}"
     revoked=0
-
-    if [ -z "$login" ]; then
-        for token_file in "$TOKEN_STATE_DIR"/*; do
-            [ -f "$token_file" ] || continue
-            rm -f "$token_file" 2>/dev/null || true
-            revoked=$((revoked + 1))
-        done
-        printf 'revoked=%s\n' "$revoked"
-        return 0
-    fi
+    failed=0
 
     for token_file in "$TOKEN_STATE_DIR"/*; do
         [ -f "$token_file" ] || continue
-        if token_file_is_legacy "$token_file"; then
-            continue
+        if [ -n "$login" ]; then
+            token_file_is_legacy "$token_file" && continue
+            file_login="$(token_file_get "$token_file" login)" || {
+                failed=$((failed + 1))
+                continue
+            }
+            [ "$file_login" = "$login" ] || continue
         fi
-        file_login="$(token_file_get "$token_file" login)"
-        [ "$file_login" = "$login" ] || continue
-        rm -f "$token_file" 2>/dev/null || true
-        revoked=$((revoked + 1))
+        # Не объявляем существующий Bearer отозванным и не бросаем остальные
+        # сеансы после первого отказа удаления (например, read-only overlay).
+        if rm -f "$token_file" 2>/dev/null; then
+            revoked=$((revoked + 1))
+        else
+            failed=$((failed + 1))
+        fi
     done
 
-    actor="${SHEEPFOLD_ACTION_ACTOR:-Sheepfold API}"
-    if [ -x "$LOG_HELPER" ]; then
-        "$LOG_HELPER" "$actor: завершены все телефонные сеансы администратора $login; отозвано токенов: $revoked" >/dev/null 2>&1 || true
-    fi
     printf 'revoked=%s\n' "$revoked"
+    if [ "$failed" -ne 0 ]; then
+        printf 'failed=%s\n' "$failed"
+        echo "Token revocation incomplete; failed records may remain active." >&2
+        return 1
+    fi
+    actor="${SHEEPFOLD_ACTION_ACTOR:-Sheepfold API}"
+    if [ -n "$login" ] && [ -x "$LOG_HELPER" ]; then
+        "$LOG_HELPER" "$actor: выполнен отзыв телефонных сеансов администратора $login; удалено записей токенов: $revoked" >/dev/null 2>&1 || true
+    fi
+    return 0
 }
 
 revoke_device_tokens() {
-    local device_id token_file file_device_id
+    local device_id token_file file_device_id failed
     device_id="${1:-}"
+    failed=0
 
     [ -n "$device_id" ] || return 1
     for token_file in "$TOKEN_STATE_DIR"/*; do
         [ -f "$token_file" ] || continue
-        if token_file_is_legacy "$token_file"; then
+        token_file_is_legacy "$token_file" && continue
+        file_device_id="$(token_file_get "$token_file" device_id)" || {
+            failed=$((failed + 1))
             continue
-        fi
-        file_device_id="$(token_file_get "$token_file" device_id)"
+        }
         [ "$file_device_id" = "$device_id" ] || continue
-        rm -f "$token_file" 2>/dev/null || true
+        rm -f "$token_file" 2>/dev/null || failed=$((failed + 1))
     done
+    [ "$failed" -eq 0 ] || {
+        echo "Device token revocation incomplete; failed records may remain active." >&2
+        return 1
+    }
+    return 0
 }
 
 ensure_token_storage

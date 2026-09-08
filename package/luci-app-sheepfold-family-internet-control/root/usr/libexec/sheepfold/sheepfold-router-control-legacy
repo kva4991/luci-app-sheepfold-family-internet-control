@@ -51,14 +51,19 @@ log() {
 }
 
 log_event() {
-	local message
-	message="$*"
-	[ -z "${SHEEPFOLD_ACTION_ACTOR:-}" ] || message="${SHEEPFOLD_ACTION_ACTOR}: $message"
-        if [ -x "$LOG_HELPER" ]; then
-		"$LOG_HELPER" "$message"
-        else
-		log "$message"
+        local message
+        message="$*"
+        [ -z "${SHEEPFOLD_ACTION_ACTOR:-}" ] || message="${SHEEPFOLD_ACTION_ACTOR}: $message"
+        # Журнал — побочное действие: отказ не отменяет уже выполненные commit/nft
+        # и не должен прерывать уборку временного доступа до её применения.
+        # stdout helper не должен повреждать машинный ответ основной команды.
+        if [ -x "$LOG_HELPER" ] && "$LOG_HELPER" "$message" >/dev/null 2>&1; then
+                return 0
         fi
+        if ! log "$message" >/dev/null 2>&1; then
+                printf 'Warning: action event could not be logged.\n' >&2
+        fi
+        return 0
 }
 
 sync_firewall() {
@@ -1254,26 +1259,35 @@ admin_pairing_status() {
 # -----------------------------------------------------------------------------
 
 wifi_set_all() {
-        local disabled="$1" changed=0
+        local disabled="$1" changed=0 wireless_config radio
 
-        for radio in $(uci -q show wireless 2>/dev/null | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\1/p'); do
-                uci -q set "wireless.$radio.disabled=$disabled"
+        # Частичный stdout неуспешного UCI не является списком радиомодулей.
+        wireless_config="$(uci -q show wireless 2>/dev/null)" || {
+                echo "Wireless configuration is unavailable." >&2
+                return 1
+        }
+        for radio in $(printf '%s\n' "$wireless_config" | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\1/p'); do
+                uci -q set "wireless.$radio.disabled=$disabled" || return 1
                 changed=1
         done
 
         [ "$changed" = "1" ] || { log "No wireless radios found."; return 1; }
 
-        uci -q commit wireless
-        wifi reload >/dev/null 2>&1 || wifi >/dev/null 2>&1 || true
+        uci -q commit wireless || return 1
+        if ! wifi reload >/dev/null 2>&1 && ! wifi >/dev/null 2>&1; then
+                echo "Wireless settings were saved, but reload failed." >&2
+                return 1
+        fi
+        return 0
 }
 
 wifi_enable() {
-        wifi_set_all 0
+        wifi_set_all 0 || return 1
         log_event "Wi-Fi включён Sheepfold"
 }
 
 wifi_disable() {
-        wifi_set_all 1
+        wifi_set_all 1 || return 1
         log_event "Wi-Fi отключён Sheepfold"
 }
 

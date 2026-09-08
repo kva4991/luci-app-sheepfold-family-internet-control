@@ -91,6 +91,7 @@ export const testCategories = Object.freeze({
     'countryProfiles.test.mjs',
   ],
   access: [
+    'commandOutcomeRuntime.test.mjs',
     'readModelRuntime.test.mjs',
     'recoveryRuntime.test.mjs',
     'policyConsistencyRuntime.test.mjs',
@@ -163,6 +164,8 @@ export const testCategories = Object.freeze({
     'siteListResilience.test.mjs',
   ],
   backend: [
+    'commandOutcomeRuntime.test.mjs',
+    'tokenStorageRecoveryRuntime.test.mjs',
     'readModelRuntime.test.mjs',
     'recoveryRuntime.test.mjs',
     'policyConsistencyRuntime.test.mjs',
@@ -305,6 +308,7 @@ export const testCategories = Object.freeze({
     'tokenDeviceBinding.test.mjs',
   ],
   security: [
+    'tokenStorageRecoveryRuntime.test.mjs',
     'apiFormRuntime.test.mjs',
     'accessPolicyRuntime.test.mjs',
     'androidSessionRaceRuntime.test.mjs',

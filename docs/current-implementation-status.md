@@ -1,5 +1,13 @@
 # Current Implementation Status
 
+Focused local fixes: 2026-09-08, **r290**, based on r289 `83bbfd4`. Token migration and
+revocation failures, wireless command outcomes and legacy action-log failure handling
+are corrected. All **983 local tests in 133 files** pass without skips, including
+40 new runtime checks. Full-run results and tool limitations are recorded in the
+[r290 record](audit-fixes-r290.ru.md). The [cumulative register](bug-register.ru.md)
+contains 30 cards, with token-writer concurrency explicitly open in R08. No hardware,
+SDK, Android or CI completion is implied; the owner's access priority is unchanged.
+
 Focused local fixes: 2026-09-08, **r289**, based on r288 `b9209ce`. Observed UCI changes
 now reject the calculation instead of acknowledging a mixed result; this is optimistic
 validation, not a complete snapshot or writer transaction. Failed schedule output is
@@ -116,10 +124,10 @@ quarantine, automatic groups, notifications and firewall effects is
 [`device-passport-and-control.ru.md`](device-passport-and-control.ru.md) (§devpas1). Focused
 device documents supplement that contract instead of redefining it.
 
-Current local r289 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
+Current local r290 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-289_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-290_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.
