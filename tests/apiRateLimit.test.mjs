@@ -1,6 +1,6 @@
 /*
  * Проверяет wiring двух уровней rate limit и модель счётчика. Файлы не меняет.
- * Проверка реального CGI/form выполняется pairingBoundaryRuntime; здесь не
+ * Реальные счётчик/CGI и гонка проверяются apiRateLimitRuntime, форма — pairingBoundaryRuntime; здесь не
  * доказываются конкурентные запросы, uhttpd и фактическая защита на роутере.
  */
 import { readFileSync } from 'node:fs';
@@ -18,10 +18,11 @@ function readProjectFile(path) {
 
 /** Mirrors sheepfold-api-rate-limit counter semantics for portable tests. */
 function rateLimitWouldAllow(state, bucket, clientId, limit, windowSeconds, now) {
-  if (!Number.isInteger(limit) || limit <= 0) return true;
+  if (!Number.isInteger(limit) || limit < 0 || !Number.isInteger(windowSeconds) || windowSeconds <= 0) return false;
+  if (limit === 0) return true;
   const key = `${bucket}_${clientId}`;
   const current = state.get(key);
-  if (!current || now - current.windowStart >= windowSeconds) {
+  if (!current || now < current.windowStart || now - current.windowStart >= windowSeconds) {
     state.set(key, { count: 1, windowStart: now });
     return true;
   }
@@ -44,7 +45,8 @@ describe('API rate limit', () => {
     assert.match(cgi, /rate_limited/);
     assert.match(cgi, /429 Too Many Requests/);
     assert.match(cgi, /Retry-After: %s/);
-    assert.match(cgi, /header_json "429 Too Many Requests" "60"/);
+    assert.match(cgi, /header_json "429 Too Many Requests" "\$1"/);
+    assert.match(cgi, /rate_limit_unavailable/);
   });
 
   it('starts a newly issued QR with fresh limits and counts only rejected credentials', () => {
@@ -93,5 +95,6 @@ describe('API rate limit', () => {
     assert.equal(rateLimitWouldAllow(state, 'pair', '192.168.1.50', 3, 60, now + 3), false);
     assert.equal(rateLimitWouldAllow(state, 'pair', '192.168.1.51', 3, 60, now + 3), true);
     assert.equal(rateLimitWouldAllow(state, 'pair', '192.168.1.50', 3, 60, now + 61), true);
+    assert.equal(rateLimitWouldAllow(state, 'pair', '192.168.1.50', 3, 60, now - 100), true);
   });
 });

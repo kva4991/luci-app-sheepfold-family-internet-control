@@ -1,86 +1,150 @@
 #!/bin/sh
 # Лёгкий лимит частоты HTTP-запросов к Sheepfold API по IP клиента.
-# Хранит счётчики в /tmp — без базы данных и заметной нагрузки на роутер.
+# Счётчики остаются в RAM; разрешение выдаётся только после сохранения квоты.
 set -eu
+umask 077
 
 RATE_DIR="/tmp/sheepfold/api-rate-limit"
+RATE_TEMP_FILE=""
+. /usr/libexec/sheepfold/sheepfold-lock-common
 
 sanitize_client_id() {
-	printf '%s' "$1" | tr -c 'A-Za-z0-9._:-' '_'
+	# В REMOTE_ADDR нет '_': это разделитель bucket/client, важный при reset.
+	printf '%s' "$1" | tr -c 'A-Za-z0-9.:-' '-'
 }
 
-sanitize_bucket() {
-	printf '%s' "$1" | tr -cd 'A-Za-z0-9_.-'
+validate_bucket() {
+	case "$1" in ''|*[!A-Za-z0-9_.-]*) return 2 ;; esac
+	[ "${#1}" -le 64 ]
+}
+
+rate_uint() {
+	local value digits
+	value="$1"
+	digits="$2"
+	case "$value" in ''|*[!0-9]*) return 2 ;; esac
+	# Ведущие нули не должны включать восьмеричную арифметику ash.
+	while [ "${value#0}" != "$value" ] && [ "${#value}" -gt 1 ]; do value="${value#0}"; done
+	[ "${#value}" -le "$digits" ] || return 2
+	printf '%s' "$value"
+}
+
+rate_cleanup() {
+	[ -z "$RATE_TEMP_FILE" ] || rm -f "$RATE_TEMP_FILE" 2>/dev/null || true
+	sheepfold_lock_release
+}
+
+rate_lock_bucket() {
+	local bucket lock_path lock_parent wait_seconds waited_seconds
+	bucket="$1"
+	[ ! -L "$RATE_DIR" ] || return 2
+	mkdir -p "$RATE_DIR" 2>/dev/null || return 2
+	chmod 700 "$RATE_DIR" 2>/dev/null || return 2
+	lock_path="$RATE_DIR/.${bucket}.lock"
+	[ ! -L "$lock_path" ] || return 2
+	[ ! -e "$lock_path" ] || [ -f "$lock_path" ] || return 2
+	# Один lock на bucket сериализует также доверенный reset при выпуске QR.
+	# Сам lock-файл не удаляем: иначе ожидающий процесс может держать старый inode.
+	sheepfold_lock_acquire "$lock_path" 3 >/dev/null 2>&1 || return 2
+	trap 'rate_cleanup' EXIT
+	trap 'exit 2' HUP INT TERM
+}
+
+rate_read_state() {
+	# Читаем запись целиком и проверяем exit reader: сбой не равен пустой квоте.
+	LC_ALL=C awk -F '\t' '
+		{
+			if (NR != 1 || NF != 2 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/) { bad=1; next }
+			count=$1; started=$2
+			sub(/^0+/, "", count); sub(/^0+/, "", started)
+			if (length(count) > 9 || length(started) > 10) bad=1
+		}
+		END {
+			if (NR != 1 || bad) exit 2
+			printf "%.0f\t%.0f\n", count+0, started+0
+		}
+	' "$1"
+}
+
+rate_write_state() {
+	local file count window_start
+	file="$1"
+	count="$2"
+	window_start="$3"
+	# Не обнуляем старый файл до успешной подготовки замены на том же tmpfs.
+	RATE_TEMP_FILE="$(mktemp "$RATE_DIR/.state.XXXXXX")" || return 2
+	printf '%s\t%s\n' "$count" "$window_start" >"$RATE_TEMP_FILE" || return 2
+	chmod 600 "$RATE_TEMP_FILE" 2>/dev/null || return 2
+	mv -f "$RATE_TEMP_FILE" "$file" 2>/dev/null || return 2
+	RATE_TEMP_FILE=""
 }
 
 rate_limit_check() {
+	local bucket client_id limit window safe_id file now count window_start line retry_after
 	bucket="$1"
-	client_id="$2"
-	limit="$3"
-	window="$4"
-
-	case "$limit" in
-		''|*[!0-9]*) return 0 ;;
-	esac
-	case "$window" in
-		''|*[!0-9]*) window=60 ;;
-	esac
+	validate_bucket "$bucket" || return 2
+	client_id="${2:-unknown}"
+	[ "${#client_id}" -le 128 ] || return 2
+	limit="$(rate_uint "$3" 9)" || return 2
+	window="$(rate_uint "$4" 9)" || return 2
+	[ "$window" -gt 0 ] || return 2
+	# Явный ноль оставлен для доверенного CLI, но неверное число не отключает лимит.
 	[ "$limit" -gt 0 ] || return 0
-
-	client_id="${client_id:-unknown}"
-	safe_id="$(sanitize_client_id "$client_id")"
-	mkdir -p "$RATE_DIR" 2>/dev/null || return 0
-	chmod 700 "$RATE_DIR" 2>/dev/null || true
-
+	safe_id="$(sanitize_client_id "$client_id")" || return 2
+	[ -n "$safe_id" ] || return 2
+	rate_lock_bucket "$bucket" || return 2
 	file="$RATE_DIR/${bucket}_${safe_id}"
-	now="$(date +%s)"
+	now="$(date +%s)" || return 2
+	now="$(rate_uint "$now" 10)" || return 2
+	[ "$now" -gt 0 ] || return 2
 	count=0
 	window_start=0
-
-	if [ -r "$file" ]; then
-		line="$(head -1 "$file" 2>/dev/null || true)"
+	if [ -e "$file" ] || [ -L "$file" ]; then
+		[ -f "$file" ] && [ ! -L "$file" ] || return 2
+		line="$(rate_read_state "$file")" || return 2
 		count="${line%%	*}"
 		window_start="${line#*	}"
-		case "$count" in ''|*[!0-9]*) count=0 ;; esac
-		case "$window_start" in ''|*[!0-9]*) window_start=0 ;; esac
 	fi
 
-	if [ "$window_start" -le 0 ] || [ $((now - window_start)) -ge "$window" ]; then
-		printf '%s\t%s\n' "1" "$now" >"$file"
-		chmod 600 "$file" 2>/dev/null || true
-		return 0
+	# Коррекция часов назад не должна продлевать минутную квоту на часы или дни.
+	if [ "$window_start" -le 0 ] || [ "$now" -lt "$window_start" ] || [ $((now - window_start)) -ge "$window" ]; then
+		count=0
+		window_start="$now"
 	fi
-
 	if [ "$count" -ge "$limit" ]; then
+		retry_after=$((window - (now - window_start)))
+		printf '%s\n' "$retry_after"
 		return 1
 	fi
-
 	count=$((count + 1))
-	printf '%s\t%s\n' "$count" "$window_start" >"$file"
-	chmod 600 "$file" 2>/dev/null || true
+	rate_write_state "$file" "$count" "$window_start" || return 2
 	return 0
 }
 
 rate_limit_reset_bucket() {
-	bucket="$(sanitize_bucket "$1")"
-	[ -n "$bucket" ] || return 2
-	[ -d "$RATE_DIR" ] || return 0
-
-	# Сброс выполняется только доверенным backend-кодом при выпуске нового QR.
-	# Ограничиваем удаление одним проверенным префиксом внутри фиксированного /tmp.
+	local bucket file client_id reset_status
+	bucket="$1"
+	validate_bucket "$bucket" || return 2
+	[ -e "$RATE_DIR" ] || [ -L "$RATE_DIR" ] || return 0
+	rate_lock_bucket "$bucket" || return 2
+	reset_status=0
 	for file in "$RATE_DIR/${bucket}_"*; do
-		[ -f "$file" ] || continue
-		rm -f "$file"
+		[ -e "$file" ] || [ -L "$file" ] || continue
+		client_id="${file#"$RATE_DIR/${bucket}_"}"
+		# Например, reset pair не затрагивает другой bucket pair_extra.
+		case "$client_id" in ''|*[!A-Za-z0-9.:-]*) continue ;; esac
+		rm -f "$file" 2>/dev/null || reset_status=2
 	done
+	return "$reset_status"
 }
 
 command_name="${1:-}"
-shift || true
+[ "$#" -eq 0 ] || shift
 case "$command_name" in
-	check) rate_limit_check "$1" "$2" "$3" "$4" ;;
-	reset-bucket) rate_limit_reset_bucket "$1" ;;
+	check) [ "$#" -eq 4 ] || exit 2; rate_limit_check "$@" ;;
+	reset-bucket) [ "$#" -eq 1 ] || exit 2; rate_limit_reset_bucket "$@" ;;
 	*)
 		echo "Usage: sheepfold-api-rate-limit check <bucket> <client_id> <limit> <window_seconds> | reset-bucket <bucket>" >&2
-		exit 1
+		exit 2
 		;;
 esac

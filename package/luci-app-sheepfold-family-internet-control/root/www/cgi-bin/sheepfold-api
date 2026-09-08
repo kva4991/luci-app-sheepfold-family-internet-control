@@ -53,18 +53,38 @@ method_not_allowed() {
 }
 
 rate_limit_exceeded() {
-    header_json "429 Too Many Requests" "60"
+    header_json "429 Too Many Requests" "$1"
     printf '{"app":"sheepfold","ok":false,"error":"rate_limited","message":"Too many requests from this client. Try again later."}\n'
     exit 0
 }
 
+rate_limit_unavailable() {
+    header_json "503 Service Unavailable"
+    printf '{"app":"sheepfold","ok":false,"error":"rate_limit_unavailable","message":"Request limiting is temporarily unavailable. Try again later."}\n'
+    exit 0
+}
+
 enforce_rate_limit() {
+    local bucket limit window rate_status rate_output
     bucket="$1"
     limit="$2"
     window="$3"
-    if [ -x "$RATE_LIMIT" ]; then
-        "$RATE_LIMIT" check "$bucket" "$client_ip" "$limit" "$window" || rate_limit_exceeded
-    fi
+    # Отсутствующий limiter не отключает защиту, а его отказ не означает перебор.
+    [ -x "$RATE_LIMIT" ] || rate_limit_unavailable
+    rate_status=0
+    rate_output="$("$RATE_LIMIT" check "$bucket" "$client_ip" "$limit" "$window" 2>/dev/null)" || rate_status=$?
+    case "$rate_status" in
+        0) ;;
+        1)
+            # В HTTP-заголовок попадают только проверенные секунды, не stdout helper.
+            case "$rate_output" in ''|*[!0-9]*) rate_output="$window" ;; esac
+            if [ "${#rate_output}" -gt 9 ] || [ "$rate_output" -le 0 ] || [ "$rate_output" -gt "$window" ]; then
+                rate_output="$window"
+            fi
+            rate_limit_exceeded "$rate_output"
+            ;;
+        *) rate_limit_unavailable ;;
+    esac
     ensure_request_source
 }
 

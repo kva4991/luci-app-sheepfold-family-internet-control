@@ -37,7 +37,7 @@ export function createAuthFixture(record = authRecord(), extra = {}) {
     .replaceAll('/etc/sheepfold', posix(persistent)).replaceAll('/tmp/sheepfold', posix(fixture.runtime))
     .replaceAll('/tmp/dhcp.leases', posix(join(fixture.root, 'leases')))
     .replaceAll('/proc/net/arp', posix(join(fixture.root, 'arp')));
-  for (const name of ['sheepfold-token-common', 'sheepfold-router-control']) {
+  for (const name of ['sheepfold-token-common', 'sheepfold-router-control', 'sheepfold-api-rate-limit']) {
     installExecutable(fixture, name, relocate(readFileSync(join(runtimeRoot, name), 'utf8')));
   }
   installExecutable(fixture, 'test-auth-cgi', relocate(readFileSync(join(runtimeRoot,

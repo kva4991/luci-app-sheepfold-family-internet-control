@@ -1,5 +1,13 @@
 # Current Implementation Status
 
+Focused local fixes: 2026-09-08, **r293**, based on r292 `1812625`. External HTTP rate
+counters now serialize updates and resets, reject storage failures, recover from a
+backward wall-clock change and distinguish 503 outages from 429 quota exhaustion.
+Retry-After reports the remaining window. **142 targeted tests in 8 files** pass;
+40 new runtime scenarios are documented in the [r293 record](audit-fixes-r293.ru.md)
+and [42-card register](bug-register.ru.md). No full-suite, hardware, SDK or Android
+build completion is claimed. The separate inner pairing-attempt counter remains open.
+
 Focused local fixes: 2026-09-08, **r292**, based on r291 `7f4764e`. Complete bound-token
 validation, explicit SHA-256 failure handling, temporary authentication errors (503),
 and delegation-aware installation hardening are corrected. The owner requested targeted
@@ -139,10 +147,10 @@ quarantine, automatic groups, notifications and firewall effects is
 [`device-passport-and-control.ru.md`](device-passport-and-control.ru.md) (§devpas1). Focused
 device documents supplement that contract instead of redefining it.
 
-Current local r292 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
+Current local r293 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-292_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-293_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.

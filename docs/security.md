@@ -1,6 +1,11 @@
 # Security Model
 ## Principles
 
+Local r293 correction: external HTTP quotas serialize updates and category resets,
+refuse unrecorded allowances and distinguish unavailable enforcement (503) from quota
+exhaustion (429). See the [r293 evidence and limits](audit-fixes-r293.ru.md).
+The inner pairing-attempt counter and target-router load behavior remain separate checks.
+
 - Do not store the router root password in the Android app.
 - Do not allow Sheepfold setup to continue when the OpenWRT root password is empty/not configured.
 - Use API tokens or session-based authentication.

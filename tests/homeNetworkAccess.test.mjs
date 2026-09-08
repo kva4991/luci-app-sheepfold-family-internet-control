@@ -120,6 +120,8 @@ test('homeNetworkCgiRequiresBothSourceApprovalAndTheExistingAdminToken', () => {
   mkdirSync(helpers);
   const helper = (name, body) => writeFileSync(join(helpers, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
   helper('sheepfold-token-common', ':');
+  // Квота проверяется настоящим limiter в apiRateLimitRuntime, здесь — только source/auth.
+  helper('sheepfold-api-rate-limit', 'exit 0');
   helper('sheepfold-home-network', `case "$1" in
 check-request) [ "$TEST_SOURCE_DENIED" != 1 ] ;;
 endpoints) printf 'https://192.168.4.1:5201/cgi-bin/sheepfold-api,https://192.168.2.179:5201/cgi-bin/sheepfold-api' ;;
