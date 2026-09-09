@@ -23,7 +23,7 @@ const body = `login=Parent&code=${encodeURIComponent(testCode)}`;
 const identity = testMac.replaceAll(':', '');
 const now = 1700000000;
 const concurrencyOptions = {
-  skip: pairingConcurrencyAvailable ? false : 'requires BusyBox ash and native flock; covered by Linux CI',
+  skip: pairingConcurrencyAvailable ? false : 'requires a native POSIX shell and flock; covered by Linux CI',
 };
 const symlinkOptions = {
   skip: process.platform === 'win32' ? 'requires POSIX symlink semantics; covered by Linux CI' : false,
@@ -59,7 +59,7 @@ esac
   const callCount = () => readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).length;
   const request = (status = 3, env = {}) => f.request(body, { TEST_PAIR_STATUS: String(status), ...env });
   const concurrent = (env = {}) => {
-    const child = spawn('busybox', ['ash', join(f.bin, 'sheepfold-api-pair')], { cwd: f.root,
+    const child = spawn('sh', [join(f.bin, 'sheepfold-api-pair')], { cwd: f.root,
       env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, REMOTE_ADDR: testIp,
         REQUEST_METHOD: 'POST', CONTENT_LENGTH: String(Buffer.byteLength(body)),
         HTTP_X_SHEEPFOLD_CLIENT: 'android-admin-v1', TEST_PAIR_STATUS: '3', ...env } });
@@ -207,7 +207,7 @@ describe('Pairing attempt accounting and failure boundaries', () => {
     try {
       request = f.concurrent({ TEST_PAIR_GATE: '1' });
       await waitFor(() => f.callCount() >= 1);
-      const child = spawn('busybox', ['ash', join(f.bin, 'sheepfold-pair-activate'), 'Parent', 'Next+Code', '', '600'],
+      const child = spawn('sh', [join(f.bin, 'sheepfold-pair-activate'), 'Parent', 'Next+Code', '', '600'],
         { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}` } });
       let stdout = '', stderr = '';
       child.stdout.on('data', (data) => { stdout += data; }); child.stderr.on('data', (data) => { stderr += data; });

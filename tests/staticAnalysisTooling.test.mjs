@@ -34,10 +34,11 @@ describe('Static analysis tooling', () => {
     const runner = read('scripts/runAndroidLint.mjs');
 
     assert.match(workflow, /Install JavaScript tooling[\s\S]*npm ci/);
-    assert.match(workflow, /Install OpenWrt shell test dependencies[\s\S]*missing\+=\(busybox\)[\s\S]*missing\+=\(util-linux\)/);
-    assert.doesNotMatch(workflow, /apt-get update/);
+    assert.match(workflow, /Verify POSIX lock test dependency[\s\S]*command -v flock[\s\S]*flock --version/);
+    assert.doesNotMatch(workflow, /apt-get (?:update|install)/);
     assert.match(workflow, /fetch-depth:\s*0/);
     assert.match(workflow, /Run impacted quality checks[\s\S]*runQualityChecks\.mjs --git "\$base" --skip-android --strict/);
+    assert.ok(workflow.indexOf('Run impacted quality checks') < workflow.indexOf('Validate runtime hardening invariants'));
     assert.doesNotMatch(workflow, /node --test tests\/\*\.test\.mjs/);
     assert.match(qualityRunner, /lintJavaScript\(changes, options\.full\)/);
     assert.match(androidWorkflow, /Run Android Lint[\s\S]*lintDebug --stacktrace/);

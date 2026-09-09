@@ -14,7 +14,6 @@ export const runtimeRoot = join(repoRoot, 'package/luci-app-sheepfold-family-int
 export const testMac = '02:00:00:00:00:11';
 export const testIp = '192.168.7.20';
 const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
-const busybox = process.platform !== 'win32' && spawnSync('busybox', ['ash', '-c', 'true']).status === 0;
 export const hostHasFlock = spawnSync('sh', ['-c', 'command -v flock >/dev/null 2>&1']).status === 0;
 
 export function createRouterFixture(values = {}) {
@@ -47,7 +46,6 @@ export function createRouterFixture(values = {}) {
       .replaceAll('/tmp/sheepfold', shellPath(runtime))
       .replaceAll('/tmp/dhcp.leases', shellPath(leases))
       .replaceAll('/proc/net/arp', shellPath(arp));
-    if (busybox) body = body.replace(/^#!\/bin\/sh/, '#!/usr/bin/env -S busybox ash');
     executable(name, body);
   }
   executable('sheepfold-token-common', '# Проверяется обработчик после авторизации\n');
@@ -93,8 +91,8 @@ esac
   }
   setValues(values);
   function run(name, args = [], options = {}) {
-    const command = busybox ? 'busybox' : 'bash';
-    const commandArgs = [...(busybox ? ['ash'] : []), '-c',
+    const command = process.platform === 'win32' ? 'bash' : 'sh';
+    const commandArgs = ['-c',
       'PATH="$1:$PATH"; export PATH; shift; exec "$@"', 'sheepfold-router-fixture',
       shellPath(bin), shellPath(join(bin, name)), ...args];
     return spawnSync(command, commandArgs, {

@@ -429,8 +429,11 @@ apk-tools v3 APK для 25.12 (§owrtci1). Package-workflow автоматиче
 реально затронутым путям. Не заменять этот вход монолитным
 `node --test tests/*.test.mjs`: он обходит карту влияния и одновременно запускает
 конфликтующие shell-fixture. Полный suite остаётся отдельным release-gate по §testcat.
-Linux-job явно устанавливает BusyBox `ash` и `util-linux` с `flock`, чтобы выполнить
-конкурентные pairing/lock-сценарии, которые штатно пропускаются на Windows.
+Quality-step идёт до изменяющего права `runtime-hardening`, иначе служебный `chmod`
+попадёт в diff. Runtime-fixture детерминированно использует POSIX `sh` и системный
+`flock`; конкурентные сценарии штатно пропускаются на Windows. Реальные BusyBox
+`ash`, UCI и права файлов подтверждает live-router/OpenWrt контур, а не подмена
+команд внутри fault-injection fixture.
 
 Число job зависит от затронутых путей. При одновременных `push` и `pull_request`
 проверки могут дублироваться; сначала сравнивайте имя workflow и commit.

@@ -3,7 +3,6 @@
  * в удаляемую .build fixture. UCI, DHCP, журнал и применение firewall моделируются.
  * Это проверка отказов и границ сохранения, не libuci, TLS, телефона или power loss.
  */
-import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRouterFixture, hostHasFlock, repoRoot, runtimeRoot, testMac, testIp } from './routerRuntimeFixture.mjs';
@@ -12,8 +11,7 @@ import { shellTestPath } from '../../tools/quality/testEnvironment.mjs';
 
 export const shellQuote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
 export const shellPath = (value) => shellTestPath(value, { cwd: repoRoot });
-const busybox = process.platform !== 'win32' && spawnSync('busybox', ['ash', '-c', 'true']).status === 0;
-export const pairingConcurrencyAvailable = busybox && hostHasFlock;
+export const pairingConcurrencyAvailable = process.platform !== 'win32' && hostHasFlock;
 export const testHash = 'a'.repeat(64);
 export const testCode = 'Valid+Code';
 export const storedToken = (login = 'Parent') => `login=${login}\ndevice_id=1\nmac=${testMac}\nissued_at=1700000000\nexpires_at=0\n`;
@@ -40,8 +38,7 @@ export function createPairingFixture({ realBackend = false } = {}) {
     .replaceAll('/etc/config', shellPath(config))
     .replaceAll('/tmp/sheepfold', shellPath(fixture.runtime))
     .replaceAll('/tmp/dhcp.leases', shellPath(join(fixture.root, 'leases')))
-    .replaceAll('/proc/net/arp', shellPath(join(fixture.root, 'arp')))
-    .replace(/^#!\/bin\/sh/, busybox ? '#!/usr/bin/env -S busybox ash' : '#!/bin/sh');
+    .replaceAll('/proc/net/arp', shellPath(join(fixture.root, 'arp')));
   for (const name of ['sheepfold-pair-common', 'sheepfold-pair-device', 'sheepfold-api-pair',
     'sheepfold-token-common', 'sheepfold-lib-form']) {
     installExecutable(fixture, name, relocate(readFileSync(join(runtimeRoot, name), 'utf8')));

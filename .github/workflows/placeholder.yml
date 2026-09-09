@@ -19,6 +19,34 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install JavaScript tooling
+        run: npm ci
+
+      - name: Verify POSIX lock test dependency
+        run: |
+          command -v flock
+          flock --version
+
+      - name: Run impacted quality checks
+        shell: bash
+        env:
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base="$PULL_REQUEST_BASE"
+          if [ -z "$base" ]; then
+            base="$PUSH_BASE"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="$(git rev-parse HEAD^ 2>/dev/null || git hash-object -t tree /dev/null)"
+          fi
+          node scripts/runQualityChecks.mjs --git "$base" --skip-android --strict
+
       - name: Validate OpenWrt shell syntax
         shell: bash
         run: |
@@ -68,39 +96,3 @@ jobs:
           test "$(printf '%s' "$openwrt" | cut -f1)" = "router"
           test -z "$(printf '%s' "$openwrt" | cut -f3)"
           test "$(printf '%s' "$openwrt" | cut -f8)" = "1"
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-
-      - name: Install JavaScript tooling
-        run: npm ci
-
-      - name: Install OpenWrt shell test dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          missing=()
-          command -v busybox >/dev/null 2>&1 || missing+=(busybox)
-          command -v flock >/dev/null 2>&1 || missing+=(util-linux)
-          if [ "${#missing[@]}" -gt 0 ]; then
-            sudo apt-get install --no-install-recommends -y "${missing[@]}"
-          fi
-          busybox ash -c true
-          flock --version
-
-      - name: Run impacted quality checks
-        shell: bash
-        env:
-          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
-          PUSH_BASE: ${{ github.event.before }}
-        run: |
-          set -euo pipefail
-          base="$PULL_REQUEST_BASE"
-          if [ -z "$base" ]; then
-            base="$PUSH_BASE"
-          fi
-          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
-            base="$(git rev-parse HEAD^ 2>/dev/null || git hash-object -t tree /dev/null)"
-          fi
-          node scripts/runQualityChecks.mjs --git "$base" --skip-android --strict
