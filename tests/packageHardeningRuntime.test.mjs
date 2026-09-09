@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const repo = resolve(import.meta.dirname, '..');
-const rootSource = join(repo, 'package/luci-app-sheepfold-family-internet-control/root');
+const rootSource = join(process.env.SHEEPFOLD_HARDENING_TEST_SOURCE || repo, 'package/luci-app-sheepfold-family-internet-control/root');
 function check(mutate = () => {}) {
   const parent = join(repo, '.build/test-fixtures');
   mkdirSync(parent, { recursive: true });
@@ -43,5 +43,24 @@ describe('Installed rootfs hardening after shared-helper refactors', () => {
     const result = check(mutate);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Sheepfold hardening check failed/);
+  });
+});
+
+// Structural guards name the damaged boundary; runtime attempt tests separately
+// prove concurrency/accounting. A static guard is not a security attestation.
+describe('Installed pairing attempt reservation after r294 extraction', () => {
+  for (const [name, mutate, message] of [
+    ['missing library', ({ runtime }) => rmSync(join(runtime, 'sheepfold-pair-attempt-common')), /missing file.*sheepfold-pair-attempt-common/],
+    ['broken library syntax', ({ edit }) => edit('sheepfold-pair-attempt-common', (s) => s + '\nif then\n'), /shell syntax error.*sheepfold-pair-attempt-common/],
+    ['disconnected CGI import', ({ edit }) => edit('sheepfold-api-pair', (s) => s.replace('. /usr/libexec/sheepfold/sheepfold-pair-attempt-common', ':')), /pairing attempt library is not connected/],
+    ['disconnected activation import', ({ edit }) => edit('sheepfold-pair-activate', (s) => s.replace('. /usr/libexec/sheepfold/sheepfold-pair-attempt-common', ':')), /pairing attempt library is not connected/],
+    ['missing reservation call', ({ edit }) => edit('sheepfold-api-pair', (s) => s.replace('pair_attempt_reserve "$attempt_identity_value"', ':')), /pairing request does not reserve an attempt/],
+    ['missing persistent reservation', ({ edit }) => edit('sheepfold-pair-attempt-common', (s) => s.replace('pair_attempt_write "$((PAIR_ATTEMPT_PREVIOUS + 1))"', ':')), /pairing attempt reservation is not persisted/],
+    ['missing kernel lock', ({ edit }) => edit('sheepfold-pair-attempt-common', (s) => s.replace('sheepfold_lock_acquire "$path" 3', ':')), /pairing attempt kernel lock is missing/],
+    ['disconnected reset', ({ edit }) => edit('sheepfold-pair-activate', (s) => s.replace('pair_attempt_reset || return 1', ':')), /new pairing code does not reset reserved attempts/],
+  ]) it(`rejects ${name} for the correct reason`, () => {
+    const result = check(mutate);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, message);
   });
 });

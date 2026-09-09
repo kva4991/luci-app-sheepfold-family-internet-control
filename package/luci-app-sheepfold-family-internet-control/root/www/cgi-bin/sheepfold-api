@@ -168,6 +168,8 @@ read_admin_body() {
 
 admin_config_message() {
     case "$1" in
+        config_read_failed|revision_hash_unavailable)
+            printf '%s' 'The router could not verify the current settings. Refresh before making further changes.' ;;
         revision_conflict) printf '%s' 'Configuration changed on the router. Refresh and try again.' ;;
         config_busy) printf '%s' 'The router is already saving Sheepfold settings. Refresh and try again.' ;;
         unsupported_schema) printf '%s' 'This management API schema is not supported.' ;;
@@ -222,6 +224,11 @@ run_admin_config() {
         3) status="409 Conflict" ;;
         4) status="409 Conflict"; retry=2 ;;
         5) status="502 Bad Gateway" ;;
+        70)
+            case "$error_code" in
+                config_read_failed|revision_hash_unavailable) status="503 Service Unavailable" ;;
+                *) status="500 Internal Server Error" ;;
+            esac ;;
         *) status="500 Internal Server Error" ;;
     esac
     message="$(admin_config_message "$error_code")"

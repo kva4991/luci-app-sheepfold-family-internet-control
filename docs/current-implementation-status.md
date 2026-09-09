@@ -1,5 +1,13 @@
 # Current Implementation Status
 
+Focused continuation: 2026-09-09, **r295**, based on r294 `e1084e1`.
+Admin-config rejects failed UCI/revision hashes, escapes JSON controls and disables
+pathname expansion of logical lists. Installation hardening now follows the r294
+pairing-attempt delegation instead of rejecting the removed function name.
+See the [r295 report](audit-fixes-r295.ru.md) and [53-card register](bug-register.ru.md).
+These are local targeted checks, not full-suite, SDK or physical-device evidence.
+Historical r294 and earlier notes follow.
+
 Focused continuation: 2026-09-08, **r294**, based on the available r293 `a1cb6cb`.
 Internal pairing attempts now reserve a slot before backend and share a lock with
 QR reset; storage and unexpected backend failures return 503. Ordinary logging no
@@ -157,10 +165,10 @@ quarantine, automatic groups, notifications and firewall effects is
 [`device-passport-and-control.ru.md`](device-passport-and-control.ru.md) (§devpas1). Focused
 device documents supplement that contract instead of redefining it.
 
-Current local r294 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
+Current local r295 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-294_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-295_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.

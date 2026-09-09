@@ -351,3 +351,9 @@
 - `§persist1`: ошибка runtime после успешного UCI commit не является rollback. Адаптер ставит `persisted=true`, UI перечитывает фактический конфиг и сообщает о частичном результате. DOM и toast запрещены внутри persistence-модулей.
 - `§coordclean1`: schedule/group persistence и settings side effects не возвращать в `overview.js`. Coordinator может подтверждать действие и обновлять DOM, но UCI-list, membership staging, runtime ordering и discovery payload принадлежат отдельным модулям.
 - `§settingview1`: поля Settings, Misc/Storage/AI composition и device-type listbox не возвращать в `overview.js`. Presentation-модуль получает draft callbacks; UCI/backend/runtime остаются отдельными adapters.
+
+## Уточнения r295: admin-config и pairing hardening
+
+- `revision` подтверждает только успешное чтение и SHA-256, не атомарность всех последующих UCI-полей; HTTP 503 после записи требует повторного чтения, а не слепого повторения POST. Подробности [B50](bug-register.ru.md) (§apicon1).
+- В admin-config `set -f` обязателен: `for value in $list` не должен подставлять файлы текущего каталога вместо ID/дней. JSON-control экранируются, не заменяются пробелами. [B51–B52](bug-register.ru.md) (§apicon1).
+- После переноса pairing-счётчика hardener должен проверять attempts library, import/reserve/lock/write/reset и её синтаксис, а не удалённое `record_failed_attempt`. [B53](bug-register.ru.md) (§dscqr01).

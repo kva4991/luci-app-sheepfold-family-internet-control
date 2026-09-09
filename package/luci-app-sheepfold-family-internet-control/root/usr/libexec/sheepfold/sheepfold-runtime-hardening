@@ -38,6 +38,7 @@ PACKAGE_MANAGER="$(path /usr/libexec/sheepfold/sheepfold-package-manager)"
 PAIR_ACTIVATE="$(path /usr/libexec/sheepfold/sheepfold-pair-activate)"
 PAIR_DEVICE="$(path /usr/libexec/sheepfold/sheepfold-pair-device)"
 PAIR_COMMON="$(path /usr/libexec/sheepfold/sheepfold-pair-common)"
+PAIR_ATTEMPTS="$(path /usr/libexec/sheepfold/sheepfold-pair-attempt-common)"
 TOKEN_COMMON="$(path /usr/libexec/sheepfold/sheepfold-token-common)"
 PAIR_API="$(path /usr/libexec/sheepfold/sheepfold-api-pair)"
 API_RATE_LIMIT="$(path /usr/libexec/sheepfold/sheepfold-api-rate-limit)"
@@ -91,7 +92,7 @@ for required in \
 	"$SERVICE" "$DEVICE_DETECTOR" "$DEVICE_ID" "$DEVICE_CLASSIFIER" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS" \
     "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP" "$DEVICE_SSDP_UCODE" "$DEVICE_UPNP_DESCRIPTION" "$DEVICE_WSD" "$DEVICE_WSD_UCODE" "$DEVICE_IDENTITY" "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" \
     "$DHCP_SIGNALS" "$LED_CONTROL" "$IPV6_CONTROL" "$PACKAGE_MANAGER" "$PAIR_ACTIVATE" "$PAIR_DEVICE" \
-	"$PAIR_COMMON" "$TOKEN_COMMON" "$PAIR_API" "$API_RATE_LIMIT" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$SIM_MONITOR" "$CHILD_WIFI_MONITOR" "$TLS_FINGERPRINT" "$HASH_COMMON" "$LOCK_COMMON" "$FORM_COMMON" "$POLICY_COMMON" \
+	"$PAIR_COMMON" "$PAIR_ATTEMPTS" "$TOKEN_COMMON" "$PAIR_API" "$API_RATE_LIMIT" "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$SIM_MONITOR" "$CHILD_WIFI_MONITOR" "$TLS_FINGERPRINT" "$HASH_COMMON" "$LOCK_COMMON" "$FORM_COMMON" "$POLICY_COMMON" \
     "$FIREWALL" "$SCHEDULE_EVALUATOR" "$EMERGENCY_SITES" "$COUNTRY_PROFILE" \
     "$COUNTRY_PROFILE_RU" "$COUNTRY_PROFILE_BY" "$COUNTRY_PROFILE_CN" "$SITE_LISTS" "$DOMAIN_POLICY" \
     "$ADGUARD_ADAPTER" "$ADGUARD_FEED" $VARIANT_REQUIRED \
@@ -115,7 +116,7 @@ for executable in \
     "$(path /usr/libexec/sheepfold/sheepfold-runtime-hardening)"; do
     chmod 0755 "$executable"
 done
-chmod 0644 "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$FORM_COMMON" "$POLICY_COMMON" ${JSON_COMMON:+"$JSON_COMMON"} "$ACL" "$PRIVACY_NOTICE" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
+chmod 0644 "$PAIR_COMMON" "$PAIR_ATTEMPTS" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$FORM_COMMON" "$POLICY_COMMON" ${JSON_COMMON:+"$JSON_COMMON"} "$ACL" "$PRIVACY_NOTICE" "$DEVICE_OUI_OVERRIDES" "$DEVICE_MDNS_UCODE" "$DEVICE_SSDP_UCODE" "$DEVICE_WSD_UCODE" \
     "$COUNTRY_PROFILE_RU" "$COUNTRY_PROFILE_BY" "$COUNTRY_PROFILE_CN" "$CUDY_LED_PACKAGE" "$CUDY_LED_COMMAND"
 
 mkdir -p "$(path /etc/sheepfold/tokens)"
@@ -154,7 +155,20 @@ grep -q 'pair_admin_section_for_login' "$PAIR_ACTIVATE" || die "existing adminis
 grep -q 'Create the account in LuCI first' "$PAIR_ACTIVATE" || die "missing-admin failure is not explicit"
 grep -q 'reset_old_pairing_attempts' "$PAIR_ACTIVATE" || die "new pairing code does not reset stale attempts"
 grep -q 'reset-bucket)' "$API_RATE_LIMIT" || die "pairing rate-limit reset is unavailable"
-grep -q 'record_failed_attempt' "$PAIR_API" || die "credential pairing failures are not counted"
+# r294 перенёс учёт попыток в reserve-before-backend. Проверяем реальное
+# подключение и обязательные границы, а не имя удалённой локальной функции.
+for consumer in "$PAIR_API" "$PAIR_ACTIVATE"; do
+    grep -Fqx '. /usr/libexec/sheepfold/sheepfold-pair-attempt-common' "$consumer" || \
+        die "pairing attempt library is not connected in $consumer"
+done
+grep -q '^pair_attempt_reserve() {' "$PAIR_ATTEMPTS" || die "pairing attempt reservation is missing"
+grep -Fq 'pair_attempt_reserve "$attempt_identity_value" || attempt_status="$?"' "$PAIR_API" || \
+    die "pairing request does not reserve an attempt"
+grep -Fq 'pair_attempt_lock || return 2' "$PAIR_ATTEMPTS" || die "pairing attempt reservation is not locked"
+grep -Fq 'sheepfold_lock_acquire "$path" 3' "$PAIR_ATTEMPTS" || die "pairing attempt kernel lock is missing"
+grep -Fq 'pair_attempt_write "$((PAIR_ATTEMPT_PREVIOUS + 1))" || return 2' "$PAIR_ATTEMPTS" || \
+    die "pairing attempt reservation is not persisted"
+grep -Fq 'pair_attempt_reset || return 1' "$PAIR_ACTIVATE" || die "new pairing code does not reset reserved attempts"
 ! grep -q '=administrator' "$PAIR_ACTIVATE" || die "pair activation can create an administrator"
 
 block_checks="$(grep -c 'pair_list_has_mac blocklist' "$PAIR_DEVICE" || true)"
@@ -348,7 +362,7 @@ for script in \
     "$DEVICE_PRESENCE" "$DEVICE_RECLASSIFY" "$DHCP_SIGNALS" "$LED_CONTROL" \
     "$STATUS_API" "$ACCESS_REQUEST" "$ADMIN_NOTIFICATION" "$FIREWALL" "$SCHEDULE_EVALUATOR" \
     "$EMERGENCY_SITES" "$SITE_LISTS" "$DOMAIN_POLICY" "$ADGUARD_ADAPTER" "$ADGUARD_FEED" \
-	"$PAIR_API" "$PAIR_COMMON" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$POLICY_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$TLS_FINGERPRINT" \
+	"$PAIR_API" "$PAIR_COMMON" "$PAIR_ATTEMPTS" "$TOKEN_COMMON" "$HASH_COMMON" "$LOCK_COMMON" "$POLICY_COMMON" "$PAIR_ACTIVATE" "$PAIR_DEVICE" "$TLS_FINGERPRINT" \
     $VARIANT_EXECUTABLES "$MAINTENANCE_WINDOW" \
     "$KEY_DERIVE" "$USB_STORAGE" "$WELL_KNOWN_GENERATOR" \
     "$CUDY_LED_APPLY_MODE" "$CUDY_FIX_INSTALL" "$CUDY_FIX_UNINSTALL"; do

@@ -1,5 +1,7 @@
 #!/bin/sh
-set -eu
+# Все списки здесь — UCI/API-значения, а не файловые маски. Без -f значение
+# targets=* могло стать набором имён из текущего каталога до валидации.
+set -efu
 
 # Authenticated parent-Android configuration API. The public CGI entrypoint
 # authenticates the bound administrator device before invoking this helper.

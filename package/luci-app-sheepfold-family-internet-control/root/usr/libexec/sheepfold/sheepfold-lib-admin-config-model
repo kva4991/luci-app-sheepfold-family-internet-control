@@ -31,9 +31,24 @@ sections_of_config_type() {
 }
 
 json_escape() {
-    printf '%s' "${1:-}" |
-        tr '\r\n\t' '   ' |
-        sed 's/\\/\\\\/g; s/"/\\"/g'
+    # Не заменяем пользовательский текст пробелами: JSON требует escaping всех
+    # control-байтов. Дополнительный LF сохраняет исходные переводы строк в awk.
+    printf '%s\n' "${1:-}" | LC_ALL=C awk '
+        BEGIN {
+            for (code = 1; code < 32; code++)
+                escaped[sprintf("%c", code)] = sprintf("\\u%04x", code)
+        }
+        {
+            if (NR > 1) printf "\\n"
+            for (pos = 1; pos <= length($0); pos++) {
+                char = substr($0, pos, 1)
+                if (char == "\\") printf "\\\\"
+                else if (char == "\"") printf "\\\""
+                else if (char in escaped) printf "%s", escaped[char]
+                else printf "%s", char
+            }
+        }
+    '
 }
 
 json_string() {
@@ -84,24 +99,61 @@ json_time_ranges() {
 }
 
 hash_state() {
-    local state
+    local state hash_output hash_value
     state="$1"
+    # Последний awk в pipeline скрывал ошибку производителя SHA-256. Ревизия
+    # допускается только после успеха самого hash-tool и проверки всего digest.
     if command -v sha256sum >/dev/null 2>&1; then
-        printf '%s' "$state" | sha256sum | awk '{ print $1 }'
+        hash_output="$(printf '%s' "$state" | sha256sum 2>/dev/null)" || {
+            printf '%s\n' revision_hash_unavailable >&2
+            return 70
+        }
+        hash_value="${hash_output%% *}"
     elif command -v openssl >/dev/null 2>&1; then
-        printf '%s' "$state" | openssl dgst -sha256 | awk '{ print $NF }'
+        hash_output="$(printf '%s' "$state" | openssl dgst -sha256 2>/dev/null)" || {
+            printf '%s\n' revision_hash_unavailable >&2
+            return 70
+        }
+        hash_value="${hash_output##* }"
     else
         printf '%s\n' revision_hash_unavailable >&2
-        return 1
+        return 70
     fi
+    case "$hash_value" in
+        ''|*[!0-9a-fA-F]*) printf '%s\n' revision_hash_unavailable >&2; return 70 ;;
+    esac
+    [ "${#hash_value}" -eq 64 ] || {
+        printf '%s\n' revision_hash_unavailable >&2
+        return 70
+    }
+    printf '%s\n' "$hash_value" | tr 'A-F' 'a-f'
 }
 
 config_revision() {
-    hash_state "$(uci_read -q show sheepfold 2>/dev/null || true)"
+    local config_dump
+    # Отказ/частичный show — не пустая конфигурация. Иначе клиент получал
+    # пригодную для записи ревизию даже при неуспешном чтении текущего состояния.
+    config_dump="$(uci_read -q show sheepfold 2>/dev/null)" || {
+        printf '%s\n' config_read_failed >&2
+        return 70
+    }
+    hash_state "$config_dump"
 }
 
 wifi_revision() {
-    hash_state "$(uci_read -q show wireless 2>/dev/null || true)"
+    local config_dump
+    if ! config_dump="$(uci_read -q show wireless 2>/dev/null)"; then
+        # На роутере без Wi-Fi файл может штатно отсутствовать. Сохраняем
+        # прежнюю пустую wifiRevision только для отсутствия, не ошибки файла.
+        if [ ! -e "${WIRELESS_CONFIG_FILE:-/etc/config/wireless}" ] &&
+            [ ! -L "${WIRELESS_CONFIG_FILE:-/etc/config/wireless}" ]; then
+            config_dump=""
+        else
+            printf '%s\n' config_read_failed >&2
+            return 70
+        fi
+    fi
+    hash_state "$config_dump"
 }
 
 json_schedule() {
