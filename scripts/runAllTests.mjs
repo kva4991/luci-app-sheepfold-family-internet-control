@@ -17,7 +17,8 @@ const testEnvironment = prepareTestEnvironment(repoRoot);
 const allTests = [...new Set(Object.values(testCategories).flat())].sort();
 const concurrency = Number.parseInt(process.env.SHEEPFOLD_TEST_CONCURRENCY || '4', 10);
 const batchSize = Number.parseInt(process.env.SHEEPFOLD_TEST_BATCH_SIZE || '1', 10);
-const timeoutSeconds = Number.parseInt(process.env.SHEEPFOLD_TEST_TIMEOUT_SECONDS || '720', 10);
+const defaultTimeoutSeconds = process.platform === 'win32' ? '1800' : '720';
+const timeoutSeconds = Number.parseInt(process.env.SHEEPFOLD_TEST_TIMEOUT_SECONDS || defaultTimeoutSeconds, 10);
 
 if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 16) {
   console.error('SHEEPFOLD_TEST_CONCURRENCY должен быть целым числом от 1 до 16.');

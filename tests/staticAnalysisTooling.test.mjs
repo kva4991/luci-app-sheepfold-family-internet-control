@@ -38,5 +38,11 @@ describe('Static analysis tooling', () => {
     assert.match(runner, /\['android', 'android-child'\]/);
     assert.match(runner, /'lintDebug'/);
     assert.match(runner, /windowsVerbatimArguments:\s*true/);
+    assert.match(runner, /GRADLE_USER_HOME:\s*gradleUserHome/);
+    assert.match(runner, /--no-daemon/);
+    assert.match(runner, /kotlin\.compiler\.execution\.strategy=in-process/);
+    assert.match(runner, /SHEEPFOLD_GRADLE_USER_HOME/);
+    assert.match(runner, /SHEEPFOLD_ANDROID_LINT_TIMEOUT_SECONDS/);
+    assert.match(runner, /result\.error\?\.code === 'ETIMEDOUT'/);
   });
 });

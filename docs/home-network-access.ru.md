@@ -145,12 +145,15 @@ refusal, child endpoint refusal, атомарный batch, выключение 
 Исполняемый CGI-тест подменяет только внешние helpers: отказ source gate не доходит до
 авторизации/команды, токен остаётся обязательным, endpoint header появляется лишь после
 успеха. Это не проверка реального HTTP listener. Карта `quality:plan` считает отдельные
-правки home helper, hotplug и Android endpoint store критичными и требует полного прогона.
+правки home helper, hotplug и Android endpoint store критичными и требует профильных
+`access`/`security`/`android` проверок плюс перечисленных ниже живых сценариев.
 Kotlin `HomeRouterEndpointsTest` запускается через `:app:testDebugUnitTest` по
 [Android runbook](android-test-lab.ru.md). Он проверяет URL, порядок подсетей и запрет
 повтора записей, но не подменяет реальную TLS/MAC/смену Wi-Fi.
 
-Полный `npm.cmd test` обязателен после этой общей API/firewall правки. `spawnSync python EPERM`
+Полный `npm.cmd test` добавляется, только если фактический impact этой API/firewall
+правки нельзя ограничить перечисленными категориями либо выполняется общий release-gate.
+`spawnSync python EPERM`
 означает запрет дочернего процесса: повторить разрешённый прогон вне песочницы, не удалять
 тесты и не устанавливать Python повторно. Не запускать весь набор через wildcard `node --test tests/*.mjs`.
 

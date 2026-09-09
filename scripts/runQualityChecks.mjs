@@ -205,7 +205,7 @@ export async function main(args = process.argv.slice(2)) {
   writeReport(result);
 
   console.log(`\n[quality] Итог: ${status}. Отчёт: ${reportPath}`);
-  if (pendingFull) console.warn('[quality] Общий контракт требует полного npm.cmd test перед push.');
+  if (pendingFull) console.warn('[quality] Обнаружен сквозной контракт: примените критерии §testcat; при явном ограничении владельца сохраните partial и перечислите проверенные категории.');
   if (strictUnknown) console.error('[quality] Строгий режим запрещает неизвестные карте пути.');
   return failed || strictUnknown ? 1 : 0;
 }

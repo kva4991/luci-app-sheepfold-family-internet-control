@@ -52,13 +52,20 @@ describe('test category map §testcat', () => {
     assert.equal(packageJson.scripts['test:category'], 'node scripts/run-test-category.mjs');
     assert.equal(packageJson.scripts['test:list'], 'node scripts/run-test-category.mjs --list');
     assert.equal(packageJson.scripts.test, 'node scripts/runAllTests.mjs');
-    assert.match(readFileSync(resolve(repoRoot, 'scripts/run-test-category.mjs'), 'utf8'), /--file/);
+    const focusedRunner = readFileSync(resolve(repoRoot, 'scripts/run-test-category.mjs'), 'utf8');
+    assert.match(focusedRunner, /--file/);
+    assert.match(focusedRunner, /for \(const \[index, name\] of selectedNames\.entries\(\)\)/);
+    assert.match(focusedRunner, /spawnSync/);
+    assert.match(focusedRunner, /--test-concurrency=1/);
+    assert.doesNotMatch(focusedRunner, /run\(\{ files: selectedFiles, concurrency: true \}\)/);
+    assert.match(focusedRunner, /SHEEPFOLD_TEST_TIMEOUT_SECONDS/);
     const fullRunner = readFileSync(resolve(repoRoot, 'scripts/runAllTests.mjs'), 'utf8');
     assert.match(fullRunner, /networkIntegration/);
     assert.match(fullRunner, /policySimulation/);
     assert.match(fullRunner, /packaging/);
     assert.match(fullRunner, /SHEEPFOLD_TEST_BATCH_SIZE/);
     assert.match(fullRunner, /SHEEPFOLD_TEST_TIMEOUT_SECONDS/);
+    assert.match(fullRunner, /process\.platform === 'win32' \? '1800' : '720'/);
     assert.match(fullRunner, /result\.error\?\.code === 'ETIMEDOUT'/);
     assert.match(fullRunner, /group\.tests\.slice\(offset, offset \+ batchSize\)/);
     assert.match(fullRunner, /new Set\(selectedTests\)\.size !== allTests\.length/);
@@ -73,6 +80,19 @@ describe('test category map §testcat', () => {
     ]) {
       assert.ok(testCategories.packaging.includes(heavy), `${heavy} must stay in packaging`);
       assert.ok(!testCategories.tooling.includes(heavy), `${heavy} makes tooling slow`);
+    }
+  });
+
+  it('keeps feature-specific suites in their owning categories', () => {
+    for (const [file, category] of [
+      ['remoteSupportTransport.test.mjs', 'security'],
+      ['familyMessageRelayProtocol.test.mjs', 'android'],
+      ['luciCommandActions.test.mjs', 'luci'],
+      ['openWrtBuildWorkflow.test.mjs', 'packaging'],
+      ['liveRouterHarness.test.mjs', 'security'],
+    ]) {
+      assert.ok(testCategories[category].includes(file), `${file} must stay in ${category}`);
+      assert.ok(!testCategories.tooling.includes(file), `${file} does not test the tooling core`);
     }
   });
 });

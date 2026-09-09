@@ -130,7 +130,7 @@ Update должен:
 - обновлять LuCI cache-busting version;
 - не ломать существующий пользовательский config;
 - при необходимости чистить LuCI index/module cache;
-- после правок версионности LuCI-ассетов запускать профильный `node --test tests/luciAssetVersioning.test.mjs`, а перед публикацией — `npm.cmd test`; полный runner изолирует сетевые, shell-симуляционные и упаковочные группы, поэтому не заменять его монолитным `node --test tests/*.test.mjs`.
+- после правок версионности LuCI-ассетов запускать профильный `node --test tests/luciAssetVersioning.test.mjs` и `quality:changed`; полный `npm.cmd test` нужен только по критериям §testcat/release-gate. Полный runner изолирует сетевые, shell-симуляционные и упаковочные группы, поэтому не заменять его монолитным `node --test tests/*.test.mjs`.
 
 Тестирование с живым OpenWRT-роутером описано отдельно в `docs/live-router-testing.ru.md`. Такие тесты делятся на read-only, write, install/update, LuCI-browser и hardware-in-loop. Write/hardware-тесты нельзя запускать без явных флагов окружения и backup UCI-конфига.
 

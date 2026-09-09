@@ -11,8 +11,9 @@ function fixture(t) {
   const f = createAdminFixture();
   t.after(() => f.close());
   const pending = join(f.root, 'pending');
+  const python = process.env.PYTHON_EXECUTABLE || (process.platform === 'win32' ? 'python' : 'python3');
   mkdirSync(pending);
-  f.put('uci', `#!/bin/sh\nexec python3 -S ${quote(new URL('./helpers/adminPendingUciModel.py', import.meta.url).pathname)} ${quote(f.configs)} ${quote(pending)} ${quote(join(f.root, 'actions'))} "$@"\n`);
+  f.put('uci', `#!/bin/sh\nexec ${quote(python)} -S ${quote(new URL('./helpers/adminPendingUciModel.py', import.meta.url).pathname)} ${quote(f.configs)} ${quote(pending)} ${quote(join(f.root, 'actions'))} "$@"\n`);
   f.put('logger', '#!/bin/sh\nexit 0\n');
   return { ...f, pending,
     draft(config, changes) { writeFileSync(join(pending, `${config}.json`), JSON.stringify(changes)); },

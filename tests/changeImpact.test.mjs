@@ -203,4 +203,19 @@ describe('change impact advisor §impact1', () => {
     assert.ok(report.areas.some((area) => area.name === 'Устройства и их паспорт'));
     assert.deepEqual(report.directTests, ['changeImpact.test.mjs']);
   });
+
+  it('runs every direct consumer of a changed shared runtime fixture', () => {
+    const admin = inspectChanges(['tests/helpers/adminConfigRuntimeFixture.mjs']);
+    assert.deepEqual(admin.unknown, []);
+    assert.deepEqual(admin.directTests, [
+      'adminConfigBoundaryRuntime.test.mjs',
+      'adminRollbackRecoveryRuntime.test.mjs',
+      'adminTransactionPendingRuntime.test.mjs',
+      'adminTransactionPreparationRuntime.test.mjs',
+      'adminWifiValidationRuntime.test.mjs',
+    ]);
+
+    const rate = inspectChanges(['tests/helpers/apiRateLimitFixture.mjs']);
+    assert.deepEqual(rate.directTests, ['apiRateLimitRuntime.test.mjs']);
+  });
 });

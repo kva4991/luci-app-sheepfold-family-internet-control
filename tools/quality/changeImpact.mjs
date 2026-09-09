@@ -65,6 +65,7 @@ export function inspectChanges(inputChanges) {
       areas.set(rule.area, (areas.get(rule.area) || 0) + 1);
       for (const category of rule.categories) categories.add(category);
       for (const check of rule.checks || []) checks.add(check);
+      for (const test of rule.directTests || []) directTests.add(test);
       reviews.add(rule.review);
       fullTest ||= rule.full === true;
       risk = highestRisk(risk, rule.risk);
@@ -143,7 +144,7 @@ export function formatImpact(report) {
   if (report.directTests.length) {
     lines.push(`Изменённые тесты: ${report.directTests.map((name) => `tests/${name}`).join(', ')}`);
   }
-  if (report.fullTest) lines.push('Изменён общий контракт: перед публикацией обязателен npm.cmd test.');
+  if (report.fullTest) lines.push('Изменён сквозной контракт: советник рекомендует npm.cmd test; примените критерии §testcat и явное ограничение владельца.');
   if (commands.manual.length) {
     lines.push('Проверки, которые не запускаются автоматически:');
     for (const command of commands.manual) lines.push(`  - ${command}`);

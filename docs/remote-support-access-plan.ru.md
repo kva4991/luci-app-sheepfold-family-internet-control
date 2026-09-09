@@ -27,7 +27,8 @@
 Documentation gates: 249 public Markdown-файлов и 13 private tests. Полный private suite:
 188 tests, 183 passed, 1 прежний NTP/Git Bash failure, 4 platform/peer skips.
 Полный public `npm test`, Android build, native OpenWrt build и live-router gate не повторялись
-для этого изолированного изменения. Перед публикацией общей ветки полный gate остаётся обязательным.
+для этого изолированного изменения. Перед публикацией повторяются затронутые public/private
+контуры; полный gate добавляется только по действующим критериям §testcat, а не из-за push сам по себе.
 
 Следующий порядок без преждевременного включения UI:
 

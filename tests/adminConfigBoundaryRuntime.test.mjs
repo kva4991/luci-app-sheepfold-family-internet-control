@@ -5,10 +5,10 @@
  */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createAdminFixture } from './helpers/adminConfigRuntimeFixture.mjs';
+import { createAdminFixture, quote } from './helpers/adminConfigRuntimeFixture.mjs';
 
 function fixture(t, values = {}, wireless = {}) {
   const value = createAdminFixture(values, wireless); t.after(() => value.close()); return value;
@@ -29,6 +29,12 @@ const notice = (revision) => form({ schemaVersion: '1', expectedRevision: revisi
 const schedule = (revision, fields = {}) => form({ schemaVersion: '1', expectedRevision: revision,
   section: 'daily', name: 'Evening', description: 'Test', enabled: '1', action: 'block',
   targetType: 'group', targets: 'family', weekdays: 'mon', timeRanges: '21:00-22:00', ...fields });
+
+function commandWrapper(directory, name, target) {
+  const file = join(directory, name);
+  writeFileSync(file, `#!/bin/sh\nexec ${quote(target)} "$@"\n`);
+  chmodSync(file, 0o755);
+}
 
 for (const config of ['sheepfold', 'wireless']) {
   for (const partial of ['0', '1']) test(`revision refuses failed ${config} read (partial=${partial})`, (t) => {
@@ -82,8 +88,8 @@ for (const tool of ['sha256sum', 'openssl']) {
       if (tool === 'openssl') {
         // Отдельный PATH без sha256sum реально выбирает fallback, не меняя продукт.
         const tools = join(f.root, 'hash-tools'); mkdirSync(tools);
-        for (const name of ['awk', 'grep', 'tr', 'sed']) symlinkSync(`/usr/bin/${name}`, join(tools, name));
-        symlinkSync(join(f.bin, 'openssl'), join(tools, 'openssl'));
+        for (const name of ['awk', 'grep', 'tr', 'sed']) commandWrapper(tools, name, `/usr/bin/${name}`);
+        commandWrapper(tools, 'openssl', join(f.bin, 'openssl'));
         setup = `PATH='${tools}'\n`;
       }
       rejected(f.shell(`${setup}hash_state 'synthetic state'`), 'revision_hash_unavailable');
@@ -166,7 +172,7 @@ test('explicit schedule selection works even beside matching filesystem entries'
 test('OpenSSL fallback preserves the SHA-256 revision when sha256sum is absent', (t) => {
   const f = fixture(t), tools = join(f.root, 'hash-tools'), value = 'synthetic state';
   mkdirSync(tools);
-  for (const name of ['awk', 'grep', 'tr', 'sed', 'openssl']) symlinkSync(`/usr/bin/${name}`, join(tools, name));
+  for (const name of ['awk', 'grep', 'tr', 'sed', 'openssl']) commandWrapper(tools, name, `/usr/bin/${name}`);
   const result = f.shell(`PATH='${tools}'\nhash_state '${value}'`);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.trim(), createHash('sha256').update(value).digest('hex'));

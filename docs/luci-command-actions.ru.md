@@ -51,4 +51,4 @@ actionMessage
 
 ## Границы проверки
 
-Node-тест доказывает coalescing, восстановление DOM-состояния, JSON/key-value failures и shell metadata. Он не доказывает реальный rpcd ACL, UCI commit, firewall sync или поведение установленной страницы. После изменения command wiring обязательны `lint:js`, `test:luci`, `quality:changed`, `quality:gate` и `router:frontend`; глобальный internet toggle, расписания и списки доступа дополнительно требуют live-router write/effect evidence.
+Node-тест доказывает coalescing, восстановление DOM-состояния, JSON/key-value failures и shell metadata. Он не доказывает реальный rpcd ACL, UCI commit, firewall sync или поведение установленной страницы. После изменения command wiring обязательны `lint:js`, `test:luci`, `quality:changed` и `router:frontend`; полный `quality:gate` добавляется только при сквозном impact по §testcat. Глобальный internet toggle, расписания и списки доступа дополнительно требуют live-router write/effect evidence.

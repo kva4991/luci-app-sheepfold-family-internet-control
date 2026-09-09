@@ -29,11 +29,16 @@ npm.cmd run quality:plan
 npm.cmd run quality:changed
 ```
 
-Перед push после изменения исполняемого кода:
+Перед push после изменения исполняемого кода повторите выбранный impact-контур:
 
 ```powershell
-npm.cmd run quality:gate
+npm.cmd run quality:changed
 ```
+
+Наличие push, PR или merge само по себе не расширяет область проверки. `quality:gate`
+нужен только когда impact нельзя надёжно ограничить, изменён сквозной контракт или
+отбор/изоляция тестов, владелец запросил полный прогон либо выполняется отдельный
+release-gate всего артефакта.
 
 `quality:gate` запускает полный Node-набор через канонический `runAllTests.mjs`, который
 разносит сетевые стенды, глубокие shell-симуляции и упаковщики по изолированным
@@ -45,9 +50,10 @@ APK: такие команды перечисляются в отчёте как
 
 На Windows оба канонических test-runner хранят temp в `.build/test-tmp` внутри
 репозитория. Node и Python используют его абсолютный Windows-путь, а test-helper
-преобразует только передаваемые Git Bash fixture-пути в относительные, чтобы shell
-не упирался в sandbox-запрет `/c/Users/User/...`. Полный runner до начала долгих
-групп отдельно проверяет запуск Git Bash и дочернего Python. `Python ... EPERM`
+преобразует передаваемые Git Bash fixture-пути в POSIX-форму и устанавливает fixture
+`PATH` уже внутри shell. Это не даёт MSYS переставить `/usr/bin` перед fault-injection
+wrapper. Полный runner до начала долгих групп отдельно проверяет запуск Git Bash и
+дочернего Python. `Python ... EPERM`
 при успешном прямом `python --version` требует повторить gate вне песочницы, а не
 переустанавливать Python или ослаблять тест. Подробная диагностика:
 [категории тестов](../test-strategy.ru.md#ipk-зависимые-тесты-на-windowscodex).
@@ -60,12 +66,18 @@ APK: такие команды перечисляются в отчёте как
 | Только посмотреть риск и план | `npm.cmd run quality:plan` | секунды | нет |
 | Посмотреть карту вручную | `npm.cmd run review:impact` | секунды | нет |
 | Запустить минимальные проверки | `npm.cmd run quality:changed` | обычно секунды или минуты | только `.build/quality/last-run.json` |
-| Строгий локальный gate | `npm.cmd run quality:gate` | полный suite может идти более 10 минут | только локальный отчёт и test temp |
+| Явный полный gate | `npm.cmd run quality:gate` | полный suite может идти более 10 минут | только локальный отчёт и test temp |
 | Проверить изменённые документы | `npm.cmd run quality:docs` | секунды | нет |
 | Проверить все Markdown-файлы репозитория | `npm.cmd run quality:docs:all` | секунды | нет |
 | Найти рост крупных файлов | `npm.cmd run quality:structure` | секунды | нет |
 | Вывести all-pairs матрицу | `npm.cmd run quality:matrix` | доли секунды | нет |
 | Проверить LuCI на роутере | `npm.cmd run router:frontend` | десятки секунд | read-only сессия LuCI, локальные артефакты |
+
+`quality:changed` дедуплицирует пересекающиеся категории и запускает каждый выбранный
+test-файл в отдельном процессе. Это чуть дороже старта одного `node --test`, зато
+shell/HTTP-fixtures не конкурируют друг с другом и отказ остаётся привязан к одному файлу.
+Android Lint также изолирует Gradle cache в `.build/gradle-user-home`, не используя
+случайно унаследованный кеш другого проекта.
 
 ## Как модули связаны
 
@@ -91,12 +103,12 @@ flowchart TD
 | Изменение | Минимум во время работы | Перед завершением |
 | --- | --- | --- |
 | Только текст документа | `quality:docs`, ближайший контрактный тест | `git diff --check`; полный suite обычно не нужен |
-| LuCI JS/CSS | `quality:changed`, затем `test:luci` при необходимости | `lint:js`, `router:frontend`, полный suite перед push |
-| Backend helper | `quality:changed`, обычно `backendFast` | полный suite; `router:readOnly` либо `router:fullSafe` по отчёту |
-| Firewall/DNS/AdGuard | ближайший unit/runtime-тест | полный suite, `router:fullSafe`, при необходимости `router:runtimeMatrix` |
+| LuCI JS/CSS | `quality:changed`, затем `test:luci` при необходимости | `lint:js`, `router:frontend` по отчёту; полный suite только при сквозном impact |
+| Backend helper | `quality:changed`, обычно `backendFast` | затронутые категории; `router:readOnly` либо `router:fullSafe` по отчёту |
+| Firewall/DNS/AdGuard | ближайший unit/runtime-тест | затронутые `access/sites/networkIntegration`, `router:fullSafe`, при необходимости `router:runtimeMatrix` |
 | Android Kotlin/XML | `test:android`, Android Lint | сборка затронутого APK и сценарий эмулятора/телефона |
-| UCI/defaults/package | `backendFast packaging security` | полный suite, живой upgrade/restore и официальный SDK build |
-| Только тестовая инфраструктура | `quality:changed` | полный suite, потому что менялся способ получения доказательств |
+| UCI/defaults/package | `backendFast packaging security` | живой upgrade/restore и официальный SDK build; полный suite только при общей migration/package-границе |
+| Только тестовая инфраструктура | direct test + `quality:changed` | полный suite лишь при изменении отбора/изоляции, способном пропустить test-файл; правка timeout или текста ошибки его не требует |
 | Native relay helper / SFMR1 wire model | дешёвый guard + protocol tests | ручной Linux `runNativeCryptoTests.sh --sanitize`, официальный SDK и target vector; [команды и ограничения](../../package/sheepfold-message-relay-crypto/README.ru.md) |
 
 ## Значение итоговых статусов

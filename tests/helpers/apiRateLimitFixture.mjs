@@ -3,11 +3,14 @@
  * часами. Барьер чтения детерминированно воспроизводит конкурирующие запросы.
  * Меняются только удаляемые .build-fixtures; firewall, сеть и реальные токены
  * не используются. Это не нагрузочная проверка uhttpd/OpenWrt или Android.
+ * Без host flock последовательные сценарии получают только test-stub; реальная
+ * конкуренция, symlink и Unix mode остаются обязательной Linux-проверкой.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { shellTestPath } from '../../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(import.meta.dirname, '../..');
 const sourceRoot = process.env.SHEEPFOLD_RATE_TEST_SOURCE || repoRoot;
@@ -16,6 +19,9 @@ export const rateNow = 1700000000;
 export const rateClient = '192.168.7.20';
 export const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
 const useBusybox = spawnSync('busybox', ['ash', '-c', 'true']).status === 0;
+export const rateFlockAvailable = spawnSync('sh', ['-c', 'command -v flock >/dev/null 2>&1']).status === 0;
+const pathDelimiter = process.platform === 'win32' ? ';' : ':';
+export const rateShellPath = (value) => shellTestPath(value, { cwd: repoRoot });
 
 export function createRateFixture() {
   const parent = join(repoRoot, '.build/test-fixtures');
@@ -39,8 +45,8 @@ export function createRateFixture() {
       put(tool, `#!/bin/sh\nexec /usr/bin/busybox ${tool} "$@"\n`);
     }
   }
-  const relocate = (text) => text.replaceAll('/usr/libexec/sheepfold', bin)
-    .replaceAll('/tmp/sheepfold', runtime);
+  const relocate = (text) => text.replaceAll('/usr/libexec/sheepfold', rateShellPath(bin))
+    .replaceAll('/tmp/sheepfold', rateShellPath(runtime));
   for (const name of ['sheepfold-api-rate-limit', 'sheepfold-lock-common']) {
     put(name, relocate(readFileSync(join(packageRoot, 'usr/libexec/sheepfold', name), 'utf8')));
   }
@@ -48,14 +54,17 @@ export function createRateFixture() {
   put('sheepfold-token-common', '# Rate boundary only; authentication is independently tested.\n');
   put('sheepfold-home-network', '#!/bin/sh\nexit 0\n');
   put('date', '#!/bin/sh\nprintf "%s\\n" "${TEST_NOW:-1700000000}"\n');
+  if (!rateFlockAvailable) put('flock', '#!/bin/sh\nexit 0\n');
   put('sheepfold-router-control', '#!/bin/sh\nprintf "login=Parent\\ndevice_id=1\\nmac=02:00:00:00:00:11\\n"\n');
-  put('sheepfold-api-legacy', `#!/bin/sh\nprintf 'dispatch\\n' >> ${quote(actionsPath)}
+  put('sheepfold-api-legacy', `#!/bin/sh\nprintf 'dispatch\\n' >> ${quote(rateShellPath(actionsPath))}
 printf 'Status: 200 OK\\r\\nContent-Type: application/json\\r\\n\\r\\n{"ok":true}\\n'\n`);
-  const environment = (extra = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`,
+  const environment = (extra = {}) => ({ ...process.env, PATH: `${bin}${pathDelimiter}${process.env.PATH}`,
     TEST_NOW: String(rateNow), REQUEST_METHOD: 'GET', PATH_INFO: '/ping', REMOTE_ADDR: rateClient,
     CONTENT_LENGTH: '0', HTTP_AUTHORIZATION: 'Bearer synthetic-not-real', ...extra });
   const invocation = (name, args) => ({ command: useBusybox ? 'busybox' : 'sh',
-    args: [...(useBusybox ? ['ash'] : []), join(bin, name), ...args] });
+    args: [...(useBusybox ? ['ash'] : []), '-c',
+      'PATH="$1:$PATH"; export PATH; shift; exec "$@"', 'sheepfold-rate-fixture',
+      rateShellPath(bin), rateShellPath(join(bin, name)), ...args] });
   function run(name, args = [], extra = {}) {
     const invocationValue = invocation(name, args);
     return spawnSync(invocationValue.command, invocationValue.args, { env: environment(extra),
@@ -80,15 +89,17 @@ printf 'Status: 200 OK\\r\\nContent-Type: application/json\\r\\n\\r\\n{"ok":true
     // Both the historical head reader and the new whole-record awk reader are
     // blocked AFTER taking their snapshot, never before acquiring the real lock.
     const barrier = join(root, 'barrier');
+    const shellBarrier = rateShellPath(barrier);
+    const shellRateDir = rateShellPath(rateDir);
     mkdirSync(barrier);
     for (const tool of ['head', 'awk']) put(tool, `#!/bin/sh
 for arg do
-  case "$arg" in ${quote(rateDir)}/*)
-    /usr/bin/${tool} "$@" > ${quote(barrier)}/snapshot.$$
+  case "$arg" in ${quote(shellRateDir)}/*)
+    /usr/bin/${tool} "$@" > ${quote(shellBarrier)}/snapshot.$$
     code=$?
-    : > ${quote(barrier)}/ready.$$
-    while [ ! -f ${quote(barrier)}/release ]; do /bin/sleep 0.01; done
-    /bin/cat ${quote(barrier)}/snapshot.$$
+    : > ${quote(shellBarrier)}/ready.$$
+    while [ ! -f ${quote(shellBarrier)}/release ]; do /bin/sleep 0.01; done
+    /bin/cat ${quote(shellBarrier)}/snapshot.$$
     exit "$code" ;;
   esac
 done

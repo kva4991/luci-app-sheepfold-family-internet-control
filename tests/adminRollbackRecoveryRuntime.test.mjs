@@ -10,6 +10,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { createAdminFixture, quote } from './helpers/adminConfigRuntimeFixture.mjs';
 
+const python = process.env.PYTHON_EXECUTABLE || (process.platform === 'win32' ? 'python' : 'python3');
+
 function fixture(t) {
   const f = createAdminFixture();
   f.put('logger', '#!/bin/sh\nexit 0\n');
@@ -60,7 +62,7 @@ for (const kind of ['config', 'wifi']) {
       assert.equal(existsSync(r.snapshot), true, 'Failed restoration must retain the only backup');
       assert.equal(readFileSync(r.snapshot, 'utf8'), 'old-complete-settings');
       assert.equal(readFileSync(r.config, 'utf8'), 'new-complete-settings', 'Never publish a partial restore');
-      assert.equal(statSync(r.tx).mode & 0o777, 0o700);
+      if (process.platform !== 'win32') assert.equal(statSync(r.tx).mode & 0o777, 0o700);
       assert.equal(r.result.stdout, '');
       assert.equal(r.result.status, 72);
       assert.match(r.result.stderr, /config_rollback_failed/);
@@ -101,7 +103,7 @@ test('CGI does not claim restoration after commit and rollback both fail', (t) =
   const f = fixture(t), before = readFileSync(join(f.configs, 'sheepfold'), 'utf8');
   const revision = successfulGet(f).revision;
   f.put('uci', `#!/bin/sh
-python3 -S ${quote(join(f.bin, 'uci-model.py'))} "$@" || exit "$?"
+${quote(python)} -S ${quote(join(f.bin, 'uci-model.py'))} "$@" || exit "$?"
 for arg in "$@"; do [ "$arg" != commit ] || exit 1; done
 exit 0
 `);

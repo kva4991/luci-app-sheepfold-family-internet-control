@@ -35,7 +35,8 @@ describe('quality assistant modules §qassist', () => {
   it('deduplicates overlapping categories and direct tests', () => {
     const selected = selectTestNames(['tooling', 'smoke'], ['tests/changeImpact.test.mjs']);
     assert.equal(selected.filter((name) => name === 'changeImpact.test.mjs').length, 1);
-    assert.ok(selected.includes('runtimeCompatibilityMatrix.test.mjs'));
+    assert.equal(selected.filter((name) => name === 'testCategories.test.mjs').length, 1);
+    assert.ok(selected.includes('documentationOperations.test.mjs'));
   });
 
   it('extracts local links and only registered concrete tags', () => {
@@ -201,6 +202,22 @@ describe('quality assistant modules §qassist', () => {
     assert.equal(
       shellTestPath('C:\\repo\\.build\\fixture', { cwd: 'C:\\repo', platform: 'win32' }),
       '.build/fixture',
+    );
+    assert.equal(
+      shellTestPath('C:\\repo\\.build\\fixture\\runtime', {
+        cwd: 'C:\\repo\\.build\\fixture\\cwd',
+        allowedRoot: 'C:\\repo\\.build\\fixture',
+        platform: 'win32',
+      }),
+      '../runtime',
+    );
+    assert.equal(
+      shellTestPath('C:\\repo\\other', {
+        cwd: 'C:\\repo\\.build\\fixture\\cwd',
+        allowedRoot: 'C:\\repo\\.build\\fixture',
+        platform: 'win32',
+      }),
+      '/c/repo/other',
     );
     assert.equal(
       shellTestPath('D:\\external\\fixture', { cwd: 'C:\\repo', platform: 'win32' }),

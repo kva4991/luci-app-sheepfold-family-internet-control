@@ -42,8 +42,8 @@
 1. До правки выписать подходящие строки обязательной матрицы и границы доказательства нужных тестов (§cmpchg1, §docops1).
 2. Во время правки запускать синтаксическую проверку и ближайший целевой тест.
 3. После завершения подсистемы запускать её набор тестов.
-4. После узкой правки запускать категорию из [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat), при пересечении — объединять категории. Полный `npm.cmd test` запускать перед push/PR/merge/release либо раньше, если изменён общий backend/API/UCI/package/security-контракт. Не повторять долгий полный набор после каждой мелкой правки.
-5. Перед итоговым прогоном выполнить `npm.cmd run quality:plan`; для обычной итерации использовать `quality:changed`, а перед push исполняемого кода `quality:gate`. Неизвестный путь разобрать вручную (§impact1, §qassist).
+4. После правки запускать только затронутые категории из [`test-strategy.ru.md`](test-strategy.ru.md) (§testcat), при пересечении — объединять их без дублей. Сам по себе push/PR/merge не требует тестов чужих подсистем. Полный `npm.cmd test` нужен, когда impact нельзя ограничить, меняется действительно сквозной контракт/runner, готовится отдельный release-gate или владелец запросил полный прогон.
+5. Перед итоговым прогоном выполнить `npm.cmd run quality:plan`; для обычной итерации и перед push использовать `quality:changed`. `quality:gate` запускать только при обоснованной необходимости полного suite. Неизвестный путь разобрать вручную (§impact1, §qassist).
 6. Android собирать соответствующим wrapper только после Android-изменений: `android\gradlew.bat -p android ...` или `android-child\gradlew.bat -p android-child ...`. Глобальный Gradle не нужен. Ручной `androidLab:smoke` запускать при необходимости Android runtime, а `androidLab:full` — перед выдачей APK/релизом, не после каждой правки (§andlab1).
 7. Перед коммитом всегда выполнить `git diff --check`, проверить `git diff --stat`, §-теги и отсутствие скачанных SDK, APK, IPK и кэшей в индексе.
 
@@ -66,7 +66,7 @@
 | Публичные IPK/OpenWrt APK | `Build OpenWrt packages` в GitHub Actions | переименование/перепаковка тестового IPK, snapshot SDK |
 | Просмотр APK/IPK/ZIP | 7-Zip | пересборку архива после ручного редактирования |
 | Android | Gradle Wrapper соответствующего проекта | глобальный `gradle` |
-| Node-тесты | целевой `node --test`, затем `npm.cmd run test:<category>`, перед публикацией `npm.cmd test` | повторный полный прогон после каждой мелочи |
+| Node-тесты | целевой `node --test`, затем только затронутые `npm.cmd run test:<category>`; полный `npm.cmd test` при неограничимом impact или отдельном release-gate | тесты незатронутых подсистем только из-за push/merge |
 | GitHub CI | `gh run`, `gh pr checks` | догадки по одной красной плашке GitHub |
 | Тестовый роутер | `npm.cmd run router:readOnly`, `router:fullSafe`, `router:frontend` по `docs/live-router-automation.ru.md` | разрозненные ручные команды, `opkg upgrade` и изменение живого роутера без backup |
 

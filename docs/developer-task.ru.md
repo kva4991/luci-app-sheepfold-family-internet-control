@@ -37,7 +37,7 @@ Sheepfold — OpenWRT-пакет для семейного управления 
 20. [`docs/home-network-access.ru.md`](home-network-access.ru.md) — принятый план доступа Android к Sheepfold через разные домашние роутеры, границы firewall/discovery и отложенная поддержка NAT.
 21. [`docs/android-test-lab.ru.md`](android-test-lab.ru.md) — ручной гибридный стенд API 28/35, физические телефоны, живой роутер и пределы доказательства (§andlab1).
 22. [`docs/child-wifi-network-notifications.ru.md`](child-wifi-network-notifications.ru.md) — уведомления о новых Wi-Fi-сетях детского устройства, геолокация, приватность и границы доверия (§childwifi1).
-23. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — обязательный чеклист тест-кейсов перед PR.
+23. [`docs/testing-cases.ru.md`](testing-cases.ru.md) — каталог ручных тест-кейсов; перед PR выбираются только затронутые сценарии.
 24. [`docs/test-strategy.ru.md`](test-strategy.ru.md) — категории автоматических тестов, быстрые команды и условия обязательного полного прогона. (§testcat)
 25. [`AGENTS.md`](../AGENTS.md) — правила для AI-агентов: именование, стиль, ограничения, фиксация gotchas.
 26. [`CODING_RULES.md`](../CODING_RULES.md) — обязательные правила кодинга и ревью (раздел 22 объясняет, куда писать мелочи).
@@ -121,7 +121,7 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 │   ├── ai-assistant-development/ # Модули, БД и dialogue policy ИИ-помощника
 │   ├── yandex-disk-storage.ru.md  # Yandex Disk: WebDAV, журнал, бэкапы
 │   ├── android-config.ru.md  # Android-конфигурация ← читать обязательно
-│   ├── testing-cases.ru.md   # Тест-кейсы ← прогнать перед PR
+│   ├── testing-cases.ru.md   # Тест-кейсы ← выбрать затронутые перед PR
 │   └── ...
 ├── utilities/                # Сопутствующие полезные материалы, не являющиеся контрактом или частью сборки
 ├── AGENTS.md                 # Правила для AI-агентов ← читать обязательно
@@ -167,7 +167,7 @@ API `/cgi-bin/sheepfold-api/client-status` возвращает `warning_before_
 
 Перед тем как считать задачу выполненной:
 
-- [ ] Пройдены все 🔴 критические тест-кейсы из `docs/testing-cases.ru.md`
+- [ ] Пройдены все затронутые 🔴 критические тест-кейсы из `docs/testing-cases.ru.md`; спорные `N/A` объяснены
 - [ ] `router-info` не содержит секретов (TC-API-01)
 - [ ] Сохранение настроек только по явному «Сохранить» (TC-UI-02)
 - [ ] «Без ограничений» выше blocklist для интернета; запрет управления роутером независим (TC-API-05, TC-EDGE-07)

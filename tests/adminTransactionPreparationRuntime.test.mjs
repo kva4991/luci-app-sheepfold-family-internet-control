@@ -23,20 +23,22 @@ function body(f, kind) {
 }
 function action(kind) { return kind === 'wifi' ? 'wifi-save' : 'notification-settings-save'; }
 function installPidCollision(f, kind) {
+  const marker = join(f.root, 'old-directory-name');
   f.put('original-admin', readFileSync(join(f.bin, 'sheepfold-api-admin-config'), 'utf8'));
   f.put('sheepfold-api-admin-config', `#!/bin/sh
 set -eu
-old="$SHEEPFOLD_ADMIN_CONFIG_TX_ROOT/${kind}.$$"
+old_name="${kind}.$$"
+old="$SHEEPFOLD_ADMIN_CONFIG_TX_ROOT/$old_name"
 mkdir -p "$old"
 printf 'only recovery copy' > "$old/original.before"
-printf '%s' "$old" > ${quote(join(f.root, 'old-directory'))}
-exec ${quote(join(f.bin, 'original-admin'))} "$@"
+printf '%s' "$old_name" > ${quote(f.shellPath(marker))}
+exec ${quote(f.shellPath(join(f.bin, 'original-admin')))} "$@"
 `);
 }
 function fault(f, mode) {
   const root = join(f.root, 'runtime/tx');
   if (mode === 'chmod') {
-    f.put('chmod', `#!/bin/sh\n[ "$2" != ${quote(root)} ] || exit 1\nexec /bin/chmod "$@"\n`);
+    f.put('chmod', `#!/bin/sh\n[ "$2" != ${quote(f.shellPath(root))} ] || exit 1\nexec /bin/chmod "$@"\n`);
   } else if (mode === 'allocate') {
     f.put('mktemp', '#!/bin/sh\nexit 1\n');
   } else {
@@ -59,7 +61,8 @@ for (const kind of ['tx', 'wifi']) {
     const f = fixture(t), request = body(f, kind);
     installPidCollision(f, kind);
     const r = f.run(action(kind), request);
-    const old = readFileSync(join(f.root, 'old-directory'), 'utf8');
+    const oldName = readFileSync(join(f.root, 'old-directory-name'), 'utf8');
+    const old = join(f.root, 'runtime/tx', oldName);
     assert.equal(existsSync(join(old, 'original.before')), true, 'Do not remove someone else\'s recovery directory');
     assert.equal(readFileSync(join(old, 'original.before'), 'utf8'), 'only recovery copy');
     assert.equal(r.status, 0, r.stderr || r.error?.message);
@@ -94,6 +97,6 @@ for (const kind of ['tx', 'wifi']) {
     assert.equal(r.status, 0, r.stderr || r.error?.message);
     const root = join(f.root, 'runtime/tx');
     assert.deepEqual(readdirSync(root), []);
-    assert.equal(statSync(root).mode & 0o777, 0o700);
+    if (process.platform !== 'win32') assert.equal(statSync(root).mode & 0o777, 0o700);
   });
 }

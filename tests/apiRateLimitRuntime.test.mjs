@@ -3,12 +3,14 @@
  * CGI-ответ до защищённого dispatch. Файлы и fault-tools изолированы в .build,
  * удаляются в finally; параллельные дети завершаются. Не доказывает throughput
  * OpenWrt, внутренний pairing-attempt limiter или поведение физического телефона.
+ * Native Windows не доказывает flock-конкуренцию, symlink и Unix mode; эти
+ * отдельные сценарии выполняются полностью в Linux CI.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { chmodSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createRateFixture, rateNow, rateClient, quote } from './helpers/apiRateLimitFixture.mjs';
+import { createRateFixture, rateFlockAvailable, rateNow, rateClient, rateShellPath, quote } from './helpers/apiRateLimitFixture.mjs';
 import { parseCgi } from './helpers/routerRuntimeFixture.mjs';
 
 const withFixture = (body) => {
@@ -23,7 +25,7 @@ describe('API rate counter executes one transaction', () => {
     assert.equal(f.check().status, 1);
     assert.equal(f.state(), `3\t${rateNow}\n`);
   }));
-  it('counts simultaneous reads without issuing two copies of the last slot', async () => {
+  it('counts simultaneous reads without issuing two copies of the last slot', { skip: !rateFlockAvailable }, async () => {
     const f = createRateFixture();
     try {
       f.seed(0);
@@ -55,14 +57,17 @@ describe('API rate counter executes one transaction', () => {
     successful(f.check());
     const result = f.run('sheepfold-api-rate-limit', ['check', 'pair', rateClient, '3', '60']);
     successful(result);
-    assert.equal(statSync(f.statePath()).mode & 0o777, 0o600);
-    assert.equal(statSync(f.rateDir).mode & 0o777, 0o700);
+    if (process.platform !== 'win32') {
+      assert.equal(statSync(f.statePath()).mode & 0o777, 0o600);
+      assert.equal(statSync(f.rateDir).mode & 0o777, 0o700);
+    }
   }));
   it('preserves the existing explicit zero-limit CLI switch', () => withFixture((f) => {
     successful(f.check(0));
     assert.equal(f.state(), '');
   }));
-  it('does not follow a symlink to a counter outside the state directory', () => withFixture((f) => {
+  it('does not follow a symlink to a counter outside the state directory',
+    { skip: process.platform === 'win32' }, () => withFixture((f) => {
     const target = join(f.root, 'unrelated');
     writeFileSync(target, `0\t${rateNow}\n`);
     symlinkSync(target, f.statePath());
@@ -138,7 +143,7 @@ describe('API limiter storage faults are not an allowance', () => {
   it('does not reset a counter after a reader fails', () => withFixture((f) => {
     f.seed(3);
     for (const tool of ['head', 'awk']) f.put(tool, `#!/bin/sh
-for arg do [ "$arg" != ${quote(f.statePath())} ] || exit 7; done
+for arg do [ "$arg" != ${quote(rateShellPath(f.statePath()))} ] || exit 7; done
 exec /usr/bin/${tool} "$@"\n`);
     assert.equal(f.check().status, 2);
     assert.equal(f.state(), `3\t${rateNow}\n`);
@@ -147,7 +152,7 @@ exec /usr/bin/${tool} "$@"\n`);
     f.seed(3);
     for (const tool of ['head', 'awk']) f.put(tool, `#!/bin/sh
 for arg do
- if [ "$arg" = ${quote(f.statePath())} ]; then printf '0\\t1700000000\\n'; exit 7; fi
+ if [ "$arg" = ${quote(rateShellPath(f.statePath()))} ]; then printf '0\\t1700000000\\n'; exit 7; fi
 done
 exec /usr/bin/${tool} "$@"\n`);
     assert.equal(f.check().status, 2);
@@ -213,7 +218,8 @@ describe('CGI distinguishes quota exhaustion from limiter outage', () => {
     assert.equal(response.body.error, 'rate_limit_unavailable');
     assert.equal(f.actions(), '');
   }));
-  for (const mode of ['missing', 'not executable']) it(`does not bypass ${mode} limiter`, () => withFixture((f) => {
+  for (const mode of ['missing', 'not executable']) it(`does not bypass ${mode} limiter`,
+    { skip: process.platform === 'win32' && mode === 'not executable' }, () => withFixture((f) => {
     const path = join(f.bin, 'sheepfold-api-rate-limit');
     if (mode === 'missing') rmSync(path); else chmodSync(path, 0o600);
     const response = parseCgi(f.request());

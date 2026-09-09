@@ -6,11 +6,15 @@
 import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { shellTestPath } from '../../tools/quality/testEnvironment.mjs';
 
 const repoRoot = resolve(import.meta.dirname, '../..');
 const sourceRoot = process.env.SHEEPFOLD_ADMIN_TEST_SOURCE || repoRoot;
 const packageRoot = join(sourceRoot, 'package/luci-app-sheepfold-family-internet-control/root');
 const hasBusybox = spawnSync('busybox', ['ash', '-c', 'true']).status === 0;
+const hasFlock = spawnSync('sh', ['-c', 'command -v flock >/dev/null 2>&1']).status === 0;
+const pathDelimiter = process.platform === 'win32' ? ';' : ':';
+const python = process.env.PYTHON_EXECUTABLE || (process.platform === 'win32' ? 'python' : 'python3');
 export const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
 export const initialConfig = {
   'sheepfold.global': 'global', 'sheepfold.global.bedtime': '21:00',
@@ -42,6 +46,7 @@ export function createAdminFixture(extra = {}, wirelessExtra = {}) {
   const root = mkdtempSync(join(parent, 'admin-config-'));
   const bin = join(root, 'bin'), configs = join(root, 'config'), cwd = join(root, 'cwd');
   const runtime = join(root, 'runtime'), actions = join(root, 'actions');
+  const shellPath = (value) => shellTestPath(value, { cwd, allowedRoot: root });
   for (const dir of [bin, configs, cwd, runtime]) mkdirSync(dir, { recursive: true });
   writeFileSync(join(configs, 'sheepfold'), JSON.stringify({ ...initialConfig, ...extra }));
   writeFileSync(join(configs, 'wireless'), JSON.stringify({ ...wirelessConfig, ...wirelessExtra }));
@@ -52,16 +57,20 @@ export function createAdminFixture(extra = {}, wirelessExtra = {}) {
     put(name, readFileSync(join(packageRoot, 'usr/libexec/sheepfold', name), 'utf8'));
   }
   put('test-admin-cgi', readFileSync(join(packageRoot, 'www/cgi-bin/sheepfold-api'), 'utf8')
-    .replaceAll('/usr/libexec/sheepfold', bin).replaceAll('/tmp/sheepfold', runtime));
+    .replaceAll('/usr/libexec/sheepfold', shellPath(bin)).replaceAll('/tmp/sheepfold', shellPath(runtime)));
   put('sheepfold-token-common', '# Authentication replaced only at this fixture boundary.\n');
   put('sheepfold-home-network', '#!/bin/sh\nexit 0\n');
   put('sheepfold-api-rate-limit', '#!/bin/sh\nexit 0\n');
   put('sheepfold-log', '#!/bin/sh\nexit 0\n');
+  // Git Bash on Windows has no flock. These fixtures do not test contention;
+  // lockCommon.test.mjs keeps the real helper contract and skips only its live
+  // contention scenario when the host lacks the package.
+  if (!hasFlock) put('flock', '#!/bin/sh\nexit 0\n');
   put('sheepfold-router-control', `#!/bin/sh
 case "$1" in authenticate-token) printf 'login=Parent\\ndevice_id=1\\nmac=02:00:00:00:00:11\\n'; exit 0 ;; esac
-printf 'runtime %s\\n' "$*" >> ${quote(actions)}
+printf 'runtime %s\\n' "$*" >> ${quote(shellPath(actions))}
 exit 0\n`);
-  put('wifi', `#!/bin/sh\nprintf 'wifi %s\\n' "$*" >> ${quote(actions)}\nexit 0\n`);
+  put('wifi', `#!/bin/sh\nprintf 'wifi %s\\n' "$*" >> ${quote(shellPath(actions))}\nexit 0\n`);
   put('uci-model.py', `#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
@@ -77,7 +86,7 @@ file=Path(${JSON.stringify(configs)}) / config
 staged=(stage/(config+'.json')) if stage else None
 readfile=staged if staged and staged.exists() else file
 if not readfile.exists(): sys.exit(1)
-values=json.loads(readfile.read_text())
+values=json.loads(readfile.read_text(encoding='utf-8'))
 text=lambda v: ' '.join(v) if isinstance(v,list) else str(v)
 if op=='show':
     fault=os.environ.get('TEST_FAIL_SHOW')==config
@@ -93,7 +102,7 @@ if op=='changes':
 if op=='get':
     if key not in values: sys.exit(1)
     sys.stdout.write(text(values[key])); sys.exit(0)
-with open(${JSON.stringify(actions)},'a') as log: log.write(op+' '+expr+'\\n')
+with open(${JSON.stringify(actions)},'a',encoding='utf-8') as log: log.write(op+' '+expr+'\\n')
 if op=='set': values[key]=value
 elif op=='add_list':
     previous=values.get(key,[])
@@ -110,30 +119,37 @@ elif op=='delete':
     for k in matching: del values[k]
 elif op!='commit': raise RuntimeError('Unsupported fixture operation: '+op)
 target=file if op=='commit' or not staged else staged
-target.write_text(json.dumps(values))
+target.write_text(json.dumps(values, ensure_ascii=False), encoding='utf-8')
 `);
-  put('uci', `#!/bin/sh\nexec python3 -S ${quote(join(bin, 'uci-model.py'))} "$@"\n`);
+  put('uci', `#!/bin/sh\nexec ${quote(python)} -S ${quote(shellPath(join(bin, 'uci-model.py')))} "$@"\n`);
   if (process.env.SHEEPFOLD_ADMIN_TEST_BUSYBOX_TOOLS === '1') {
     if (!hasBusybox) throw new Error('BusyBox required for explicit applet repeat');
     for (const tool of ['awk', 'sed', 'grep', 'sha256sum', 'cat', 'tr', 'dd', 'chmod', 'cp', 'mv', 'rm', 'mkdir']) {
       put(tool, `#!/bin/sh\nexec /usr/bin/busybox ${tool} "$@"\n`);
     }
   }
-  const env = (extraEnv = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`,
-    SHEEPFOLD_UCI_BIN: join(bin, 'uci'), SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN: 'Parent',
-    SHEEPFOLD_CONFIG_FILE: join(configs, 'sheepfold'), SHEEPFOLD_WIRELESS_CONFIG_FILE: join(configs, 'wireless'),
-    SHEEPFOLD_ADMIN_CONFIG_LOCK: join(root, 'admin.lock'), SHEEPFOLD_ADMIN_CONFIG_TX_ROOT: join(runtime, 'tx'),
-    SHEEPFOLD_LOCK_COMMON: join(bin, 'sheepfold-lock-common'), SHEEPFOLD_FORM_COMMON: join(bin, 'sheepfold-lib-form'),
-    SHEEPFOLD_ROUTER_CONTROL: join(bin, 'sheepfold-router-control'), SHEEPFOLD_WIFI_BIN: join(bin, 'wifi'),
-    SHEEPFOLD_LOG_HELPER: join(bin, 'sheepfold-log'),
+  const env = (extraEnv = {}) => ({ ...process.env, PATH: `${bin}${pathDelimiter}${process.env.PATH}`,
+    PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1',
+    SHEEPFOLD_UCI_BIN: shellPath(join(bin, 'uci')), SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN: 'Parent',
+    SHEEPFOLD_CONFIG_FILE: shellPath(join(configs, 'sheepfold')),
+    SHEEPFOLD_WIRELESS_CONFIG_FILE: shellPath(join(configs, 'wireless')),
+    SHEEPFOLD_ADMIN_CONFIG_LOCK: shellPath(join(root, 'admin.lock')),
+    SHEEPFOLD_ADMIN_CONFIG_TX_ROOT: shellPath(join(runtime, 'tx')),
+    SHEEPFOLD_LOCK_COMMON: shellPath(join(bin, 'sheepfold-lock-common')),
+    SHEEPFOLD_FORM_COMMON: shellPath(join(bin, 'sheepfold-lib-form')),
+    SHEEPFOLD_ROUTER_CONTROL: shellPath(join(bin, 'sheepfold-router-control')),
+    SHEEPFOLD_WIFI_BIN: shellPath(join(bin, 'wifi')),
+    SHEEPFOLD_LOG_HELPER: shellPath(join(bin, 'sheepfold-log')),
     ...Object.fromEntries(['model','common','groups','schedules','wifi','notifications','devices'].map((name) =>
-      [`SHEEPFOLD_ADMIN_CONFIG_${name.toUpperCase()}`, join(bin, `sheepfold-lib-admin-config-${name}`)])),
+      [`SHEEPFOLD_ADMIN_CONFIG_${name.toUpperCase()}`, shellPath(join(bin, `sheepfold-lib-admin-config-${name}`))])),
     REQUEST_METHOD: 'GET', PATH_INFO: '/api/v1/admin-config', REMOTE_ADDR: '192.168.7.20',
     HTTP_AUTHORIZATION: 'Bearer synthetic-not-real', CONTENT_LENGTH: '0', ...extraEnv });
   const run = (name, args, body = '', extraEnv = {}) => spawnSync(hasBusybox ? 'busybox' : 'sh',
-    [...(hasBusybox ? ['ash'] : []), join(bin, name), ...args],
-    { cwd, env: env(extraEnv), encoding: 'utf8', input: body, timeout: 25000 });
-  return { root, bin, cwd, configs, put,
+    [...(hasBusybox ? ['ash'] : []), '-c',
+      'PATH="$1:$PATH"; export PATH; shift; exec "$@"', 'sheepfold-admin-fixture',
+      shellPath(bin), shellPath(join(bin, name)), ...args],
+    { cwd, env: env(extraEnv), encoding: 'utf8', input: body, timeout: process.platform === 'win32' ? 120000 : 25000 });
+  return { root, bin, cwd, configs, put, shellPath,
     run: (action = 'get', body = '', extraEnv = {}) => run('sheepfold-api-admin-config', [action], body, extraEnv),
     cgi: (body = '', extraEnv = {}) => run('test-admin-cgi', [], body, {
       CONTENT_LENGTH: String(Buffer.byteLength(body)), CONTENT_TYPE: 'application/x-www-form-urlencoded', ...extraEnv }),
