@@ -9,13 +9,25 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as pause } from 'node:timers/promises';
-import { createPairingFixture, testCode, shellQuote, shellPath } from './helpers/pairingRuntimeFixture.mjs';
+import {
+  createPairingFixture,
+  pairingConcurrencyAvailable,
+  testCode,
+  shellQuote,
+  shellPath,
+} from './helpers/pairingRuntimeFixture.mjs';
 import { installExecutable } from './helpers/controlRuntimeFixture.mjs';
 import { runtimeRoot, testMac, testIp, parseCgi } from './helpers/routerRuntimeFixture.mjs';
 
 const body = `login=Parent&code=${encodeURIComponent(testCode)}`;
 const identity = testMac.replaceAll(':', '');
 const now = 1700000000;
+const concurrencyOptions = {
+  skip: pairingConcurrencyAvailable ? false : 'requires BusyBox ash and native flock; covered by Linux CI',
+};
+const symlinkOptions = {
+  skip: process.platform === 'win32' ? 'requires POSIX symlink semantics; covered by Linux CI' : false,
+};
 function fixture(limit = 2) {
   const f = createPairingFixture();
   const values = f.values();
@@ -83,7 +95,7 @@ describe('Pairing attempt accounting and failure boundaries', () => {
       assert.equal(f.callCount(), 2);
     } finally { f.close(); }
   });
-  it('allows one backend call, not two, when parallel attempts share the final slot', async () => {
+  it('allows one backend call, not two, when parallel attempts share the final slot', concurrencyOptions, async () => {
     const f = fixture(1); const running = [];
     try {
       const first = f.concurrent({ TEST_PAIR_GATE: '1' }); running.push(first);
@@ -135,7 +147,7 @@ describe('Pairing attempt accounting and failure boundaries', () => {
     try { mkdirSync(f.state); response(f.request(), 503); assert.equal(f.callCount(), 0); }
     finally { f.close(); }
   });
-  it('rejects a symlink counter without changing its target', () => {
+  it('rejects a symlink counter without changing its target', symlinkOptions, () => {
     const f = fixture(); const outside = join(f.root, 'keep-state');
     try {
       writeFileSync(outside, `${now} 0\n`); symlinkSync(outside, f.state);
@@ -190,7 +202,7 @@ describe('Pairing attempt accounting and failure boundaries', () => {
       response(f.request(), 403);
     } finally { f.close(); }
   });
-  it('synchronizes a fresh QR reset with an in-flight failed attempt', async () => {
+  it('synchronizes a fresh QR reset with an in-flight failed attempt', concurrencyOptions, async () => {
     const f = fixture(); let request;
     try {
       request = f.concurrent({ TEST_PAIR_GATE: '1' });
@@ -260,7 +272,7 @@ exec /bin/mv "$@"
       response(f.request(3), 403);
     } finally { f.close(); }
   });
-  it('releases the lock after killed CGI but does not refund an unclassified attempt', async () => {
+  it('releases the lock after killed CGI but does not refund an unclassified attempt', concurrencyOptions, async () => {
     const f = fixture(1); let running;
     try {
       running = f.concurrent({ TEST_PAIR_GATE: '1' });
@@ -273,7 +285,7 @@ exec /bin/mv "$@"
       writeFileSync(f.gate, 'release'); if (running) await running.done; f.close();
     }
   });
-  it('returns unavailable, not quota-exhausted, when another pairing holds the lock', async () => {
+  it('returns unavailable, not quota-exhausted, when another pairing holds the lock', concurrencyOptions, async () => {
     const f = fixture(10); let running;
     try {
       running = f.concurrent({ TEST_PAIR_GATE: '1' });

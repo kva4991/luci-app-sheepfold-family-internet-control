@@ -136,7 +136,9 @@ describe('Bound token publication under checked function calls', () => {
     assert.deepEqual(readdirSync(join(f.store, testHash)), []);
     assertNoTemps(f);
   }));
-  it('preserves a symlink destination and its target', () => withFixture((f) => {
+  it('preserves a symlink destination and its target', {
+    skip: process.platform === 'win32' ? 'requires POSIX symlink semantics; covered by Linux CI' : false,
+  }, () => withFixture((f) => {
     const target = join(f.root, 'unrelated');
     writeFileSync(target, 'untouched');
     symlinkSync(target, join(f.store, testHash));

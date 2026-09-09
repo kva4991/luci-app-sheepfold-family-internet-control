@@ -418,6 +418,14 @@ apk-tools v3 APK для 25.12 (§owrtci1).
 - `shell-and-node`;
 - `android` matrix: `android`, `android-child`.
 
+`shell-and-node` получает полную Git-историю, вычисляет базовый commit события и
+передаёт diff в `runQualityChecks.mjs`. Поэтому Node-тесты и ESLint выбираются по
+реально затронутым путям. Не заменять этот вход монолитным
+`node --test tests/*.test.mjs`: он обходит карту влияния и одновременно запускает
+конфликтующие shell-fixture. Полный suite остаётся отдельным release-gate по §testcat.
+Linux-job явно устанавливает BusyBox `ash` и `util-linux` с `flock`, чтобы выполнить
+конкурентные pairing/lock-сценарии, которые штатно пропускаются на Windows.
+
 Если на GitHub видно 6 красных проверок, это часто дубли `push` и `pull_request`: фактически падают три job-семейства.
 
 Для просмотра логов удобно установить `gh`:

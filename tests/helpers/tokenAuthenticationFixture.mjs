@@ -16,7 +16,6 @@ export const authNow = '1700000000';
 export const authRecord = (overrides = {}) => Object.entries({ login: 'Parent', device_id: '1',
   mac: testMac, issued_at: '1699999990', expires_at: '0', ...overrides })
   .filter(([, value]) => value !== null).map(([key, value]) => `${key}=${value}\n`).join('');
-const posix = (value) => value.replaceAll('\\', '/').replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`);
 export const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
 
 export function createAuthFixture(record = authRecord(), extra = {}) {
@@ -33,10 +32,19 @@ export function createAuthFixture(record = authRecord(), extra = {}) {
   const actionsPath = join(fixture.root, 'protected-actions');
   writeFileSync(recordPath, record);
   writeFileSync(actionsPath, '');
-  const relocate = (body) => body.replaceAll('/usr/libexec/sheepfold', posix(fixture.bin))
-    .replaceAll('/etc/sheepfold', posix(persistent)).replaceAll('/tmp/sheepfold', posix(fixture.runtime))
-    .replaceAll('/tmp/dhcp.leases', posix(join(fixture.root, 'leases')))
-    .replaceAll('/proc/net/arp', posix(join(fixture.root, 'arp')));
+  const relocate = (body) => {
+    let relocated = body.replaceAll('/usr/libexec/sheepfold', fixture.shellPath(fixture.bin))
+      .replaceAll('/etc/sheepfold', fixture.shellPath(persistent))
+      .replaceAll('/tmp/sheepfold', fixture.shellPath(fixture.runtime))
+      .replaceAll('/tmp/dhcp.leases', fixture.shellPath(join(fixture.root, 'leases')))
+      .replaceAll('/proc/net/arp', fixture.shellPath(join(fixture.root, 'arp')));
+    // Token migration has its own Linux runtime suite. Native Windows without
+    // symlink privileges cannot prepare that link, but can still prove all
+    // record parsing, hashing and authorization contracts against TOKEN_STATE_DIR.
+    if (process.platform === 'win32')
+      relocated = relocated.replace('\nensure_token_storage\n', '\n: # storage link is covered by Linux CI\n');
+    return relocated;
+  };
   for (const name of ['sheepfold-token-common', 'sheepfold-router-control', 'sheepfold-api-rate-limit']) {
     installExecutable(fixture, name, relocate(readFileSync(join(runtimeRoot, name), 'utf8')));
   }
@@ -44,7 +52,7 @@ export function createAuthFixture(record = authRecord(), extra = {}) {
     '../../../www/cgi-bin/sheepfold-api'), 'utf8')));
   installExecutable(fixture, 'sheepfold-home-network', '#!/bin/sh\nexit 0\n');
   installExecutable(fixture, 'date', `#!/bin/sh\n[ "$1" != +%s ] || { printf '${authNow}'; exit 0; }\nexec /bin/date "$@"\n`);
-  installExecutable(fixture, 'sheepfold-router-control-legacy', `#!/bin/sh\nprintf '%s\\n' "$*" >> ${quote(posix(actionsPath))}\nprintf '[]\\n'\n`);
+  installExecutable(fixture, 'sheepfold-router-control-legacy', `#!/bin/sh\nprintf '%s\\n' "$*" >> ${quote(fixture.shellPath(actionsPath))}\nprintf '[]\\n'\n`);
   const run = (command, bearer = authBearer, id = '1', mac = testMac) => fixture.run('sheepfold-router-control',
     command === 'authenticate-token' ? [command, bearer, testIp] : [command, bearer, id, mac]);
   const request = (name = 'test-auth-cgi', bearer = authBearer) => fixture.run(name, [], { env: {

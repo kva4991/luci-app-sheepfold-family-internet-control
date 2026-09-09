@@ -11,19 +11,18 @@ import { createControlFixture, installExecutable, installNftModel } from './help
 import { testMac } from './helpers/routerRuntimeFixture.mjs';
 
 const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
-const posix = (value) => value.replaceAll('\\', '/').replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`);
 
 function logModel(fixture, code = 0) {
   const events = join(fixture.root, 'events');
   writeFileSync(events, '');
-  installExecutable(fixture, 'sheepfold-log', `#!/bin/sh\nprintf '%s\\n' "$*" >> ${quote(posix(events))}\nexit ${code}\n`);
+  installExecutable(fixture, 'sheepfold-log', `#!/bin/sh\nprintf '%s\\n' "$*" >> ${quote(fixture.shellPath(events))}\nexit ${code}\n`);
   return () => readFileSync(events, 'utf8');
 }
 function wifiModel(fixture, reloadCode, fallbackCode) {
   const log = join(fixture.root, 'wifi-calls');
   writeFileSync(log, '');
   installExecutable(fixture, 'wifi', `#!/bin/sh
-printf '%s\\n' "\${1:-default}" >> ${quote(posix(log))}
+printf '%s\\n' "\${1:-default}" >> ${quote(fixture.shellPath(log))}
 [ "\${1:-}" != reload ] || exit ${reloadCode}
 exit ${fallbackCode}
 `);
@@ -36,7 +35,7 @@ if [ "$*" = ${quote(failure)} ]; then
   printf '%s' ${quote(partial)}
   exit 1
 fi
-exec ${quote(posix(join(fixture.bin, 'uci-good')))} "$@"
+exec ${quote(fixture.shellPath(join(fixture.bin, 'uci-good')))} "$@"
 `);
 }
 const radio = { 'wireless.radio0': 'wifi-device', 'wireless.radio0.disabled': '0' };

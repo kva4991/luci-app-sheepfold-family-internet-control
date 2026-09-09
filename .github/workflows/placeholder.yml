@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Validate OpenWrt shell syntax
         shell: bash
@@ -88,11 +90,24 @@ jobs:
       - name: Install JavaScript tooling
         run: npm ci
 
-      - name: Run ESLint
-        run: npm run lint:js
+      - name: Install OpenWrt shell test dependencies
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y busybox util-linux
 
-      - name: Run JavaScript tests
-        run: node --test tests/*.test.mjs
+      - name: Run impacted quality checks
+        shell: bash
+        env:
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base="$PULL_REQUEST_BASE"
+          if [ -z "$base" ]; then
+            base="$PUSH_BASE"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="$(git rev-parse HEAD^ 2>/dev/null || git hash-object -t tree /dev/null)"
+          fi
+          node scripts/runQualityChecks.mjs --git "$base" --skip-android --strict
 
   android:
     runs-on: ubuntu-latest

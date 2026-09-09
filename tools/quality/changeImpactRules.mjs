@@ -64,6 +64,33 @@ export const checkCatalog = Object.freeze({
   }),
 });
 
+const routerRuntimeConsumers = Object.freeze([
+  'accessPolicyRuntime.test.mjs',
+  'apiFormRuntime.test.mjs',
+  'apiRateLimitRuntime.test.mjs',
+  'commandOutcomeRuntime.test.mjs',
+  'pairingAttemptRuntime.test.mjs',
+  'pairingBoundaryRuntime.test.mjs',
+  'pairingStorageRuntime.test.mjs',
+  'policyConsistencyRuntime.test.mjs',
+  'readModelRuntime.test.mjs',
+  'recoveryRuntime.test.mjs',
+  'tokenAuthenticationRuntime.test.mjs',
+  'tokenStorageRecoveryRuntime.test.mjs',
+]);
+
+const controlRuntimeConsumers = Object.freeze([
+  'commandOutcomeRuntime.test.mjs',
+  'pairingAttemptRuntime.test.mjs',
+  'pairingBoundaryRuntime.test.mjs',
+  'pairingStorageRuntime.test.mjs',
+  'policyConsistencyRuntime.test.mjs',
+  'readModelRuntime.test.mjs',
+  'recoveryRuntime.test.mjs',
+  'tokenAuthenticationRuntime.test.mjs',
+  'tokenStorageRecoveryRuntime.test.mjs',
+]);
+
 export const impactRules = Object.freeze([
   Object.freeze({
     id: 'remoteSupportProtocol',
@@ -249,7 +276,7 @@ export const impactRules = Object.freeze([
   Object.freeze({
     id: 'packaging',
     area: 'Пакет, release и updater',
-    pattern: /(?:^package\/[^/]+\/Makefile$|^scripts\/(?:build-test-ipk|sheepfold_variants|prepare-openwrt|collect-openwrt|create-openwrt-release)|(?:^|\/)sheepfold-updater$|^install\.sh$|^uninstall\.sh$|^\.github\/workflows\/)/,
+    pattern: /(?:^package\/[^/]+\/Makefile$|^scripts\/(?:build-test-ipk|sheepfold_variants|prepare-openwrt|collect-openwrt|create-openwrt-release)|(?:^|\/)sheepfold-updater$|^install\.sh$|^uninstall\.sh$|^\.github\/workflows\/build-openwrt-packages\.yml$)/,
     excludeKinds: ['packageReleaseOnly'],
     categories: ['packaging', 'tooling', 'security'],
     checks: ['githubPackages'],
@@ -283,6 +310,65 @@ export const impactRules = Object.freeze([
     directTests: Object.freeze(['apiRateLimitRuntime.test.mjs']),
     review: 'Запустить прямой rate-limit runtime-тест, не расширяя tooling-категорию соседними backend-стендами.',
   }),
+  Object.freeze({
+    id: 'routerRuntimeTestFixture',
+    area: 'Общий router runtime-fixture тестов',
+    pattern: /^tests\/helpers\/routerRuntimeFixture\.mjs$/,
+    categories: ['tooling'],
+    checks: ['lintJs'],
+    risk: 'medium',
+    directTests: routerRuntimeConsumers,
+    review: 'Запустить прямых потребителей общего shell-fixture; это затронутый контур, а не повод запускать посторонние категории.',
+  }),
+  Object.freeze({
+    id: 'controlRuntimeTestFixture',
+    area: 'Общий router-control runtime-fixture тестов',
+    pattern: /^tests\/helpers\/controlRuntimeFixture\.mjs$/,
+    categories: ['tooling'],
+    checks: ['lintJs'],
+    risk: 'medium',
+    directTests: controlRuntimeConsumers,
+    review: 'Запустить все runtime-тесты, импортирующие helper управления, без расширения на несвязанные тесты.',
+  }),
+  Object.freeze({
+    id: 'pairingRuntimeTestFixture',
+    area: 'Общий pairing runtime-fixture тестов',
+    pattern: /^tests\/helpers\/pairingRuntimeFixture\.mjs$/,
+    categories: ['tooling'],
+    checks: ['lintJs'],
+    risk: 'medium',
+    directTests: Object.freeze([
+      'pairingAttemptRuntime.test.mjs',
+      'pairingBoundaryRuntime.test.mjs',
+      'pairingStorageRuntime.test.mjs',
+    ]),
+    review: 'Запустить три прямых pairing-потребителя изменённого fixture.',
+  }),
+  Object.freeze({
+    id: 'tokenAuthenticationRuntimeTestFixture',
+    area: 'Общий token-auth runtime-fixture тестов',
+    pattern: /^tests\/helpers\/tokenAuthenticationFixture\.mjs$/,
+    categories: ['tooling'],
+    checks: ['lintJs'],
+    risk: 'medium',
+    directTests: Object.freeze(['tokenAuthenticationRuntime.test.mjs']),
+    review: 'Запустить прямой тест аутентификации токена, не расширяя проверку на весь security-набор.',
+  }),
+	Object.freeze({
+		id: 'validationWorkflow',
+		area: 'CI проверки исходников',
+		pattern: /^\.github\/workflows\/placeholder\.yml$/,
+		categories: ['tooling'],
+		checks: ['lintJs'],
+		risk: 'high',
+		directTests: Object.freeze([
+			'deviceDetectorSafety.test.mjs',
+			'openWrtBuildWorkflow.test.mjs',
+			'staticAnalysisTooling.test.mjs',
+			'windowsToolchain.test.mjs',
+		]),
+		review: 'Проверить прямые контракты validation workflow; package SDK относится к отдельному build-openwrt workflow.',
+	}),
 	Object.freeze({
 		id: 'architectureDocs',
 		area: 'Архитектура и правила агентов',

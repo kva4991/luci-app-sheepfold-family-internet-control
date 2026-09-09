@@ -8,13 +8,12 @@ import { join } from 'node:path';
 import { createRouterFixture, runtimeRoot, basePolicy, childPolicy } from './routerRuntimeFixture.mjs';
 
 const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
-const posix = (value) => value.replaceAll('\\', '/').replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`);
 
 export function installRuntime(fixture, name) {
   const body = readFileSync(join(runtimeRoot, name), 'utf8')
-    .replaceAll('/usr/libexec/sheepfold', posix(fixture.bin))
-    .replaceAll('/etc/config', posix(join(fixture.root, 'config')))
-    .replaceAll('/tmp/sheepfold', posix(fixture.runtime));
+    .replaceAll('/usr/libexec/sheepfold', fixture.shellPath(fixture.bin))
+    .replaceAll('/etc/config', fixture.shellPath(join(fixture.root, 'config')))
+    .replaceAll('/tmp/sheepfold', fixture.shellPath(fixture.runtime));
   installExecutable(fixture, name, body);
 }
 export function installExecutable(fixture, name, body) {
@@ -53,11 +52,11 @@ if (op === 'get') {
   writeFileSync(file, JSON.stringify(values));
 }
 `);
-  installExecutable(fixture, 'uci', `#!/bin/sh\nexec node ${quote(posix(helperPath))} "$@"\n`);
+  installExecutable(fixture, 'uci', `#!/bin/sh\nexec node ${quote(fixture.shellPath(helperPath))} "$@"\n`);
   installExecutable(fixture, 'date', '#!/bin/sh\n[ "$1" != +%s ] || { printf 1700000000; exit 0; }\nexec /bin/date "$@"\n');
   installExecutable(fixture, 'sheepfold-log', '#!/bin/sh\nexit 0\n');
   installRuntime(fixture, 'sheepfold-router-control-legacy');
-  installExecutable(fixture, 'sheepfold-router-control', `#!/bin/sh\nexec ${quote(posix(join(fixture.bin, 'sheepfold-router-control-legacy')))} "$@"\n`);
+  installExecutable(fixture, 'sheepfold-router-control', `#!/bin/sh\nexec ${quote(fixture.shellPath(join(fixture.bin, 'sheepfold-router-control-legacy')))} "$@"\n`);
   return { ...fixture,
     values: () => JSON.parse(readFileSync(valuesPath, 'utf8')),
     writes: () => readFileSync(logPath, 'utf8'),
@@ -71,10 +70,10 @@ export function installNftModel(fixture) {
   const missingMarker = join(fixture.root, 'nft-no-marker-chain');
   writeFileSync(log, '');
   installExecutable(fixture, 'nft', `#!/bin/sh
-log=${quote(posix(log))}
-marker=${quote(posix(marker))}
-fail=${quote(posix(fail))}
-missing_marker=${quote(posix(missingMarker))}
+log=${quote(fixture.shellPath(log))}
+marker=${quote(fixture.shellPath(marker))}
+fail=${quote(fixture.shellPath(fail))}
+missing_marker=${quote(fixture.shellPath(missingMarker))}
 case "$1" in
   list)
     if [ "$2" = chain ] && [ "$5" = sheepfold_sync_marker ]; then

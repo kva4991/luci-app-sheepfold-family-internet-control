@@ -76,6 +76,12 @@ npm.cmd run quality:changed
 
 Она запускает `git diff --check`, изменённую документацию, применимый ESLint/Android Lint и объединённый набор затронутых test-файлов без дублей. Это обычный pre-push путь. `quality:gate` выполняет строгий полный прогон только для отдельно обоснованного сквозного или релизного барьера. Подробная граница и JSON-отчёт описаны в [`quality-assistants/README.ru.md`](quality-assistants/README.ru.md).
 
+GitHub Actions использует ту же карту: workflow вычисляет base SHA события и вызывает
+`runQualityChecks.mjs --git <base> --skip-android --strict`; Android проверяется
+отдельной matrix-job. Запрещено возвращать wildcard-запуск `node --test tests/*.test.mjs`,
+потому что он одновременно исполняет конфликтующие runtime-fixture и тестирует
+несвязанные области. Статический контракт защищает `staticAnalysisTooling.test.mjs`.
+
 ## Внешние HTTP-квоты r293
 
 Новый `tests/apiRateLimitRuntime.test.mjs` запускает реальные helper/CGI и два процесса

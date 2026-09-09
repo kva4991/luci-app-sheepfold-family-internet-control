@@ -5,8 +5,17 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { formatImpact, inspectChanges, parseNameStatus } from '../scripts/inspectChangeImpact.mjs';
 import { recommendedCommands } from '../tools/quality/changeImpact.mjs';
+
+function fixtureConsumers(helperName) {
+  return readdirSync(import.meta.dirname)
+    .filter((name) => name.endsWith('.test.mjs'))
+    .filter((name) => readFileSync(join(import.meta.dirname, name), 'utf8').includes(`helpers/${helperName}`))
+    .sort();
+}
 
 describe('change impact advisor §impact1', () => {
   it('requires security and full verification for the experimental support credential profile', () => {
@@ -94,6 +103,22 @@ describe('change impact advisor §impact1', () => {
     assert.deepEqual(unknown.unknown, ['experimental/unknown.file']);
     assert.deepEqual(unknown.categories, []);
     assert.equal(unknown.risk, 'medium');
+  });
+
+  it('separates source validation CI from the OpenWrt package build workflow', () => {
+    const validation = inspectChanges(['.github/workflows/placeholder.yml']);
+    assert.deepEqual(validation.categories, ['tooling']);
+    assert.equal(validation.fullTest, false);
+    assert.deepEqual(validation.directTests, [
+      'deviceDetectorSafety.test.mjs',
+      'openWrtBuildWorkflow.test.mjs',
+      'staticAnalysisTooling.test.mjs',
+      'windowsToolchain.test.mjs',
+    ]);
+
+    const packages = inspectChanges(['.github/workflows/build-openwrt-packages.yml']);
+    assert.ok(packages.categories.includes('packaging'));
+    assert.equal(packages.fullTest, true);
   });
 
   it('maps the isolated AI server experiment to AI and security checks', () => {
@@ -205,17 +230,17 @@ describe('change impact advisor §impact1', () => {
   });
 
   it('runs every direct consumer of a changed shared runtime fixture', () => {
-    const admin = inspectChanges(['tests/helpers/adminConfigRuntimeFixture.mjs']);
-    assert.deepEqual(admin.unknown, []);
-    assert.deepEqual(admin.directTests, [
-      'adminConfigBoundaryRuntime.test.mjs',
-      'adminRollbackRecoveryRuntime.test.mjs',
-      'adminTransactionPendingRuntime.test.mjs',
-      'adminTransactionPreparationRuntime.test.mjs',
-      'adminWifiValidationRuntime.test.mjs',
-    ]);
-
-    const rate = inspectChanges(['tests/helpers/apiRateLimitFixture.mjs']);
-    assert.deepEqual(rate.directTests, ['apiRateLimitRuntime.test.mjs']);
+    for (const helperName of [
+      'adminConfigRuntimeFixture.mjs',
+      'apiRateLimitFixture.mjs',
+      'controlRuntimeFixture.mjs',
+      'pairingRuntimeFixture.mjs',
+      'routerRuntimeFixture.mjs',
+      'tokenAuthenticationFixture.mjs',
+    ]) {
+      const report = inspectChanges([`tests/helpers/${helperName}`]);
+      assert.deepEqual(report.unknown, []);
+      assert.deepEqual(report.directTests, fixtureConsumers(helperName), helperName);
+    }
   });
 });

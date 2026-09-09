@@ -12,7 +12,6 @@ import { createRouterFixture, runtimeRoot } from './helpers/routerRuntimeFixture
 import { installExecutable, installRuntime } from './helpers/controlRuntimeFixture.mjs';
 
 const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
-const posix = (value) => value.replaceAll('\\', '/').replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`);
 const token = (login = 'Parent', id = '1') => `login=${login}\ndevice_id=${id}\nmac=02:00:00:00:00:11\nissued_at=1700000000\nexpires_at=0\n`;
 
 function createTokenFixture() {
@@ -24,11 +23,17 @@ function createTokenFixture() {
   mkdirSync(store, { recursive: true });
   writeFileSync(events, '');
   installRuntime(fixture, 'sheepfold-token-common');
-  installExecutable(fixture, 'sheepfold-router-control', readFileSync(join(runtimeRoot, 'sheepfold-router-control'), 'utf8')
-    .replaceAll('/usr/libexec/sheepfold', posix(fixture.bin))
-    .replaceAll('/etc/sheepfold', posix(persistent))
-    .replaceAll('/tmp/sheepfold', posix(fixture.runtime)));
-  installExecutable(fixture, 'sheepfold-log', `#!/bin/sh\nprintf '%s\\n' "$*" >> ${quote(posix(events))}\n`);
+  let routerControl = readFileSync(join(runtimeRoot, 'sheepfold-router-control'), 'utf8')
+    .replaceAll('/usr/libexec/sheepfold', fixture.shellPath(fixture.bin))
+    .replaceAll('/etc/sheepfold', fixture.shellPath(persistent))
+    .replaceAll('/tmp/sheepfold', fixture.shellPath(fixture.runtime));
+  // Migration requires native POSIX symlink semantics and is exercised by
+  // Linux CI. On Windows, keep the revocation suite useful without requiring
+  // Developer Mode or elevated symlink privileges.
+  if (process.platform === 'win32')
+    routerControl = routerControl.replace('\nensure_token_storage\n', '\n: # storage link is covered by Linux CI\n');
+  installExecutable(fixture, 'sheepfold-router-control', routerControl);
+  installExecutable(fixture, 'sheepfold-log', `#!/bin/sh\nprintf '%s\\n' "$*" >> ${quote(fixture.shellPath(events))}\n`);
   return { ...fixture, store, legacy, events,
     prepareLegacy: (files) => {
       mkdirSync(legacy, { recursive: true });
@@ -42,7 +47,7 @@ function createTokenFixture() {
 function failRemoval(fixture, name) {
   installExecutable(fixture, 'rm', `#!/bin/sh
 for item do
-  [ "$item" != ${quote(posix(join(fixture.store, name)))} ] || exit 1
+  [ "$item" != ${quote(fixture.shellPath(join(fixture.store, name)))} ] || exit 1
 done
 exec /bin/rm "$@"
 `);
@@ -52,7 +57,11 @@ function noPublishedFragments(fixture) {
   assert.deepEqual(readdirSync(fixture.store), [], 'failed migration must not publish a token or leave a visible fragment');
 }
 
-describe('Persistent administrator token migration', () => {
+describe('Persistent administrator token migration', {
+  skip: process.platform === 'win32'
+    ? 'requires native POSIX hard-link and symlink semantics; covered by Linux CI'
+    : false,
+}, () => {
   it('migrates complete files before replacing the legacy directory with a link', () => {
     const f = createTokenFixture();
     try {
@@ -61,7 +70,7 @@ describe('Persistent administrator token migration', () => {
       assert.equal(readFileSync(join(f.store, 'first'), 'utf8'), token());
       assert.equal(readFileSync(join(f.store, 'second'), 'utf8'), token('Other', '2'));
       assert.ok(lstatSync(f.legacy).isSymbolicLink());
-      assert.equal(readlinkSync(f.legacy), posix(f.store));
+      assert.equal(readlinkSync(f.legacy), f.shellPath(f.store));
       if (process.platform !== 'win32') assert.equal(statSync(join(f.store, 'first')).mode & 0o777, 0o600);
     } finally { f.close(); }
   });
@@ -164,7 +173,7 @@ exit 1
     try {
       f.prepareLegacy({ first: token() });
       installExecutable(f, 'rmdir', `#!/bin/sh
-printf '%s' ${quote(token('Late', '7'))} > ${quote(posix(join(f.legacy, 'late')))}
+printf '%s' ${quote(token('Late', '7'))} > ${quote(f.shellPath(join(f.legacy, 'late')))}
 exec /bin/rmdir "$@"
 `);
       assert.notEqual(f.initialize().status, 0);
@@ -196,7 +205,7 @@ exec /bin/ln -T "$@"
         const other = join(f.root, 'other-directory');
         mkdirSync(other);
         const collision = kind === 'directory' ? 'mkdir "$2"'
-          : `/bin/ln -s ${quote(posix(other))} "$2"`;
+          : `/bin/ln -s ${quote(f.shellPath(other))} "$2"`;
         installExecutable(f, 'ln', `#!/bin/sh
 [ "$1" != -s ] || exec /bin/ln "$@"
 [ "$1" != -T ] || shift

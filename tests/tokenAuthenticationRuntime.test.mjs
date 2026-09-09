@@ -29,7 +29,7 @@ function failHash(f) {
 function failReader(f) {
   // Both old sed-based and new awk-based readers see the same I/O failure.
   for (const tool of ['sed', 'awk']) installExecutable(f, tool, `#!/bin/sh\nfor arg do
-[ "$arg" != ${quote(f.recordPath)} ] || exit 7
+[ "$arg" != ${quote(f.shellPath(f.recordPath))} ] || exit 7
 done\nexec /usr/bin/${tool} "$@"\n`);
 }
 
@@ -129,7 +129,7 @@ describe('Authentication dependency failures do not confirm or revoke sessions',
   }));
   it('refuses a partially printed field even if a failed reader emitted valid data', () => withFixture((f) => {
     for (const tool of ['sed', 'awk']) installExecutable(f, tool, `#!/bin/sh\nfor arg do
-if [ "$arg" = ${quote(f.recordPath)} ]; then /usr/bin/${tool} "$@"; exit 7; fi
+if [ "$arg" = ${quote(f.shellPath(f.recordPath))} ]; then /usr/bin/${tool} "$@"; exit 7; fi
 done\nexec /usr/bin/${tool} "$@"\n`);
     assert.equal(f.runAuth('authenticate-token').status, 5);
     assert.equal(f.actions(), '');

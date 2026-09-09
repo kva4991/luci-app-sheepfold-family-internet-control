@@ -6,12 +6,14 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createRouterFixture, runtimeRoot, testMac, testIp } from './routerRuntimeFixture.mjs';
+import { createRouterFixture, hostHasFlock, repoRoot, runtimeRoot, testMac, testIp } from './routerRuntimeFixture.mjs';
 import { installExecutable } from './controlRuntimeFixture.mjs';
+import { shellTestPath } from '../../tools/quality/testEnvironment.mjs';
 
 export const shellQuote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
-export const shellPath = (value) => value.replaceAll('\\', '/').replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`);
+export const shellPath = (value) => shellTestPath(value, { cwd: repoRoot });
 const busybox = process.platform !== 'win32' && spawnSync('busybox', ['ash', '-c', 'true']).status === 0;
+export const pairingConcurrencyAvailable = busybox && hostHasFlock;
 export const testHash = 'a'.repeat(64);
 export const testCode = 'Valid+Code';
 export const storedToken = (login = 'Parent') => `login=${login}\ndevice_id=1\nmac=${testMac}\nissued_at=1700000000\nexpires_at=0\n`;

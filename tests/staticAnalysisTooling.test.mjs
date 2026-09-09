@@ -27,12 +27,17 @@ describe('Static analysis tooling', () => {
     assert.match(config, /'no-unused-vars':\s*\['error'/);
   });
 
-  it('runs JavaScript and both Android linters in CI', () => {
+  it('runs impacted JavaScript checks and both Android linters in CI', () => {
     const workflow = read('.github/workflows/placeholder.yml');
+    const qualityRunner = read('scripts/runQualityChecks.mjs');
     const runner = read('scripts/runAndroidLint.mjs');
 
     assert.match(workflow, /Install JavaScript tooling[\s\S]*npm ci/);
-    assert.match(workflow, /Run ESLint[\s\S]*npm run lint:js/);
+    assert.match(workflow, /Install OpenWrt shell test dependencies[\s\S]*busybox util-linux/);
+    assert.match(workflow, /fetch-depth:\s*0/);
+    assert.match(workflow, /Run impacted quality checks[\s\S]*runQualityChecks\.mjs --git "\$base" --skip-android --strict/);
+    assert.doesNotMatch(workflow, /node --test tests\/\*\.test\.mjs/);
+    assert.match(qualityRunner, /lintJavaScript\(changes, options\.full\)/);
     assert.match(workflow, /Run Android Lint[\s\S]*lintDebug --stacktrace/);
     assert.match(workflow, /android-lint-\$\{\{ matrix\.kind \}\}/);
     assert.match(runner, /\['android', 'android-child'\]/);

@@ -7,14 +7,15 @@
 import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { shellTestPath } from '../../tools/quality/testEnvironment.mjs';
 
 export const repoRoot = resolve(import.meta.dirname, '../..');
 export const runtimeRoot = join(repoRoot, 'package/luci-app-sheepfold-family-internet-control/root/usr/libexec/sheepfold');
 export const testMac = '02:00:00:00:00:11';
 export const testIp = '192.168.7.20';
 const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
-const posix = (value) => value.replaceAll('\\', '/').replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`);
 const busybox = process.platform !== 'win32' && spawnSync('busybox', ['ash', '-c', 'true']).status === 0;
+export const hostHasFlock = spawnSync('sh', ['-c', 'command -v flock >/dev/null 2>&1']).status === 0;
 
 export function createRouterFixture(values = {}) {
   const parent = join(repoRoot, '.build', 'test-fixtures');
@@ -23,6 +24,7 @@ export function createRouterFixture(values = {}) {
   const bin = join(root, 'bin');
   const state = join(root, 'state');
   const runtime = join(root, 'runtime');
+  const shellPath = (value) => shellTestPath(value, { cwd: repoRoot, allowedRoot: root });
   for (const directory of [bin, state, runtime]) mkdirSync(directory);
   const nftLog = join(root, 'nft.log');
   const callLog = join(root, 'calls.log');
@@ -41,15 +43,16 @@ export function createRouterFixture(values = {}) {
     'sheepfold-lib-form', 'sheepfold-hash-common', 'sheepfold-lock-common'];
   for (const name of names) {
     let body = readFileSync(join(runtimeRoot, name), 'utf8')
-      .replaceAll('/usr/libexec/sheepfold', posix(bin))
-      .replaceAll('/tmp/sheepfold', posix(runtime))
-      .replaceAll('/tmp/dhcp.leases', posix(leases))
-      .replaceAll('/proc/net/arp', posix(arp));
+      .replaceAll('/usr/libexec/sheepfold', shellPath(bin))
+      .replaceAll('/tmp/sheepfold', shellPath(runtime))
+      .replaceAll('/tmp/dhcp.leases', shellPath(leases))
+      .replaceAll('/proc/net/arp', shellPath(arp));
     if (busybox) body = body.replace(/^#!\/bin\/sh/, '#!/usr/bin/env -S busybox ash');
     executable(name, body);
   }
   executable('sheepfold-token-common', '# Проверяется обработчик после авторизации\n');
   executable('logger', '#!/bin/sh\nexit 0\n');
+  if (!hostHasFlock) executable('flock', '#!/bin/sh\nexit 0\n');
   executable('sheepfold-device-id', '#!/bin/sh\nprintf 1\n');
   executable('nft', `#!/bin/sh
 case "$1" in
@@ -60,7 +63,7 @@ esac
 `);
   executable('sheepfold-router-control', `#!/bin/sh
 if [ "$1" = client-status ]; then
-  exec ${quote(posix(join(bin, 'sheepfold-client-status-effective')))} "$2"
+  exec ${quote(shellPath(join(bin, 'sheepfold-client-status-effective')))} "$2"
 fi
 printf '%s\\n' "$*" >> "$TEST_CALL_LOG"
 printf 'OK\\n'
@@ -91,7 +94,9 @@ esac
   setValues(values);
   function run(name, args = [], options = {}) {
     const command = busybox ? 'busybox' : 'bash';
-    const commandArgs = [...(busybox ? ['ash'] : []), posix(join(bin, name)), ...args];
+    const commandArgs = [...(busybox ? ['ash'] : []), '-c',
+      'PATH="$1:$PATH"; export PATH; shift; exec "$@"', 'sheepfold-router-fixture',
+      shellPath(bin), shellPath(join(bin, name)), ...args];
     return spawnSync(command, commandArgs, {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -99,14 +104,14 @@ esac
       input: options.input || '',
       env: {
         ...process.env,
-        PATH: `${posix(bin)}:${process.env.PATH || ''}`,
-        TEST_NFT_LOG: posix(nftLog), TEST_CALL_LOG: posix(callLog),
+        PATH: process.env.PATH || '',
+        TEST_NFT_LOG: shellPath(nftLog), TEST_CALL_LOG: shellPath(callLog),
         SHEEPFOLD_AUTHENTICATED_ADMIN_LOGIN: 'synthetic-parent',
         SHEEPFOLD_FIREWALL_LOCK_HELD: '1',
-        SHEEPFOLD_FIREWALL_STATE_DIR: posix(state),
-        SHEEPFOLD_DOMAIN_POLICY_ACTIVE: posix(join(root, 'missing-domain-policy')),
-        SHEEPFOLD_HOME_NETWORK: posix(join(root, 'missing-home-network')),
-        SHEEPFOLD_SCHEDULE_EVALUATOR: posix(join(bin, 'sheepfold-schedule-evaluator')),
+        SHEEPFOLD_FIREWALL_STATE_DIR: shellPath(state),
+        SHEEPFOLD_DOMAIN_POLICY_ACTIVE: shellPath(join(root, 'missing-domain-policy')),
+        SHEEPFOLD_HOME_NETWORK: shellPath(join(root, 'missing-home-network')),
+        SHEEPFOLD_SCHEDULE_EVALUATOR: shellPath(join(bin, 'sheepfold-schedule-evaluator')),
         SHEEPFOLD_NOW_WEEKDAY: 'mon', SHEEPFOLD_NOW_MINUTES: '600',
         REMOTE_ADDR: testIp, REQUEST_METHOD: 'GET', QUERY_STRING: '', CONTENT_LENGTH: '0',
         ...options.env,
@@ -114,7 +119,7 @@ esac
     });
   }
   return {
-    root, bin, state, runtime, run, setValues,
+    root, bin, state, runtime, run, setValues, shellPath,
     calls: () => readFileSync(callLog, 'utf8').trim().split('\n').filter(Boolean),
     batch: () => existsSync(nftLog) ? readFileSync(nftLog, 'utf8') : '',
     close: () => rmSync(root, { recursive: true, force: true }),
