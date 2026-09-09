@@ -191,6 +191,8 @@ admin_config_message() {
         wifi_network_not_found|wifi_radio_not_found) printf '%s' 'This Wi-Fi network changed or no longer exists. Refresh and try again.' ;;
         invalid_wifi_ssid|invalid_wifi_password|wifi_password_required|invalid_wifi_encryption|invalid_wifi_channel|invalid_wifi_enabled)
             printf '%s' 'Check the Wi-Fi name, password, security type, channel and switch state.' ;;
+        config_rollback_failed) printf '%s' 'The router could not restore the previous settings. Check the router and recovery files before retrying.' ;;
+        wifi_rollback_apply_failed) printf '%s' 'The previous Wi-Fi settings were restored, but Wi-Fi could not restart. Check the router before retrying.' ;;
         config_commit_failed|config_verify_failed) printf '%s' 'The router did not confirm the write and restored the previous configuration.' ;;
         *) printf '%s' 'Check the submitted fields and refresh the router state.' ;;
     esac
@@ -218,12 +220,19 @@ run_admin_config() {
     if ! printf '%s' "$error_code" | grep -Eq '^[a-z0-9_]{1,64}$'; then
         error_code=admin_config_failed
     fi
+    # Cleanup выполняется после исходной ошибки; его отдельный код важнее
+    # первой stderr-строки, иначе API ложно обещает уже выполненный rollback.
+    case "$result" in
+        72) error_code=config_rollback_failed ;;
+        73) error_code=wifi_rollback_apply_failed ;;
+    esac
     retry=""
     case "$result" in
         2) status="400 Bad Request" ;;
         3) status="409 Conflict" ;;
         4) status="409 Conflict"; retry=2 ;;
-        5) status="502 Bad Gateway" ;;
+        5|73) status="502 Bad Gateway" ;;
+        72) status="500 Internal Server Error" ;;
         70)
             case "$error_code" in
                 config_read_failed|revision_hash_unavailable) status="503 Service Unavailable" ;;

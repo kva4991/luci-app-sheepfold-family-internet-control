@@ -1,5 +1,13 @@
 # Current Implementation Status
 
+Focused continuation: 2026-09-09, **r296**, based on r295 `5f2c816`.
+The administrative Wi-Fi backend checks SSID octets and WPA-PSK bounds, preserves
+SSID spaces and accepts passwordless OWE. Failed rollback retains available recovery
+data and is distinguished from a restored file whose Wi-Fi restart failed.
+See the [r296 report](audit-fixes-r296.ru.md) and [57-card register](bug-register.ru.md).
+Only affected-area tests were run; no native UCI, live radio or SDK-release claim.
+Historical r295 and earlier notes follow.
+
 Focused continuation: 2026-09-09, **r295**, based on r294 `e1084e1`.
 Admin-config rejects failed UCI/revision hashes, escapes JSON controls and disables
 pathname expansion of logical lists. Installation hardening now follows the r294
@@ -165,10 +173,10 @@ quarantine, automatic groups, notifications and firewall effects is
 [`device-passport-and-control.ru.md`](device-passport-and-control.ru.md) (§devpas1). Focused
 device documents supplement that contract instead of redefining it.
 
-Current local r295 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
+Current local r296 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-295_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-296_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.

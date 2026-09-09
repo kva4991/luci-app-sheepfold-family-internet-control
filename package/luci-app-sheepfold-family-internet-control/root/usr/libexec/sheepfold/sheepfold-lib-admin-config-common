@@ -162,24 +162,48 @@ TX_SNAPSHOT=""
 TX_RESTORE=0
 TX_ACTIVE=0
 
-restore_snapshot() {
-    local restore_file
-    restore_file="${CONFIG_FILE}.android-restore.$$"
-    [ -r "$TX_SNAPSHOT" ] || return 1
-    cp -p "$TX_SNAPSHOT" "$restore_file" || return 1
-    mv -f "$restore_file" "$CONFIG_FILE" || {
-        rm -f "$restore_file" 2>/dev/null || true
+# Восстанавливаем файл через проверенную копию на той же файловой системе.
+# Прямая cp могла обнулить действующую конфигурацию до сообщения об ошибке.
+restore_config_snapshot() {
+    local snapshot target restore_dir restore_file
+    snapshot="$1"
+    target="$2"
+    [ -f "$snapshot" ] && [ -r "$snapshot" ] && [ ! -d "$target" ] || return 1
+    restore_dir="$(umask 077; mktemp -d "${target}.android-restore.XXXXXX")" || return 1
+    restore_file="$restore_dir/config"
+    if ! cp -p "$snapshot" "$restore_file" ||
+        ! cmp -s "$snapshot" "$restore_file" ||
+        ! mv -f "$restore_file" "$target"; then
+        rm -rf "$restore_dir" 2>/dev/null || true
         return 1
-    }
+    fi
+    rmdir "$restore_dir" 2>/dev/null || true
+}
+
+restore_snapshot() {
+    restore_config_snapshot "$TX_SNAPSHOT" "$CONFIG_FILE"
+}
+
+# Содержимое копии (пароли/токены) не печатается. Путь — только в системный
+# журнал для ручного восстановления; отказ logger не должен скрыть код ошибки.
+report_recovery_failure() {
+    local error_code recovery_dir
+    error_code="$1"
+    recovery_dir="$2"
+    printf '%s\n' "$error_code" >&2
+    logger -t sheepfold "Android admin-config: $error_code; recovery directory not removed: $recovery_dir" >/dev/null 2>&1 || true
 }
 
 transaction_cleanup() {
-    local status="${1:-1}"
+    local status="${1:-1}" keep_snapshot=0
     trap - EXIT HUP INT TERM
-    if [ "$TX_RESTORE" = 1 ]; then
-        restore_snapshot || logger -t sheepfold "Android admin-config transaction rollback failed"
+    if [ "$TX_RESTORE" = 1 ] && ! restore_snapshot; then
+        keep_snapshot=1
+        status=72
+        report_recovery_failure config_rollback_failed "$TX_DIR"
     fi
-    [ -z "$TX_DIR" ] || rm -rf "$TX_DIR" 2>/dev/null || true
+    # При провале rollback это последняя исходная копия, а не мусор транзакции.
+    [ "$keep_snapshot" = 1 ] || [ -z "$TX_DIR" ] || rm -rf "$TX_DIR" 2>/dev/null || true
     [ "$TX_ACTIVE" = 0 ] || sheepfold_lock_release
     exit "$status"
 }

@@ -66,16 +66,44 @@ wifi_channels_json() {
 }
 
 wifi_save_cleanup() {
-    local status="${1:-1}"
+    local status="${1:-1}" keep_snapshot=0
     trap - EXIT HUP INT TERM
-    if [ "$WIFI_TX_RESTORE" = 1 ] && [ -r "$WIFI_TX_SNAPSHOT" ]; then
-        cp -p "$WIFI_TX_SNAPSHOT" "$WIRELESS_CONFIG_FILE" 2>/dev/null || true
-        "$WIFI_BIN" reload >/dev/null 2>&1 || "$WIFI_BIN" >/dev/null 2>&1 || true
+    if [ "$WIFI_TX_RESTORE" = 1 ]; then
+        if ! restore_config_snapshot "$WIFI_TX_SNAPSHOT" "$WIRELESS_CONFIG_FILE"; then
+            keep_snapshot=1
+            status=72
+            report_recovery_failure config_rollback_failed "$WIFI_TX_DIR"
+        elif ! "$WIFI_BIN" reload >/dev/null 2>&1 && ! "$WIFI_BIN" >/dev/null 2>&1; then
+            # Файл восстановлен, но подтверждения работающего Wi-Fi нет.
+            keep_snapshot=1
+            status=73
+            report_recovery_failure wifi_rollback_apply_failed "$WIFI_TX_DIR"
+        fi
     fi
-    [ -z "$WIFI_TX_DIR" ] || rm -rf "$WIFI_TX_DIR" 2>/dev/null || true
+    [ "$keep_snapshot" = 1 ] || [ -z "$WIFI_TX_DIR" ] || rm -rf "$WIFI_TX_DIR" 2>/dev/null || true
     [ "$WIFI_TX_ACTIVE" = 0 ] || sheepfold_lock_release
     exit "$status"
 }
+
+valid_wifi_ssid() (
+    # Лимит SSID задан в октетах, не в символах UTF-8. Пробелы — часть имени.
+    LC_ALL=C
+    export LC_ALL
+    [ -n "${1:-}" ] && valid_plain_text "$1" 32
+)
+
+valid_wifi_psk() (
+    local key
+    LC_ALL=C
+    export LC_ALL
+    key="${1:-}"
+    # WPA-PSK: фраза 8–63 байта либо ровно 64 hex-символа готового ключа.
+    # Не переносим эти ограничения на чистый SAE или enterprise/WEP.
+    if [ "${#key}" -eq 64 ]; then
+        case "$key" in *[!0-9a-fA-F]*) return 1 ;; *) return 0 ;; esac
+    fi
+    [ "${#key}" -ge 8 ] && [ "${#key}" -le 63 ]
+)
 
 valid_wifi_encryption() {
     case "${1:-}" in
@@ -111,7 +139,7 @@ wifi_state_is_valid() {
     else
         [ "$(uci_get "wireless.$section.disabled")" = 1 ] || return 1
     fi
-    if [ "$encryption" = none ]; then
+    if [ "$encryption" = none ] || [ "$encryption" = owe ]; then
         [ -z "$(uci_get "wireless.$section.key")" ]
     else
         [ "$(uci_get "wireless.$section.key")" = "$password" ]
@@ -124,7 +152,7 @@ wifi_save() {
     body="$(cat)"
     expected_wifi_revision="$(form_get expectedWifiRevision "$body")"
     section="$(form_get section "$body")"
-    ssid="$(trim_text "$(form_get ssid "$body")")"
+    ssid="$(form_get ssid "$body")"
     password="$(form_get password "$body")"
     encryption="$(form_get encryption "$body")"
     channel="$(form_get channel "$body")"
@@ -144,7 +172,7 @@ wifi_save() {
         printf '%s\n' wifi_radio_not_found >&2
         return 2
     }
-    [ -n "$ssid" ] && valid_plain_text "$ssid" 64 || {
+    valid_wifi_ssid "$ssid" || {
         printf '%s\n' invalid_wifi_ssid >&2
         return 2
     }
@@ -156,10 +184,19 @@ wifi_save() {
         printf '%s\n' invalid_wifi_encryption >&2
         return 2
     }
-    [ "$encryption" = none ] || [ -n "$password" ] || {
+    # OWE шифрует соединение без общего пароля, как отдельный режим, не PSK.
+    [ "$encryption" = none ] || [ "$encryption" = owe ] || [ -n "$password" ] || {
         printf '%s\n' wifi_password_required >&2
         return 2
     }
+    case "$encryption" in
+        psk|psk2|psk-mixed)
+            valid_wifi_psk "$password" || {
+                printf '%s\n' invalid_wifi_password >&2
+                return 2
+            }
+            ;;
+    esac
     valid_wifi_channel "$channel" || {
         printf '%s\n' invalid_wifi_channel >&2
         return 2
@@ -218,7 +255,7 @@ wifi_save() {
     else
         uci_read -q set "wireless.$section.disabled=1"
     fi
-    if [ "$encryption" = none ]; then
+    if [ "$encryption" = none ] || [ "$encryption" = owe ]; then
         uci_read -q delete "wireless.$section.key" 2>/dev/null || true
     else
         uci_read -q set "wireless.$section.key=$password"

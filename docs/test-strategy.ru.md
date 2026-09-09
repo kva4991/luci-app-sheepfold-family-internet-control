@@ -502,3 +502,13 @@ pairing-библиотеки; положительный тест принима
 настоящие libuci/flash, установку opkg/apk, браузер или Wi-Fi. Тяжёлый admin-config
 набор зарегистрирован только в backend/security, не в smoke/backendFast.
 Команды, контрольная r294 и актуальные результаты — [отчёт r295](audit-fixes-r295.ru.md).
+
+
+## Проверки Wi-Fi и восстановления r296
+
+`adminWifiValidationRuntime.test.mjs` исполняет административные CLI/CGI с моделью UCI;
+`adminRollbackRecoveryRuntime.test.mjs` проверяет реальные cleanup-функции, файловые
+отказы и приоритет ошибки восстановления в CGI. Оба входят в backend/security,
+но не в smoke/backendFast. Всего 47 новых сценариев; имена, команды и результаты
+соседних проверок — в [отчёте r296](audit-fixes-r296.ru.md). Файловая модель не доказывает
+сохранность UCI-delta, поведение flash при потере питания или работу радио.
