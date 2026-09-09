@@ -3,9 +3,25 @@ name: Build OpenWrt packages
 on:
   workflow_dispatch:
   pull_request:
+    paths:
+      - '.github/workflows/build-openwrt-packages.yml'
+      - 'package/**'
+      - 'po/**'
+      - 'scripts/collect-openwrt-package.py'
+      - 'scripts/create-openwrt-release-manifest.py'
+      - 'scripts/prepare-openwrt-sdk-feed.py'
+      - 'scripts/sheepfold_variants.py'
   push:
     branches:
       - main
+    paths:
+      - '.github/workflows/build-openwrt-packages.yml'
+      - 'package/**'
+      - 'po/**'
+      - 'scripts/collect-openwrt-package.py'
+      - 'scripts/create-openwrt-release-manifest.py'
+      - 'scripts/prepare-openwrt-sdk-feed.py'
+      - 'scripts/sheepfold_variants.py'
   release:
     types:
       - published

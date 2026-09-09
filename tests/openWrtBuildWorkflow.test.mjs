@@ -34,6 +34,22 @@ describe('OpenWrt GitHub Actions build §owrtci1', () => {
     assert.equal((workflow.match(/variant: sheepfoldAi\n/g) || []).length, 2);
   });
 
+  it('automatically builds only when package inputs change', () => {
+    for (const path of [
+      '.github/workflows/build-openwrt-packages.yml',
+      'package/**',
+      'po/**',
+      'scripts/collect-openwrt-package.py',
+      'scripts/create-openwrt-release-manifest.py',
+      'scripts/prepare-openwrt-sdk-feed.py',
+      'scripts/sheepfold_variants.py',
+    ]) {
+      assert.equal(workflow.split('\n').filter((line) => line.trim() === `- '${path}'`).length, 2, path);
+    }
+    assert.match(workflow, /workflow_dispatch:/);
+    assert.match(workflow, /release:\n {4}types:\n {6}- published/);
+  });
+
   it('pins the official SDK action and validates real APK metadata', () => {
     assert.match(
       workflow,

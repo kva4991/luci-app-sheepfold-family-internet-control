@@ -411,7 +411,10 @@ SSH-привязка и ADB работали без повторного вхо�
 
 Первый проверяет shell/Node и две Android-сборки. Второй канонически собирает
 Standard/AI Support через официальный OpenWrt SDK: IPK для 24.10 и настоящий
-apk-tools v3 APK для 25.12 (§owrtci1).
+apk-tools v3 APK для 25.12 (§owrtci1). Package-workflow автоматически запускается
+только при изменении package payload, корневых переводов, своего workflow или
+четырёх используемых им Python-модулей. Ручной запуск и публикация релиза доступны
+независимо от `paths`-фильтра.
 
 В `placeholder.yml` есть:
 

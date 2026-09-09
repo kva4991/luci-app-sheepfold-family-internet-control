@@ -82,6 +82,11 @@ GitHub Actions использует ту же карту: workflow вычисл�
 потому что он одновременно исполняет конфликтующие runtime-fixture и тестирует
 несвязанные области. Статический контракт защищает `staticAnalysisTooling.test.mjs`.
 
+Тяжёлая SDK-сборка OpenWrt также не запускается от несвязанных изменений. Её
+`pull_request`/`push` ограничены `paths` package payload, переводов и сборочных
+Python-модулей; `workflow_dispatch` и опубликованный release остаются явными
+полными барьерами. Этот контракт защищает `openWrtBuildWorkflow.test.mjs`.
+
 ## Внешние HTTP-квоты r293
 
 Новый `tests/apiRateLimitRuntime.test.mjs` запускает реальные helper/CGI и два процесса
