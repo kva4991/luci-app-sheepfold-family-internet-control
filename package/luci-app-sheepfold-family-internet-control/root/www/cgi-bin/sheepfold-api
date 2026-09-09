@@ -170,6 +170,8 @@ admin_config_message() {
     case "$1" in
         config_read_failed|revision_hash_unavailable)
             printf '%s' 'The router could not verify the current settings. Refresh before making further changes.' ;;
+        config_snapshot_failed) printf '%s' 'The router could not prepare a verified recovery copy. No settings were saved.' ;;
+        config_pending_changes) printf '%s' 'This configuration has pending changes. Save or discard them in their originating editor before retrying.' ;;
         revision_conflict) printf '%s' 'Configuration changed on the router. Refresh and try again.' ;;
         config_busy) printf '%s' 'The router is already saving Sheepfold settings. Refresh and try again.' ;;
         unsupported_schema) printf '%s' 'This management API schema is not supported.' ;;
@@ -235,7 +237,7 @@ run_admin_config() {
         72) status="500 Internal Server Error" ;;
         70)
             case "$error_code" in
-                config_read_failed|revision_hash_unavailable) status="503 Service Unavailable" ;;
+                config_read_failed|revision_hash_unavailable|config_snapshot_failed) status="503 Service Unavailable" ;;
                 *) status="500 Internal Server Error" ;;
             esac ;;
         *) status="500 Internal Server Error" ;;

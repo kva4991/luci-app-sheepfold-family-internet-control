@@ -1,5 +1,13 @@
 # Current Implementation Status
 
+Focused continuation: 2026-09-09, **r297**, based on r296 `89b7093`.
+Admin transactions use fresh owned recovery directories and verify snapshots before
+mutation. Wi-Fi writes use private deltas; common admin transactions and Wi-Fi reject
+observable shared pending changes and recheck revisions before commit. This is not a
+complete UCI transaction or writer lock. See the [r297 report](audit-fixes-r297.ru.md)
+and [60-card register](bug-register.ru.md). Only affected-area tests were run.
+Historical r296 and earlier evidence follows.
+
 Focused continuation: 2026-09-09, **r296**, based on r295 `5f2c816`.
 The administrative Wi-Fi backend checks SSID octets and WPA-PSK bounds, preserves
 SSID spaces and accepts passwordless OWE. Failed rollback retains available recovery
@@ -173,10 +181,10 @@ quarantine, automatic groups, notifications and firewall effects is
 [`device-passport-and-control.ru.md`](device-passport-and-control.ru.md) (§devpas1). Focused
 device documents supplement that contract instead of redefining it.
 
-Current local r296 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
+Current local r297 test-package name produced by `scripts/build-test-ipk.py` (not an SDK release):
 
 ```text
-luci-app-sheepfold-family-internet-control_0.1.0-296_all.ipk
+luci-app-sheepfold-family-internet-control_0.1.0-297_all.ipk
 ```
 
 This local fixture uses `Architecture: all` because it contains LuCI assets, shell scripts, UCI defaults, init/hotplug scripts, CGI endpoints, and rpcd ACL files without native binaries. Official OpenWrt SDK artifacts use the format-native architecture metadata described below.

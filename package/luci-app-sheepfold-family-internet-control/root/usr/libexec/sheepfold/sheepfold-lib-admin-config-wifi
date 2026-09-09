@@ -6,6 +6,7 @@ WIFI_TX_SNAPSHOT=""
 WIFI_TX_DIR=""
 WIFI_TX_RESTORE=0
 WIFI_TX_ACTIVE=0
+WIFI_TX_UCI_DIR=""
 
 # Два ограниченных read-only RPC на радио, без сканирования эфира и записи во flash
 wifi_channel_list() (
@@ -63,6 +64,12 @@ wifi_channels_json() {
         printf ']'
     done
     printf '}}\n'
+}
+
+# Не оставляем собственные set/delete в общей очереди UCI при отказе commit.
+# -t не удаляет прочие read paths: отдельные guards ниже проверяют чужую очередь.
+wifi_tx_uci() {
+    "$UCI_BIN" -t "$WIFI_TX_UCI_DIR" -p "$WIFI_TX_UCI_DIR" "$@"
 }
 
 wifi_save_cleanup() {
@@ -230,6 +237,8 @@ wifi_save() {
         return 2
     }
 
+    assert_no_pending_config wireless || return "$?"
+
     # Сохранить прежний канал можно и без iwinfo, но новый числовой канал требует проверки
     if [ "$channel" != auto ] && [ "$channel" != "$(uci_get "wireless.$device.channel")" ]; then
         wifi_channel_list "$device" | grep -Fxq "$channel" || {
@@ -238,29 +247,42 @@ wifi_save() {
         }
     fi
 
-    mkdir -p "$TRANSACTION_ROOT"
-    chmod 700 "$TRANSACTION_ROOT" 2>/dev/null || true
-    WIFI_TX_DIR="$TRANSACTION_ROOT/wifi.$$"
+    WIFI_TX_DIR="$(new_transaction_directory wifi)" || {
+        printf '%s\n' config_snapshot_failed >&2
+        return 70
+    }
     WIFI_TX_SNAPSHOT="$WIFI_TX_DIR/wireless.before"
-    (umask 077; mkdir "$WIFI_TX_DIR") || return 70
-    cp -p "$WIRELESS_CONFIG_FILE" "$WIFI_TX_SNAPSHOT" || return 70
-    WIFI_TX_RESTORE=1
+    WIFI_TX_UCI_DIR="$WIFI_TX_DIR/uci"
+    if ! (umask 077; mkdir "$WIFI_TX_UCI_DIR") ||
+        ! prepare_config_snapshot "$WIRELESS_CONFIG_FILE" "$WIFI_TX_SNAPSHOT"; then
+        printf '%s\n' config_snapshot_failed >&2
+        return 70
+    fi
 
-    uci_read -q set "wireless.$section.ssid=$ssid"
-    uci_read -q set "wireless.$section.encryption=$encryption"
-    uci_read -q set "wireless.$device.channel=$channel"
+    wifi_tx_uci -q set "wireless.$section.ssid=$ssid"
+    wifi_tx_uci -q set "wireless.$section.encryption=$encryption"
+    wifi_tx_uci -q set "wireless.$device.channel=$channel"
     if [ "$enabled" = 1 ]; then
-        uci_read -q delete "wireless.$section.disabled" 2>/dev/null || true
-        uci_read -q delete "wireless.$device.disabled" 2>/dev/null || true
+        wifi_tx_uci -q delete "wireless.$section.disabled" 2>/dev/null || true
+        wifi_tx_uci -q delete "wireless.$device.disabled" 2>/dev/null || true
     else
-        uci_read -q set "wireless.$section.disabled=1"
+        wifi_tx_uci -q set "wireless.$section.disabled=1"
     fi
     if [ "$encryption" = none ] || [ "$encryption" = owe ]; then
-        uci_read -q delete "wireless.$section.key" 2>/dev/null || true
+        wifi_tx_uci -q delete "wireless.$section.key" 2>/dev/null || true
     else
-        uci_read -q set "wireless.$section.key=$password"
+        wifi_tx_uci -q set "wireless.$section.key=$password"
     fi
-    uci_read -q commit wireless || {
+    assert_no_pending_config wireless || return "$?"
+    current_wifi_revision="$(wifi_revision)" || return 70
+    [ "$current_wifi_revision" = "$expected_wifi_revision" ] || {
+        printf '%s\n' revision_conflict >&2
+        return 3
+    }
+    # До commit менялась только наша delta; при раннем отказе нельзя откатывать
+    # файл и перезапускать Wi-Fi поверх изменений другого процесса.
+    WIFI_TX_RESTORE=1
+    wifi_tx_uci -q commit wireless || {
         printf '%s\n' config_commit_failed >&2
         return 70
     }
@@ -333,7 +355,7 @@ wifi_automation_save() {
     tx_uci -q set "sheepfold.global.wifi_auto_enable_time=$enable_time"
     tx_uci -q set "sheepfold.global.wifi_auto_disable_mode=$disable_mode"
     tx_uci -q set "sheepfold.global.wifi_auto_disable_time=$disable_time"
-    commit_transaction || { printf '%s\n' config_commit_failed >&2; return 70; }
+    commit_transaction || return "$?"
     [ "$(uci_get sheepfold.global.wifi_auto_enable_mode)" = "$enable_mode" ] &&
         [ "$(uci_get sheepfold.global.wifi_auto_enable_time)" = "$enable_time" ] &&
         [ "$(uci_get sheepfold.global.wifi_auto_disable_mode)" = "$disable_mode" ] &&

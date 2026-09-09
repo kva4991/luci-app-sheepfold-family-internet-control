@@ -75,6 +75,11 @@ test('channelsEndpointIsAdminOnlyAndWritesValidateBeforeStaging', () => {
   assert.match(route.slice(0, route.indexOf(';;')), /\[ "\$method" = "GET" \] \|\| method_not_allowed[\s\S]*require_admin[\s\S]*run_admin_config wifi-channels/);
   assert.match(wifi, /sections_of_config_type wireless wifi-device \| head -n 4/);
   const write = wifi.slice(wifi.indexOf('wifi_save()'));
-  assert.ok(write.indexOf('wifi_channel_list "$device"') < write.indexOf('mkdir -p "$TRANSACTION_ROOT"'));
+  const validation = write.indexOf('wifi_channel_list "$device"');
+  const preparation = write.indexOf('new_transaction_directory wifi');
+  const staging = write.indexOf('wifi_tx_uci -q set');
+  assert.ok(validation >= 0 && preparation >= 0 && staging >= 0,
+    'Validation, fresh transaction preparation and private staging must all exist');
+  assert.ok(validation < preparation && preparation < staging);
   assert.match(write, /\[ "\$channel" != auto \] && \[ "\$channel" != "\$\(uci_get/);
 });

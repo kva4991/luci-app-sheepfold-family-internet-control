@@ -261,10 +261,7 @@ group_save() {
         fi
     done
 
-    commit_transaction || {
-        printf '%s\n' config_commit_failed >&2
-        return 70
-    }
+    commit_transaction || return "$?"
     group_state_is_valid || {
         printf '%s\n' config_verify_failed >&2
         return 70
@@ -312,10 +309,7 @@ group_delete() {
     done
 
     tx_uci -q delete "sheepfold.$section"
-    commit_transaction || {
-        printf '%s\n' config_commit_failed >&2
-        return 70
-    }
+    commit_transaction || return "$?"
     group_delete_is_valid || {
         printf '%s\n' config_verify_failed >&2
         return 70

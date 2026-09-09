@@ -161,6 +161,39 @@ TX_UCI_DIR=""
 TX_SNAPSHOT=""
 TX_RESTORE=0
 TX_ACTIVE=0
+TX_EXPECTED_REVISION=""
+
+# Владение каталогом возникает только после успешного mktemp. Предсказуемое
+# имя по PID могло совпасть с оставленной аварийной копией и cleanup удалял её.
+new_transaction_directory() (
+    local kind directory
+    kind="$1"
+    umask 077
+    [ ! -L "$TRANSACTION_ROOT" ] &&
+        mkdir -p "$TRANSACTION_ROOT" 2>/dev/null &&
+        chmod 700 "$TRANSACTION_ROOT" 2>/dev/null || return 1
+    directory="$(mktemp -d "$TRANSACTION_ROOT/$kind.XXXXXX" 2>/dev/null)" || return 1
+    printf '%s\n' "$directory"
+)
+
+prepare_config_snapshot() {
+    # cp может завершиться успешно с неполной/изменившейся копией. Проверка
+    # обязательна до первой мутации, не только во время аварийного отката.
+    cp -p "$1" "$2" 2>/dev/null && cmp -s "$1" "$2"
+}
+
+assert_no_pending_config() {
+    local pending
+    pending="$(uci_read -q changes "$1" 2>/dev/null)" || {
+        printf '%s\n' config_read_failed >&2
+        return 70
+    }
+    [ -z "$pending" ] || {
+        # Не коммитим и не стираем чужой черновик через общий revert.
+        printf '%s\n' config_pending_changes >&2
+        return 3
+    }
+}
 
 # Восстанавливаем файл через проверенную копию на той же файловой системе.
 # Прямая cp могла обнулить действующую конфигурацию до сообщения об ошибке.
@@ -226,13 +259,19 @@ begin_transaction() {
     trap 'exit 143' TERM
     validate_expected_revision "$schema_version" "$expected_revision" || return "$?"
 
-    mkdir -p "$TRANSACTION_ROOT"
-    chmod 700 "$TRANSACTION_ROOT" 2>/dev/null || true
-    TX_DIR="$TRANSACTION_ROOT/tx.$$"
+    assert_no_pending_config sheepfold || return "$?"
+    TX_EXPECTED_REVISION="$expected_revision"
+    TX_DIR="$(new_transaction_directory tx)" || {
+        printf '%s\n' config_snapshot_failed >&2
+        return 70
+    }
     TX_UCI_DIR="$TX_DIR/uci"
     TX_SNAPSHOT="$TX_DIR/sheepfold.before"
-    (umask 077; mkdir "$TX_DIR" && mkdir "$TX_UCI_DIR") || return 70
-    cp -p "$CONFIG_FILE" "$TX_SNAPSHOT" || return 70
+    if ! (umask 077; mkdir "$TX_UCI_DIR") ||
+        ! prepare_config_snapshot "$CONFIG_FILE" "$TX_SNAPSHOT"; then
+        printf '%s\n' config_snapshot_failed >&2
+        return 70
+    fi
 }
 
 tx_uci() {
@@ -254,8 +293,15 @@ commit_transaction() {
     # Keep rollback armed until the caller has verified the main UCI view. A
     # successful `uci commit` with a wrong save/search path is not proof that
     # the persistent config changed (§debug01, §pairtx1).
+    # -t задаёт место своей записи, но не исключает общую delta-очередь из
+    # чтения UCI. Повторно проверяем её и базовую ревизию перед commit.
+    assert_no_pending_config sheepfold || return "$?"
+    validate_expected_revision "$SCHEMA_VERSION" "$TX_EXPECTED_REVISION" || return "$?"
     TX_RESTORE=1
-    tx_uci -q commit sheepfold
+    tx_uci -q commit sheepfold || {
+        printf '%s\n' config_commit_failed >&2
+        return 70
+    }
 }
 
 confirm_transaction() {

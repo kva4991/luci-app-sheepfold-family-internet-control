@@ -151,4 +151,4 @@ If you find Sheepfold useful and want to support development, see [Donation](doc
 
 MIT License.
 
-[Local r296 audit and regression evidence](docs/audit-fixes-r296.ru.md).
+[Local r297 audit and regression evidence](docs/audit-fixes-r297.ru.md).

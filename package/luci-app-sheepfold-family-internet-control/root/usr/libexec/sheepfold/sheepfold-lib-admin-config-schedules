@@ -141,10 +141,7 @@ schedule_save() {
     tx_uci -q delete "sheepfold.$section.start_time" 2>/dev/null || true
     tx_uci -q delete "sheepfold.$section.end_time" 2>/dev/null || true
 
-    commit_transaction || {
-        printf '%s\n' config_commit_failed >&2
-        return 70
-    }
+    commit_transaction || return "$?"
     schedule_state_is_valid || {
         printf '%s\n' config_verify_failed >&2
         return 70
@@ -176,10 +173,7 @@ schedule_delete() {
         done
         set_tx_list "$group_section" schedules "$kept"
     done
-    commit_transaction || {
-        printf '%s\n' config_commit_failed >&2
-        return 70
-    }
+    commit_transaction || return "$?"
     schedule_delete_is_valid || {
         printf '%s\n' config_verify_failed >&2
         return 70

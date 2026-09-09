@@ -88,6 +88,8 @@ if op=='show':
                 formatted=' '.join(repr(s) for s in fields) if k.count('.')>1 else str(v)
                 print(k+'='+formatted)
     sys.exit(1 if fault else 0)
+if op=='changes':
+    sys.exit(0)
 if op=='get':
     if key not in values: sys.exit(1)
     sys.stdout.write(text(values[key])); sys.exit(0)

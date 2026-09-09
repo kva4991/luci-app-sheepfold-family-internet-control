@@ -16,10 +16,7 @@ notification_settings_save() {
     begin_transaction "$expected_revision" "$schema_version" || return "$?"
     tx_uci -q set "sheepfold.global.sim_change_notifications=$sim_change_mode"
     tx_uci -q set "sheepfold.global.child_wifi_network_notifications=$child_wifi_mode"
-    commit_transaction || {
-        printf '%s\n' config_commit_failed >&2
-        return 70
-    }
+    commit_transaction || return "$?"
     [ "$(uci_get sheepfold.global.sim_change_notifications)" = "$sim_change_mode" ] &&
         [ "$(uci_get sheepfold.global.child_wifi_network_notifications)" = "$child_wifi_mode" ] || {
         printf '%s\n' config_verify_failed >&2
