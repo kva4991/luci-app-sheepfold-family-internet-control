@@ -91,7 +91,17 @@ jobs:
         run: npm ci
 
       - name: Install OpenWrt shell test dependencies
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y busybox util-linux
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          command -v busybox >/dev/null 2>&1 || missing+=(busybox)
+          command -v flock >/dev/null 2>&1 || missing+=(util-linux)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            sudo apt-get install --no-install-recommends -y "${missing[@]}"
+          fi
+          busybox ash -c true
+          flock --version
 
       - name: Run impacted quality checks
         shell: bash

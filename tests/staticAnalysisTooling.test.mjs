@@ -33,7 +33,8 @@ describe('Static analysis tooling', () => {
     const runner = read('scripts/runAndroidLint.mjs');
 
     assert.match(workflow, /Install JavaScript tooling[\s\S]*npm ci/);
-    assert.match(workflow, /Install OpenWrt shell test dependencies[\s\S]*busybox util-linux/);
+    assert.match(workflow, /Install OpenWrt shell test dependencies[\s\S]*missing\+=\(busybox\)[\s\S]*missing\+=\(util-linux\)/);
+    assert.doesNotMatch(workflow, /apt-get update/);
     assert.match(workflow, /fetch-depth:\s*0/);
     assert.match(workflow, /Run impacted quality checks[\s\S]*runQualityChecks\.mjs --git "\$base" --skip-android --strict/);
     assert.doesNotMatch(workflow, /node --test tests\/\*\.test\.mjs/);
