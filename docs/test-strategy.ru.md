@@ -78,7 +78,9 @@ npm.cmd run quality:changed
 
 GitHub Actions использует ту же карту: workflow вычисляет base SHA события и вызывает
 `runQualityChecks.mjs --git <base> --skip-android --strict`; Android проверяется
-отдельной matrix-job. Запрещено возвращать wildcard-запуск `node --test tests/*.test.mjs`,
+отдельным `validate-android.yml` только при изменении APK, каталога значков,
+Android-скриптов или самого workflow; ручной запуск всегда доступен. Запрещено
+возвращать wildcard-запуск `node --test tests/*.test.mjs`,
 потому что он одновременно исполняет конфликтующие runtime-fixture и тестирует
 несвязанные области. Статический контракт защищает `staticAnalysisTooling.test.mjs`.
 

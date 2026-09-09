@@ -119,6 +119,15 @@ describe('change impact advisor §impact1', () => {
     const packages = inspectChanges(['.github/workflows/build-openwrt-packages.yml']);
     assert.ok(packages.categories.includes('packaging'));
     assert.equal(packages.fullTest, true);
+
+    const android = inspectChanges(['.github/workflows/validate-android.yml']);
+    assert.deepEqual(android.categories, ['android', 'tooling']);
+    assert.equal(android.fullTest, false);
+    assert.deepEqual(android.directTests, [
+      'openWrtBuildWorkflow.test.mjs',
+      'staticAnalysisTooling.test.mjs',
+      'windowsToolchain.test.mjs',
+    ]);
   });
 
   it('maps the isolated AI server experiment to AI and security checks', () => {

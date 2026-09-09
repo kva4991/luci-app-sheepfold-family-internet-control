@@ -370,6 +370,20 @@ export const impactRules = Object.freeze([
 		review: 'Проверить прямые контракты validation workflow; package SDK относится к отдельному build-openwrt workflow.',
 	}),
 	Object.freeze({
+		id: 'androidValidationWorkflow',
+		area: 'CI проверка Android-приложений',
+		pattern: /^\.github\/workflows\/validate-android\.yml$/,
+		categories: ['android', 'tooling'],
+		checks: ['lintAndroid', 'androidBuild'],
+		risk: 'high',
+		directTests: Object.freeze([
+			'openWrtBuildWorkflow.test.mjs',
+			'staticAnalysisTooling.test.mjs',
+			'windowsToolchain.test.mjs',
+		]),
+		review: 'Проверить paths-фильтр, обе Android matrix-ветки, lint, сборку и границу APK.',
+	}),
+	Object.freeze({
 		id: 'architectureDocs',
 		area: 'Архитектура и правила агентов',
 		pattern: /(?:^(?:README(?:\.ru)?|AGENTS|CODING_RULES)\.md$|^\.agents\/skills\/|^(?:docs|utilities)\/)/,

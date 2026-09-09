@@ -1,0 +1,82 @@
+name: Validate Sheepfold Android
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/validate-android.yml'
+      - 'android/**'
+      - 'android-child/**'
+      - 'icons/**'
+      - 'scripts/generateIconCatalog.mjs'
+      - 'scripts/verify-android-variant.py'
+  push:
+    branches:
+      - main
+      - editsByClaude
+    paths:
+      - '.github/workflows/validate-android.yml'
+      - 'android/**'
+      - 'android-child/**'
+      - 'icons/**'
+      - 'scripts/generateIconCatalog.mjs'
+      - 'scripts/verify-android-variant.py'
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: android
+            task: assembleDebug
+            kind: parent
+            apk: android/app/build/outputs/apk/debug/app-debug.apk
+          - project: android-child
+            task: assembleDebug
+            kind: child
+            apk: android-child/app/build/outputs/apk/debug/app-debug.apk
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate Android XML
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          for project in (Path('android'), Path('android-child')):
+              for xml_file in project.rglob('*.xml'):
+                  ET.parse(xml_file)
+                  print(xml_file)
+          PY
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Run Android Lint
+        run: ./${{ matrix.project }}/gradlew -p "${{ matrix.project }}" lintDebug --stacktrace
+
+      - name: Upload Android Lint report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-lint-${{ matrix.kind }}
+          path: ${{ matrix.project }}/app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+
+      - name: Build debug APK
+        run: ./${{ matrix.project }}/gradlew -p "${{ matrix.project }}" ${{ matrix.task }} --stacktrace
+
+      - name: Verify product boundary inside APK
+        run: python3 scripts/verify-android-variant.py --kind "${{ matrix.kind }}" "${{ matrix.apk }}"

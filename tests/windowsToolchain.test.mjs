@@ -94,7 +94,7 @@ describe('Windows repository toolchain', () => {
       assert.ok(existsSync(resolve(repoRoot, project, 'gradlew.bat')));
     }
 
-    const workflow = read('.github/workflows/placeholder.yml');
+    const workflow = read('.github/workflows/validate-android.yml');
     assert.match(workflow, /\.\/\$\{\{ matrix\.project \}\}\/gradlew/);
     assert.doesNotMatch(workflow, /gradle-version:\s*['"]8\.9/);
   });

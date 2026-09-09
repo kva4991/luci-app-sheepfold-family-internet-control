@@ -29,6 +29,7 @@ describe('Static analysis tooling', () => {
 
   it('runs impacted JavaScript checks and both Android linters in CI', () => {
     const workflow = read('.github/workflows/placeholder.yml');
+    const androidWorkflow = read('.github/workflows/validate-android.yml');
     const qualityRunner = read('scripts/runQualityChecks.mjs');
     const runner = read('scripts/runAndroidLint.mjs');
 
@@ -39,8 +40,10 @@ describe('Static analysis tooling', () => {
     assert.match(workflow, /Run impacted quality checks[\s\S]*runQualityChecks\.mjs --git "\$base" --skip-android --strict/);
     assert.doesNotMatch(workflow, /node --test tests\/\*\.test\.mjs/);
     assert.match(qualityRunner, /lintJavaScript\(changes, options\.full\)/);
-    assert.match(workflow, /Run Android Lint[\s\S]*lintDebug --stacktrace/);
-    assert.match(workflow, /android-lint-\$\{\{ matrix\.kind \}\}/);
+    assert.match(androidWorkflow, /Run Android Lint[\s\S]*lintDebug --stacktrace/);
+    assert.match(androidWorkflow, /android-lint-\$\{\{ matrix\.kind \}\}/);
+    assert.equal((androidWorkflow.match(/- 'android\/\*\*'/g) || []).length, 2);
+    assert.equal((androidWorkflow.match(/- 'android-child\/\*\*'/g) || []).length, 2);
     assert.match(runner, /\['android', 'android-child'\]/);
     assert.match(runner, /'lintDebug'/);
     assert.match(runner, /windowsVerbatimArguments:\s*true/);

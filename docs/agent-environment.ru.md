@@ -406,20 +406,23 @@ SSH-привязка и ADB работали без повторного вхо�
 
 ```text
 .github/workflows/placeholder.yml
+.github/workflows/validate-android.yml
 .github/workflows/build-openwrt-packages.yml
 ```
 
-Первый проверяет shell/Node и две Android-сборки. Второй канонически собирает
-Standard/AI Support через официальный OpenWrt SDK: IPK для 24.10 и настоящий
+Первый проверяет shell/Node, второй собирает и проверяет два Android APK только при
+изменении их входов. Третий канонически собирает Standard/AI Support через
+официальный OpenWrt SDK: IPK для 24.10 и настоящий
 apk-tools v3 APK для 25.12 (§owrtci1). Package-workflow автоматически запускается
 только при изменении package payload, корневых переводов, своего workflow или
 четырёх используемых им Python-модулей. Ручной запуск и публикация релиза доступны
 независимо от `paths`-фильтра.
 
-В `placeholder.yml` есть:
+Разделение workflow:
 
-- `shell-and-node`;
-- `android` matrix: `android`, `android-child`.
+- `placeholder.yml`: `shell-and-node`;
+- `validate-android.yml`: `android` matrix для `android` и `android-child`;
+- `build-openwrt-packages.yml`: SDK matrix и release bundle.
 
 `shell-and-node` получает полную Git-историю, вычисляет базовый commit события и
 передаёт diff в `runQualityChecks.mjs`. Поэтому Node-тесты и ESLint выбираются по
@@ -429,7 +432,8 @@ apk-tools v3 APK для 25.12 (§owrtci1). Package-workflow автоматиче
 Linux-job явно устанавливает BusyBox `ash` и `util-linux` с `flock`, чтобы выполнить
 конкурентные pairing/lock-сценарии, которые штатно пропускаются на Windows.
 
-Если на GitHub видно 6 красных проверок, это часто дубли `push` и `pull_request`: фактически падают три job-семейства.
+Число job зависит от затронутых путей. При одновременных `push` и `pull_request`
+проверки могут дублироваться; сначала сравнивайте имя workflow и commit.
 
 Для просмотра логов удобно установить `gh`:
 
